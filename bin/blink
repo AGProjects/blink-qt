@@ -1,0 +1,26 @@
+#!/usr/bin/env python
+
+import os
+import sys
+
+# We need to mangle Python's import path in case blink is run directly from
+# the bin/ directory.
+script_dir = os.path.dirname(os.path.realpath(__file__))
+parent_dir = os.path.dirname(script_dir)
+if os.path.basename(script_dir)=='bin' and os.path.exists(os.path.join(parent_dir, 'blink', '__init__.py')):
+    # Insert the parent path just before the existing script's path. We need
+    # to do this in order to work with debuggers which insert their own paths
+    # at the beginning. The script's path is the last Python itself inserted
+    # so we should insert just before that.
+    try:
+        position = sys.path.index(script_dir)
+    except ValueError:
+        position = 0
+    sys.path.insert(position, parent_dir)
+
+
+if __name__ == '__main__':
+    from blink import Blink
+    blink = Blink()
+    blink.run()
+
