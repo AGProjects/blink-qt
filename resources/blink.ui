@@ -235,7 +235,7 @@
      </layout>
     </item>
     <item>
-     <widget class="QPushButton" name="sessions_button">
+     <widget class="QPushButton" name="switch_view">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
         <horstretch>0</horstretch>
@@ -356,7 +356,7 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QPushButton" name="add_contact">
+                 <widget class="QPushButton" name="add_search_contact">
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                     <horstretch>0</horstretch>
@@ -462,7 +462,7 @@ buttons below.</string>
            <number>3</number>
           </property>
           <item>
-           <widget class="QToolButton" name="toolButton">
+           <widget class="QToolButton" name="add_contact">
             <property name="minimumSize">
              <size>
               <width>29</width>
@@ -509,7 +509,7 @@ buttons below.</string>
              <number>0</number>
             </property>
             <item>
-             <widget class="QToolButton" name="toolButton_2">
+             <widget class="QToolButton" name="audio_call">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -535,7 +535,7 @@ buttons below.</string>
              </widget>
             </item>
             <item>
-             <widget class="QToolButton" name="toolButton_3">
+             <widget class="QToolButton" name="im_session">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -560,7 +560,7 @@ buttons below.</string>
              </widget>
             </item>
             <item>
-             <widget class="QToolButton" name="toolButton_4">
+             <widget class="QToolButton" name="ds_session">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -601,7 +601,7 @@ buttons below.</string>
            </spacer>
           </item>
           <item>
-           <widget class="QToolButton" name="toolButton_5">
+           <widget class="QToolButton" name="silent">
             <property name="minimumSize">
              <size>
               <width>29</width>
