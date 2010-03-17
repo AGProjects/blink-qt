@@ -289,7 +289,14 @@
              <number>0</number>
             </property>
             <item>
-             <widget class="QListView" name="contact_list"/>
+             <widget class="QListView" name="contact_list">
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <property name="alternatingRowColors">
+               <bool>true</bool>
+              </property>
+             </widget>
             </item>
            </layout>
           </widget>
