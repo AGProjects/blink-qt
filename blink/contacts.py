@@ -211,7 +211,7 @@ class ContactModel(QAbstractListModel):
             else:
                 position = len(self.items)
             self.beginInsertRows(QModelIndex(), position, position)
-            self.items.append(contact)
+            self.items.insert(position, contact)
             self.endInsertRows()
             self.contact_list.setRowHidden(position, contact.group.collapsed)
         else:
