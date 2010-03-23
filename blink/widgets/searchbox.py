@@ -1,7 +1,7 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-from PyQt4.QtCore import Qt, SIGNAL, SLOT
+from PyQt4.QtCore import Qt
 from PyQt4.QtGui import QAbstractButton, QPainter, QPalette, QPixmap, QWidget
 
 from blink.resources import Resources
@@ -88,8 +88,8 @@ class SearchBox(LineEdit):
         self.addHeadWidget(self.search_icon)
         self.addTailWidget(self.clear_button)
         self.clear_button.hide()
-        self.connect(self.clear_button, SIGNAL("clicked()"), self, SLOT("clear()"))
-        self.connect(self, SIGNAL("textChanged(const QString&)"), self.text_changed)
+        self.clear_button.clicked.connect(self.clear)
+        self.textChanged.connect(self.text_changed)
         self.inactiveText = u"Search"
 
     def text_changed(self, text):

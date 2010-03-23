@@ -1,19 +1,21 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-from PyQt4.QtCore import Qt, QEvent, SIGNAL
+from PyQt4.QtCore import Qt, QEvent, pyqtSignal
 from PyQt4.QtGui import QLineEdit, QBoxLayout, QHBoxLayout, QLayout, QPainter, QPalette, QSpacerItem, QSizePolicy, QStyle, QWidget, QStyleOptionFrameV2
 
 from blink.widgets.util import QtDynamicProperty
 
 
 class SideWidget(QWidget):
+    sizeHintChanged = pyqtSignal()
+
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
 
     def event(self, event):
         if event.type() == QEvent.LayoutRequest:
-            self.emit(SIGNAL("sizeHintChanged()"))
+            self.sizeHintChanged.emit()
         return QWidget.event(self, event)
 
 
@@ -38,8 +40,8 @@ class LineEdit(QLineEdit):
         self.right_layout.setDirection(box_direction)
         self.right_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
         self.widgetSpacing = 2
-        self.connect(self.left_widget,  SIGNAL("sizeHintChanged()"), self._update_text_margins)
-        self.connect(self.right_widget, SIGNAL("sizeHintChanged()"), self._update_text_margins)
+        self.left_widget.sizeHintChanged.connect(self._update_text_margins)
+        self.right_widget.sizeHintChanged.connect(self._update_text_margins)
 
     @property
     def left_margin(self):
