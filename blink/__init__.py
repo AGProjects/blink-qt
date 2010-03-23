@@ -30,7 +30,6 @@ class Blink(object):
         #self.main_window.setWindowTitle('Blink')
         self.main_window.setWindowIconText('Blink')
         self._setup_identities()
-        #self._setup_user_states()
 
         #self.contacts_widget = uic.loadUi("contacts.ui", self.main_window.widget)
         #self.contacts_widget.hide()
@@ -77,19 +76,6 @@ class Blink(object):
         self.main_window.identity.addItem("Bonjour")
         self._set_user_icon(Resources.get("icons/default_user_icon.png"))
         #self._set_user_icon(":/resources/icons/default_user_icon.png")
-
-    def _setup_user_states(self):
-        red_dot = QIcon()
-        red_dot.addFile('icons/red-dot.svg')
-        yellow_dot = QIcon()
-        yellow_dot.addFile('icons/yellow-dot.svg')
-        green_dot = QIcon()
-        green_dot.addFile('icons/green-dot.svg')
-        self.main_window.status.setIconSize(QSize(10, 10))
-        self.main_window.status.addItem(green_dot, 'Available')
-        self.main_window.status.addItem(yellow_dot, 'Away')
-        self.main_window.status.addItem(red_dot, 'Busy')
-        self.main_window.status.addItem(red_dot, 'On the phone')
 
     def set_identity(self, string):
         print "identity changed", string
