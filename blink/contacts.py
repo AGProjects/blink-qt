@@ -2,7 +2,7 @@
 #
 
 from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QSize
-from PyQt4.QtGui  import QAbstractItemDelegate, QColor, QPainter, QPalette, QPixmap, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QColor, QPainter, QPalette, QPixmap, QStyle, QStyledItemDelegate
 
 from application.python.util import Null
 from functools import partial
