@@ -278,7 +278,7 @@
         <item>
          <widget class="QStackedWidget" name="contacts_view">
           <property name="currentIndex">
-           <number>1</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="contact_list_panel">
            <layout class="QVBoxLayout" name="verticalLayout_7">

@@ -3,7 +3,7 @@
 
 __all__ = ['Blink']
 
-from PyQt4.QtCore import Qt, SIGNAL, SLOT
+from PyQt4.QtCore import Qt
 from PyQt4.QtGui  import QApplication, QBrush, QColor, QPainter, QPen, QPixmap
 
 # We need to fix __path__ in order be able to import the ui module when used
@@ -20,6 +20,7 @@ import sys
 _qt_application = QApplication(sys.argv)
 
 from blink import ui
+from blink.contacts import ContactDelegate, ContactModel
 from blink.resources import Resources
 
 
@@ -27,28 +28,29 @@ class Blink(object):
     def __init__(self):
         self.app = _qt_application
         self.main_window = ui.main_window
-        #self.main_window.setWindowTitle('Blink')
+        self.main_window.setWindowTitle('Blink')
         self.main_window.setWindowIconText('Blink')
+
         self._setup_identities()
 
-        #self.contacts_widget = uic.loadUi("contacts.ui", self.main_window.widget)
-        #self.contacts_widget.hide()
+        self.contact_model = ContactModel(self.main_window)
+        self.main_window.contact_list.setModel(self.contact_model)
+        self.main_window.contact_list.setItemDelegate(ContactDelegate(self.main_window.contact_list))
+        self.contact_model.test()
 
         self.main_window.main_view.setCurrentWidget(self.main_window.contacts_panel)
         self.main_window.contacts_view.setCurrentWidget(self.main_window.contact_list_panel)
         self.main_window.search_view.setCurrentWidget(self.main_window.search_list_panel)
 
-        self.main_window.connect(self.main_window.search_box, SIGNAL("textChanged(const QString&)"), self.text_changed)
-        self.main_window.connect(self.main_window.back_to_contacts, SIGNAL("clicked()"), self.main_window.search_box, SLOT("clear()"))
+        self.main_window.search_box.textChanged.connect(self.text_changed)
 
-        #self.main_window.search_box.setStyleSheet(search_css) # this method is not working properly with all themes. -Dan
-        self.main_window.connect(self.main_window.identity, SIGNAL("currentIndexChanged (const QString&)"), self.set_identity)
-        #self.main_window.connect(self.main_window.identity, QtCore.SIGNAL("activated(const QString&)"), self.set_identity2)
+        self.main_window.back_to_contacts.clicked.connect(self.main_window.search_box.clear)
+        self.main_window.add_contact.clicked.connect(self.test_add_contact)
 
-        #self.main_window.connect(self.main_window.icon_view, QtCore.SIGNAL("clicked()"), self.set_icon_view_mode)
-        #self.main_window.connect(self.main_window.list_view, QtCore.SIGNAL("clicked()"), self.set_list_view_mode)
-        #self.main_window.connect(self.main_window.list_view, QtCore.SIGNAL("doubleClicked(const QModelIndex &)"), self.play_game)
-        #self.main_window.connect(self.main_window.list_view.selectionModel(), QtCore.SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self.selection_changed)
+        self.main_window.identity.currentIndexChanged[str].connect(self.set_identity)
+
+        #self.main_window.connect(self.main_window.contact_list, QtCore.SIGNAL("doubleClicked(const QModelIndex &)"), self.double_click_action)
+        #self.main_window.connect(self.main_window.contact_list.selectionModel(), QtCore.SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self.selection_changed)
 
     def run(self):
         self.main_window.show()
@@ -80,13 +82,18 @@ class Blink(object):
     def set_identity(self, string):
         print "identity changed", string
 
-    def set_identity2(self, string):
-        print "identity (re)selected", string
-
     def text_changed(self, text):
         active_widget = self.main_window.contact_list_panel if text.isEmpty() else self.main_window.search_panel
         self.main_window.contacts_view.setCurrentWidget(active_widget)
         active_widget = self.main_window.search_list_panel if len(text)<3 else self.main_window.not_found_panel
         self.main_window.search_view.setCurrentWidget(active_widget)
+
+    def test_add_contact(self):
+        from blink.contacts import Contact, ContactGroup
+        import random
+        no = random.randrange(1, 100)
+        contact = Contact(ContactGroup('Test'), 'John Doe %02d' % no, 'user%02d@test.com' % no)
+        contact.status = random.choice(('online', 'away', 'busy', 'offline'))
+        self.contact_model.addContact(contact)
 
 
