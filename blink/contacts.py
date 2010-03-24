@@ -2,7 +2,7 @@
 #
 
 from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QSize
-from PyQt4.QtGui  import QColor, QPainter, QPalette, QPixmap, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QColor, QPainter, QPalette, QPixmap, QStyle, QSortFilterProxyModel, QStyledItemDelegate
 
 from application.python.util import Null
 from functools import partial
@@ -249,5 +249,29 @@ class ContactModel(QAbstractListModel):
                 contact.status = 'busy'
             self.addContact(contact)
         self.addGroup(test_group)
+
+
+class ContactSearchModel(QSortFilterProxyModel):
+    def __init__(self, model, parent=None):
+        super(ContactSearchModel, self).__init__(parent)
+        self.setSourceModel(model)
+        self.setDynamicSortFilter(True)
+
+    def data(self, index, role=Qt.DisplayRole):
+        data = super(ContactSearchModel, self).data(index, role)
+        return data.toPyObject() if role==Qt.DisplayRole else data
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        source_model = self.sourceModel()
+        source_index = source_model.index(source_row, 0, source_parent)
+        item = source_model.data(source_index, Qt.DisplayRole)
+        if type(item) is ContactGroup:
+            return False
+        search_string = unicode(self.filterRegExp().pattern())
+        return search_string in item.name.lower() or search_string in item.uri.lower()
+
+    def lessThan(self, left, right):
+        print "lessThan", left, right, left.model().data(left, Qt.DisplayRole)
+        return super(ContactSearchModel, self).lessThan(left, right)
 
 

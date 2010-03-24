@@ -20,7 +20,7 @@ import sys
 _qt_application = QApplication(sys.argv)
 
 from blink import ui
-from blink.contacts import ContactDelegate, ContactModel
+from blink.contacts import ContactDelegate, ContactModel, ContactSearchModel
 from blink.resources import Resources
 
 
@@ -37,6 +37,11 @@ class Blink(object):
         self.main_window.contact_list.setModel(self.contact_model)
         self.main_window.contact_list.setItemDelegate(ContactDelegate(self.main_window.contact_list))
         self.contact_model.test()
+
+        self.contact_search_model = ContactSearchModel(self.contact_model, self.main_window)
+        self.main_window.search_list.setModel(self.contact_search_model)
+        self.main_window.search_list.setItemDelegate(ContactDelegate(self.main_window.search_list))
+        self.main_window.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
 
         self.main_window.main_view.setCurrentWidget(self.main_window.contacts_panel)
         self.main_window.contacts_view.setCurrentWidget(self.main_window.contact_list_panel)
@@ -85,7 +90,7 @@ class Blink(object):
     def text_changed(self, text):
         active_widget = self.main_window.contact_list_panel if text.isEmpty() else self.main_window.search_panel
         self.main_window.contacts_view.setCurrentWidget(active_widget)
-        active_widget = self.main_window.search_list_panel if len(text)<3 else self.main_window.not_found_panel
+        active_widget = self.main_window.search_list_panel if self.contact_search_model.rowCount() else self.main_window.not_found_panel
         self.main_window.search_view.setCurrentWidget(active_widget)
 
     def test_add_contact(self):
