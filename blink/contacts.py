@@ -1,6 +1,8 @@
 # Copyright (C) 2010 AG Projects. See LICENSE for details.
 #
 
+__all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel']
+
 from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QSize
 from PyQt4.QtGui  import QColor, QPainter, QPalette, QPixmap, QStyle, QSortFilterProxyModel, QStyledItemDelegate
 
