@@ -3,6 +3,8 @@
 
 __all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel']
 
+import sys
+
 from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QSize
 from PyQt4.QtGui  import QColor, QPainter, QPalette, QPixmap, QStyle, QSortFilterProxyModel, QStyledItemDelegate
 
@@ -33,6 +35,9 @@ class ContactGroup(object):
         return "%s(%r)" % (self.__class__.__name__, self.name)
 
     def __str__(self):
+        return self.name.encode(sys.stdout.encoding)
+
+    def __unicode__(self):
         return self.name
 
     @property
@@ -87,8 +92,14 @@ class Contact(object):
     def __repr__(self):
         return '%s(%r, %r, %r, %r)' % (self.__class__.__name__, self.group, self.name, self.uri, self.image)
 
-    def __str__(self):
+    def __unicode__(self):
         return '%s <%s>' % (self.name, self.uri) if self.name else self.uri
+
+    def __str__(self):
+        return unicode(self).encode(sys.stdout.encoding)
+
+    def __unicode__(self):
+        return u'%s <%s>' % (self.name, self.uri) if self.name else self.uri
 
     def __reduce__(self):
         return (self.__class__, (self.group, self.name, self.uri, self.image), None)
