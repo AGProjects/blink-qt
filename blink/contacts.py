@@ -73,11 +73,12 @@ class ContactIconDescriptor(object):
 class Contact(object):
     default_user_icon = ContactIconDescriptor('icons/default_user_icon.png')
 
-    def __init__(self, group, name, uri, icon=None):
+    def __init__(self, group, name, uri, image=None):
         self.group = group
         self.name = name
         self.uri = uri
-        self.icon = self.default_user_icon if icon is None else ContactIconDescriptor(icon).__get__(self, self.__class__)
+        self.image = image
+        self.icon = self.default_user_icon if image is None else ContactIconDescriptor(image).__get__(self, self.__class__)
         self.status = 'unknown'
 
 
