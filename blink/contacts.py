@@ -81,6 +81,12 @@ class Contact(object):
         self.icon = self.default_user_icon if image is None else ContactIconDescriptor(image).__get__(self, self.__class__)
         self.status = 'unknown'
 
+    def __repr__(self):
+        return '%s(%r, %r, %r, %r)' % (self.__class__.__name__, self.group, self.name, self.uri, self.image)
+
+    def __str__(self):
+        return '%s <%s>' % (self.name, self.uri) if self.name else self.uri
+
 
 class ContactDelegate(QStyledItemDelegate):
     item_size_hints = {Contact: QSize(200, 36), ContactGroup: QSize(200, 18)}
