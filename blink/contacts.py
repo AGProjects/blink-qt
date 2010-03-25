@@ -26,6 +26,9 @@ class ContactGroup(object):
             cls.instances[name] = obj
         return obj
 
+    def __reduce__(self):
+        return (self.__class__, (self.name,), None)
+
     def __repr__(self):
         return "%s(%r)" % (self.__class__.__name__, self.name)
 
@@ -86,6 +89,9 @@ class Contact(object):
 
     def __str__(self):
         return '%s <%s>' % (self.name, self.uri) if self.name else self.uri
+
+    def __reduce__(self):
+        return (self.__class__, (self.group, self.name, self.uri, self.image), None)
 
 
 class ContactDelegate(QStyledItemDelegate):
