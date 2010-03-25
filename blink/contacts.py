@@ -258,6 +258,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         super(ContactSearchModel, self).__init__(parent)
         self.setSourceModel(model)
         self.setDynamicSortFilter(True)
+        self.sort(0)
 
     def data(self, index, role=Qt.DisplayRole):
         data = super(ContactSearchModel, self).data(index, role)
@@ -272,8 +273,9 @@ class ContactSearchModel(QSortFilterProxyModel):
         search_string = unicode(self.filterRegExp().pattern()).lower()
         return search_string in item.name.lower() or search_string in item.uri.lower()
 
-    def lessThan(self, left, right):
-        print "lessThan", left, right, left.model().data(left, Qt.DisplayRole)
-        return super(ContactSearchModel, self).lessThan(left, right)
+    def lessThan(self, left_index, right_index):
+        left_item = left_index.model().data(left_index, Qt.DisplayRole)
+        right_item = right_index.model().data(right_index, Qt.DisplayRole)
+        return left_item.name < right_item.name
 
 
