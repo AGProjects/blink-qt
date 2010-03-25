@@ -293,8 +293,9 @@ class ContactSearchModel(QSortFilterProxyModel):
         item = source_model.data(source_index, Qt.DisplayRole)
         if type(item) is ContactGroup:
             return False
-        search_string = unicode(self.filterRegExp().pattern()).lower()
-        return search_string in item.name.lower() or search_string in item.uri.lower()
+        search_tokens = unicode(self.filterRegExp().pattern()).lower().split()
+        searched_item = unicode(item).lower()
+        return all(token in searched_item for token in search_tokens)
 
     def lessThan(self, left_index, right_index):
         left_item = left_index.model().data(left_index, Qt.DisplayRole)
