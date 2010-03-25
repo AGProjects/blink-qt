@@ -244,7 +244,6 @@ class ContactModel(QAbstractListModel):
             self.items.pop(row)
         self.endRemoveRows()
 
-    # temporary function for testing
     def addGroup(self, group):
         if group in self.items:
             return
