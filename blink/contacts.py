@@ -92,9 +92,6 @@ class Contact(object):
     def __repr__(self):
         return '%s(%r, %r, %r, %r)' % (self.__class__.__name__, self.group, self.name, self.uri, self.image)
 
-    def __unicode__(self):
-        return '%s <%s>' % (self.name, self.uri) if self.name else self.uri
-
     def __str__(self):
         return unicode(self).encode(sys.stdout.encoding)
 
