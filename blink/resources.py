@@ -20,6 +20,14 @@ def classproperty(function):
     return Descriptor()
 
 
+class DirectoryContextManager(str):
+    def __enter__(self):
+        self.directory = os.getcwd()
+        os.chdir(self)
+    def __exit__(self, type, value, traceback):
+        os.chdir(self.directory)
+
+
 class Resources(object):
     """Provide access to Blink's resources"""
 
@@ -41,7 +49,7 @@ class Resources(object):
                 cls._cached_directory = os.path.join(application_directory, 'resources')
             else:
                 cls._cached_directory = os.path.join(application_directory, 'share', 'blink')
-        return cls._cached_directory
+        return DirectoryContextManager(cls._cached_directory)
 
     @classmethod
     def get(cls, resource):
