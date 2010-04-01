@@ -39,9 +39,16 @@ class MainWindow(base_class, ui_class):
         self.search_list.setItemDelegate(ContactDelegate(self.search_list))
         self.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
 
+        self.contacts_panel.sibling_panel = self.sessions_panel
+        self.contacts_panel.sibling_name = u'Sessions'
+        self.sessions_panel.sibling_panel = self.contacts_panel
+        self.sessions_panel.sibling_name = u'Contacts'
+
         self.main_view.setCurrentWidget(self.contacts_panel)
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
         self.search_view.setCurrentWidget(self.search_list_panel)
+
+        self.switch_view.clicked.connect(self.switch_main_view)
 
         self.search_box.textChanged.connect(self.search_box_text_changed)
 
@@ -80,10 +87,21 @@ class MainWindow(base_class, ui_class):
         print "identity changed", string
 
     def search_box_text_changed(self, text):
+        if text:
+            self.main_view.setCurrentWidget(self.contacts_panel)
+            self.switch_view.setText(u"Sessions")
+        else:
+            # switch to the sessions panel if there are active sessions, else to the contacts panel -Dan
+            pass
         active_widget = self.contact_list_panel if text.isEmpty() else self.search_panel
         self.contacts_view.setCurrentWidget(active_widget)
         active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
         self.search_view.setCurrentWidget(active_widget)
+
+    def switch_main_view(self):
+        widget = self.main_view.currentWidget().sibling_panel
+        self.main_view.setCurrentWidget(widget)
+        self.switch_view.setText(widget.sibling_name)
 
     def test_add_contact(self):
         from blink.contacts import Contact, ContactGroup
