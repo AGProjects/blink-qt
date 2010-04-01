@@ -80,8 +80,8 @@ class MainWindow(base_class, ui_class):
     def _setup_identities(self):
         self.identity.addItem("31208005167@ag-projects.com")
         self.identity.addItem("Bonjour")
-        self._set_user_icon(Resources.get("icons/default_user_icon.png"))
-        #self._set_user_icon(":/resources/icons/default_user_icon.png")
+        self._set_user_icon(Resources.get("icons/default-avatar.png"))
+        #self._set_user_icon(":/resources/icons/default-avatar.png")
 
     def set_identity(self, string):
         print "identity changed", string

@@ -104,7 +104,7 @@
          <string/>
         </property>
         <property name="pixmap">
-         <pixmap>icons/default_user_icon.png</pixmap>
+         <pixmap>icons/default-avatar.png</pixmap>
         </property>
         <property name="alignment">
          <set>Qt::AlignCenter</set>
@@ -265,7 +265,7 @@
     <item>
      <widget class="QStackedWidget" name="main_view">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="contacts_panel">
        <layout class="QVBoxLayout" name="verticalLayout_8">
@@ -626,8 +626,8 @@ buttons below.</string>
             </property>
             <property name="icon">
              <iconset>
-              <normaloff>icons/bellon.png</normaloff>
-              <normalon>icons/belloff.png</normalon>icons/bellon.png</iconset>
+              <normaloff>icons/bell-on.png</normaloff>
+              <normalon>icons/bell-off.png</normalon>icons/bell-on.png</iconset>
             </property>
             <property name="iconSize">
              <size>

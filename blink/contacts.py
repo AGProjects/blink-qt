@@ -76,7 +76,7 @@ class ContactIconDescriptor(object):
 
 
 class Contact(object):
-    default_user_icon = ContactIconDescriptor('icons/default_user_icon.png')
+    default_user_icon = ContactIconDescriptor('icons/default-avatar.png')
 
     def __init__(self, group, name, uri, image=None):
         self.group = group

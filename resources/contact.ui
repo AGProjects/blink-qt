@@ -111,7 +111,7 @@
       <string/>
      </property>
      <property name="pixmap">
-      <pixmap>icons/default_user_icon.png</pixmap>
+      <pixmap>icons/default-avatar.png</pixmap>
      </property>
     </widget>
    </item>
