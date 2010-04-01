@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MainWindow</class>
- <widget class="QMainWindow" name="MainWindow">
+ <class>main_window</class>
+ <widget class="QMainWindow" name="main_window">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -309,7 +309,7 @@
              <number>0</number>
             </property>
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_4">
+             <layout class="QHBoxLayout" name="search_topbox_layout">
               <property name="spacing">
                <number>0</number>
               </property>
@@ -317,7 +317,7 @@
                <number>0</number>
               </property>
               <item>
-               <spacer name="horizontalSpacer_3">
+               <spacer name="search_topbox_spacer_1">
                 <property name="orientation">
                  <enum>Qt::Horizontal</enum>
                 </property>
@@ -330,7 +330,7 @@
                </spacer>
               </item>
               <item>
-               <layout class="QVBoxLayout" name="verticalLayout_2">
+               <layout class="QVBoxLayout" name="search_topbuttons_layout">
                 <property name="spacing">
                  <number>1</number>
                 </property>
@@ -387,7 +387,7 @@
                </layout>
               </item>
               <item>
-               <spacer name="horizontalSpacer_4">
+               <spacer name="search_topbox_spacer_2">
                 <property name="orientation">
                  <enum>Qt::Horizontal</enum>
                 </property>
@@ -452,7 +452,7 @@ buttons below.</string>
          </widget>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <layout class="QHBoxLayout" name="contact_buttonbox_layout">
           <property name="spacing">
            <number>0</number>
           </property>
@@ -498,7 +498,7 @@ buttons below.</string>
            </widget>
           </item>
           <item>
-           <spacer name="horizontalSpacer">
+           <spacer name="button_box_spacer_1">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
             </property>
@@ -511,7 +511,7 @@ buttons below.</string>
            </spacer>
           </item>
           <item>
-           <layout class="QHBoxLayout" name="horizontalLayout">
+           <layout class="QHBoxLayout" name="dial_buttons_layout">
             <property name="spacing">
              <number>0</number>
             </property>
@@ -595,7 +595,7 @@ buttons below.</string>
            </layout>
           </item>
           <item>
-           <spacer name="horizontalSpacer_5">
+           <spacer name="button_box_spacer_2">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
             </property>
@@ -699,7 +699,7 @@ buttons below.</string>
   <connection>
    <sender>actionQuit</sender>
    <signal>activated()</signal>
-   <receiver>MainWindow</receiver>
+   <receiver>main_window</receiver>
    <slot>close()</slot>
    <hints>
     <hint type="sourcelabel">
