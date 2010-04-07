@@ -299,12 +299,11 @@ class ContactDelegate(QStyledItemDelegate):
         painter.restore()
 
     def paintContactGroup(self, group, painter, option, index):
-        item = index.model().data(index, Qt.DisplayRole)
-        if item.widget.size() != option.rect.size():
+        if group.widget.size() != option.rect.size():
             # For some reason updateEditorGeometry only receives the peak value of
             # the size that the widget ever had, so it will never shrink it. -Dan
-            item.widget.resize(option.rect.size())
-        item.widget.selected = bool(option.state & QStyle.State_Selected)
+            group.widget.resize(option.rect.size())
+        group.widget.selected = bool(option.state & QStyle.State_Selected)
 
     def paint(self, painter, option, index):
         item = index.model().data(index, Qt.DisplayRole)
