@@ -327,8 +327,8 @@ class ContactModel(QAbstractListModel):
 
     def flags(self, index):
         if not index.isValid():
-            return Qt.ItemIsEnabled
-        return Qt.ItemFlags(QAbstractListModel.flags(self, index) | Qt.ItemIsEditable)
+            return QAbstractListModel.flags(self, index)
+        return QAbstractListModel.flags(self, index) | Qt.ItemIsEditable
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
