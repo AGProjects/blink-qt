@@ -39,7 +39,7 @@ class ContactGroup(object):
 
     @property
     def collapsed(self):
-        return self.widget.collapsed
+        return self.widget.collapse_button.isChecked()
 
     def _get_name(self):
         return self.__dict__['name']
@@ -127,10 +127,6 @@ class ContactGroupWidget(base_class, ui_class):
         self.name_editor.editingFinished.connect(self._end_editing)
 
     @property
-    def collapsed(self):
-        return self.arrow.isChecked()
-
-    @property
     def editing(self):
         return self.name_view.currentWidget() is self.editor_widget
 
@@ -193,7 +189,7 @@ class ContactGroupWidget(base_class, ui_class):
         painter.drawLine(rect.bottomLeft(), rect.bottomRight())
         #painter.drawLine(option.rect.topRight(), option.rect.bottomRight())
 
-        if self.collapsed:
+        if self.collapse_button.isChecked():
             arrow = QPolygonF([QPointF(0, 0), QPointF(0, 9), QPointF(8, 4.5)])
             arrow.translate(QPointF(5, 4))
         else:
@@ -251,7 +247,7 @@ class ContactDelegate(QStyledItemDelegate):
         if type(item) is ContactGroup:
             if item.widget is Null:
                 item.widget = ContactGroupWidget(item.name, parent)
-                item.widget.arrow.toggled.connect(partial(self._update_list_view, item))
+                item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
             return item.widget
         else:
             return None
