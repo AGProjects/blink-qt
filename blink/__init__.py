@@ -6,20 +6,20 @@ __all__ = ['Blink']
 import sys
 
 from PyQt4.QtGui import QApplication
-from application.python.util import Singleton
 
 from blink.mainwindow import MainWindow
+from blink.util import QSingleton
 
 
-class Blink(object):
-    __metaclass__ = Singleton
+class Blink(QApplication):
+    __metaclass__ = QSingleton
 
     def __init__(self):
-        self.app = QApplication(sys.argv)
+        super(Blink, self).__init__(sys.argv)
         self.main_window = MainWindow()
 
     def run(self):
         self.main_window.show()
-        self.app.exec_()
+        self.exec_()
 
 
