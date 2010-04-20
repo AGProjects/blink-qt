@@ -6,6 +6,8 @@ __all__ = ['Blink']
 import sys
 
 from PyQt4.QtGui import QApplication
+from application import log
+from application.python.util import Null
 
 from blink.mainwindow import MainWindow
 from blink.util import QSingleton
@@ -21,5 +23,16 @@ class Blink(QApplication):
     def run(self):
         self.main_window.show()
         self.exec_()
+
+    def customEvent(self, event):
+        handler = getattr(self, '_EH_%s' % event.name, Null)
+        handler(event)
+
+    def _EH_CallFunctionEvent(self, event):
+        try:
+            event.function(*event.args, **event.kw)
+        except:
+            log.error('Exception occured while calling function %s in the GUI thread' % event.function.__name__)
+            log.err()
 
 
