@@ -7,22 +7,33 @@ import sys
 
 from PyQt4.QtGui import QApplication
 from application import log
+from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
+from zope.interface import implements
+
+from sipsimple.application import SIPApplication
+from sipsimple.configuration.backend.file import FileBackend
 
 from blink.mainwindow import MainWindow
-from blink.util import QSingleton
+from blink.resources import ApplicationData
+from blink.util import QSingleton, run_in_gui_thread
 
 
 class Blink(QApplication):
     __metaclass__ = QSingleton
 
+    implements(IObserver)
+
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
+        self.application = SIPApplication()
         self.main_window = MainWindow()
 
     def run(self):
-        self.main_window.show()
+        from blink.util import call_in_gui_thread as call_later
+        call_later(self._initialize_sipsimple)
         self.exec_()
+        self.application.stop()
 
     def customEvent(self, event):
         handler = getattr(self, '_EH_%s' % event.name, Null)
@@ -34,5 +45,18 @@ class Blink(QApplication):
         except:
             log.error('Exception occured while calling function %s in the GUI thread' % event.function.__name__)
             log.err()
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    @run_in_gui_thread
+    def _NH_SIPApplicationDidStart(self, notification):
+        self.main_window.show()
+
+    def _initialize_sipsimple(self):
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=self.application)
+        self.application.start(FileBackend(ApplicationData.get('config')))
 
 
