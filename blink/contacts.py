@@ -39,7 +39,7 @@ class ContactGroup(object):
 
     @property
     def collapsed(self):
-        return self.widget.collapse_button.isChecked()
+        return bool(self.widget.collapse_button.isChecked())
 
     def _get_name(self):
         return self.__dict__['name']
