@@ -289,12 +289,15 @@
              <number>0</number>
             </property>
             <item>
-             <widget class="QListView" name="contact_list">
+             <widget class="ContactListView" name="contact_list">
               <property name="horizontalScrollBarPolicy">
                <enum>Qt::ScrollBarAlwaysOff</enum>
               </property>
               <property name="alternatingRowColors">
                <bool>true</bool>
+              </property>
+              <property name="selectionMode">
+               <enum>QAbstractItemView::ExtendedSelection</enum>
               </property>
              </widget>
             </item>
@@ -803,6 +806,11 @@ buttons below.</string>
    <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
+  </customwidget>
+  <customwidget>
+   <class>ContactListView</class>
+   <extends>QListView</extends>
+   <header>blink.contacts</header>
   </customwidget>
  </customwidgets>
  <tabstops>

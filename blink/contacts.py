@@ -3,11 +3,12 @@
 
 from __future__ import with_statement
 
-__all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel']
+__all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel', 'ContactListView']
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QEvent, QModelIndex, QPointF, QSize
-from PyQt4.QtGui  import QBrush, QColor, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPalette, QPen, QPixmap, QPolygonF, QStyle, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QDataStream, QEvent, QIODevice, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer, QVariant
+from PyQt4.QtGui  import QBrush, QColor, QKeyEvent, QLinearGradient, QListView, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
+from PyQt4.QtGui  import QSortFilterProxyModel, QStyledItemDelegate
 
 from application.python.util import Null
 from functools import partial
@@ -25,6 +26,7 @@ class ContactGroup(object):
             obj = object.__new__(cls)
             obj.name = name
             obj.widget = Null
+            obj.saved_state = Null
             cls.instances[name] = obj
         return obj
 
@@ -55,6 +57,23 @@ class ContactGroup(object):
 
     name = property(_get_name, _set_name)
     del _get_name, _set_name
+
+    def collapse(self):
+        if not self.widget.collapse_button.isChecked():
+            self.widget.collapse_button.click()
+
+    def expand(self):
+        if self.widget.collapse_button.isChecked():
+            self.widget.collapse_button.click()
+
+    def save_state(self):
+        """Saves the current state of the group (collapsed or not)"""
+        self.saved_state = self.widget.collapse_button.isChecked()
+
+    def restore_state(self):
+        """Restores the last saved state of the group (collapsed or not)"""
+        if self.saved_state != self.widget.collapse_button.isChecked():
+            self.widget.collapse_button.click()
 
 
 class ContactIconDescriptor(object):
@@ -121,6 +140,7 @@ class ContactGroupWidget(base_class, ui_class):
             self.setupUi(self)
         self.name = name
         self.selected = False
+        self.drop_indicator = None
         self.setFocusProxy(parent)
         self.label_widget.setFocusProxy(self)
         self.name_view.setCurrentWidget(self.label_widget)
@@ -153,6 +173,18 @@ class ContactGroupWidget(base_class, ui_class):
 
     selected = property(_get_selected, _set_selected)
     del _get_selected, _set_selected
+
+    def _get_drop_indicator(self):
+        return self.__dict__['drop_indicator']
+
+    def _set_drop_indicator(self, value):
+        if self.__dict__.get('drop_indicator', Null) == value:
+            return
+        self.__dict__['drop_indicator'] = value
+        self.update()
+
+    drop_indicator = property(_get_drop_indicator, _set_drop_indicator)
+    del _get_drop_indicator, _set_drop_indicator
 
     def _start_editing(self):
         #self.name_editor.setText(self.name_label.text())
@@ -189,16 +221,37 @@ class ContactGroupWidget(base_class, ui_class):
         painter.drawLine(rect.bottomLeft(), rect.bottomRight())
         #painter.drawLine(option.rect.topRight(), option.rect.bottomRight())
 
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+        if self.drop_indicator is ContactListView.AboveItem:
+            line_rect = QRectF(rect.adjusted(18, 0, 0, 5-rect.height()))
+            arc_rect = line_rect.adjusted(-5, -3, -line_rect.width(), -3)
+            path = QPainterPath(line_rect.topRight())
+            path.lineTo(line_rect.topLeft())
+            path.arcTo(arc_rect, 0, -180)
+            painter.drawPath(path)
+        elif self.drop_indicator is ContactListView.BelowItem:
+            line_rect = QRectF(rect.adjusted(18, rect.height()-5, 0, 0))
+            arc_rect = line_rect.adjusted(-5, 2, -line_rect.width(), 2)
+            path = QPainterPath(line_rect.bottomRight())
+            path.lineTo(line_rect.bottomLeft())
+            path.arcTo(arc_rect, 0, 180)
+            painter.drawPath(path)
+        elif self.drop_indicator is ContactListView.OnItem:
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+
         if self.collapse_button.isChecked():
             arrow = QPolygonF([QPointF(0, 0), QPointF(0, 9), QPointF(8, 4.5)])
             arrow.translate(QPointF(5, 4))
         else:
             arrow = QPolygonF([QPointF(0, 0), QPointF(9, 0), QPointF(4.5, 8)])
             arrow.translate(QPointF(5, 5))
-        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setBrush(foreground)
         painter.setPen(QPen(painter.brush(), 0, Qt.NoPen))
         painter.drawPolygon(arrow)
+
         painter.end()
 
     def event(self, event):
@@ -245,9 +298,10 @@ class ContactDelegate(QStyledItemDelegate):
     def createEditor(self, parent, options, index):
         item = index.model().data(index, Qt.DisplayRole)
         if type(item) is ContactGroup:
-            if item.widget is Null:
-                item.widget = ContactGroupWidget(item.name, parent)
-                item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
+            collapsed = item.collapsed # if there was a previous editor widget, preserve its collapsed state
+            item.widget = ContactGroupWidget(item.name, parent)
+            item.widget.collapse_button.setChecked(collapsed)
+            item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
             return item.widget
         else:
             return None
@@ -296,10 +350,19 @@ class ContactDelegate(QStyledItemDelegate):
 
     def paintContactGroup(self, group, painter, option, index):
         if group.widget.size() != option.rect.size():
-            # For some reason updateEditorGeometry only receives the peak value of
-            # the size that the widget ever had, so it will never shrink it. -Dan
+            # For some reason updateEditorGeometry only receives the peak value
+            # of the size that the widget ever had, so it will never shrink it.
             group.widget.resize(option.rect.size())
         group.widget.selected = bool(option.state & QStyle.State_Selected)
+
+        if option.state & QStyle.State_Selected and not option.state & QStyle.State_HasFocus:
+            # This condition is met when dragging is started on this group.
+            # We use this to to draw the dragged item image.
+            painter.save()
+            pixmap = QPixmap(option.rect.size())
+            group.widget.render(pixmap)
+            painter.drawPixmap(option.rect, pixmap)
+            painter.restore()
 
     def paint(self, painter, option, index):
         item = index.model().data(index, Qt.DisplayRole)
@@ -311,6 +374,9 @@ class ContactDelegate(QStyledItemDelegate):
 
 
 class ContactModel(QAbstractListModel):
+    # The MIME types we accept in the order they should be handled
+    accepted_mime_types = ['application/x-blink-contact-group-list', 'application/x-blink-contact-list', 'text/uri-list']
+
     def __init__(self, parent=None):
         super(ContactModel, self).__init__(parent)
         self.items = []
@@ -321,9 +387,10 @@ class ContactModel(QAbstractListModel):
         return [item for item in self.items if type(item) is ContactGroup]
 
     def flags(self, index):
-        if not index.isValid():
-            return QAbstractListModel.flags(self, index)
-        return QAbstractListModel.flags(self, index) | Qt.ItemIsEditable
+        if index.isValid():
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled | Qt.ItemIsEditable
+        else:
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
@@ -332,6 +399,136 @@ class ContactModel(QAbstractListModel):
         if not index.isValid() or role != Qt.DisplayRole:
             return None
         return self.items[index.row()]
+
+    def supportedDropActions(self):
+        return Qt.CopyAction | Qt.MoveAction
+
+    def mimeTypes(self):
+        return QStringList(['application/x-blink-contact-list'])
+
+    def mimeData(self, indexes):
+        mime_data = QMimeData()
+        contact_data = QByteArray()
+        contact_group_data = QByteArray()
+        contact_stream = QDataStream(contact_data, QIODevice.WriteOnly)
+        contact_group_stream = QDataStream(contact_group_data, QIODevice.WriteOnly)
+        for index in (index for index in indexes if index.isValid()):
+            row = index.row()
+            item = self.items[row]
+            stream = contact_group_stream if type(item) is ContactGroup else contact_stream
+            stream.writeInt32(row)
+            stream.writeQVariant(QVariant(item))
+        if contact_data:
+            mime_data.setData('application/x-blink-contact-list', contact_data)
+        if contact_group_data:
+            mime_data.setData('application/x-blink-contact-group-list', contact_group_data)
+        return mime_data
+
+    def dropMimeData(self, mime_data, action, row, column, parent_index):
+        # this is here just to keep the default Qt DnD API happy
+        # the custom handler is in handleDroppedData
+        return False
+
+    def handleDroppedData(self, mime_data, action, index):
+        if action == Qt.IgnoreAction:
+            return True
+
+        for mime_type in self.accepted_mime_types:
+            if mime_data.hasFormat(mime_type):
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                return handler(mime_data, action, index)
+        else:
+            return False
+
+    def _DH_ApplicationXBlinkContactGroupList(self, mime_data, action, index):
+        contact_groups = self.contact_groups
+        group = self.items[index.row()] if index.isValid() else contact_groups[-1]
+        drop_indicator = group.widget.drop_indicator
+        if group.widget.drop_indicator is None:
+            return False
+        selected_indexes = self.contact_list.selectionModel().selectedIndexes()
+        moved_groups = set(self.items[index.row()] for index in selected_indexes if index.isValid())
+        if group is contact_groups[0] and group in moved_groups:
+            drop_group = (group for group in contact_groups if group not in moved_groups).next()
+            drop_position = self.contact_list.AboveItem
+        elif group is contact_groups[-1] and group in moved_groups:
+            drop_group = (group for group in reversed(contact_groups) if group not in moved_groups).next()
+            drop_position = self.contact_list.BelowItem
+        elif group in moved_groups:
+            position = contact_groups.index(group)
+            if drop_indicator is self.contact_list.AboveItem:
+                drop_group = (group for group in reversed(contact_groups[:position]) if group not in moved_groups).next()
+                drop_position = self.contact_list.BelowItem
+            else:
+                drop_group = (group for group in contact_groups[position:] if group not in moved_groups).next()
+                drop_position = self.contact_list.AboveItem
+        else:
+            drop_group = group
+            drop_position = drop_indicator
+        items = self.popItems(selected_indexes)
+        contact_groups = self.contact_groups # they changed so refresh them
+        if drop_position is self.contact_list.AboveItem:
+            position = self.items.index(drop_group)
+        else:
+            position = len(self.items) if drop_group is contact_groups[-1] else self.items.index(contact_groups[contact_groups.index(drop_group)+1])
+        self.beginInsertRows(QModelIndex(), position, position+len(items)-1)
+        self.items[position:position] = items
+        self.endInsertRows()
+        for index, item in enumerate(items):
+            if type(item) is ContactGroup:
+                self.contact_list.openPersistentEditor(self.index(position+index))
+            else:
+                self.contact_list.setRowHidden(position+index, item.group.collapsed)
+        return True
+
+    def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
+        group = self.items[index.row()] if index.isValid() else self.contact_groups[-1]
+        if group.widget.drop_indicator is None:
+            return False
+        for contact in self.popItems(self.contact_list.selectionModel().selectedIndexes()):
+            contact.group = group
+            self.addContact(contact)
+        return True
+
+    def _DH_TextUriList(self, mime_data, action, index):
+        return False
+
+    @staticmethod
+    def item_mime_data_iterator(data):
+        stream = QDataStream(data)
+        while not stream.atEnd():
+            yield stream.readInt32(), stream.readQVariant().toPyObject()
+
+    @staticmethod
+    def range_iterator(indexes):
+        """Return contiguous ranges from indexes"""
+        start = last = None
+        for index in sorted(indexes):
+            if start is None:
+                start = index
+            elif index-last>1:
+                yield (start, last)
+                start = index
+            last = index
+        else:
+            if indexes:
+                yield (start, last)
+
+    @staticmethod
+    def reversed_range_iterator(indexes):
+        """Return contiguous ranges from indexes starting from the end"""
+        end = last = None
+        for index in reversed(sorted(indexes)):
+            if end is None:
+                end = index
+            elif last-index>1:
+                yield (last, end)
+                end = index
+            last = index
+        else:
+            if indexes:
+                yield (last, end)
 
     def addContact(self, contact):
         if contact.group in self.items:
@@ -353,11 +550,12 @@ class ContactModel(QAbstractListModel):
             self.contact_list.openPersistentEditor(self.index(position))
             self.endInsertRows()
 
-    def deleteContacts(self, indexes):
-        rows = sorted(index.row() for index in indexes if index.isValid())
-        self.beginRemoveRows(QModelIndex(), rows[0], rows[-1])
-        for row in reversed(rows):
-            self.items.pop(row)
+    def removeContact(self, contact):
+        if contact not in self.items:
+            return
+        position = self.items.index(contact)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.items[position]
         self.endRemoveRows()
 
     def addGroup(self, group):
@@ -369,19 +567,52 @@ class ContactModel(QAbstractListModel):
         self.contact_list.openPersistentEditor(self.index(position))
         self.endInsertRows()
 
+    def removeGroup(self, group):
+        if group not in self.items:
+            return
+        start = self.items.index(group)
+        end = start + len([item for item in self.items if type(item) is Contact and item.group==group])
+        self.beginRemoveRows(QModelIndex(), start, end)
+        del self.items[start:end+1]
+        self.endRemoveRows()
+
+    def removeItems(self, indexes):
+        rows = set(index.row() for index in indexes if index.isValid())
+        removed_groups = set(self.items[row] for row in rows if type(self.items[row]) is ContactGroup)
+        rows.update(row for row, item in enumerate(self.items) if type(item) is Contact and item.group in removed_groups)
+        for start, end in self.reversed_range_iterator(rows):
+            self.beginRemoveRows(QModelIndex(), start, end)
+            del self.items[start:end+1]
+            self.endRemoveRows()
+
+    def popItems(self, indexes):
+        items = []
+        rows = set(index.row() for index in indexes if index.isValid())
+        removed_groups = set(self.items[row] for row in rows if type(self.items[row]) is ContactGroup)
+        rows.update(row for row, item in enumerate(self.items) if type(item) is Contact and item.group in removed_groups)
+        for start, end in self.reversed_range_iterator(rows):
+            self.beginRemoveRows(QModelIndex(), start, end)
+            items[0:0] = self.items[start:end+1]
+            del self.items[start:end+1]
+            self.endRemoveRows()
+        return items
+
     def test(self):
         work_group = ContactGroup('Work')
-        test_group = ContactGroup('Test')
         for contact in [Contact(work_group, 'Dan Pascu', '31208005167@ag-projects.com', 'icons/avatar.png'), Contact(work_group, 'Lucian Stanescu', '31208005164@ag-projects.com'), Contact(work_group, 'Test number', '3333@ag-projects.com')]:
             if contact.uri.startswith('3333@') or contact.uri.startswith('31208005167@'):
                 contact.status = 'online'
             else:
                 contact.status = 'busy'
             self.addContact(contact)
-        self.addGroup(test_group)
+        self.addGroup(ContactGroup('Test'))
+        self.addGroup(ContactGroup('Test 2'))
+        self.addGroup(ContactGroup('Test 3'))
 
 
 class ContactSearchModel(QSortFilterProxyModel):
+    accepted_mime_types = ['text/uri-list']
+
     def __init__(self, model, parent=None):
         super(ContactSearchModel, self).__init__(parent)
         self.setSourceModel(model)
@@ -406,5 +637,164 @@ class ContactSearchModel(QSortFilterProxyModel):
         left_item = left_index.model().data(left_index, Qt.DisplayRole)
         right_item = right_index.model().data(right_index, Qt.DisplayRole)
         return left_item.name < right_item.name
+
+
+class ContactListView(QListView):
+    def __init__(self, parent=None):
+        super(ContactListView, self).__init__(parent)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(False)
+        self.restore_timer = QTimer(self)
+        self.restore_timer.setSingleShot(True)
+        self.restore_timer.setInterval(1250)
+        self.restore_timer.timeout.connect(self._restore_groups)
+        self.needs_restore = False
+
+    def _restore_groups(self):
+        for group in self.model().contact_groups:
+            group.restore_state()
+        self.needs_restore = False
+
+    def paintEvent(self, event):
+        super(ContactListView, self).paintEvent(event)
+        model = self.model()
+        last_group = model.contact_groups[-1]
+        if last_group.widget.drop_indicator is self.BelowItem:
+            # draw the bottom part of the drop indicator for the last group
+            rect = self.visualRect(model.index(model.items.index(last_group)))
+            line_rect = QRectF(rect.adjusted(18, rect.height(), 0, 5))
+            arc_rect = line_rect.adjusted(-5, -3, -line_rect.width(), -3)
+            path = QPainterPath(line_rect.topRight())
+            path.lineTo(line_rect.topLeft())
+            path.arcTo(arc_rect, 0, -180)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+            painter.drawPath(path)
+            painter.end()
+
+    def dragEnterEvent(self, event):
+        event_source = event.source()
+        accepted_mime_types = set(self.model().accepted_mime_types)
+        provided_mime_types = set(str(x) for x in event.mimeData().formats())
+        acceptable_mime_types = accepted_mime_types & provided_mime_types
+        has_blink_contacts = 'application/x-blink-contact-list' in provided_mime_types
+        has_blink_groups = 'application/x-blink-contact-group-list' in provided_mime_types
+        if not acceptable_mime_types:
+            event.ignore() # no acceptable mime types found
+        elif has_blink_contacts and has_blink_groups:
+            event.ignore() # we can't handle drops for both groups and contacts at the same time
+        elif event_source is not self and (has_blink_contacts or has_blink_groups):
+            event.ignore() # we don't handle drops for blink contacts or groups from other sources
+        else:
+            if event_source is self:
+                event.setDropAction(Qt.MoveAction)
+            if has_blink_contacts or has_blink_groups:
+                if not self.needs_restore:
+                    for group in self.model().contact_groups:
+                        group.save_state()
+                        group.collapse()
+                    self.needs_restore = True
+                self.restore_timer.stop()
+            event.accept()
+            self.setState(self.DraggingState)
+
+    def dragLeaveEvent(self, event):
+        super(ContactListView, self).dragLeaveEvent(event)
+        for group in self.model().contact_groups:
+            group.widget.drop_indicator = None
+        if self.needs_restore:
+            self.restore_timer.start()
+
+    def dragMoveEvent(self, event):
+        super(ContactListView, self).dragMoveEvent(event)
+        if event.source() is self:
+            event.setDropAction(Qt.MoveAction)
+
+        for mime_type in self.model().accepted_mime_types:
+            if event.provides(mime_type):
+                index = self.indexAt(event.pos())
+                rect = self.visualRect(index)
+                item = self.model().data(index)
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                handler(event, index, rect, item)
+                break
+        else:
+            event.ignore()
+
+    def _DH_ApplicationXBlinkContactGroupList(self, event, index, rect, item):
+        model = self.model()
+        groups = model.contact_groups
+        for group in groups:
+            group.widget.drop_indicator = None
+        if not index.isValid():
+            drop_groups = (groups[-1], Null)
+            rect = self.viewport().rect()
+            rect.setTop(self.visualRect(model.index(model.items.index(groups[-1]))).bottom())
+        elif type(item) is ContactGroup:
+            index = groups.index(item)
+            rect.setHeight(rect.height()/2)
+            if rect.contains(event.pos()):
+                drop_groups = (groups[index-1], groups[index]) if index>0 else (Null, groups[index])
+            else:
+                drop_groups = (groups[index], groups[index+1]) if index<len(groups)-1 else (groups[index], Null)
+                rect.translate(0, rect.height())
+        selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes())
+        if selected_rows:
+            first = groups.index(model.items[selected_rows[0]])
+            last = groups.index(model.items[selected_rows[-1]])
+            contiguous_selection = len(selected_rows) == last-first+1
+        else:
+            contiguous_selection = False
+        selected_groups = set(model.items[row] for row in selected_rows)
+        overlapping_groups = len(selected_groups.intersection(drop_groups))
+        allowed_overlapping = 0 if contiguous_selection else 1
+        if event.source() is not self or overlapping_groups <= allowed_overlapping:
+            drop_groups[0].widget.drop_indicator = self.BelowItem
+            drop_groups[1].widget.drop_indicator = self.AboveItem
+        if groups[-1] in drop_groups:
+            self.viewport().update()
+        event.accept(rect)
+
+    def _DH_ApplicationXBlinkContactList(self, event, index, rect, item):
+        model = self.model()
+        groups = model.contact_groups
+        for group in groups:
+            group.widget.drop_indicator = None
+        if not index.isValid():
+            group = groups[-1]
+            rect = self.viewport().rect()
+            rect.setTop(self.visualRect(model.index(model.items.index(group))).bottom())
+        elif type(item) is ContactGroup:
+            group = item
+        selected_contact_groups = set(model.items[index.row()].group for index in self.selectionModel().selectedIndexes())
+        if event.source() is not self or len(selected_contact_groups) > 1 or group not in selected_contact_groups:
+            group.widget.drop_indicator = self.OnItem
+        event.accept(rect)
+
+    def _DH_TextUriList(self, event, index, rect, item):
+        model = self.model()
+        if not index.isValid():
+            rect = self.viewport().rect()
+            rect.setTop(self.visualRect(model.index(len(model.items)-1)).bottom())
+        if type(item) is Contact:
+            event.accept(rect)
+        else:
+            event.ignore(rect)
+
+    def dropEvent(self, event):
+        model = self.model()
+        if event.source() is self:
+            event.setDropAction(Qt.MoveAction)
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        for group in model.contact_groups:
+            group.widget.drop_indicator = None
+            if self.needs_restore:
+                group.restore_state()
+        self.needs_restore = False
+        super(ContactListView, self).dropEvent(event)
 
 
