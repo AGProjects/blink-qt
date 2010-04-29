@@ -16,8 +16,6 @@ from blink.resources import Resources
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
 
 class MainWindow(base_class, ui_class):
-    #class __metaclass__(Singleton, base_class.__class__): pass
-
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
