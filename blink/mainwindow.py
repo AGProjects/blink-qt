@@ -9,7 +9,7 @@ from PyQt4 import uic
 from PyQt4.QtCore import Qt
 from PyQt4.QtGui  import QBrush, QColor, QPainter, QPen, QPixmap
 
-from blink.contacts import ContactDelegate, ContactModel, ContactSearchModel
+from blink.contacts import ContactModel, ContactSearchModel
 from blink.resources import Resources
 
 
@@ -28,14 +28,12 @@ class MainWindow(base_class, ui_class):
         self._setup_identities()
 
         self.contact_model = ContactModel(self)
-        self.contact_list.setModel(self.contact_model)
-        self.contact_list.setItemDelegate(ContactDelegate(self.contact_list))
-        self.contact_model.test()
-
         self.contact_search_model = ContactSearchModel(self.contact_model, self)
+        self.contact_list.setModel(self.contact_model)
         self.search_list.setModel(self.contact_search_model)
-        self.search_list.setItemDelegate(ContactDelegate(self.search_list))
         self.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
+
+        self.contact_model.test()
 
         self.contacts_panel.sibling_panel = self.sessions_panel
         self.contacts_panel.sibling_name = u'Sessions'

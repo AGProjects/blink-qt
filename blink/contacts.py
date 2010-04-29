@@ -693,6 +693,7 @@ class ContactSearchModel(QSortFilterProxyModel):
 class ContactListView(QListView):
     def __init__(self, parent=None):
         super(ContactListView, self).__init__(parent)
+        self.setItemDelegate(ContactDelegate(self))
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(False)
@@ -869,6 +870,7 @@ class ContactListView(QListView):
 class ContactSearchListView(QListView):
     def __init__(self, parent=None):
         super(ContactSearchListView, self).__init__(parent)
+        self.setItemDelegate(ContactDelegate(self))
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(False)
