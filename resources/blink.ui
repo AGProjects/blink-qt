@@ -21,7 +21,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>icons/blink64.png</normaloff>icons/blink64.png</iconset>
+    <normaloff>icons/blink48.png</normaloff>icons/blink48.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
