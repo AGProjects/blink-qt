@@ -694,8 +694,6 @@ class ContactListView(QListView):
     def __init__(self, parent=None):
         super(ContactListView, self).__init__(parent)
         self.setItemDelegate(ContactDelegate(self))
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
         self.setDropIndicatorShown(False)
         self.drop_indicator_index = QModelIndex()
         self.restore_timer = QTimer(self)
@@ -871,8 +869,6 @@ class ContactSearchListView(QListView):
     def __init__(self, parent=None):
         super(ContactSearchListView, self).__init__(parent)
         self.setItemDelegate(ContactDelegate(self))
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
         self.setDropIndicatorShown(False)
         self.drop_indicator_index = QModelIndex()
 
