@@ -645,6 +645,7 @@ class ContactListView(QListView):
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(False)
+        self.drop_indicator_index = QModelIndex()
         self.restore_timer = QTimer(self)
         self.restore_timer.setSingleShot(True)
         self.restore_timer.setInterval(1250)
@@ -658,6 +659,14 @@ class ContactListView(QListView):
 
     def paintEvent(self, event):
         super(ContactListView, self).paintEvent(event)
+        if self.drop_indicator_index.isValid():
+            rect = self.visualRect(self.drop_indicator_index)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
         model = self.model()
         last_group = model.contact_groups[-1]
         if last_group.widget.drop_indicator is self.BelowItem:
@@ -702,6 +711,8 @@ class ContactListView(QListView):
 
     def dragLeaveEvent(self, event):
         super(ContactListView, self).dragLeaveEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
         for group in self.model().contact_groups:
             group.widget.drop_indicator = None
         if self.needs_restore:
@@ -714,12 +725,15 @@ class ContactListView(QListView):
 
         for mime_type in self.model().accepted_mime_types:
             if event.provides(mime_type):
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
+                self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
                 item = self.model().data(index)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
                 break
         else:
             event.ignore()
@@ -781,6 +795,7 @@ class ContactListView(QListView):
             rect.setTop(self.visualRect(model.index(len(model.items)-1)).bottom())
         if type(item) is Contact:
             event.accept(rect)
+            self.drop_indicator_index = index
         else:
             event.ignore(rect)
 
@@ -796,5 +811,7 @@ class ContactListView(QListView):
                 group.restore_state()
         self.needs_restore = False
         super(ContactListView, self).dropEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
 
 
