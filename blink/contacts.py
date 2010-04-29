@@ -3,7 +3,7 @@
 
 from __future__ import with_statement
 
-__all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel', 'ContactListView']
+__all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QDataStream, QEvent, QIODevice, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer, QVariant
@@ -619,9 +619,60 @@ class ContactSearchModel(QSortFilterProxyModel):
         self.setDynamicSortFilter(True)
         self.sort(0)
 
+    def flags(self, index):
+        if index.isValid():
+            return QSortFilterProxyModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled
+        else:
+            return QSortFilterProxyModel.flags(self, index) | Qt.ItemIsDropEnabled
+
     def data(self, index, role=Qt.DisplayRole):
         data = super(ContactSearchModel, self).data(index, role)
         return data.toPyObject() if role==Qt.DisplayRole else data
+
+    def supportedDropActions(self):
+        return Qt.CopyAction
+
+    def mimeTypes(self):
+        return QStringList(['application/x-blink-contact-list'])
+
+    def mimeData(self, indexes):
+        mime_data = QMimeData()
+        contact_data = QByteArray()
+        stream = QDataStream(contact_data, QIODevice.WriteOnly)
+        for index in (index for index in indexes if index.isValid()):
+            row = index.row()
+            item = self.data(index)
+            stream.writeInt32(row)
+            stream.writeQVariant(QVariant(item))
+        if contact_data:
+            mime_data.setData('application/x-blink-contact-list', contact_data)
+        return mime_data
+
+    def dropMimeData(self, mime_data, action, row, column, parent_index):
+        # this is here just to keep the default Qt DnD API happy
+        # the custom handler is in handleDroppedData
+        return False
+
+    def handleDroppedData(self, mime_data, action, index):
+        if action == Qt.IgnoreAction:
+            return True
+
+        for mime_type in self.accepted_mime_types:
+            if mime_data.hasFormat(mime_type):
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                return handler(mime_data, action, index)
+        else:
+            return False
+
+    def _DH_TextUriList(self, mime_data, action, index):
+        return False
+
+    @staticmethod
+    def item_mime_data_iterator(data):
+        stream = QDataStream(data)
+        while not stream.atEnd():
+            yield stream.readInt32(), stream.readQVariant().toPyObject()
 
     def filterAcceptsRow(self, source_row, source_parent):
         source_model = self.sourceModel()
@@ -811,6 +862,77 @@ class ContactListView(QListView):
                 group.restore_state()
         self.needs_restore = False
         super(ContactListView, self).dropEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
+
+
+class ContactSearchListView(QListView):
+    def __init__(self, parent=None):
+        super(ContactSearchListView, self).__init__(parent)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(False)
+        self.drop_indicator_index = QModelIndex()
+
+    def paintEvent(self, event):
+        super(ContactSearchListView, self).paintEvent(event)
+        if self.drop_indicator_index.isValid():
+            rect = self.visualRect(self.drop_indicator_index)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
+
+    def dragEnterEvent(self, event):
+        accepted_mime_types = set(self.model().accepted_mime_types)
+        provided_mime_types = set(str(x) for x in event.mimeData().formats())
+        acceptable_mime_types = accepted_mime_types & provided_mime_types
+        if event.source() is self or not acceptable_mime_types:
+            event.ignore()
+        else:
+            event.accept()
+            self.setState(self.DraggingState)
+
+    def dragLeaveEvent(self, event):
+        super(ContactSearchListView, self).dragLeaveEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
+
+    def dragMoveEvent(self, event):
+        super(ContactSearchListView, self).dragMoveEvent(event)
+
+        for mime_type in self.model().accepted_mime_types:
+            if event.provides(mime_type):
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
+                self.drop_indicator_index = QModelIndex()
+                index = self.indexAt(event.pos())
+                rect = self.visualRect(index)
+                item = self.model().data(index)
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                handler(event, index, rect, item)
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
+                break
+        else:
+            event.ignore()
+
+    def _DH_TextUriList(self, event, index, rect, item):
+        if index.isValid():
+            event.accept(rect)
+            self.drop_indicator_index = index
+        else:
+            model = self.model()
+            rect = self.viewport().rect()
+            rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
+            event.ignore(rect)
+
+    def dropEvent(self, event):
+        model = self.model()
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        super(ContactSearchListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
 
