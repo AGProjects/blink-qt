@@ -626,7 +626,7 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
-        contacts = [self.items[index.row()] for index in indexes if index.isValid()]
+        contacts = [self.data(index) for index in indexes if index.isValid()]
         if contacts:
             mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contacts)))
         return mime_data
