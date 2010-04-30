@@ -374,7 +374,7 @@ class ContactDelegate(QStyledItemDelegate):
 
 
 class ContactModel(QAbstractListModel):
-    # The MIME types we accept in the order they should be handled
+    # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['application/x-blink-contact-group-list', 'application/x-blink-contact-list', 'text/uri-list']
 
     def __init__(self, parent=None):
@@ -611,6 +611,7 @@ class ContactModel(QAbstractListModel):
 
 
 class ContactSearchModel(QSortFilterProxyModel):
+    # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['text/uri-list']
 
     def __init__(self, model, parent=None):
