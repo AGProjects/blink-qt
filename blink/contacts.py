@@ -9,8 +9,8 @@ import cPickle as pickle
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer
-from PyQt4.QtGui  import QBrush, QColor, QKeyEvent, QLinearGradient, QListView, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
-from PyQt4.QtGui  import QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtGui  import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
+from PyQt4.QtGui  import QKeyEvent, QListView, QMouseEvent, QSortFilterProxyModel, QStyledItemDelegate
 
 from application.python.util import Null
 from functools import partial
