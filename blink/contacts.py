@@ -495,12 +495,6 @@ class ContactModel(QAbstractListModel):
         return False
 
     @staticmethod
-    def item_mime_data_iterator(data):
-        stream = QDataStream(data)
-        while not stream.atEnd():
-            yield stream.readInt32(), stream.readQVariant().toPyObject()
-
-    @staticmethod
     def range_iterator(indexes):
         """Return contiguous ranges from indexes"""
         start = last = None
@@ -668,12 +662,6 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def _DH_TextUriList(self, mime_data, action, index):
         return False
-
-    @staticmethod
-    def item_mime_data_iterator(data):
-        stream = QDataStream(data)
-        while not stream.atEnd():
-            yield stream.readInt32(), stream.readQVariant().toPyObject()
 
     def filterAcceptsRow(self, source_row, source_parent):
         source_model = self.sourceModel()
