@@ -3,7 +3,7 @@
 
 from __future__ import with_statement
 
-__all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
+__all__ = ['Contact', 'ContactGroup', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
 
 import cPickle as pickle
 
