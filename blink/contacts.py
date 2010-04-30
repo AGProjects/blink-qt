@@ -5,8 +5,10 @@ from __future__ import with_statement
 
 __all__ = ['Contact', 'ContactGroup', 'ContactDelegate', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
 
+import cPickle as pickle
+
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QDataStream, QEvent, QIODevice, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer, QVariant
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer
 from PyQt4.QtGui  import QBrush, QColor, QKeyEvent, QLinearGradient, QListView, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
 from PyQt4.QtGui  import QSortFilterProxyModel, QStyledItemDelegate
 
@@ -408,20 +410,12 @@ class ContactModel(QAbstractListModel):
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
-        contact_data = QByteArray()
-        contact_group_data = QByteArray()
-        contact_stream = QDataStream(contact_data, QIODevice.WriteOnly)
-        contact_group_stream = QDataStream(contact_group_data, QIODevice.WriteOnly)
-        for index in (index for index in indexes if index.isValid()):
-            row = index.row()
-            item = self.items[row]
-            stream = contact_group_stream if type(item) is ContactGroup else contact_stream
-            stream.writeInt32(row)
-            stream.writeQVariant(QVariant(item))
-        if contact_data:
-            mime_data.setData('application/x-blink-contact-list', contact_data)
-        if contact_group_data:
-            mime_data.setData('application/x-blink-contact-group-list', contact_group_data)
+        contacts = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if type(item) is Contact]
+        groups = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if type(item) is ContactGroup]
+        if contacts:
+            mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contacts)))
+        if groups:
+            mime_data.setData('application/x-blink-contact-group-list', QByteArray(pickle.dumps(groups)))
         return mime_data
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
@@ -632,15 +626,9 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
-        contact_data = QByteArray()
-        stream = QDataStream(contact_data, QIODevice.WriteOnly)
-        for index in (index for index in indexes if index.isValid()):
-            row = index.row()
-            item = self.data(index)
-            stream.writeInt32(row)
-            stream.writeQVariant(QVariant(item))
-        if contact_data:
-            mime_data.setData('application/x-blink-contact-list', contact_data)
+        contacts = [self.items[index.row()] for index in indexes if index.isValid()]
+        if contacts:
+            mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contacts)))
         return mime_data
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
