@@ -5,7 +5,7 @@ __all__ = ['CallFunctionEvent']
 
 from PyQt4.QtCore import QEvent
 
-from blink.util import classproperty
+from sipsimple.util import classproperty
 
 
 class EventMeta(type(QEvent)):

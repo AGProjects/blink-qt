@@ -9,7 +9,7 @@ import os
 import platform
 import sys
 
-from blink.util import classproperty
+from sipsimple.util import classproperty
 
 
 class DirectoryContextManager(unicode):
