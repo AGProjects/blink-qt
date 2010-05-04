@@ -37,6 +37,20 @@ class ContactGroup(object):
     def collapsed(self):
         return bool(self.widget.collapse_button.isChecked())
 
+    def _get_widget(self):
+        return self.__dict__['widget']
+
+    def _set_widget(self, widget):
+        old_widget = self.__dict__.get('widget', Null)
+        old_widget.name_editor.editingFinished.disconnect(self._name_changed)
+        widget.name_editor.editingFinished.connect(self._name_changed)
+        self.__dict__['widget'] = widget
+
+    widget = property(_get_widget, _set_widget)
+    del _get_widget, _set_widget
+
+    def _name_changed(self):
+        self.name = self.widget.name_editor.text()
 
     def collapse(self):
         if not self.widget.collapse_button.isChecked():
