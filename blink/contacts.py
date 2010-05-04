@@ -14,23 +14,15 @@ from PyQt4.QtGui  import QKeyEvent, QListView, QMouseEvent, QSortFilterProxyMode
 
 from application.python.util import Null
 from functools import partial
-from weakref import WeakValueDictionary
 
 from blink.resources import Resources
 
 
 class ContactGroup(object):
-    instances = WeakValueDictionary()
-
-    def __new__(cls, name):
-        obj = cls.instances.get(name, None)
-        if obj is None:
-            obj = object.__new__(cls)
-            obj.name = name
-            obj.widget = Null
-            obj.saved_state = Null
-            cls.instances[name] = obj
-        return obj
+    def __init__(self, name):
+        self.name = name
+        self.widget = Null
+        self.saved_state = Null
 
     def __reduce__(self):
         return (self.__class__, (self.name,), None)
@@ -45,20 +37,6 @@ class ContactGroup(object):
     def collapsed(self):
         return bool(self.widget.collapse_button.isChecked())
 
-    def _get_name(self):
-        return self.__dict__['name']
-
-    def _set_name(self, name):
-        old_name = self.__dict__.get('name')
-        if name == old_name:
-            return
-        if old_name is not None:
-            del self.instances[old_name]
-        self.__dict__['name'] = name
-        self.instances[name] = self
-
-    name = property(_get_name, _set_name)
-    del _get_name, _set_name
 
     def collapse(self):
         if not self.widget.collapse_button.isChecked():

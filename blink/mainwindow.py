@@ -126,7 +126,11 @@ class MainWindow(base_class, ui_class):
         from blink.contacts import Contact, ContactGroup
         import random
         no = random.randrange(1, 100)
-        contact = Contact(ContactGroup('Test'), 'John Doe %02d' % no, 'user%02d@test.com' % no)
+        try:
+            test_group = (group for group in self.contact_model.contact_groups if group.name=='Test').next()
+        except StopIteration:
+            test_group = ContactGroup('Test')
+        contact = Contact(test_group, 'John Doe %02d' % no, 'user%02d@test.com' % no)
         contact.status = random.choice(('online', 'away', 'busy', 'offline'))
         self.contact_model.addContact(contact)
 
