@@ -34,7 +34,7 @@ class MainWindow(base_class, ui_class):
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
 
-        self._set_user_icon(Resources.get("icons/default-avatar.png")) # ":/resources/icons/default-avatar.png"
+        self.set_user_icon(Resources.get("icons/default-avatar.png")) # ":/resources/icons/default-avatar.png"
         self.enable_call_buttons(False)
 
         self.contact_model = ContactModel(self)
@@ -73,7 +73,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name="SIPAccountDidActivate")
         notification_center.add_observer(self, name="SIPAccountDidDeactivate")
 
-    def _set_user_icon(self, image_file_name):
+    def set_user_icon(self, image_file_name):
         pixmap = QPixmap(32, 32)
         pixmap.fill(QColor(Qt.transparent))
         painter = QPainter(pixmap)
