@@ -15,7 +15,7 @@ from zope.interface import implements
 
 from sipsimple.account import AccountManager, BonjourAccount
 
-from blink.contacts import ContactModel, ContactSearchModel
+from blink.contacts import Contact, ContactModel, ContactSearchModel
 from blink.resources import Resources
 from blink.util import run_in_gui_thread
 
@@ -35,11 +35,14 @@ class MainWindow(base_class, ui_class):
         self.setWindowIconText('Blink')
 
         self._set_user_icon(Resources.get("icons/default-avatar.png")) # ":/resources/icons/default-avatar.png"
+        self.enable_call_buttons(False)
 
         self.contact_model = ContactModel(self)
         self.contact_search_model = ContactSearchModel(self.contact_model, self)
         self.contact_list.setModel(self.contact_model)
         self.search_list.setModel(self.contact_search_model)
+
+        self.contact_list.selectionModel().selectionChanged.connect(self.contact_list_selection_changed)
         self.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
 
         self.contact_model.test()
@@ -63,7 +66,6 @@ class MainWindow(base_class, ui_class):
         self.identity.activated[int].connect(self.set_identity)
 
         #self.connect(self.contact_list, QtCore.SIGNAL("doubleClicked(const QModelIndex &)"), self.double_click_action)
-        #self.connect(self.contact_list.selectionModel(), QtCore.SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self.selection_changed)
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name="SIPAccountManagerDidChangeDefaultAccount")
@@ -88,6 +90,11 @@ class MainWindow(base_class, ui_class):
         painter.end()
         self.image.setPixmap(pixmap)
 
+    def enable_call_buttons(self, enabled):
+        self.audio_call.setEnabled(enabled)
+        self.im_session.setEnabled(enabled)
+        self.ds_session.setEnabled(enabled)
+
     def set_identity(self, index):
         account_manager = AccountManager()
         account_manager.default_account = self.identity.itemData(index).toPyObject()
@@ -96,13 +103,19 @@ class MainWindow(base_class, ui_class):
         if text:
             self.main_view.setCurrentWidget(self.contacts_panel)
             self.switch_view.setText(u"Sessions")
+            self.enable_call_buttons(True)
         else:
+            selected_items = self.contact_list.selectionModel().selectedIndexes()
+            self.enable_call_buttons(len(selected_items)==1 and type(self.contact_model.data(selected_items[0])) is Contact)
             # switch to the sessions panel if there are active sessions, else to the contacts panel -Dan
-            pass
         active_widget = self.contact_list_panel if text.isEmpty() else self.search_panel
         self.contacts_view.setCurrentWidget(active_widget)
         active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
         self.search_view.setCurrentWidget(active_widget)
+
+    def contact_list_selection_changed(self, selected, deselected):
+        selected_items = self.contact_list.selectionModel().selectedIndexes()
+        self.enable_call_buttons(len(selected_items)==1 and type(self.contact_model.data(selected_items[0])) is Contact)
 
     def switch_main_view(self):
         widget = self.main_view.currentWidget().sibling_panel
