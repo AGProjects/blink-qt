@@ -757,6 +757,21 @@ class ContactListView(QListView):
         else:
             event.ignore()
 
+    def dropEvent(self, event):
+        model = self.model()
+        if event.source() is self:
+            event.setDropAction(Qt.MoveAction)
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        for group in model.contact_groups:
+            group.widget.drop_indicator = None
+            if self.needs_restore:
+                group.restore_state()
+        self.needs_restore = False
+        super(ContactListView, self).dropEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
+
     def _DH_ApplicationXBlinkContactGroupList(self, event, index, rect, item):
         model = self.model()
         groups = model.contact_groups
@@ -818,21 +833,6 @@ class ContactListView(QListView):
         else:
             event.ignore(rect)
 
-    def dropEvent(self, event):
-        model = self.model()
-        if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
-            event.accept()
-        for group in model.contact_groups:
-            group.widget.drop_indicator = None
-            if self.needs_restore:
-                group.restore_state()
-        self.needs_restore = False
-        super(ContactListView, self).dropEvent(event)
-        self.viewport().update(self.visualRect(self.drop_indicator_index))
-        self.drop_indicator_index = QModelIndex()
-
 
 class ContactSearchListView(QListView):
     def __init__(self, parent=None):
@@ -885,6 +885,14 @@ class ContactSearchListView(QListView):
         else:
             event.ignore()
 
+    def dropEvent(self, event):
+        model = self.model()
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        super(ContactSearchListView, self).dropEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
+
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
             event.accept(rect)
@@ -894,13 +902,5 @@ class ContactSearchListView(QListView):
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
             event.ignore(rect)
-
-    def dropEvent(self, event):
-        model = self.model()
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
-            event.accept()
-        super(ContactSearchListView, self).dropEvent(event)
-        self.viewport().update(self.visualRect(self.drop_indicator_index))
-        self.drop_indicator_index = QModelIndex()
 
 
