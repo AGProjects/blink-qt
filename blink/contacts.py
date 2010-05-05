@@ -10,7 +10,7 @@ import cPickle as pickle
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer
 from PyQt4.QtGui  import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
-from PyQt4.QtGui  import QKeyEvent, QListView, QMouseEvent, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QSortFilterProxyModel, QStyledItemDelegate
 
 from application.python.util import Null
 from functools import partial
@@ -189,6 +189,9 @@ class ContactGroupWidget(base_class, ui_class):
     def _end_editing(self):
         self.name_label.setText(self.name_editor.text())
         self.name_view.setCurrentWidget(self.label_widget)
+
+    def edit(self):
+        self._start_editing()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -374,6 +377,7 @@ class ContactModel(QAbstractListModel):
     def __init__(self, parent=None):
         super(ContactModel, self).__init__(parent)
         self.items = []
+        self.deleted_items = []
         self.contact_list = parent.contact_list
 
     @property
@@ -562,6 +566,10 @@ class ContactModel(QAbstractListModel):
         rows.update(row for row, item in enumerate(self.items) if type(item) is Contact and item.group in removed_groups)
         for start, end in self.reversed_range_iterator(rows):
             self.beginRemoveRows(QModelIndex(), start, end)
+            deleted_items = self.items[start:end+1]
+            for item in (item for item in deleted_items if type(item) is ContactGroup):
+                item.widget = Null
+            self.deleted_items.append(deleted_items)
             del self.items[start:end+1]
             self.endRemoveRows()
 
@@ -659,12 +667,29 @@ class ContactSearchModel(QSortFilterProxyModel):
         return left_item.name < right_item.name
 
 
+class ContextMenuActions(object):
+    pass
+
+
 class ContactListView(QListView):
     def __init__(self, parent=None):
         super(ContactListView, self).__init__(parent)
         self.setItemDelegate(ContactDelegate(self))
         self.setDropIndicatorShown(False)
         self.drop_indicator_index = QModelIndex()
+        self.actions = ContextMenuActions()
+        self.actions.add_group = QAction("Add Group", self, triggered=self._AH_AddGroup)
+        self.actions.add_contact = QAction("Add Contact", self, triggered=self._AH_AddContact)
+        self.actions.edit_item = QAction("Edit", self, triggered=self._AH_EditItem)
+        self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
+        self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
+        self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
+        self.actions.start_audio_session = QAction("Start Audio Session", self, triggered=self._AH_StartAudioSession)
+        self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
+        self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
+        self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
+        self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
         self.restore_timer = QTimer(self)
         self.restore_timer.setSingleShot(True)
         self.restore_timer.setInterval(1250)
@@ -701,6 +726,49 @@ class ContactListView(QListView):
             painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             painter.drawPath(path)
             painter.end()
+
+    def contextMenuEvent(self, event):
+        model = self.model()
+        selected_items = [model.data(index) for index in self.selectionModel().selectedIndexes()]
+        menu = QMenu(self)
+        if not selected_items:
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        elif len(selected_items) > 1:
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.delete_selection)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        elif type(selected_items[0]) is ContactGroup:
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.edit_item)
+            menu.addAction(self.actions.delete_item)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        else:
+            contact = selected_items[0]
+            menu.addAction(self.actions.start_audio_session)
+            menu.addAction(self.actions.start_chat_session)
+            menu.addAction(self.actions.send_sms)
+            menu.addSeparator()
+            menu.addAction(self.actions.send_files)
+            menu.addSeparator()
+            self.actions.request_remote_desktop.setText("Request Desktop from %s" % (contact.name or contact.uri))
+            self.actions.share_my_desktop.setText("Share My Desktop with %s" % (contact.name or contact.uri))
+            menu.addAction(self.actions.request_remote_desktop)
+            menu.addAction(self.actions.share_my_desktop)
+            menu.addSeparator()
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.edit_item)
+            menu.addAction(self.actions.delete_item)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        menu.exec_(event.globalPos())
 
     def dragEnterEvent(self, event):
         event_source = event.source()
@@ -772,6 +840,57 @@ class ContactListView(QListView):
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
 
+    def _AH_AddGroup(self):
+        group = ContactGroup("")
+        self.model().addGroup(group)
+        self.scrollToBottom()
+        group.widget.edit()
+
+    def _AH_AddContact(self):
+        model = self.model()
+        selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes())
+        if selected_rows:
+            item = model.items[selected_rows[0]]
+            prefered_group = item if type(item) is ContactGroup else item.group
+        elif model.items:
+            prefered_group = model.items[0]
+        else:
+            prefered_group = None
+
+    def _AH_EditItem(self):
+        index = self.selectionModel().selectedIndexes()[0]
+        item = self.model().data(index)
+        if type(item) is ContactGroup:
+            self.scrollTo(index)
+            item.widget.edit()
+
+    def _AH_DeleteSelection(self):
+        self.model().removeItems(self.selectionModel().selectedIndexes())
+
+    def _AH_UndoLastDelete(self):
+        model = self.model()
+        for item in model.deleted_items.pop():
+            handler = model.addGroup if type(item) is ContactGroup else model.addContact
+            handler(item)
+
+    def _AH_StartAudioSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_StartChatSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendSMS(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendFiles(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_RequestRemoteDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_ShareMyDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
     def _DH_ApplicationXBlinkContactGroupList(self, event, index, rect, item):
         model = self.model()
         groups = model.contact_groups
@@ -840,6 +959,17 @@ class ContactSearchListView(QListView):
         self.setItemDelegate(ContactDelegate(self))
         self.setDropIndicatorShown(False)
         self.drop_indicator_index = QModelIndex()
+        self.actions = ContextMenuActions()
+        self.actions.edit_item = QAction("Edit", self, triggered=self._AH_EditItem)
+        self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
+        self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
+        self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
+        self.actions.start_audio_session = QAction("Start Audio Session", self, triggered=self._AH_StartAudioSession)
+        self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
+        self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
+        self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
+        self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
 
     def paintEvent(self, event):
         super(ContactSearchListView, self).paintEvent(event)
@@ -851,6 +981,37 @@ class ContactSearchListView(QListView):
             painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
             painter.end()
+
+    def contextMenuEvent(self, event):
+        model = self.model()
+        source_model = model.sourceModel()
+        selected_items = [model.data(index) for index in self.selectionModel().selectedIndexes()]
+        menu = QMenu(self)
+        if not selected_items:
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
+        elif len(selected_items) > 1:
+            menu.addAction(self.actions.delete_selection)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
+        else:
+            contact = selected_items[0]
+            menu.addAction(self.actions.start_audio_session)
+            menu.addAction(self.actions.start_chat_session)
+            menu.addAction(self.actions.send_sms)
+            menu.addSeparator()
+            menu.addAction(self.actions.send_files)
+            menu.addSeparator()
+            self.actions.request_remote_desktop.setText("Request Desktop from %s" % (contact.name or contact.uri))
+            self.actions.share_my_desktop.setText("Share My Desktop with %s" % (contact.name or contact.uri))
+            menu.addAction(self.actions.request_remote_desktop)
+            menu.addAction(self.actions.share_my_desktop)
+            menu.addSeparator()
+            menu.addAction(self.actions.edit_item)
+            menu.addAction(self.actions.delete_item)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
+        menu.exec_(event.globalPos())
 
     def dragEnterEvent(self, event):
         accepted_mime_types = set(self.model().accepted_mime_types)
@@ -892,6 +1053,37 @@ class ContactSearchListView(QListView):
         super(ContactSearchListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
+
+    def _AH_EditItem(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_DeleteSelection(self):
+        model = self.model()
+        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes())
+
+    def _AH_UndoLastDelete(self):
+        model = self.model().sourceModel()
+        for item in model.deleted_items.pop():
+            handler = model.addGroup if type(item) is ContactGroup else model.addContact
+            handler(item)
+
+    def _AH_StartAudioSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_StartChatSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendSMS(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendFiles(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_RequestRemoteDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_ShareMyDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
 
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
