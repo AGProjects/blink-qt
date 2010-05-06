@@ -6,26 +6,54 @@ from __future__ import with_statement
 __all__ = ['Contact', 'ContactGroup', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
 
 import cPickle as pickle
+import errno
+import os
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer
 from PyQt4.QtGui  import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
 from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QSortFilterProxyModel, QStyledItemDelegate
 
+from application.python.decorator import decorator, preserve_signature
+from application.python.queue import EventQueue
 from application.python.util import Null
 from functools import partial
+from operator import attrgetter
 
-from blink.resources import Resources
+from sipsimple.util import makedirs
+
+from blink.resources import ApplicationData, Resources
+
+
+# Functions decorated with updates_contacts_db must only be called from the GUI thread.
+#
+@decorator
+def updates_contacts_db(func):
+    @preserve_signature(func)
+    def wrapper(*args, **kw):
+        updates_contacts_db.counter += 1
+        try:
+            result = func(*args, **kw)
+        finally:
+            updates_contacts_db.counter -= 1
+        if updates_contacts_db.counter == 0:
+            from blink import Blink
+            blink = Blink()
+            blink.main_window.contact_model.save()
+        return result
+    return wrapper
+updates_contacts_db.counter = 0
 
 
 class ContactGroup(object):
-    def __init__(self, name):
+    def __init__(self, name, collapsed=False):
+        self.user_collapsed = collapsed
         self.name = name
         self.widget = Null
         self.saved_state = Null
 
     def __reduce__(self):
-        return (self.__class__, (self.name,), None)
+        return (self.__class__, (self.name, self.user_collapsed), None)
 
     def __repr__(self):
         return "%s(%r)" % (self.__class__.__name__, self.name)
@@ -33,6 +61,11 @@ class ContactGroup(object):
     def __unicode__(self):
         return self.name
 
+    @updates_contacts_db
+    def _collapsed_changed(self, state):
+        self.user_collapsed = state
+
+    @updates_contacts_db
     def _name_changed(self):
         self.name = self.widget.name_editor.text()
 
@@ -41,8 +74,11 @@ class ContactGroup(object):
 
     def _set_widget(self, widget):
         old_widget = self.__dict__.get('widget', Null)
+        old_widget.collapse_button.clicked.disconnect(self._collapsed_changed)
         old_widget.name_editor.editingFinished.disconnect(self._name_changed)
+        widget.collapse_button.clicked.connect(self._collapsed_changed)
         widget.name_editor.editingFinished.connect(self._name_changed)
+        widget.collapse_button.setChecked(old_widget.collapse_button.isChecked() if old_widget is not Null else self.user_collapsed)
         self.__dict__['widget'] = widget
 
     widget = property(_get_widget, _set_widget)
@@ -53,12 +89,10 @@ class ContactGroup(object):
         return bool(self.widget.collapse_button.isChecked())
 
     def collapse(self):
-        if not self.widget.collapse_button.isChecked():
-            self.widget.collapse_button.click()
+        self.widget.collapse_button.setChecked(True)
 
     def expand(self):
-        if self.widget.collapse_button.isChecked():
-            self.widget.collapse_button.click()
+        self.widget.collapse_button.setChecked(False)
 
     def save_state(self):
         """Saves the current state of the group (collapsed or not)"""
@@ -66,8 +100,7 @@ class ContactGroup(object):
 
     def restore_state(self):
         """Restores the last saved state of the group (collapsed or not)"""
-        if self.saved_state != self.widget.collapse_button.isChecked():
-            self.widget.collapse_button.click()
+        self.widget.collapse_button.setChecked(self.saved_state)
 
 
 class ContactIconDescriptor(object):
@@ -295,9 +328,7 @@ class ContactDelegate(QStyledItemDelegate):
     def createEditor(self, parent, options, index):
         item = index.model().data(index, Qt.DisplayRole)
         if type(item) is ContactGroup:
-            collapsed = item.collapsed # if there was a previous editor widget, preserve its collapsed state
             item.widget = ContactGroupWidget(item.name, parent)
-            item.widget.collapse_button.setChecked(collapsed)
             item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
             return item.widget
         else:
@@ -379,6 +410,8 @@ class ContactModel(QAbstractListModel):
         self.items = []
         self.deleted_items = []
         self.contact_list = parent.contact_list
+        self.save_queue = EventQueue(self.store_contacts, name='ContactsSavingThread')
+        self.save_queue.start()
 
     @property
     def contact_groups(self):
@@ -431,6 +464,7 @@ class ContactModel(QAbstractListModel):
         else:
             return False
 
+    @updates_contacts_db
     def _DH_ApplicationXBlinkContactGroupList(self, mime_data, action, index):
         contact_groups = self.contact_groups
         group = self.items[index.row()] if index.isValid() else contact_groups[-1]
@@ -472,6 +506,7 @@ class ContactModel(QAbstractListModel):
                 self.contact_list.setRowHidden(position+index, item.group.collapsed)
         return True
 
+    @updates_contacts_db
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
         group = self.items[index.row()] if index.isValid() else self.contact_groups[-1]
         if group.widget.drop_indicator is None:
@@ -514,6 +549,7 @@ class ContactModel(QAbstractListModel):
             if indexes:
                 yield (last, end)
 
+    @updates_contacts_db
     def addContact(self, contact):
         if contact.group in self.items:
             for position in xrange(self.items.index(contact.group)+1, len(self.items)):
@@ -534,6 +570,7 @@ class ContactModel(QAbstractListModel):
             self.contact_list.openPersistentEditor(self.index(position))
             self.endInsertRows()
 
+    @updates_contacts_db
     def removeContact(self, contact):
         if contact not in self.items:
             return
@@ -542,6 +579,7 @@ class ContactModel(QAbstractListModel):
         del self.items[position]
         self.endRemoveRows()
 
+    @updates_contacts_db
     def addGroup(self, group):
         if group in self.items:
             return
@@ -551,6 +589,7 @@ class ContactModel(QAbstractListModel):
         self.contact_list.openPersistentEditor(self.index(position))
         self.endInsertRows()
 
+    @updates_contacts_db
     def removeGroup(self, group):
         if group not in self.items:
             return
@@ -560,6 +599,7 @@ class ContactModel(QAbstractListModel):
         del self.items[start:end+1]
         self.endRemoveRows()
 
+    @updates_contacts_db
     def removeItems(self, indexes):
         rows = set(index.row() for index in indexes if index.isValid())
         removed_groups = set(self.items[row] for row in rows if type(self.items[row]) is ContactGroup)
@@ -573,6 +613,7 @@ class ContactModel(QAbstractListModel):
             del self.items[start:end+1]
             self.endRemoveRows()
 
+    @updates_contacts_db
     def popItems(self, indexes):
         items = []
         rows = set(index.row() for index in indexes if index.isValid())
@@ -585,17 +626,51 @@ class ContactModel(QAbstractListModel):
             self.endRemoveRows()
         return items
 
-    def test(self):
-        work_group = ContactGroup('Work')
-        for contact in [Contact(work_group, 'Dan Pascu', '31208005167@ag-projects.com', 'icons/avatar.png'), Contact(work_group, 'Lucian Stanescu', '31208005164@ag-projects.com'), Contact(work_group, 'Test number', '3333@ag-projects.com')]:
-            if contact.uri.startswith('3333@') or contact.uri.startswith('31208005167@'):
-                contact.status = 'online'
+    def save(self):
+        self.save_queue.put(pickle.dumps(self.items))
+
+    def load(self):
+        try:
+            try:
+                file = open(ApplicationData.get('contacts'))
+                items = pickle.load(file)
+            except (IOError, OSError):
+                file = open(ApplicationData.get('contacts.bak'))
+                items = pickle.load(file)
+        except (IOError, OSError):
+            file = None
+            group = ContactGroup('Test')
+            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', 'icons/3333@sip2sip.info.png'),
+                        Contact(group, 'Echo Test', '4444@sip2sip.info', 'icons/4444@sip2sip.info.png'),
+                        Contact(group, 'Multi-Party Chat', '123@chatserver.ag-projects.com'),
+                        Contact(group, 'VUC Conference', '200901@login.zipdx.com', 'icons/200901@login.zipdx.com.png')]
+            contacts.sort(key=attrgetter('name'))
+            items = [group] + contacts
+        self.beginInsertRows(QModelIndex(), 0, len(items)-1)
+        self.items = items
+        self.endInsertRows()
+        for position, item in enumerate(self.items):
+            if type(item) is ContactGroup:
+                self.contact_list.openPersistentEditor(self.index(position))
             else:
-                contact.status = 'busy'
-            self.addContact(contact)
-        self.addGroup(ContactGroup('Test'))
-        self.addGroup(ContactGroup('Test 2'))
-        self.addGroup(ContactGroup('Test 3'))
+                self.contact_list.setRowHidden(position, item.group.collapsed)
+        if file is None:
+            self.save()
+
+    def store_contacts(self, data):
+        makedirs(ApplicationData.directory)
+        filename = ApplicationData.get('contacts')
+        tmp_filename = ApplicationData.get('contacts.tmp')
+        bak_filename = ApplicationData.get('contacts.bak')
+        file = open(tmp_filename, 'wb')
+        file.write(data)
+        file.close()
+        try:
+            os.rename(filename, bak_filename)
+        except OSError, e:
+            if e.errno != errno.ENOENT:
+                raise
+        os.rename(tmp_filename, filename)
 
 
 class ContactSearchModel(QSortFilterProxyModel):

@@ -45,7 +45,7 @@ class MainWindow(base_class, ui_class):
         self.contact_list.selectionModel().selectionChanged.connect(self.contact_list_selection_changed)
         self.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
 
-        self.contact_model.test()
+        self.contact_model.load()
 
         self.contacts_panel.sibling_panel = self.sessions_panel
         self.contacts_panel.sibling_name = u'Sessions'
