@@ -65,7 +65,7 @@
        </size>
       </property>
       <property name="inactiveText" stdset="0">
-       <string>Search Contacts</string>
+       <string>Search Contacts or Dial</string>
       </property>
      </widget>
     </item>
