@@ -634,10 +634,10 @@ class ContactModel(QAbstractListModel):
             try:
                 file = open(ApplicationData.get('contacts'))
                 items = pickle.load(file)
-            except (IOError, OSError):
+            except Exception:
                 file = open(ApplicationData.get('contacts.bak'))
                 items = pickle.load(file)
-        except (IOError, OSError):
+        except Exception:
             file = None
             group = ContactGroup('Test')
             contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', 'icons/3333@sip2sip.info.png'),
