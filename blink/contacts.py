@@ -646,9 +646,14 @@ class ContactModel(QAbstractListModel):
                         Contact(group, 'VUC Conference', '200901@login.zipdx.com', 'icons/200901@login.zipdx.com.png')]
             contacts.sort(key=attrgetter('name'))
             items = [group] + contacts
-        self.beginResetModel()
-        self.items = items
-        self.endResetModel()
+        if self.items:
+            self.beginRemoveRows(QModelIndex(), 0, len(self.items)-1)
+            del self.items[:]
+            self.endRemoveRows()
+        if items:
+            self.beginInsertRows(QModelIndex(), 0, len(items)-1)
+            self.items = items
+            self.endInsertRows()
         for position, item in enumerate(self.items):
             if type(item) is ContactGroup:
                 self.contact_list.openPersistentEditor(self.index(position))
