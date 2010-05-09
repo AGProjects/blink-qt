@@ -410,6 +410,10 @@ class ContactModel(QAbstractListModel):
         self.items = []
         self.deleted_items = []
         self.contact_list = parent.contact_list
+        if not hasattr(self, 'beginResetModel'):
+            # emulate beginResetModel/endResetModel for QT < 4.6
+            self.beginResetModel = Null # or use self.modelAboutToBeReset.emit (it'll be emited twice though in that case)
+            self.endResetModel = self.reset
         self.save_queue = EventQueue(self.store_contacts, name='ContactsSavingThread')
         self.save_queue.start()
 
@@ -646,14 +650,9 @@ class ContactModel(QAbstractListModel):
                         Contact(group, 'VUC Conference', '200901@login.zipdx.com', 'icons/200901@login.zipdx.com.png')]
             contacts.sort(key=attrgetter('name'))
             items = [group] + contacts
-        if self.items:
-            self.beginRemoveRows(QModelIndex(), 0, len(self.items)-1)
-            del self.items[:]
-            self.endRemoveRows()
-        if items:
-            self.beginInsertRows(QModelIndex(), 0, len(items)-1)
-            self.items = items
-            self.endInsertRows()
+        self.beginResetModel()
+        self.items = items
+        self.endResetModel()
         for position, item in enumerate(self.items):
             if type(item) is ContactGroup:
                 self.contact_list.openPersistentEditor(self.index(position))
