@@ -636,8 +636,14 @@ class ContactModel(QAbstractListModel):
                 file = open(ApplicationData.get('contacts'))
                 items = pickle.load(file)
             except Exception:
+                # remove the corrupted contacts file, so it won't be backed up to contacts.bak later
+                try:
+                    os.unlink(ApplicationData.get('contacts'))
+                except Exception:
+                    pass
                 file = open(ApplicationData.get('contacts.bak'))
                 items = pickle.load(file)
+                file = None # restore contacts from contacts.bak
         except Exception:
             file = None
             group = ContactGroup('Test')
