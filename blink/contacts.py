@@ -630,9 +630,6 @@ class ContactModel(QAbstractListModel):
             self.endRemoveRows()
         return items
 
-    def save(self):
-        self.save_queue.put(pickle.dumps(self.items))
-
     def load(self):
         try:
             try:
@@ -660,6 +657,9 @@ class ContactModel(QAbstractListModel):
                 self.contact_list.setRowHidden(position, item.group.collapsed)
         if file is None:
             self.save()
+
+    def save(self):
+        self.save_queue.put(pickle.dumps(self.items))
 
     def store_contacts(self, data):
         makedirs(ApplicationData.directory)
