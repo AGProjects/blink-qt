@@ -75,6 +75,12 @@ border-width: 0;
            <verstretch>0</verstretch>
           </sizepolicy>
          </property>
+         <property name="font">
+          <font>
+           <pointsize>9</pointsize>
+           <bold>true</bold>
+          </font>
+         </property>
          <property name="palette">
           <palette>
            <active>

@@ -130,9 +130,9 @@
        </property>
        <property name="font">
         <font>
-         <pointsize>10</pointsize>
+         <pointsize>9</pointsize>
          <weight>75</weight>
-         <bold>true</bold>
+         <bold>false</bold>
         </font>
        </property>
        <property name="text">
@@ -153,6 +153,13 @@
        </property>
        <property name="text">
         <string>URI</string>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>8</pointsize>
+         <weight>75</weight>
+         <bold>false</bold>
+        </font>
        </property>
       </widget>
      </item>
