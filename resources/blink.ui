@@ -132,7 +132,7 @@
             <property name="font">
              <font>
               <weight>75</weight>
-              <bold>true</bold>
+              <bold>false</bold>
              </font>
             </property>
             <property name="styleSheet">
@@ -213,7 +213,7 @@
           </property>
           <property name="font">
            <font>
-            <italic>true</italic>
+            <italic>false</italic>
            </font>
           </property>
           <property name="styleSheet">
