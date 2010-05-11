@@ -142,7 +142,7 @@
              <bool>false</bool>
             </property>
             <property name="inactiveText" stdset="0">
-             <string>Type your name here</string>
+             <string>My full name</string>
             </property>
             <property name="widgetSpacing" stdset="0">
              <number>0</number>
