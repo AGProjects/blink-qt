@@ -3,7 +3,7 @@
 
 from __future__ import with_statement
 
-__all__ = ['Contact', 'ContactGroup', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
+__all__ = ['BonjourGroup', 'BonjourNeighbour', 'Contact', 'ContactGroup', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
 
 import cPickle as pickle
 import errno
@@ -46,6 +46,11 @@ updates_contacts_db.counter = 0
 
 
 class ContactGroup(object):
+    savable = True
+    movable = True
+    editable = True
+    deletable = True
+
     def __init__(self, name, collapsed=False):
         self.user_collapsed = collapsed
         self.name = name
@@ -122,6 +127,11 @@ class ContactIconDescriptor(object):
 
 
 class Contact(object):
+    savable = True
+    movable = True
+    editable = True
+    deletable = True
+
     default_user_icon = ContactIconDescriptor('icons/default-avatar.png')
 
     def __init__(self, group, name, uri, image=None):
@@ -140,6 +150,24 @@ class Contact(object):
 
     def __reduce__(self):
         return (self.__class__, (self.group, self.name, self.uri, self.image), None)
+
+
+class BonjourGroup(ContactGroup):
+    savable = True
+    movable = True
+    editable = True
+    deletable = False
+
+    def __init__(self, name, collapsed=False):
+        super(BonjourGroup, self).__init__(name, collapsed)
+        self.previous_position = None
+
+
+class BonjourNeighbour(Contact):
+    savable = False
+    movable = False
+    editable = False
+    deletable = False
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact.ui'))
@@ -295,7 +323,7 @@ del ui_class, base_class
 
 
 class ContactDelegate(QStyledItemDelegate):
-    item_size_hints = {Contact: QSize(200, 36), ContactGroup: QSize(200, 18)}
+    item_size_hints = {Contact: QSize(200, 36), ContactGroup: QSize(200, 18), BonjourNeighbour: QSize(200, 36), BonjourGroup: QSize(200, 18)}
 
     def __init__(self, parent=None):
         super(ContactDelegate, self).__init__(parent)
@@ -321,13 +349,13 @@ class ContactDelegate(QStyledItemDelegate):
         list_view = self.parent()
         list_items = list_view.model().items
         for position in xrange(list_items.index(group)+1, len(list_items)):
-            if type(list_items[position]) is ContactGroup:
+            if isinstance(list_items[position], ContactGroup):
                 break
             list_view.setRowHidden(position, collapsed)
 
     def createEditor(self, parent, options, index):
         item = index.model().data(index, Qt.DisplayRole)
-        if type(item) is ContactGroup:
+        if isinstance(item, ContactGroup):
             item.widget = ContactGroupWidget(item.name, parent)
             item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
             return item.widget
@@ -392,6 +420,9 @@ class ContactDelegate(QStyledItemDelegate):
             painter.drawPixmap(option.rect, pixmap)
             painter.restore()
 
+    paintBonjourNeighbour = paintContact
+    paintBonjourGroup = paintContactGroup
+
     def paint(self, painter, option, index):
         item = index.model().data(index, Qt.DisplayRole)
         handler = getattr(self, 'paint%s' % item.__class__.__name__, Null)
@@ -416,10 +447,11 @@ class ContactModel(QAbstractListModel):
             self.endResetModel = self.reset
         self.save_queue = EventQueue(self.store_contacts, name='ContactsSavingThread')
         self.save_queue.start()
+        self.bonjour_group = None
 
     @property
     def contact_groups(self):
-        return [item for item in self.items if type(item) is ContactGroup]
+        return [item for item in self.items if isinstance(item, ContactGroup)]
 
     def flags(self, index):
         if index.isValid():
@@ -443,8 +475,8 @@ class ContactModel(QAbstractListModel):
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
-        contacts = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if type(item) is Contact]
-        groups = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if type(item) is ContactGroup]
+        contacts = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if isinstance(item, Contact)]
+        groups = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if isinstance(item, ContactGroup)]
         if contacts:
             mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contacts)))
         if groups:
@@ -476,7 +508,7 @@ class ContactModel(QAbstractListModel):
         if group.widget.drop_indicator is None:
             return False
         selected_indexes = self.contact_list.selectionModel().selectedIndexes()
-        moved_groups = set(self.items[index.row()] for index in selected_indexes if index.isValid())
+        moved_groups = set(self.items[index.row()] for index in selected_indexes if index.isValid() and self.items[index.row()].movable)
         if group is contact_groups[0] and group in moved_groups:
             drop_group = (group for group in contact_groups if group not in moved_groups).next()
             drop_position = self.contact_list.AboveItem
@@ -504,7 +536,7 @@ class ContactModel(QAbstractListModel):
         self.items[position:position] = items
         self.endInsertRows()
         for index, item in enumerate(items):
-            if type(item) is ContactGroup:
+            if isinstance(item, ContactGroup):
                 self.contact_list.openPersistentEditor(self.index(position+index))
             else:
                 self.contact_list.setRowHidden(position+index, item.group.collapsed)
@@ -515,7 +547,8 @@ class ContactModel(QAbstractListModel):
         group = self.items[index.row()] if index.isValid() else self.contact_groups[-1]
         if group.widget.drop_indicator is None:
             return False
-        for contact in self.popItems(self.contact_list.selectionModel().selectedIndexes()):
+        indexes = [index for index in self.contact_list.selectionModel().selectedIndexes() if self.items[index.row()].movable]
+        for contact in self.popItems(indexes):
             contact.group = group
             self.addContact(contact)
         return True
@@ -558,7 +591,7 @@ class ContactModel(QAbstractListModel):
         if contact.group in self.items:
             for position in xrange(self.items.index(contact.group)+1, len(self.items)):
                 item = self.items[position]
-                if type(item) is ContactGroup or item.name > contact.name:
+                if isinstance(item, ContactGroup) or item.name > contact.name:
                     break
             else:
                 position = len(self.items)
@@ -598,20 +631,47 @@ class ContactModel(QAbstractListModel):
         if group not in self.items:
             return
         start = self.items.index(group)
-        end = start + len([item for item in self.items if type(item) is Contact and item.group==group])
+        end = start + len([item for item in self.items if isinstance(item, Contact) and item.group==group])
         self.beginRemoveRows(QModelIndex(), start, end)
         del self.items[start:end+1]
         self.endRemoveRows()
 
     @updates_contacts_db
+    def moveGroup(self, group, position):
+        contact_groups = self.contact_groups
+        if group not in contact_groups or contact_groups.index(group) == position:
+            return
+        contacts_count = len([item for item in self.items if isinstance(item, Contact) and item.group==group])
+        start = self.items.index(group)
+        end = start + contacts_count
+        self.beginRemoveRows(QModelIndex(), start, end)
+        items = self.items[start:end+1]
+        del self.items[start:end+1]
+        self.endRemoveRows()
+        if position >= len(contact_groups)-1:
+            self.beginInsertRows(QModelIndex(), len(self.items), len(self.items)+end)
+            self.items.extend(items)
+            self.endInsertRows()
+            self.contact_list.openPersistentEditor(self.index(len(self.items)-contacts_count-1))
+        else:
+            if contact_groups.index(group) < position:
+                position += 1
+            start = self.items.index(contact_groups[position])
+            end = start + contacts_count
+            self.beginInsertRows(QModelIndex(), start, end)
+            self.items[start:start] = items
+            self.endInsertRows()
+            self.contact_list.openPersistentEditor(self.index(start))
+
+    @updates_contacts_db
     def removeItems(self, indexes):
         rows = set(index.row() for index in indexes if index.isValid())
-        removed_groups = set(self.items[row] for row in rows if type(self.items[row]) is ContactGroup)
-        rows.update(row for row, item in enumerate(self.items) if type(item) is Contact and item.group in removed_groups)
+        removed_groups = set(self.items[row] for row in rows if isinstance(self.items[row], ContactGroup))
+        rows.update(row for row, item in enumerate(self.items) if isinstance(item, Contact) and item.group in removed_groups)
         for start, end in self.reversed_range_iterator(rows):
             self.beginRemoveRows(QModelIndex(), start, end)
             deleted_items = self.items[start:end+1]
-            for item in (item for item in deleted_items if type(item) is ContactGroup):
+            for item in (item for item in deleted_items if isinstance(item, ContactGroup)):
                 item.widget = Null
             self.deleted_items.append(deleted_items)
             del self.items[start:end+1]
@@ -621,8 +681,8 @@ class ContactModel(QAbstractListModel):
     def popItems(self, indexes):
         items = []
         rows = set(index.row() for index in indexes if index.isValid())
-        removed_groups = set(self.items[row] for row in rows if type(self.items[row]) is ContactGroup)
-        rows.update(row for row, item in enumerate(self.items) if type(item) is Contact and item.group in removed_groups)
+        removed_groups = set(self.items[row] for row in rows if isinstance(self.items[row], ContactGroup))
+        rows.update(row for row, item in enumerate(self.items) if isinstance(item, Contact) and item.group in removed_groups)
         for start, end in self.reversed_range_iterator(rows):
             self.beginRemoveRows(QModelIndex(), start, end)
             items[0:0] = self.items[start:end+1]
@@ -657,15 +717,28 @@ class ContactModel(QAbstractListModel):
         self.items = items
         self.endResetModel()
         for position, item in enumerate(self.items):
-            if type(item) is ContactGroup:
+            if isinstance(item, ContactGroup):
                 self.contact_list.openPersistentEditor(self.index(position))
             else:
                 self.contact_list.setRowHidden(position, item.group.collapsed)
+            if type(item) is BonjourGroup:
+                self.bonjour_group = item
+        if self.bonjour_group is None:
+            self.bonjour_group = BonjourGroup('Bonjour Neighbours')
         if file is None:
             self.save()
 
     def save(self):
-        self.save_queue.put(pickle.dumps(self.items))
+        items = [item for item in self.items if item.savable]
+        contact_groups = self.contact_groups
+        if self.bonjour_group in contact_groups and self.bonjour_group.previous_position != contact_groups.index(self.bonjour_group) and self.bonjour_group.previous_position is not None:
+            items.remove(self.bonjour_group)
+            if self.bonjour_group.previous_position >= len(contact_groups)-1:
+                items.append(self.bonjour_group)
+            else:
+                position = items.index(contact_groups[self.bonjour_group.previous_position+1])
+                items.insert(position, self.bonjour_group)
+        self.save_queue.put(pickle.dumps(items))
 
     def store_contacts(self, data):
         makedirs(ApplicationData.directory)
@@ -740,7 +813,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         source_model = self.sourceModel()
         source_index = source_model.index(source_row, 0, source_parent)
         item = source_model.data(source_index, Qt.DisplayRole)
-        if type(item) is ContactGroup:
+        if isinstance(item, ContactGroup):
             return False
         search_tokens = unicode(self.filterRegExp().pattern()).lower().split()
         searched_item = unicode(item).lower()
@@ -826,13 +899,16 @@ class ContactListView(QListView):
             menu.addAction(self.actions.add_contact)
             menu.addAction(self.actions.delete_selection)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        elif type(selected_items[0]) is ContactGroup:
+        elif isinstance(selected_items[0], ContactGroup):
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.edit_item.setEnabled(selected_items[0].editable)
+            self.actions.delete_item.setEnabled(selected_items[0].deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         else:
             contact = selected_items[0]
@@ -852,6 +928,8 @@ class ContactListView(QListView):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.edit_item.setEnabled(contact.editable)
+            self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         menu.exec_(event.globalPos())
 
@@ -933,29 +1011,33 @@ class ContactListView(QListView):
 
     def _AH_AddContact(self):
         model = self.model()
-        selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes())
+        selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes() if type(model.data(index)) in (Contact, ContactGroup))
         if selected_rows:
             item = model.items[selected_rows[0]]
-            prefered_group = item if type(item) is ContactGroup else item.group
-        elif model.items:
-            prefered_group = model.items[0]
+            preferred_group = item if type(item) is ContactGroup else item.group
         else:
-            prefered_group = None
+            try:
+                preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
+            except StopIteration:
+                preferred_group = None
 
     def _AH_EditItem(self):
         index = self.selectionModel().selectedIndexes()[0]
         item = self.model().data(index)
-        if type(item) is ContactGroup:
+        if isinstance(item, ContactGroup):
             self.scrollTo(index)
             item.widget.edit()
 
     def _AH_DeleteSelection(self):
-        self.model().removeItems(self.selectionModel().selectedIndexes())
+        model = self.model()
+        indexes = [index for index in self.selectionModel().selectedIndexes() if model.items[index.row()].deletable]
+        model.removeItems(indexes)
+        self.selectionModel().clearSelection()
 
     def _AH_UndoLastDelete(self):
         model = self.model()
         for item in model.deleted_items.pop():
-            handler = model.addGroup if type(item) is ContactGroup else model.addContact
+            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
             handler(item)
 
     def _AH_StartAudioSession(self):
@@ -985,7 +1067,7 @@ class ContactListView(QListView):
             drop_groups = (groups[-1], Null)
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(model.items.index(groups[-1]))).bottom())
-        elif type(item) is ContactGroup:
+        elif isinstance(item, ContactGroup):
             index = groups.index(item)
             rect.setHeight(rect.height()/2)
             if rect.contains(event.pos()):
@@ -993,7 +1075,7 @@ class ContactListView(QListView):
             else:
                 drop_groups = (groups[index], groups[index+1]) if index<len(groups)-1 else (groups[index], Null)
                 rect.translate(0, rect.height())
-        selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes())
+        selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes() if model.items[index.row()].movable)
         if selected_rows:
             first = groups.index(model.items[selected_rows[0]])
             last = groups.index(model.items[selected_rows[-1]])
@@ -1015,14 +1097,17 @@ class ContactListView(QListView):
         groups = model.contact_groups
         for group in groups:
             group.widget.drop_indicator = None
+        if not any(model.items[index.row()].movable for index in self.selectionModel().selectedIndexes()):
+            event.accept(rect)
+            return
         if not index.isValid():
             group = groups[-1]
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(model.items.index(group))).bottom())
-        elif type(item) is ContactGroup:
+        elif isinstance(item, ContactGroup):
             group = item
-        selected_contact_groups = set(model.items[index.row()].group for index in self.selectionModel().selectedIndexes())
-        if event.source() is not self or len(selected_contact_groups) > 1 or group not in selected_contact_groups:
+        selected_contact_groups = set(model.items[index.row()].group for index in self.selectionModel().selectedIndexes() if model.items[index.row()].movable)
+        if type(group) is ContactGroup and (event.source() is not self or len(selected_contact_groups) > 1 or group not in selected_contact_groups):
             group.widget.drop_indicator = self.OnItem
         event.accept(rect)
 
@@ -1031,7 +1116,7 @@ class ContactListView(QListView):
         if not index.isValid():
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(len(model.items)-1)).bottom())
-        if type(item) is Contact:
+        if isinstance(item, Contact):
             event.accept(rect)
             self.drop_indicator_index = index
         else:
@@ -1078,6 +1163,7 @@ class ContactSearchListView(QListView):
         elif len(selected_items) > 1:
             menu.addAction(self.actions.delete_selection)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         else:
             contact = selected_items[0]
@@ -1095,6 +1181,8 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.edit_item.setEnabled(contact.editable)
+            self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         menu.exec_(event.globalPos())
 
@@ -1144,12 +1232,12 @@ class ContactSearchListView(QListView):
 
     def _AH_DeleteSelection(self):
         model = self.model()
-        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes())
+        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes() if model.data(index).deletable)
 
     def _AH_UndoLastDelete(self):
         model = self.model().sourceModel()
         for item in model.deleted_items.pop():
-            handler = model.addGroup if type(item) is ContactGroup else model.addContact
+            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
             handler(item)
 
     def _AH_StartAudioSession(self):

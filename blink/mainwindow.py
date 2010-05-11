@@ -15,7 +15,7 @@ from zope.interface import implements
 
 from sipsimple.account import AccountManager, BonjourAccount
 
-from blink.contacts import Contact, ContactModel, ContactSearchModel
+from blink.contacts import BonjourNeighbour, Contact, ContactModel, ContactSearchModel
 from blink.resources import Resources
 from blink.util import run_in_gui_thread
 
@@ -68,6 +68,8 @@ class MainWindow(base_class, ui_class):
         #self.connect(self.contact_list, QtCore.SIGNAL("doubleClicked(const QModelIndex &)"), self.double_click_action)
 
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BonjourAccountDidAddNeighbour')
+        notification_center.add_observer(self, name='BonjourAccountDidRemoveNeighbour')
         notification_center.add_observer(self, name="SIPAccountManagerDidChangeDefaultAccount")
         notification_center.add_observer(self, name="SIPAccountManagerDidStart")
         notification_center.add_observer(self, name="SIPAccountDidActivate")
@@ -139,11 +141,22 @@ class MainWindow(base_class, ui_class):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _NH_BonjourAccountDidAddNeighbour(self, notification):
+        display_name = '%s (%s)' % (notification.data.display_name, notification.data.host)
+        contact = BonjourNeighbour(self.contact_model.bonjour_group, display_name, unicode(notification.data.uri))
+        self.contact_model.addContact(contact)
+
+    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
+        for contact in (c for c in self.contact_model.items[:] if type(c) is BonjourNeighbour):
+            if contact.uri == unicode(notification.data.uri):
+                self.contact_model.removeContact(contact)
+
     def _NH_SIPAccountDidActivate(self, notification):
         account = notification.sender
         name = u'Bonjour' if account is BonjourAccount() else account.id
         icon = None
         if account is BonjourAccount():
+            self.contact_model.addGroup(self.contact_model.bonjour_group)
             pixmap = QPixmap()
             if pixmap.load(Resources.get('icons/bonjour.png')):
                 pixmap = pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -157,16 +170,38 @@ class MainWindow(base_class, ui_class):
         account = notification.sender
         name = u'Bonjour' if account is BonjourAccount() else account.id
         self.identity.removeItem(self.identity.findText(name))
+        if account is BonjourAccount():
+            self.contact_model.removeGroup(self.contact_model.bonjour_group)
 
     def _NH_SIPAccountManagerDidStart(self, notification):
         account = AccountManager().default_account
         name = u'Bonjour' if account is BonjourAccount() else account.id
         self.identity.setCurrentIndex(self.identity.findText(name))
+        if not BonjourAccount().enabled and self.contact_model.bonjour_group in self.contact_model.contact_groups:
+            self.contact_model.removeGroup(self.contact_model.bonjour_group)
+        if notification.sender.default_account is BonjourAccount():
+            group = self.contact_model.bonjour_group
+            group.previous_position = self.contact_model.contact_groups.index(group)
+            self.contact_model.moveGroup(group, 0)
+            group.expand()
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         account = notification.data.account
+        old_account = notification.data.old_account
         name = u'Bonjour' if account is BonjourAccount() else account.id
         self.identity.setCurrentIndex(self.identity.findText(name))
+        if account is BonjourAccount():
+            group = self.contact_model.bonjour_group
+            group.previous_position = self.contact_model.contact_groups.index(group)
+            self.contact_model.moveGroup(group, 0)
+            group.expand()
+        elif old_account is BonjourAccount():
+            group = self.contact_model.bonjour_group
+            self.contact_model.moveGroup(group, group.previous_position)
+            if group.collapsed and not group.user_collapsed:
+                group.expand()
+            elif not group.collapsed and group.user_collapsed:
+                group.collapse()
 
 del ui_class, base_class
 
