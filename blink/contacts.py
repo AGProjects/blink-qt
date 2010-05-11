@@ -649,7 +649,7 @@ class ContactModel(QAbstractListModel):
         del self.items[start:end+1]
         self.endRemoveRows()
         if position >= len(contact_groups)-1:
-            self.beginInsertRows(QModelIndex(), len(self.items), len(self.items)+end)
+            self.beginInsertRows(QModelIndex(), len(self.items), len(self.items)+contacts_count)
             self.items.extend(items)
             self.endInsertRows()
             self.contact_list.openPersistentEditor(self.index(len(self.items)-contacts_count-1))
@@ -736,8 +736,10 @@ class ContactModel(QAbstractListModel):
             if self.bonjour_group.previous_position >= len(contact_groups)-1:
                 items.append(self.bonjour_group)
             else:
-                position = items.index(contact_groups[self.bonjour_group.previous_position+1])
-                items.insert(position, self.bonjour_group)
+                position = self.bonjour_group.previous_position
+                if contact_groups.index(self.bonjour_group) < position:
+                    position += 1
+                items.insert(items.index(contact_groups[position]), self.bonjour_group)
         self.save_queue.put(pickle.dumps(items))
 
     def store_contacts(self, data):
