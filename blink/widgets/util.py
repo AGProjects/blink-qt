@@ -8,7 +8,7 @@ from PyQt4.QtCore import QVariant
 
 
 class QtDynamicProperty(object):
-    def __init__(self, name, type=str):
+    def __init__(self, name, type=unicode):
         self.name = name
         self.type = type
     def __get__(self, obj, objtype):
