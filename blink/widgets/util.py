@@ -12,9 +12,10 @@ class QtDynamicProperty(object):
         self.name = name
         self.type = type
     def __get__(self, obj, objtype):
-        return obj.property(self.name).toPyObject() if obj is not None else self
+        value = self if obj is None else obj.property(self.name).toPyObject()
+        return value if value in (self, None) else self.type(value)
     def __set__(self, obj, value):
-        obj.setProperty(self.name, QVariant(value))
+        obj.setProperty(self.name, QVariant(value if value is None else self.type(value)))
     def __delete__(self, obj):
         raise AttributeError("attribute cannot be deleted")
 
