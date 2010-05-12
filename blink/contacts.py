@@ -952,10 +952,12 @@ class ContactListView(QListView):
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
             painter.end()
         model = self.model()
-        contact_groups = model.contact_groups
-        if contact_groups and contact_groups[-1].widget.drop_indicator is self.BelowItem:
-            # draw the bottom part of the drop indicator for the last group
-            last_group = contact_groups[-1]
+        try:
+            last_group = model.contact_groups[-1]
+        except IndexError:
+            last_group = Null
+        if last_group.widget.drop_indicator is self.BelowItem:
+            # draw the bottom part of the drop indicator for the last group if we have one
             rect = self.visualRect(model.index(model.items.index(last_group)))
             line_rect = QRectF(rect.adjusted(18, rect.height(), 0, 5))
             arc_rect = line_rect.adjusted(-5, -3, -line_rect.width(), -3)
