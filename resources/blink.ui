@@ -61,7 +61,7 @@
       <property name="minimumSize">
        <size>
         <width>0</width>
-        <height>24</height>
+        <height>29</height>
        </size>
       </property>
       <property name="inactiveText" stdset="0">
@@ -132,7 +132,7 @@
             <property name="font">
              <font>
               <weight>75</weight>
-              <bold>false</bold>
+              <bold>true</bold>
              </font>
             </property>
             <property name="styleSheet">
@@ -142,7 +142,7 @@
              <bool>false</bool>
             </property>
             <property name="inactiveText" stdset="0">
-             <string>My full name</string>
+             <string>Type your name here</string>
             </property>
             <property name="widgetSpacing" stdset="0">
              <number>0</number>
@@ -210,11 +210,6 @@
             <width>16777215</width>
             <height>18</height>
            </size>
-          </property>
-          <property name="font">
-           <font>
-            <italic>false</italic>
-           </font>
           </property>
           <property name="styleSheet">
            <string>background-color: transparent;</string>

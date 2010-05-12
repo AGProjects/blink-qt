@@ -724,10 +724,10 @@ class ContactModel(QAbstractListModel):
         except Exception:
             file = None
             group = ContactGroup('Test')
-            contacts = [Contact(group, 'Play James Bond Theme', '3333@sip2sip.info', 'icons/3333@sip2sip.info.png'),
-                        Contact(group, 'Test Your Microphone', '4444@sip2sip.info', 'icons/4444@sip2sip.info.png'),
-                        Contact(group, 'Test Multi-Party Chatserver', '123@chatserver.ag-projects.com'),
-                        Contact(group, 'VUC Conference http://vuc.me', '200901@login.zipdx.com', 'icons/200901@login.zipdx.com.png')]
+            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', 'icons/3333@sip2sip.info.png'),
+                        Contact(group, 'Echo Test', '4444@sip2sip.info', 'icons/4444@sip2sip.info.png'),
+                        Contact(group, 'Multi-Party Chat', '123@chatserver.ag-projects.com'),
+                        Contact(group, 'VUC Conference', '200901@login.zipdx.com', 'icons/200901@login.zipdx.com.png')]
             contacts.sort(key=attrgetter('name'))
             items = [group] + contacts
         self.beginResetModel()
