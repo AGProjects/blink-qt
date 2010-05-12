@@ -39,7 +39,7 @@ class ApplicationData(object):
 
     @classmethod
     def get(cls, resource):
-        return os.path.join(cls.directory, resource)
+        return os.path.join(cls.directory, resource or u'')
 
 
 class Resources(object):
@@ -67,6 +67,6 @@ class Resources(object):
 
     @classmethod
     def get(cls, resource):
-        return os.path.join(cls.directory, resource)
+        return os.path.join(cls.directory, resource or u'')
 
 
