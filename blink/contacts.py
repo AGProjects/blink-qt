@@ -25,7 +25,7 @@ from zope.interface import implements
 from sipsimple.account import BonjourAccount
 from sipsimple.util import makedirs
 
-from blink.resources import ApplicationData, Resources
+from blink.resources import ApplicationData, Resources, IconCache
 from blink.util import run_in_gui_thread
 
 
@@ -126,12 +126,12 @@ class ContactGroup(object):
 
 class ContactIconDescriptor(object):
     def __init__(self, filename):
-        self.filename = Resources.get(filename)
+        self.filename = filename
         self.icon = None
     def __get__(self, obj, objtype):
         if self.icon is None:
             pixmap = QPixmap()
-            if pixmap.load(self.filename):
+            if pixmap.load(ApplicationData.get(self.filename)):
                 self.icon = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             else:
                 self.icon = pixmap
@@ -148,7 +148,7 @@ class Contact(object):
     editable = True
     deletable = True
 
-    default_user_icon = ContactIconDescriptor('icons/default-avatar.png')
+    default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
 
     def __init__(self, group, name, uri, image=None):
         self.group = group
@@ -723,11 +723,12 @@ class ContactModel(QAbstractListModel):
                 file = None # restore contacts from contacts.bak
         except Exception:
             file = None
+            icon_cache = IconCache()
             group = ContactGroup('Test')
-            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', 'icons/3333@sip2sip.info.png'),
-                        Contact(group, 'Echo Test', '4444@sip2sip.info', 'icons/4444@sip2sip.info.png'),
+            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', icon_cache.store(Resources.get('icons/3333@sip2sip.info.png'))),
+                        Contact(group, 'Echo Test', '4444@sip2sip.info', icon_cache.store(Resources.get('icons/4444@sip2sip.info.png'))),
                         Contact(group, 'Multi-Party Chat', '123@chatserver.ag-projects.com'),
-                        Contact(group, 'VUC Conference', '200901@login.zipdx.com', 'icons/200901@login.zipdx.com.png')]
+                        Contact(group, 'VUC Conference', '200901@login.zipdx.com', icon_cache.store(Resources.get('icons/200901@login.zipdx.com.png')))]
             contacts.sort(key=attrgetter('name'))
             items = [group] + contacts
         self.beginResetModel()
