@@ -152,6 +152,9 @@ class Contact(object):
         return (self.__class__, (self.group, self.name, self.uri, self.image), None)
 
 
+class NoGroup(object):
+    pass
+
 class BonjourGroup(ContactGroup):
     savable = True
     movable = True
@@ -160,7 +163,7 @@ class BonjourGroup(ContactGroup):
 
     def __init__(self, name, collapsed=False):
         super(BonjourGroup, self).__init__(name, collapsed)
-        self.previous_position = None
+        self.reference_group = NoGroup
 
 
 class BonjourNeighbour(Contact):
@@ -540,6 +543,8 @@ class ContactModel(QAbstractListModel):
                 self.contact_list.openPersistentEditor(self.index(position+index))
             else:
                 self.contact_list.setRowHidden(position+index, item.group.collapsed)
+        if self.bonjour_group in moved_groups:
+            self.bonjour_group.reference_group = NoGroup
         return True
 
     @updates_contacts_db
@@ -637,31 +642,17 @@ class ContactModel(QAbstractListModel):
         self.endRemoveRows()
 
     @updates_contacts_db
-    def moveGroup(self, group, position):
+    def moveGroup(self, group, reference):
         contact_groups = self.contact_groups
-        if group not in contact_groups or contact_groups.index(group) == position:
+        if group not in contact_groups or contact_groups.index(group)+1 == (contact_groups.index(reference) if reference in contact_groups else len(contact_groups)):
             return
-        contacts_count = len([item for item in self.items if isinstance(item, Contact) and item.group==group])
-        start = self.items.index(group)
-        end = start + contacts_count
-        self.beginRemoveRows(QModelIndex(), start, end)
-        items = self.items[start:end+1]
-        del self.items[start:end+1]
-        self.endRemoveRows()
-        if position >= len(contact_groups)-1:
-            self.beginInsertRows(QModelIndex(), len(self.items), len(self.items)+contacts_count)
-            self.items.extend(items)
-            self.endInsertRows()
-            self.contact_list.openPersistentEditor(self.index(len(self.items)-contacts_count-1))
-        else:
-            if contact_groups.index(group) < position:
-                position += 1
-            start = self.items.index(contact_groups[position])
-            end = start + contacts_count
-            self.beginInsertRows(QModelIndex(), start, end)
-            self.items[start:start] = items
-            self.endInsertRows()
-            self.contact_list.openPersistentEditor(self.index(start))
+        items = self.popItems([self.index(self.items.index(group))])
+        start = self.items.index(reference) if reference in contact_groups else len(self.items)
+        end = start + len(items) - 1
+        self.beginInsertRows(QModelIndex(), start, end)
+        self.items[start:start] = items
+        self.endInsertRows()
+        self.contact_list.openPersistentEditor(self.index(start))
 
     @updates_contacts_db
     def removeItems(self, indexes):
@@ -731,15 +722,12 @@ class ContactModel(QAbstractListModel):
     def save(self):
         items = [item for item in self.items if item.savable]
         contact_groups = self.contact_groups
-        if self.bonjour_group in contact_groups and self.bonjour_group.previous_position != contact_groups.index(self.bonjour_group) and self.bonjour_group.previous_position is not None:
+        group = self.bonjour_group
+        reference = group.reference_group
+        if group in contact_groups and reference is not NoGroup and contact_groups.index(group)+1 != (contact_groups.index(reference) if reference in contact_groups else len(contact_groups)):
             items.remove(self.bonjour_group)
-            if self.bonjour_group.previous_position >= len(contact_groups)-1:
-                items.append(self.bonjour_group)
-            else:
-                position = self.bonjour_group.previous_position
-                if contact_groups.index(self.bonjour_group) < position:
-                    position += 1
-                items.insert(items.index(contact_groups[position]), self.bonjour_group)
+            position = items.index(reference) if reference in contact_groups else len(self.items)
+            items.insert(position, group)
         self.save_queue.put(pickle.dumps(items))
 
     def store_contacts(self, data):

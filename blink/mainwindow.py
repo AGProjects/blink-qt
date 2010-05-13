@@ -15,7 +15,7 @@ from zope.interface import implements
 
 from sipsimple.account import AccountManager, BonjourAccount
 
-from blink.contacts import BonjourNeighbour, Contact, ContactModel, ContactSearchModel
+from blink.contacts import BonjourNeighbour, Contact, ContactModel, ContactSearchModel, NoGroup
 from blink.resources import Resources
 from blink.util import run_in_gui_thread
 
@@ -181,8 +181,13 @@ class MainWindow(base_class, ui_class):
             self.contact_model.removeGroup(self.contact_model.bonjour_group)
         if notification.sender.default_account is BonjourAccount():
             group = self.contact_model.bonjour_group
-            group.previous_position = self.contact_model.contact_groups.index(group)
-            self.contact_model.moveGroup(group, 0)
+            contact_groups = self.contact_model.contact_groups
+            try:
+                group.reference_group = contact_groups[contact_groups.index(group)+1]
+            except IndexError:
+                group.reference_group = Null
+            if group is not self.contact_model.contact_groups[0]:
+                self.contact_model.moveGroup(group, self.contact_model.contact_groups[0])
             group.expand()
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
@@ -192,12 +197,18 @@ class MainWindow(base_class, ui_class):
         self.identity.setCurrentIndex(self.identity.findText(name))
         if account is BonjourAccount():
             group = self.contact_model.bonjour_group
-            group.previous_position = self.contact_model.contact_groups.index(group)
-            self.contact_model.moveGroup(group, 0)
+            contact_groups = self.contact_model.contact_groups
+            try:
+                group.reference_group = contact_groups[contact_groups.index(group)+1]
+            except IndexError:
+                group.reference_group = Null
+            if group is not self.contact_model.contact_groups[0]:
+                self.contact_model.moveGroup(group, self.contact_model.contact_groups[0])
             group.expand()
         elif old_account is BonjourAccount():
             group = self.contact_model.bonjour_group
-            self.contact_model.moveGroup(group, group.previous_position)
+            self.contact_model.moveGroup(group, group.reference_group)
+            group.reference_group = NoGroup
             if group.collapsed and not group.user_collapsed:
                 group.expand()
             elif not group.collapsed and group.user_collapsed:
