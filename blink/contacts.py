@@ -29,7 +29,7 @@ from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread
 
 
-# Functions decorated with updates_contacts_db or skip_contacts_db_update must
+# Functions decorated with updates_contacts_db or ignore_contacts_db_updates must
 # only be called from the GUI thread.
 #
 @decorator
