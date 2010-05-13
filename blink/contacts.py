@@ -29,7 +29,8 @@ from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread
 
 
-# Functions decorated with updates_contacts_db must only be called from the GUI thread.
+# Functions decorated with updates_contacts_db or skip_contacts_db_update must
+# only be called from the GUI thread.
 #
 @decorator
 def updates_contacts_db(func):
@@ -47,6 +48,17 @@ def updates_contacts_db(func):
         return result
     return wrapper
 updates_contacts_db.counter = 0
+
+@decorator
+def ignore_contacts_db_updates(func):
+    @preserve_signature(func)
+    def wrapper(*args, **kw):
+        updates_contacts_db.counter += 1
+        try:
+            return func(*args, **kw)
+        finally:
+            updates_contacts_db.counter -= 1
+    return wrapper
 
 
 class ContactGroup(object):
@@ -764,11 +776,13 @@ class ContactModel(QAbstractListModel):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    @ignore_contacts_db_updates
     def _NH_BonjourAccountDidAddNeighbour(self, notification):
         display_name = '%s (%s)' % (notification.data.display_name, notification.data.host)
         contact = BonjourNeighbour(self.bonjour_group, display_name, unicode(notification.data.uri))
         self.addContact(contact)
 
+    @ignore_contacts_db_updates
     def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
         for contact in (c for c in self.items[:] if type(c) is BonjourNeighbour):
             if contact.uri == unicode(notification.data.uri):
@@ -784,6 +798,7 @@ class ContactModel(QAbstractListModel):
         if account is BonjourAccount():
             self.removeGroup(self.bonjour_group)
 
+    @ignore_contacts_db_updates
     def _NH_SIPAccountManagerDidStart(self, notification):
         if not BonjourAccount().enabled and self.bonjour_group in self.contact_groups:
             self.removeGroup(self.bonjour_group)
@@ -798,6 +813,7 @@ class ContactModel(QAbstractListModel):
                 self.moveGroup(group, contact_groups[0])
             group.expand()
 
+    @ignore_contacts_db_updates
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         account = notification.data.account
         old_account = notification.data.old_account
