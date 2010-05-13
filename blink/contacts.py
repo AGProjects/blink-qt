@@ -14,15 +14,19 @@ from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, 
 from PyQt4.QtGui  import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
 from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QSortFilterProxyModel, QStyledItemDelegate
 
+from application.notification import IObserver, NotificationCenter
 from application.python.decorator import decorator, preserve_signature
 from application.python.queue import EventQueue
 from application.python.util import Null
 from functools import partial
 from operator import attrgetter
+from zope.interface import implements
 
+from sipsimple.account import BonjourAccount
 from sipsimple.util import makedirs
 
 from blink.resources import ApplicationData, Resources
+from blink.util import run_in_gui_thread
 
 
 # Functions decorated with updates_contacts_db must only be called from the GUI thread.
@@ -436,6 +440,8 @@ class ContactDelegate(QStyledItemDelegate):
 
 
 class ContactModel(QAbstractListModel):
+    implements(IObserver)
+
     # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['application/x-blink-contact-group-list', 'application/x-blink-contact-list', 'text/uri-list']
 
@@ -451,6 +457,14 @@ class ContactModel(QAbstractListModel):
         self.save_queue = EventQueue(self.store_contacts, name='ContactsSavingThread')
         self.save_queue.start()
         self.bonjour_group = None
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BonjourAccountDidAddNeighbour')
+        notification_center.add_observer(self, name='BonjourAccountDidRemoveNeighbour')
+        notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
+        notification_center.add_observer(self, name='SIPAccountManagerDidStart')
+        notification_center.add_observer(self, name='SIPAccountDidActivate')
+        notification_center.add_observer(self, name='SIPAccountDidDeactivate')
 
     @property
     def contact_groups(self):
@@ -744,6 +758,68 @@ class ContactModel(QAbstractListModel):
             if e.errno != errno.ENOENT:
                 raise
         os.rename(tmp_filename, filename)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BonjourAccountDidAddNeighbour(self, notification):
+        display_name = '%s (%s)' % (notification.data.display_name, notification.data.host)
+        contact = BonjourNeighbour(self.bonjour_group, display_name, unicode(notification.data.uri))
+        self.addContact(contact)
+
+    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
+        for contact in (c for c in self.items[:] if type(c) is BonjourNeighbour):
+            if contact.uri == unicode(notification.data.uri):
+                self.removeContact(contact)
+
+    def _NH_SIPAccountDidActivate(self, notification):
+        account = notification.sender
+        if account is BonjourAccount():
+            self.addGroup(self.bonjour_group)
+
+    def _NH_SIPAccountDidDeactivate(self, notification):
+        account = notification.sender
+        if account is BonjourAccount():
+            self.removeGroup(self.bonjour_group)
+
+    def _NH_SIPAccountManagerDidStart(self, notification):
+        if not BonjourAccount().enabled and self.bonjour_group in self.contact_groups:
+            self.removeGroup(self.bonjour_group)
+        if notification.sender.default_account is BonjourAccount():
+            group = self.bonjour_group
+            contact_groups = self.contact_groups
+            try:
+                group.reference_group = contact_groups[contact_groups.index(group)+1]
+            except IndexError:
+                group.reference_group = Null
+            if group is not contact_groups[0]:
+                self.moveGroup(group, contact_groups[0])
+            group.expand()
+
+    def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
+        account = notification.data.account
+        old_account = notification.data.old_account
+        if account is BonjourAccount():
+            group = self.bonjour_group
+            contact_groups = self.contact_groups
+            try:
+                group.reference_group = contact_groups[contact_groups.index(group)+1]
+            except IndexError:
+                group.reference_group = Null
+            if group is not contact_groups[0]:
+                self.moveGroup(group, contact_groups[0])
+            group.expand()
+        elif old_account is BonjourAccount():
+            group = self.bonjour_group
+            if group.reference_group is not NoGroup:
+                self.moveGroup(group, group.reference_group)
+                group.reference_group = NoGroup
+            if group.collapsed and not group.user_collapsed:
+                group.expand()
+            elif not group.collapsed and group.user_collapsed:
+                group.collapse()
 
 
 class ContactSearchModel(QSortFilterProxyModel):
