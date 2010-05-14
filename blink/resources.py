@@ -118,6 +118,8 @@ class IconCache(object):
         self.available_names = deque(sorted(all_names - used_names))
 
     def store(self, filename, pixmap=None):
+        if filename is None:
+            return None
         if not os.path.isabs(filename):
             return filename
         if filename.startswith(ApplicationData.directory + os.path.sep):
