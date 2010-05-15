@@ -1120,6 +1120,7 @@ class ContactListView(QListView):
         model.removeItems(indexes)
         self.selectionModel().clearSelection()
 
+    @updates_contacts_db
     def _AH_UndoLastDelete(self):
         model = self.model()
         for item in model.deleted_items.pop():
@@ -1320,6 +1321,7 @@ class ContactSearchListView(QListView):
         model = self.model()
         model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes() if model.data(index).deletable)
 
+    @updates_contacts_db
     def _AH_UndoLastDelete(self):
         model = self.model().sourceModel()
         for item in model.deleted_items.pop():
