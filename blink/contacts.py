@@ -484,7 +484,7 @@ class ContactModel(QAbstractListModel):
             # emulate beginResetModel/endResetModel for QT < 4.6
             self.beginResetModel = Null # or use self.modelAboutToBeReset.emit (it'll be emited twice though in that case)
             self.endResetModel = self.reset
-        self.save_queue = EventQueue(self.store_contacts, name='ContactsSavingThread')
+        self.save_queue = EventQueue(self._store_contacts, name='ContactsSavingThread')
         self.save_queue.start()
         self.bonjour_group = None
 
@@ -690,6 +690,21 @@ class ContactModel(QAbstractListModel):
             self.endRemoveRows()
         return items
 
+    def _store_contacts(self, data):
+        makedirs(ApplicationData.directory)
+        filename = ApplicationData.get('contacts')
+        tmp_filename = ApplicationData.get('contacts.tmp')
+        bak_filename = ApplicationData.get('contacts.bak')
+        file = open(tmp_filename, 'wb')
+        file.write(data)
+        file.close()
+        try:
+            os.rename(filename, bak_filename)
+        except OSError, e:
+            if e.errno != errno.ENOENT:
+                raise
+        os.rename(tmp_filename, filename)
+
     @updates_contacts_db
     def addContact(self, contact):
         if contact in self.items:
@@ -808,21 +823,6 @@ class ContactModel(QAbstractListModel):
             position = items.index(reference) if reference in contact_groups else len(self.items)
             items.insert(position, group)
         self.save_queue.put(pickle.dumps(items))
-
-    def store_contacts(self, data):
-        makedirs(ApplicationData.directory)
-        filename = ApplicationData.get('contacts')
-        tmp_filename = ApplicationData.get('contacts.tmp')
-        bak_filename = ApplicationData.get('contacts.bak')
-        file = open(tmp_filename, 'wb')
-        file.write(data)
-        file.close()
-        try:
-            os.rename(filename, bak_filename)
-        except OSError, e:
-            if e.errno != errno.ENOENT:
-                raise
-        os.rename(tmp_filename, filename)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
