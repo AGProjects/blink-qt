@@ -230,7 +230,7 @@
      </layout>
     </item>
     <item>
-     <widget class="QPushButton" name="switch_view">
+     <widget class="QPushButton" name="switch_view_button">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
         <horstretch>0</horstretch>
@@ -345,7 +345,7 @@
                  <number>3</number>
                 </property>
                 <item>
-                 <widget class="QPushButton" name="back_to_contacts">
+                 <widget class="QPushButton" name="back_to_contacts_button">
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                     <horstretch>0</horstretch>
@@ -367,7 +367,7 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QPushButton" name="add_search_contact">
+                 <widget class="QPushButton" name="add_search_contact_button">
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                     <horstretch>0</horstretch>
@@ -486,7 +486,7 @@ buttons below.</string>
            <number>3</number>
           </property>
           <item>
-           <widget class="QToolButton" name="add_contact">
+           <widget class="QToolButton" name="add_contact_button">
             <property name="minimumSize">
              <size>
               <width>29</width>
@@ -533,7 +533,7 @@ buttons below.</string>
              <number>0</number>
             </property>
             <item>
-             <widget class="QToolButton" name="audio_call">
+             <widget class="QToolButton" name="audio_call_button">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -559,7 +559,7 @@ buttons below.</string>
              </widget>
             </item>
             <item>
-             <widget class="QToolButton" name="im_session">
+             <widget class="QToolButton" name="im_session_button">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -584,7 +584,7 @@ buttons below.</string>
              </widget>
             </item>
             <item>
-             <widget class="QToolButton" name="ds_session">
+             <widget class="QToolButton" name="ds_session_button">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -625,7 +625,7 @@ buttons below.</string>
            </spacer>
           </item>
           <item>
-           <widget class="QToolButton" name="silent">
+           <widget class="QToolButton" name="silent_button">
             <property name="minimumSize">
              <size>
               <width>29</width>
@@ -690,7 +690,7 @@ buttons below.</string>
            <number>3</number>
           </property>
           <item>
-           <widget class="QPushButton" name="hangup_all">
+           <widget class="QPushButton" name="hangup_all_button">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -712,7 +712,7 @@ buttons below.</string>
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="conference">
+           <widget class="QPushButton" name="conference_button">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -747,7 +747,7 @@ buttons below.</string>
            </spacer>
           </item>
           <item>
-           <widget class="QToolButton" name="mute">
+           <widget class="QToolButton" name="mute_button">
             <property name="minimumSize">
              <size>
               <width>29</width>

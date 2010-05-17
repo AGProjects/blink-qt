@@ -3,16 +3,16 @@
 
 from __future__ import with_statement
 
-__all__ = ['BonjourGroup', 'BonjourNeighbour', 'Contact', 'ContactGroup', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView']
+__all__ = ['BonjourGroup', 'BonjourNeighbour', 'Contact', 'ContactGroup', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog']
 
 import cPickle as pickle
 import errno
 import os
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QSize, QStringList, QTimer
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QRegExp, QSize, QStringList, QTimer, pyqtSignal
 from PyQt4.QtGui  import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
-from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QRegExpValidator, QSortFilterProxyModel, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter
 from application.python.decorator import decorator, preserve_signature
@@ -155,7 +155,7 @@ class Contact(object):
         self.name = name
         self.uri = uri
         self.image = image
-        self.icon = self.default_user_icon if image is None else ContactIconDescriptor(image).__get__(self, self.__class__)
+        self.preferred_media = 'Audio'
         self.status = 'unknown'
 
     def __repr__(self):
@@ -165,7 +165,21 @@ class Contact(object):
         return u'%s <%s>' % (self.name, self.uri) if self.name else self.uri
 
     def __reduce__(self):
-        return (self.__class__, (self.group, self.name, self.uri, self.image), None)
+        return (self.__class__, (self.group, self.name, self.uri, self.image), dict(preferred_media=self.preferred_media))
+
+    def _get_image(self):
+        return self.__dict__['image']
+
+    def _set_image(self, image):
+        self.__dict__['image'] = image
+        self.__dict__['icon'] = self.default_user_icon if image is None else ContactIconDescriptor(image).__get__(self, self.__class__)
+
+    image = property(_get_image, _set_image)
+    del _get_image, _set_image
+
+    @property
+    def icon(self):
+        return self.__dict__['icon']
 
 
 class NoGroup(object):
@@ -198,7 +212,7 @@ class ContactWidget(base_class, ui_class):
             self.setupUi(self)
 
     def set_contact(self, contact):
-        self.name.setText(contact.name)
+        self.name.setText(contact.name or contact.uri)
         self.uri.setText(contact.uri)
         self.icon.setPixmap(contact.icon)
 
@@ -454,6 +468,9 @@ class ContactDelegate(QStyledItemDelegate):
 class ContactModel(QAbstractListModel):
     implements(IObserver)
 
+    itemsAdded = pyqtSignal(list)
+    itemsRemoved = pyqtSignal(list)
+
     # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['application/x-blink-contact-group-list', 'application/x-blink-contact-list', 'text/uri-list']
 
@@ -461,6 +478,7 @@ class ContactModel(QAbstractListModel):
         super(ContactModel, self).__init__(parent)
         self.items = []
         self.deleted_items = []
+        self.main_window = parent
         self.contact_list = parent.contact_list
         if not hasattr(self, 'beginResetModel'):
             # emulate beginResetModel/endResetModel for QT < 4.6
@@ -555,7 +573,7 @@ class ContactModel(QAbstractListModel):
         else:
             drop_group = group
             drop_position = drop_indicator
-        items = self.popItems(selected_indexes)
+        items = self._pop_items(selected_indexes)
         contact_groups = self.contact_groups # they changed so refresh them
         if drop_position is self.contact_list.AboveItem:
             position = self.items.index(drop_group)
@@ -579,9 +597,9 @@ class ContactModel(QAbstractListModel):
         if group.widget.drop_indicator is None:
             return False
         indexes = [index for index in self.contact_list.selectionModel().selectedIndexes() if self.items[index.row()].movable]
-        for contact in self.popItems(indexes):
+        for contact in self._pop_items(indexes):
             contact.group = group
-            self.addContact(contact)
+            self._add_contact(contact)
         return True
 
     def _DH_TextUriList(self, mime_data, action, index):
@@ -617,8 +635,7 @@ class ContactModel(QAbstractListModel):
             if indexes:
                 yield (last, end)
 
-    @updates_contacts_db
-    def addContact(self, contact):
+    def _add_contact(self, contact):
         if contact.group in self.items:
             for position in xrange(self.items.index(contact.group)+1, len(self.items)):
                 item = self.items[position]
@@ -638,64 +655,30 @@ class ContactModel(QAbstractListModel):
             self.contact_list.openPersistentEditor(self.index(position))
             self.endInsertRows()
 
-    @updates_contacts_db
-    def removeContact(self, contact):
-        if contact not in self.items:
-            return
-        position = self.items.index(contact)
-        self.beginRemoveRows(QModelIndex(), position, position)
-        del self.items[position]
-        self.endRemoveRows()
-
-    @updates_contacts_db
-    def addGroup(self, group):
-        if group in self.items:
-            return
+    def _add_group(self, group):
         position = len(self.items)
         self.beginInsertRows(QModelIndex(), position, position)
         self.items.append(group)
         self.contact_list.openPersistentEditor(self.index(position))
         self.endInsertRows()
 
-    @updates_contacts_db
-    def removeGroup(self, group):
-        if group not in self.items:
-            return
+    def _pop_contact(self, contact):
+        position = self.items.index(contact)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.items[position]
+        self.endRemoveRows()
+        return contact
+
+    def _pop_group(self, group):
         start = self.items.index(group)
         end = start + len([item for item in self.items if isinstance(item, Contact) and item.group==group])
         self.beginRemoveRows(QModelIndex(), start, end)
+        items = self.items[start:end+1]
         del self.items[start:end+1]
         self.endRemoveRows()
+        return items
 
-    @updates_contacts_db
-    def moveGroup(self, group, reference):
-        contact_groups = self.contact_groups
-        if group not in contact_groups or contact_groups.index(group)+1 == (contact_groups.index(reference) if reference in contact_groups else len(contact_groups)):
-            return
-        items = self.popItems([self.index(self.items.index(group))])
-        start = self.items.index(reference) if reference in contact_groups else len(self.items)
-        end = start + len(items) - 1
-        self.beginInsertRows(QModelIndex(), start, end)
-        self.items[start:start] = items
-        self.endInsertRows()
-        self.contact_list.openPersistentEditor(self.index(start))
-
-    @updates_contacts_db
-    def removeItems(self, indexes):
-        rows = set(index.row() for index in indexes if index.isValid())
-        removed_groups = set(self.items[row] for row in rows if isinstance(self.items[row], ContactGroup))
-        rows.update(row for row, item in enumerate(self.items) if isinstance(item, Contact) and item.group in removed_groups)
-        for start, end in self.reversed_range_iterator(rows):
-            self.beginRemoveRows(QModelIndex(), start, end)
-            deleted_items = self.items[start:end+1]
-            for item in (item for item in deleted_items if isinstance(item, ContactGroup)):
-                item.widget = Null
-            self.deleted_items.append(deleted_items)
-            del self.items[start:end+1]
-            self.endRemoveRows()
-
-    @updates_contacts_db
-    def popItems(self, indexes):
+    def _pop_items(self, indexes):
         items = []
         rows = set(index.row() for index in indexes if index.isValid())
         removed_groups = set(self.items[row] for row in rows if isinstance(self.items[row], ContactGroup))
@@ -706,6 +689,76 @@ class ContactModel(QAbstractListModel):
             del self.items[start:end+1]
             self.endRemoveRows()
         return items
+
+    @updates_contacts_db
+    def addContact(self, contact):
+        if contact in self.items:
+            return
+        added_items = [contact.group, contact] if contact.group in self.items else [contact]
+        self._add_contact(contact)
+        self.itemsAdded.emit(added_items)
+
+    @updates_contacts_db
+    def updateContact(self, contact, attributes):
+        group = attributes.pop('group')
+        for name, value in attributes.iteritems():
+            setattr(contact, name, value)
+        if contact.group != group:
+            new_group = group not in self.items
+            self._pop_contact(contact)
+            contact.group = group
+            self._add_contact(contact)
+            if new_group:
+                self.itemsAdded.emit([group])
+        else:
+            index = self.index(self.items.index(contact))
+            self.dataChanged.emit(index, index)
+
+    @updates_contacts_db
+    def removeContact(self, contact):
+        if contact not in self.items:
+            return
+        self._pop_contact(contact)
+        if type(contact) is Contact:
+            self.deleted_items.append([contact])
+        self.itemsRemoved.emit([contact])
+
+    @updates_contacts_db
+    def addGroup(self, group):
+        if group in self.items:
+            return
+        self._add_group(group)
+        self.itemsAdded.emit([group])
+
+    @updates_contacts_db
+    def removeGroup(self, group):
+        if group not in self.items:
+            return
+        items = self._pop_group(group)
+        if type(group) is ContactGroup:
+            self.deleted_items.append(items)
+        self.itemsRemoved.emit(items)
+
+    @updates_contacts_db
+    def moveGroup(self, group, reference):
+        contact_groups = self.contact_groups
+        if group not in contact_groups or contact_groups.index(group)+1 == (contact_groups.index(reference) if reference in contact_groups else len(contact_groups)):
+            return
+        items = self._pop_group(group)
+        start = self.items.index(reference) if reference in contact_groups else len(self.items)
+        end = start + len(items) - 1
+        self.beginInsertRows(QModelIndex(), start, end)
+        self.items[start:start] = items
+        self.endInsertRows()
+        self.contact_list.openPersistentEditor(self.index(start))
+
+    @updates_contacts_db
+    def removeItems(self, indexes):
+        items = self._pop_items(indexes)
+        for item in (item for item in items if isinstance(item, ContactGroup)):
+            item.widget = Null
+        self.deleted_items.append(items)
+        self.itemsRemoved.emit(items)
 
     def load(self):
         try:
@@ -785,7 +838,7 @@ class ContactModel(QAbstractListModel):
 
     @ignore_contacts_db_updates
     def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
-        for contact in (c for c in self.items[:] if type(c) is BonjourNeighbour):
+        for contact in [c for c in self.items if type(c) is BonjourNeighbour]:
             if contact.uri == unicode(notification.data.uri):
                 self.removeContact(contact)
 
@@ -801,7 +854,7 @@ class ContactModel(QAbstractListModel):
 
     @ignore_contacts_db_updates
     def _NH_SIPAccountManagerDidStart(self, notification):
-        if not BonjourAccount().enabled and self.bonjour_group in self.contact_groups:
+        if not BonjourAccount().enabled and self.bonjour_group in self.items:
             self.removeGroup(self.bonjour_group)
         if notification.sender.default_account is BonjourAccount():
             group = self.bonjour_group
@@ -845,6 +898,7 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def __init__(self, model, parent=None):
         super(ContactSearchModel, self).__init__(parent)
+        self.main_window = parent
         self.setSourceModel(model)
         self.setDynamicSortFilter(True)
         self.sort(0)
@@ -1112,22 +1166,27 @@ class ContactListView(QListView):
 
     def _AH_AddContact(self):
         model = self.model()
-        selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes() if type(model.data(index)) in (Contact, ContactGroup))
-        if selected_rows:
-            item = model.items[selected_rows[0]]
+        main_window = model.main_window
+        selected_items = ((index.row(), model.data(index)) for index in self.selectionModel().selectedIndexes())
+        try:
+            item = (item for row, item in sorted(selected_items) if type(item) in (Contact, ContactGroup)).next()
             preferred_group = item if type(item) is ContactGroup else item.group
-        else:
+        except StopIteration:
             try:
                 preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
             except StopIteration:
                 preferred_group = None
+        main_window.contact_editor.open_for_add(main_window.search_box.text(), preferred_group)
 
     def _AH_EditItem(self):
+        model = self.model()
         index = self.selectionModel().selectedIndexes()[0]
-        item = self.model().data(index)
+        item = model.data(index)
         if isinstance(item, ContactGroup):
             self.scrollTo(index)
             item.widget.edit()
+        else:
+            model.main_window.contact_editor.open_for_edit(item)
 
     def _AH_DeleteSelection(self):
         model = self.model()
@@ -1330,7 +1389,9 @@ class ContactSearchListView(QListView):
         self.drop_indicator_index = QModelIndex()
 
     def _AH_EditItem(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        model = self.model()
+        contact = model.data(self.selectionModel().selectedIndexes()[0])
+        model.main_window.contact_editor.open_for_edit(contact)
 
     def _AH_DeleteSelection(self):
         model = self.model()
@@ -1370,5 +1431,107 @@ class ContactSearchListView(QListView):
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
             event.ignore(rect)
+
+
+# The contact editor dialog
+#
+
+class ContactEditorGroupModel(QSortFilterProxyModel):
+    def __init__(self, contact_model, parent=None):
+        super(ContactEditorGroupModel, self).__init__(parent)
+        self.setSourceModel(contact_model)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if role in (Qt.DisplayRole, Qt.EditRole):
+            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole).toPyObject().name
+        elif role == Qt.UserRole:
+            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole).toPyObject()
+        else:
+            return super(ContactEditorGroupModel, self).data(index, role)
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        source_model = self.sourceModel()
+        item = source_model.data(source_model.index(source_row, 0, source_parent), Qt.DisplayRole)
+        return True if type(item) is ContactGroup else False
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
+
+class ContactEditorDialog(base_class, ui_class):
+    def __init__(self, contact_model, parent=None):
+        super(ContactEditorDialog, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        self.edited_contact = None
+        self.group.setModel(ContactEditorGroupModel(contact_model, parent))
+        self.sip_address_editor.setValidator(QRegExpValidator(QRegExp("\S+"), self))
+        self.sip_address_editor.textChanged.connect(self.enable_accept_button)
+        self.clear_button.clicked.connect(self.reset_icon)
+        self.accepted.connect(self.process_contact)
+
+    def open_for_add(self, sip_address=u'', target_group=None):
+        self.sip_address_editor.setText(sip_address)
+        self.display_name_editor.setText(u'')
+        for index in xrange(self.group.count()):
+            if self.group.itemData(index).toPyObject() is target_group:
+                break
+        else:
+            index = 0
+        self.group.setCurrentIndex(index)
+        self.icon_selector.filename = None
+        self.preferred_media.setCurrentIndex(0)
+        self.accept_button.setText(u'Add')
+        self.accept_button.setEnabled(sip_address != u'')
+        self.open()
+
+    def open_for_edit(self, contact):
+        self.edited_contact = contact
+        self.sip_address_editor.setText(contact.uri)
+        self.display_name_editor.setText(contact.name)
+        for index in xrange(self.group.count()):
+            if self.group.itemData(index).toPyObject() is contact.group:
+                break
+        else:
+            index = 0
+        self.group.setCurrentIndex(index)
+        self.icon_selector.filename = contact.image
+        self.preferred_media.setCurrentIndex(self.preferred_media.findText(contact.preferred_media))
+        self.accept_button.setText(u'Ok')
+        self.accept_button.setEnabled(True)
+        self.open()
+
+    def reset_icon(self):
+        self.icon_selector.filename = None
+
+    def enable_accept_button(self, text):
+        self.accept_button.setEnabled(text != u'')
+
+    @updates_contacts_db
+    def process_contact(self):
+        contact_model = self.parent().contact_model
+        uri = unicode(self.sip_address_editor.text())
+        name = unicode(self.display_name_editor.text())
+        image = IconCache().store(self.icon_selector.filename)
+        preferred_media = unicode(self.preferred_media.currentText())
+        group_index = self.group.currentIndex()
+        group_name = self.group.currentText()
+        if group_name != self.group.itemText(group_index):
+            # user edited the group name. first look if we already have a group with that name
+            index = self.group.findText(group_name)
+            if index >= 0:
+                group = self.group.itemData(index).toPyObject()
+            else:
+                group = ContactGroup(unicode(group_name))
+        else:
+            group = self.group.itemData(group_index).toPyObject()
+        if self.edited_contact is None:
+            contact = Contact(group, name, uri, image)
+            contact_model.addContact(contact)
+        else:
+            attributes = dict(group=group, name=name, uri=uri, image=image, preferred_media=preferred_media)
+            contact_model.updateContact(self.edited_contact, attributes)
+            self.edited_contact = None
+
+del ui_class, base_class
 
 
