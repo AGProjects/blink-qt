@@ -974,17 +974,30 @@ class ContactListView(QListView):
     def contextMenuEvent(self, event):
         model = self.model()
         selected_items = [model.data(index) for index in self.selectionModel().selectedIndexes()]
+        if not model.deleted_items:
+            undo_delete_text = "Undo Delete"
+        elif len(model.deleted_items[-1]) == 1:
+            item = model.deleted_items[-1][0]
+            if type(item) is Contact:
+                name = item.name or item.uri
+            else:
+                name = item.name
+            undo_delete_text = 'Undo Delete "%s"' % name
+        else:
+            undo_delete_text = "Undo Delete (%d items)" % len(model.deleted_items[-1])
         menu = QMenu(self)
         if not selected_items:
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         elif len(selected_items) > 1:
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
             menu.addAction(self.actions.delete_selection)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         elif isinstance(selected_items[0], ContactGroup):
@@ -993,6 +1006,7 @@ class ContactListView(QListView):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.edit_item.setEnabled(selected_items[0].editable)
             self.actions.delete_item.setEnabled(selected_items[0].deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
@@ -1014,6 +1028,7 @@ class ContactListView(QListView):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
