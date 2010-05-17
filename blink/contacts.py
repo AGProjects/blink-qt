@@ -838,9 +838,9 @@ class ContactModel(QAbstractListModel):
 
     @ignore_contacts_db_updates
     def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
-        for contact in [c for c in self.items if type(c) is BonjourNeighbour]:
-            if contact.uri == unicode(notification.data.uri):
-                self.removeContact(contact)
+        uri = unicode(notification.data.uri)
+        for contact in [c for c in self.items if type(c) is BonjourNeighbour and c.uri == uri]:
+            self.removeContact(contact)
 
     def _NH_SIPAccountDidActivate(self, notification):
         account = notification.sender
