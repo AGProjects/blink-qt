@@ -745,12 +745,11 @@ class ContactModel(QAbstractListModel):
         if group not in contact_groups or contact_groups.index(group)+1 == (contact_groups.index(reference) if reference in contact_groups else len(contact_groups)):
             return
         items = self._pop_group(group)
-        start = self.items.index(reference) if reference in contact_groups else len(self.items)
-        end = start + len(items) - 1
-        self.beginInsertRows(QModelIndex(), start, end)
-        self.items[start:start] = items
+        position = self.items.index(reference) if reference in contact_groups else len(self.items)
+        self.beginInsertRows(QModelIndex(), position, position+len(items)-1)
+        self.items[position:position] = items
         self.endInsertRows()
-        self.contact_list.openPersistentEditor(self.index(start))
+        self.contact_list.openPersistentEditor(self.index(position))
 
     @updates_contacts_db
     def removeItems(self, indexes):
