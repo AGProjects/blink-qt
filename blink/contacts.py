@@ -605,6 +605,72 @@ class ContactModel(QAbstractListModel):
     def _DH_TextUriList(self, mime_data, action, index):
         return False
 
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    @ignore_contacts_db_updates
+    def _NH_BonjourAccountDidAddNeighbour(self, notification):
+        display_name = '%s (%s)' % (notification.data.display_name, notification.data.host)
+        contact = BonjourNeighbour(self.bonjour_group, display_name, unicode(notification.data.uri))
+        self.addContact(contact)
+
+    @ignore_contacts_db_updates
+    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
+        uri = unicode(notification.data.uri)
+        for contact in [c for c in self.items if type(c) is BonjourNeighbour and c.uri == uri]:
+            self.removeContact(contact)
+
+    def _NH_SIPAccountDidActivate(self, notification):
+        account = notification.sender
+        if account is BonjourAccount():
+            self.addGroup(self.bonjour_group)
+
+    def _NH_SIPAccountDidDeactivate(self, notification):
+        account = notification.sender
+        if account is BonjourAccount():
+            self.removeGroup(self.bonjour_group)
+
+    @ignore_contacts_db_updates
+    def _NH_SIPAccountManagerDidStart(self, notification):
+        if not BonjourAccount().enabled and self.bonjour_group in self.items:
+            self.removeGroup(self.bonjour_group)
+        if notification.sender.default_account is BonjourAccount():
+            group = self.bonjour_group
+            contact_groups = self.contact_groups
+            try:
+                group.reference_group = contact_groups[contact_groups.index(group)+1]
+            except IndexError:
+                group.reference_group = Null
+            if group is not contact_groups[0]:
+                self.moveGroup(group, contact_groups[0])
+            group.expand()
+
+    @ignore_contacts_db_updates
+    def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
+        account = notification.data.account
+        old_account = notification.data.old_account
+        if account is BonjourAccount():
+            group = self.bonjour_group
+            contact_groups = self.contact_groups
+            try:
+                group.reference_group = contact_groups[contact_groups.index(group)+1]
+            except IndexError:
+                group.reference_group = Null
+            if group is not contact_groups[0]:
+                self.moveGroup(group, contact_groups[0])
+            group.expand()
+        elif old_account is BonjourAccount():
+            group = self.bonjour_group
+            if group.reference_group is not NoGroup:
+                self.moveGroup(group, group.reference_group)
+                group.reference_group = NoGroup
+            if group.collapsed and not group.user_collapsed:
+                group.expand()
+            elif not group.collapsed and group.user_collapsed:
+                group.collapse()
+
     @staticmethod
     def range_iterator(indexes):
         """Return contiguous ranges from indexes"""
@@ -824,72 +890,6 @@ class ContactModel(QAbstractListModel):
             items.insert(position, group)
         self.save_queue.put(pickle.dumps(items))
 
-    @run_in_gui_thread
-    def handle_notification(self, notification):
-        handler = getattr(self, '_NH_%s' % notification.name, Null)
-        handler(notification)
-
-    @ignore_contacts_db_updates
-    def _NH_BonjourAccountDidAddNeighbour(self, notification):
-        display_name = '%s (%s)' % (notification.data.display_name, notification.data.host)
-        contact = BonjourNeighbour(self.bonjour_group, display_name, unicode(notification.data.uri))
-        self.addContact(contact)
-
-    @ignore_contacts_db_updates
-    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
-        uri = unicode(notification.data.uri)
-        for contact in [c for c in self.items if type(c) is BonjourNeighbour and c.uri == uri]:
-            self.removeContact(contact)
-
-    def _NH_SIPAccountDidActivate(self, notification):
-        account = notification.sender
-        if account is BonjourAccount():
-            self.addGroup(self.bonjour_group)
-
-    def _NH_SIPAccountDidDeactivate(self, notification):
-        account = notification.sender
-        if account is BonjourAccount():
-            self.removeGroup(self.bonjour_group)
-
-    @ignore_contacts_db_updates
-    def _NH_SIPAccountManagerDidStart(self, notification):
-        if not BonjourAccount().enabled and self.bonjour_group in self.items:
-            self.removeGroup(self.bonjour_group)
-        if notification.sender.default_account is BonjourAccount():
-            group = self.bonjour_group
-            contact_groups = self.contact_groups
-            try:
-                group.reference_group = contact_groups[contact_groups.index(group)+1]
-            except IndexError:
-                group.reference_group = Null
-            if group is not contact_groups[0]:
-                self.moveGroup(group, contact_groups[0])
-            group.expand()
-
-    @ignore_contacts_db_updates
-    def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
-        account = notification.data.account
-        old_account = notification.data.old_account
-        if account is BonjourAccount():
-            group = self.bonjour_group
-            contact_groups = self.contact_groups
-            try:
-                group.reference_group = contact_groups[contact_groups.index(group)+1]
-            except IndexError:
-                group.reference_group = Null
-            if group is not contact_groups[0]:
-                self.moveGroup(group, contact_groups[0])
-            group.expand()
-        elif old_account is BonjourAccount():
-            group = self.bonjour_group
-            if group.reference_group is not NoGroup:
-                self.moveGroup(group, group.reference_group)
-                group.reference_group = NoGroup
-            if group.collapsed and not group.user_collapsed:
-                group.expand()
-            elif not group.collapsed and group.user_collapsed:
-                group.collapse()
-
 
 class ContactSearchModel(QSortFilterProxyModel):
     # The MIME types we accept in drop operations, in the order they should be handled
@@ -911,6 +911,21 @@ class ContactSearchModel(QSortFilterProxyModel):
     def data(self, index, role=Qt.DisplayRole):
         data = super(ContactSearchModel, self).data(index, role)
         return data.toPyObject() if role==Qt.DisplayRole else data
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        source_model = self.sourceModel()
+        source_index = source_model.index(source_row, 0, source_parent)
+        item = source_model.data(source_index, Qt.DisplayRole)
+        if isinstance(item, ContactGroup):
+            return False
+        search_tokens = unicode(self.filterRegExp().pattern()).lower().split()
+        searched_item = unicode(item).lower()
+        return all(token in searched_item for token in search_tokens)
+
+    def lessThan(self, left_index, right_index):
+        left_item = left_index.model().data(left_index, Qt.DisplayRole)
+        right_item = right_index.model().data(right_index, Qt.DisplayRole)
+        return left_item.name < right_item.name
 
     def supportedDropActions(self):
         return Qt.CopyAction
@@ -944,21 +959,6 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def _DH_TextUriList(self, mime_data, action, index):
         return False
-
-    def filterAcceptsRow(self, source_row, source_parent):
-        source_model = self.sourceModel()
-        source_index = source_model.index(source_row, 0, source_parent)
-        item = source_model.data(source_index, Qt.DisplayRole)
-        if isinstance(item, ContactGroup):
-            return False
-        search_tokens = unicode(self.filterRegExp().pattern()).lower().split()
-        searched_item = unicode(item).lower()
-        return all(token in searched_item for token in search_tokens)
-
-    def lessThan(self, left_index, right_index):
-        left_item = left_index.model().data(left_index, Qt.DisplayRole)
-        right_item = right_index.model().data(right_index, Qt.DisplayRole)
-        return left_item.name < right_item.name
 
 
 class ContextMenuActions(object):
@@ -1087,6 +1087,67 @@ class ContactListView(QListView):
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         menu.exec_(event.globalPos())
 
+    def _AH_AddGroup(self):
+        group = ContactGroup("")
+        self.model().addGroup(group)
+        self.scrollToBottom()
+        group.widget.edit()
+
+    def _AH_AddContact(self):
+        model = self.model()
+        main_window = model.main_window
+        selected_items = ((index.row(), model.data(index)) for index in self.selectionModel().selectedIndexes())
+        try:
+            item = (item for row, item in sorted(selected_items) if type(item) in (Contact, ContactGroup)).next()
+            preferred_group = item if type(item) is ContactGroup else item.group
+        except StopIteration:
+            try:
+                preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
+            except StopIteration:
+                preferred_group = None
+        main_window.contact_editor.open_for_add(main_window.search_box.text(), preferred_group)
+
+    def _AH_EditItem(self):
+        model = self.model()
+        index = self.selectionModel().selectedIndexes()[0]
+        item = model.data(index)
+        if isinstance(item, ContactGroup):
+            self.scrollTo(index)
+            item.widget.edit()
+        else:
+            model.main_window.contact_editor.open_for_edit(item)
+
+    def _AH_DeleteSelection(self):
+        model = self.model()
+        indexes = [index for index in self.selectionModel().selectedIndexes() if model.items[index.row()].deletable]
+        model.removeItems(indexes)
+        self.selectionModel().clearSelection()
+
+    @updates_contacts_db
+    def _AH_UndoLastDelete(self):
+        model = self.model()
+        for item in model.deleted_items.pop():
+            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
+            handler(item)
+
+    def _AH_StartAudioSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_StartChatSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendSMS(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendFiles(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_RequestRemoteDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_ShareMyDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
     def dragEnterEvent(self, event):
         event_source = event.source()
         accepted_mime_types = set(self.model().accepted_mime_types)
@@ -1156,67 +1217,6 @@ class ContactListView(QListView):
         super(ContactListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
-
-    def _AH_AddGroup(self):
-        group = ContactGroup("")
-        self.model().addGroup(group)
-        self.scrollToBottom()
-        group.widget.edit()
-
-    def _AH_AddContact(self):
-        model = self.model()
-        main_window = model.main_window
-        selected_items = ((index.row(), model.data(index)) for index in self.selectionModel().selectedIndexes())
-        try:
-            item = (item for row, item in sorted(selected_items) if type(item) in (Contact, ContactGroup)).next()
-            preferred_group = item if type(item) is ContactGroup else item.group
-        except StopIteration:
-            try:
-                preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
-            except StopIteration:
-                preferred_group = None
-        main_window.contact_editor.open_for_add(main_window.search_box.text(), preferred_group)
-
-    def _AH_EditItem(self):
-        model = self.model()
-        index = self.selectionModel().selectedIndexes()[0]
-        item = model.data(index)
-        if isinstance(item, ContactGroup):
-            self.scrollTo(index)
-            item.widget.edit()
-        else:
-            model.main_window.contact_editor.open_for_edit(item)
-
-    def _AH_DeleteSelection(self):
-        model = self.model()
-        indexes = [index for index in self.selectionModel().selectedIndexes() if model.items[index.row()].deletable]
-        model.removeItems(indexes)
-        self.selectionModel().clearSelection()
-
-    @updates_contacts_db
-    def _AH_UndoLastDelete(self):
-        model = self.model()
-        for item in model.deleted_items.pop():
-            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
-            handler(item)
-
-    def _AH_StartAudioSession(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_StartChatSession(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_SendSMS(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_SendFiles(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_RequestRemoteDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_ShareMyDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
 
     def _DH_ApplicationXBlinkContactGroupList(self, event, index, rect, item):
         model = self.model()
@@ -1346,6 +1346,40 @@ class ContactSearchListView(QListView):
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         menu.exec_(event.globalPos())
 
+    def _AH_EditItem(self):
+        model = self.model()
+        contact = model.data(self.selectionModel().selectedIndexes()[0])
+        model.main_window.contact_editor.open_for_edit(contact)
+
+    def _AH_DeleteSelection(self):
+        model = self.model()
+        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes() if model.data(index).deletable)
+
+    @updates_contacts_db
+    def _AH_UndoLastDelete(self):
+        model = self.model().sourceModel()
+        for item in model.deleted_items.pop():
+            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
+            handler(item)
+
+    def _AH_StartAudioSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_StartChatSession(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendSMS(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_SendFiles(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_RequestRemoteDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
+    def _AH_ShareMyDesktop(self):
+        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+
     def dragEnterEvent(self, event):
         accepted_mime_types = set(self.model().accepted_mime_types)
         provided_mime_types = set(str(x) for x in event.mimeData().formats())
@@ -1386,40 +1420,6 @@ class ContactSearchListView(QListView):
         super(ContactSearchListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
-
-    def _AH_EditItem(self):
-        model = self.model()
-        contact = model.data(self.selectionModel().selectedIndexes()[0])
-        model.main_window.contact_editor.open_for_edit(contact)
-
-    def _AH_DeleteSelection(self):
-        model = self.model()
-        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes() if model.data(index).deletable)
-
-    @updates_contacts_db
-    def _AH_UndoLastDelete(self):
-        model = self.model().sourceModel()
-        for item in model.deleted_items.pop():
-            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
-            handler(item)
-
-    def _AH_StartAudioSession(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_StartChatSession(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_SendSMS(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_SendFiles(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_RequestRemoteDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-
-    def _AH_ShareMyDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
 
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
