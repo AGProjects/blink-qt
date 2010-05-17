@@ -88,7 +88,7 @@ class ContactGroup(object):
 
     @updates_contacts_db
     def _name_changed(self):
-        self.name = str(self.widget.name_editor.text())
+        self.name = unicode(self.widget.name_editor.text())
 
     def _get_widget(self):
         return self.__dict__['widget']
@@ -239,7 +239,7 @@ class ContactGroupWidget(base_class, ui_class):
         return self.name_view.currentWidget() is self.editor_widget
 
     def _get_name(self):
-        return str(self.name_label.text())
+        return unicode(self.name_label.text())
 
     def _set_name(self, value):
         self.name_label.setText(value)
