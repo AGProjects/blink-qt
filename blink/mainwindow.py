@@ -6,25 +6,19 @@ from __future__ import with_statement
 __all__ = ['MainWindow']
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QVariant
-from PyQt4.QtGui  import QBrush, QColor, QIcon, QPainter, QPen, QPixmap
+from PyQt4.QtCore import Qt
+from PyQt4.QtGui  import QBrush, QColor, QPainter, QPen, QPixmap
 
-from application.notification import IObserver, NotificationCenter
-from application.python.util import Null
-from zope.interface import implements
+from sipsimple.account import AccountManager
 
-from sipsimple.account import AccountManager, BonjourAccount
-
+from blink.accounts import AccountModel, ActiveAccountModel
 from blink.contacts import Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
 from blink.resources import Resources
-from blink.util import run_in_gui_thread
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
 
 class MainWindow(base_class, ui_class):
-    implements(IObserver)
-
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
@@ -36,6 +30,10 @@ class MainWindow(base_class, ui_class):
 
         self.set_user_icon(Resources.get("icons/default-avatar.png")) # ":/resources/icons/default-avatar.png"
         self.enable_call_buttons(False)
+
+        self.account_model = AccountModel(self)
+        self.enabled_account_model = ActiveAccountModel(self.account_model, self)
+        self.identity.setModel(self.enabled_account_model)
 
         self.contact_model = ContactModel(self)
         self.contact_search_model = ContactSearchModel(self.contact_model, self)
@@ -72,12 +70,6 @@ class MainWindow(base_class, ui_class):
         self.identity.activated[int].connect(self.set_identity)
 
         #self.connect(self.contact_list, QtCore.SIGNAL("doubleClicked(const QModelIndex &)"), self.double_click_action)
-
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, name="SIPAccountManagerDidChangeDefaultAccount")
-        notification_center.add_observer(self, name="SIPAccountManagerDidStart")
-        notification_center.add_observer(self, name="SIPAccountDidActivate")
-        notification_center.add_observer(self, name="SIPAccountDidDeactivate")
 
     def add_contact(self, clicked):
         model = self.contact_model
@@ -116,7 +108,7 @@ class MainWindow(base_class, ui_class):
 
     def set_identity(self, index):
         account_manager = AccountManager()
-        account_manager.default_account = self.identity.itemData(index).toPyObject()
+        account_manager.default_account = self.identity.itemData(index).toPyObject().account
 
     def search_box_text_changed(self, text):
         if text:
@@ -155,40 +147,6 @@ class MainWindow(base_class, ui_class):
         widget = self.main_view.currentWidget().sibling_panel
         self.main_view.setCurrentWidget(widget)
         self.switch_view_button.setText(widget.sibling_name)
-
-    @run_in_gui_thread
-    def handle_notification(self, notification):
-        handler = getattr(self, '_NH_%s' % notification.name, Null)
-        handler(notification)
-
-    def _NH_SIPAccountDidActivate(self, notification):
-        account = notification.sender
-        name = u'Bonjour' if account is BonjourAccount() else account.id
-        icon = None
-        if account is BonjourAccount():
-            pixmap = QPixmap()
-            if pixmap.load(Resources.get('icons/bonjour.png')):
-                pixmap = pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                icon = QIcon(pixmap)
-        if icon is not None:
-            self.identity.addItem(icon, name, QVariant(account))
-        else:
-            self.identity.addItem(name, QVariant(account))
-
-    def _NH_SIPAccountDidDeactivate(self, notification):
-        account = notification.sender
-        name = u'Bonjour' if account is BonjourAccount() else account.id
-        self.identity.removeItem(self.identity.findText(name))
-
-    def _NH_SIPAccountManagerDidStart(self, notification):
-        account = AccountManager().default_account
-        name = u'Bonjour' if account is BonjourAccount() else account.id
-        self.identity.setCurrentIndex(self.identity.findText(name))
-
-    def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
-        account = notification.data.account
-        name = u'Bonjour' if account is BonjourAccount() else account.id
-        self.identity.setCurrentIndex(self.identity.findText(name))
 
 del ui_class, base_class
 

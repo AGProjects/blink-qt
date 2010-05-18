@@ -41,7 +41,7 @@
      <number>1</number>
     </property>
     <item>
-     <widget class="QComboBox" name="identity">
+     <widget class="AccountSelector" name="identity">
       <property name="maximumSize">
        <size>
         <width>16777215</width>
@@ -824,6 +824,11 @@ buttons below.</string>
    <class>ContactSearchListView</class>
    <extends>QListView</extends>
    <header>blink.contacts</header>
+  </customwidget>
+  <customwidget>
+   <class>AccountSelector</class>
+   <extends>QComboBox</extends>
+   <header>blink.accounts</header>
   </customwidget>
  </customwidgets>
  <tabstops>
