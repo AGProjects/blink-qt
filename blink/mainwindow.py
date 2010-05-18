@@ -141,7 +141,7 @@ class MainWindow(base_class, ui_class):
 
     def contact_list_selection_changed(self, selected, deselected):
         selected_items = self.contact_list.selectionModel().selectedIndexes()
-        self.enable_call_buttons(len(selected_items)==1 and type(self.contact_model.data(selected_items[0])) is Contact)
+        self.enable_call_buttons(len(selected_items)==1 and isinstance(self.contact_model.data(selected_items[0]), Contact))
 
     def switch_main_view(self):
         widget = self.main_view.currentWidget().sibling_panel
