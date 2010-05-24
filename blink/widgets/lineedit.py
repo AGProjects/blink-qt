@@ -20,7 +20,7 @@ class SideWidget(QWidget):
 
 
 class LineEdit(QLineEdit):
-    inactiveText  = QtDynamicProperty('inactiveText',  str)
+    inactiveText  = QtDynamicProperty('inactiveText',  unicode)
     widgetSpacing = QtDynamicProperty('widgetSpacing', int)
 
     def __init__(self, parent=None, contents=u""):
