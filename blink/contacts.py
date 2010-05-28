@@ -992,7 +992,7 @@ class ContactListView(QListView):
         self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
-        self.actions.start_audio_session = QAction("Start Audio Session", self, triggered=self._AH_StartAudioSession)
+        self.actions.start_audio_session = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -1144,7 +1144,7 @@ class ContactListView(QListView):
             handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
             handler(item)
 
-    def _AH_StartAudioSession(self):
+    def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
 
     def _AH_StartChatSession(self):
@@ -1308,7 +1308,7 @@ class ContactSearchListView(QListView):
         self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
-        self.actions.start_audio_session = QAction("Start Audio Session", self, triggered=self._AH_StartAudioSession)
+        self.actions.start_audio_session = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -1390,7 +1390,7 @@ class ContactSearchListView(QListView):
             handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
             handler(item)
 
-    def _AH_StartAudioSession(self):
+    def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
 
     def _AH_StartChatSession(self):
