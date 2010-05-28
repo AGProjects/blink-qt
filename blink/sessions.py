@@ -234,12 +234,13 @@ class DraggedSessionWidget(base_class, ui_class):
         self.tls_label.hide()
         self.srtp_label.hide()
         self.latency.hide()
-        self.status.setText(u'')
+        self.duration.hide()
+        self.stream_info.setText(u'')
         self.address.setText(session_widget.address.text())
         if session_widget.conference_position is None:
-            self.duration.setText(u'Drop over a session to conference them')
+            self.status.setText(u'Drop over a session to conference them')
         else:
-            self.duration.setText(u'Drop outside to remove from conference')
+            self.status.setText(u'Drop outside to remove from conference')
 
     def paintEvent(self, event):
         painter = QPainter(self)
