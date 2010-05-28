@@ -241,7 +241,7 @@
        <enum>Qt::TabFocus</enum>
       </property>
       <property name="text">
-       <string>Sessions</string>
+       <string>Switch to Calls</string>
       </property>
       <property name="iconSize">
        <size>
@@ -254,7 +254,7 @@
     <item>
      <widget class="QStackedWidget" name="main_view">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="contacts_panel">
        <layout class="QVBoxLayout" name="verticalLayout_8">
@@ -267,7 +267,7 @@
         <item>
          <widget class="QStackedWidget" name="contacts_view">
           <property name="currentIndex">
-           <number>0</number>
+           <number>1</number>
           </property>
           <widget class="QWidget" name="contact_list_panel">
            <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -670,7 +670,17 @@ buttons below.</string>
          <number>0</number>
         </property>
         <item>
-         <widget class="QListView" name="session_list"/>
+         <widget class="SessionListView" name="session_list">
+          <property name="horizontalScrollBarPolicy">
+           <enum>Qt::ScrollBarAlwaysOff</enum>
+          </property>
+          <property name="dragEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="dragDropMode">
+           <enum>QAbstractItemView::DragDrop</enum>
+          </property>
+         </widget>
         </item>
         <item>
          <layout class="QHBoxLayout" name="session_buttons_layout">
@@ -840,6 +850,11 @@ buttons below.</string>
    <class>ToolButton</class>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
+  </customwidget>
+  <customwidget>
+   <class>SessionListView</class>
+   <extends>QListView</extends>
+   <header>blink.sessions</header>
   </customwidget>
  </customwidgets>
  <tabstops>

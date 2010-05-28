@@ -13,6 +13,7 @@ from sipsimple.account import AccountManager
 
 from blink.accounts import AccountModel, ActiveAccountModel
 from blink.contacts import Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
+from blink.sessions import SessionModel
 from blink.resources import Resources
 
 
@@ -47,10 +48,14 @@ class MainWindow(base_class, ui_class):
 
         self.contact_editor = ContactEditorDialog(self.contact_model, self)
 
+        self.session_model = SessionModel(self)
+        self.session_list.setModel(self.session_model)
+        self.session_model.test()
+
         self.contacts_panel.sibling_panel = self.sessions_panel
-        self.contacts_panel.sibling_name = u'Sessions'
+        self.contacts_panel.sibling_name = u'Switch to Calls'
         self.sessions_panel.sibling_panel = self.contacts_panel
-        self.sessions_panel.sibling_name = u'Contacts'
+        self.sessions_panel.sibling_name = u'Switch to Contacts'
 
         self.main_view.setCurrentWidget(self.contacts_panel)
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
@@ -113,7 +118,7 @@ class MainWindow(base_class, ui_class):
     def search_box_text_changed(self, text):
         if text:
             self.main_view.setCurrentWidget(self.contacts_panel)
-            self.switch_view_button.setText(u"Sessions")
+            self.switch_view_button.setText(self.contacts_panel.sibling_name)
             self.enable_call_buttons(True)
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
