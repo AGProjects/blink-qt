@@ -240,7 +240,7 @@ class DraggedSessionWidget(base_class, ui_class):
         if session_widget.conference_position is None:
             self.status.setText(u'Drop over a session to conference them')
         else:
-            self.status.setText(u'Drop outside to remove from conference')
+            self.status.setText(u'Drop outside the conference to detach')
 
     def paintEvent(self, event):
         painter = QPainter(self)
