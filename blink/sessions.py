@@ -83,7 +83,7 @@ class Bottom(object): pass
 ui_class, base_class = uic.loadUiType(Resources.get('session.ui'))
 
 class SessionWidget(base_class, ui_class):
-    def __init__(self, session_info, parent=None):
+    def __init__(self, session, parent=None):
         super(SessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
@@ -109,7 +109,7 @@ class SessionWidget(base_class, ui_class):
         #self.srtp_label.hide()
         #self.tls_label.hide()
         #self.latency_label.hide()
-        self.address_label.setText(session_info.name or session_info.uri)
+        self.address_label.setText(session.name or session.uri)
 
     def _get_selected(self):
         return self.__dict__['selected']
