@@ -24,6 +24,15 @@ class SessionItem(object):
         self.streams = streams
         self.widget = Null
         self.conference = None
+        self.type = None
+        self.codec_info = ''
+        self.tls = False
+        self.srtp = False
+        self.latency = 0
+        self.packet_loss = 0
+
+    def __reduce__(self):
+        return (self.__class__, (self.name, self.uri, self.streams), None)
 
     def _get_conference(self):
         return self.__dict__['conference']
@@ -41,8 +50,77 @@ class SessionItem(object):
     conference = property(_get_conference, _set_conference)
     del _get_conference, _set_conference
 
-    def __reduce__(self):
-        return (self.__class__, (self.name, self.uri, self.streams), None)
+    def _get_type(self):
+        return self.__dict__['type']
+
+    def _set_type(self, value):
+        if self.__dict__.get('type', Null) == value:
+            return
+        self.__dict__['type'] = value
+        self.widget.stream_info_label.session_type = value
+
+    type = property(_get_type, _set_type)
+    del _get_type, _set_type
+
+    def _get_codec_info(self):
+        return self.__dict__['codec_info']
+
+    def _set_codec_info(self, value):
+        if self.__dict__.get('codec_info', None) == value:
+            return
+        self.__dict__['codec_info'] = value
+        self.widget.stream_info_label.codec_info = value
+
+    codec_info = property(_get_codec_info, _set_codec_info)
+    del _get_codec_info, _set_codec_info
+
+    def _get_tls(self):
+        return self.__dict__['tls']
+
+    def _set_tls(self, value):
+        if self.__dict__.get('tls', None) == value:
+            return
+        self.__dict__['tls'] = value
+        self.widget.tls_label.setVisible(bool(value))
+
+    tls = property(_get_tls, _set_tls)
+    del _get_tls, _set_tls
+
+    def _get_srtp(self):
+        return self.__dict__['srtp']
+
+    def _set_srtp(self, value):
+        if self.__dict__.get('srtp', None) == value:
+            return
+        self.__dict__['srtp'] = value
+        self.widget.srtp_label.setVisible(bool(value))
+
+    srtp = property(_get_srtp, _set_srtp)
+    del _get_srtp, _set_srtp
+
+    def _get_latency(self):
+        return self.__dict__['latency']
+
+    def _set_latency(self, value):
+        if self.__dict__.get('latency', None) == value:
+            return
+        self.__dict__['latency'] = value
+        self.widget.latency_label.value = value
+
+    latency = property(_get_latency, _set_latency)
+    del _get_latency, _set_latency
+
+    def _get_packet_loss(self):
+        return self.__dict__['packet_loss']
+
+    def _set_packet_loss(self, value):
+        if self.__dict__.get('packet_loss', None) == value:
+            return
+        self.__dict__['packet_loss'] = value
+        self.widget.packet_loss_label.value = value
+
+    packet_loss = property(_get_packet_loss, _set_packet_loss)
+    del _get_packet_loss, _set_packet_loss
 
 
 class Conference(object):
@@ -90,6 +168,9 @@ class SessionWidget(base_class, ui_class):
         font = self.latency_label.font()
         font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
         self.latency_label.setFont(font)
+        font = self.packet_loss_label.font()
+        font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
+        self.packet_loss_label.setFont(font)
         self.mute_button.type = LeftSegment
         self.hold_button.type = MiddleSegment
         self.record_button.type = MiddleSegment
@@ -106,10 +187,13 @@ class SessionWidget(base_class, ui_class):
         self.record_button.pressed.connect(self._tool_button_pressed)
         self.hangup_button.pressed.connect(self._tool_button_pressed)
         self.mute_button.hide()
-        #self.srtp_label.hide()
-        #self.tls_label.hide()
-        #self.latency_label.hide()
         self.address_label.setText(session.name or session.uri)
+        self.stream_info_label.session_type = session.type
+        self.stream_info_label.session_type = session.codec_info
+        self.latency_label.value = session.latency
+        self.packet_loss_label.value = session.packet_loss
+        self.tls_label.setVisible(bool(session.tls))
+        self.srtp_label.setVisible(bool(session.srtp))
 
     def _get_selected(self):
         return self.__dict__['selected']
@@ -234,6 +318,7 @@ class DraggedSessionWidget(base_class, ui_class):
         self.tls_label.hide()
         self.srtp_label.hide()
         self.latency_label.hide()
+        self.packet_loss_label.hide()
         self.duration_label.hide()
         self.stream_info_label.setText(u'')
         self.address_label.setText(session_widget.address_label.text())
@@ -438,6 +523,24 @@ class SessionModel(QAbstractListModel):
         conference = Conference()
         self.sessions[2].conference = conference
         self.sessions[3].conference = conference
+        session = self.sessions[0]
+        session.type, session.codec_info = 'HD Audio', 'speex 32kHz'
+        session.tls, session.srtp, session.latency, session.packet_loss = True,  True,  100, 20
+        session = self.sessions[1]
+        session.type, session.codec_info = 'HD Audio', 'speex 32kHz'
+        session.tls, session.srtp, session.latency, session.packet_loss = True,  True,   80, 20
+        session = self.sessions[2]
+        session.type, session.codec_info = 'HD Audio', 'speex 32kHz'
+        session.tls, session.srtp, session.latency, session.packet_loss = True,  False, 150,  0
+        session = self.sessions[3]
+        session.type, session.codec_info = 'HD Audio', 'speex 32kHz'
+        session.tls, session.srtp, session.latency, session.packet_loss = False, False, 180, 20
+        session = self.sessions[4]
+        session.type, session.codec_info = 'Video', 'H.264 512kbit, PCM 8kHz'
+        session.tls, session.srtp, session.latency, session.packet_loss = True,  True,    0,  0
+        session = self.sessions[5]
+        session.type, session.codec_info = 'Audio', 'PCM 8kHz'
+        session.tls, session.srtp, session.latency, session.packet_loss = True,  True,  540, 50
 
 
 class ContextMenuActions(object):

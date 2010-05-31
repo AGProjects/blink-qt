@@ -352,7 +352,7 @@
   <customwidget>
    <class>IconSelector</class>
    <extends>QLabel</extends>
-   <header>blink.widgets.iconselector</header>
+   <header>blink.widgets.labels</header>
   </customwidget>
  </customwidgets>
  <tabstops>
