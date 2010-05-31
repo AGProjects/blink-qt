@@ -87,9 +87,9 @@ class SessionWidget(base_class, ui_class):
         super(SessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        latency_font = self.latency.font()
-        latency_font.setPointSizeF(self.status.fontInfo().pointSizeF() - 1)
-        self.latency.setFont(latency_font)
+        font = self.latency_label.font()
+        font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
+        self.latency_label.setFont(font)
         self.mute_button.type = LeftSegment
         self.hold_button.type = MiddleSegment
         self.record_button.type = MiddleSegment
@@ -108,8 +108,8 @@ class SessionWidget(base_class, ui_class):
         self.mute_button.hide()
         #self.srtp_label.hide()
         #self.tls_label.hide()
-        #self.latency.hide()
-        self.address.setText(session_info.name or session_info.uri)
+        #self.latency_label.hide()
+        self.address_label.setText(session_info.name or session_info.uri)
 
     def _get_selected(self):
         return self.__dict__['selected']
@@ -233,14 +233,14 @@ class DraggedSessionWidget(base_class, ui_class):
         self.hangup_button.hide()
         self.tls_label.hide()
         self.srtp_label.hide()
-        self.latency.hide()
-        self.duration.hide()
-        self.stream_info.setText(u'')
-        self.address.setText(session_widget.address.text())
+        self.latency_label.hide()
+        self.duration_label.hide()
+        self.stream_info_label.setText(u'')
+        self.address_label.setText(session_widget.address_label.text())
         if session_widget.conference_position is None:
-            self.status.setText(u'Drop over a session to conference them')
+            self.status_label.setText(u'Drop over a session to conference them')
         else:
-            self.status.setText(u'Drop outside the conference to detach')
+            self.status_label.setText(u'Drop outside the conference to detach')
 
     def paintEvent(self, event):
         painter = QPainter(self)

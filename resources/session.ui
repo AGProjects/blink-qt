@@ -41,7 +41,7 @@
       <number>1</number>
      </property>
      <item>
-      <widget class="QLabel" name="address">
+      <widget class="QLabel" name="address_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
          <horstretch>0</horstretch>
@@ -129,7 +129,7 @@
       <number>1</number>
      </property>
      <item>
-      <widget class="QLabel" name="stream_info">
+      <widget class="QLabel" name="stream_info_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
          <horstretch>0</horstretch>
@@ -164,7 +164,7 @@
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="latency">
+      <widget class="QLabel" name="latency_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
          <horstretch>0</horstretch>
@@ -253,7 +253,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Latency 100 ms</string>
+        <string>Latency 100ms</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -299,7 +299,7 @@
       <number>1</number>
      </property>
      <item>
-      <widget class="QLabel" name="duration">
+      <widget class="QLabel" name="duration_label">
        <property name="minimumSize">
         <size>
          <width>38</width>
@@ -312,7 +312,7 @@
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="status">
+      <widget class="QLabel" name="status_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
          <horstretch>0</horstretch>
