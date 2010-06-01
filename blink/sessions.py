@@ -433,7 +433,69 @@ class SessionModel(QAbstractListModel):
             return False
 
     def _DH_ApplicationXBlinkSessionList(self, mime_data, action, index):
-        return False
+        session_list = self.session_list
+        selection_model = session_list.selectionModel()
+        selected_index = selection_model.selectedIndexes()[0]
+        source_row = selected_index.row()
+        source = self.sessions[source_row]
+        target = self.sessions[index.row()] if index.isValid() else None
+        if source.conference is None:
+            # the dragged session is not in a conference yet
+            if target is None:
+                return False
+            selection_mode = session_list.selectionMode()
+            session_list.setSelectionMode(session_list.NoSelection)
+            selection_model.clearSelection()
+            if target.conference is not None:
+                self._pop_session(source)
+                position = self.sessions.index(target.conference.sessions[-1]) + 1
+                self.beginInsertRows(QModelIndex(), position, position)
+                self.sessions.insert(position, source)
+                self.endInsertRows()
+                session_list.openPersistentEditor(self.index(position))
+                source.conference = target.conference
+            else:
+                target_row = index.row()
+                first, last = (source, target) if source_row < target_row else (target, source)
+                self._pop_session(source)
+                self._pop_session(target)
+                self.beginInsertRows(QModelIndex(), 0, 1)
+                self.sessions[0:0] = [first, last]
+                self.endInsertRows()
+                session_list.openPersistentEditor(self.index(0))
+                session_list.openPersistentEditor(self.index(1))
+                conference = Conference()
+                first.conference = conference
+                last.conference = conference
+                position = self.sessions.index(source)
+            session_list.setSelectionMode(selection_mode)
+            selection_model.select(self.index(position), selection_model.Select)
+        else:
+            # the dragged session is in a conference
+            if target is not None and target.conference is source.conference:
+                return False
+            selection_mode = session_list.selectionMode()
+            session_list.setSelectionMode(session_list.NoSelection)
+            conference = source.conference
+            if len(conference.sessions) == 2:
+                selection_model.clearSelection()
+                first, last = conference.sessions
+                sibling = first if source is last else last
+                source.conference = None
+                sibling.conference = None
+                self._pop_session(first)
+                self._pop_session(last)
+                self._add_session(first)
+                self._add_session(last)
+                position = self.sessions.index(sibling)
+            else:
+                source.conference = None
+                self._pop_session(source)
+                self._add_session(source)
+                position = self.sessions.index(conference.sessions[0])
+            session_list.setSelectionMode(selection_mode)
+            selection_model.select(self.index(position), selection_model.Select)
+        return True
 
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
         return False
