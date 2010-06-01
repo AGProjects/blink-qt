@@ -376,8 +376,8 @@ class SessionDelegate(QStyledItemDelegate):
 
 
 class SessionModel(QAbstractListModel):
-    sessionsAdded = pyqtSignal(list)
-    sessionsRemoved = pyqtSignal(list)
+    sessionAdded = pyqtSignal(SessionItem)
+    sessionRemoved = pyqtSignal(SessionItem)
 
     # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['application/x-blink-session-list', 'application/x-blink-contact-list']
@@ -447,7 +447,7 @@ class SessionModel(QAbstractListModel):
             session_list.setSelectionMode(session_list.NoSelection)
             selection_model.clearSelection()
             if target.conference is not None:
-                self._pop_session(source)
+                self._remove_session(source)
                 position = self.sessions.index(target.conference.sessions[-1]) + 1
                 self.beginInsertRows(QModelIndex(), position, position)
                 self.sessions.insert(position, source)
@@ -458,8 +458,8 @@ class SessionModel(QAbstractListModel):
             else:
                 target_row = index.row()
                 first, last = (source, target) if source_row < target_row else (target, source)
-                self._pop_session(source)
-                self._pop_session(target)
+                self._remove_session(source)
+                self._remove_session(target)
                 self.beginInsertRows(QModelIndex(), 0, 1)
                 self.sessions[0:0] = [first, last]
                 self.endInsertRows()
@@ -485,15 +485,15 @@ class SessionModel(QAbstractListModel):
                 sibling = first if source is last else last
                 source.conference = None
                 sibling.conference = None
-                self._pop_session(first)
-                self._pop_session(last)
+                self._remove_session(first)
+                self._remove_session(last)
                 self._add_session(first)
                 self._add_session(last)
                 position = self.sessions.index(sibling)
                 session_list.scrollToBottom()
             else:
                 source.conference = None
-                self._pop_session(source)
+                self._remove_session(source)
                 self._add_session(source)
                 position = self.sessions.index(conference.sessions[0])
                 session_list.scrollTo(self.index(position), session_list.PositionAtCenter)
@@ -504,36 +504,6 @@ class SessionModel(QAbstractListModel):
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
         return False
 
-    @staticmethod
-    def range_iterator(indexes):
-        """Return contiguous ranges from indexes"""
-        start = last = None
-        for index in sorted(indexes):
-            if start is None:
-                start = index
-            elif index-last>1:
-                yield (start, last)
-                start = index
-            last = index
-        else:
-            if indexes:
-                yield (start, last)
-
-    @staticmethod
-    def reversed_range_iterator(indexes):
-        """Return contiguous ranges from indexes starting from the end"""
-        end = last = None
-        for index in reversed(sorted(indexes)):
-            if end is None:
-                end = index
-            elif last-index>1:
-                yield (last, end)
-                end = index
-            last = index
-        else:
-            if indexes:
-                yield (last, end)
-
     def _add_session(self, session):
         position = len(self.sessions)
         self.beginInsertRows(QModelIndex(), position, position)
@@ -541,40 +511,23 @@ class SessionModel(QAbstractListModel):
         self.session_list.openPersistentEditor(self.index(position))
         self.endInsertRows()
 
-    def _pop_session(self, session):
+    def _remove_session(self, session):
         position = self.sessions.index(session)
         self.beginRemoveRows(QModelIndex(), position, position)
         del self.sessions[position]
         self.endRemoveRows()
-        return session
-
-    def _pop_sessions(self, indexes):
-        sessions = []
-        rows = set(index.row() for index in indexes if index.isValid())
-        for start, end in self.reversed_range_iterator(rows):
-            self.beginRemoveRows(QModelIndex(), start, end)
-            sessions[0:0] = self.sessions[start:end+1]
-            del self.sessions[start:end+1]
-            self.endRemoveRows()
-        return sessions
 
     def addSession(self, session):
         if session in self.sessions:
             return
         self._add_session(session)
-        self.sessionsAdded.emit([session])
+        self.sessionAdded.emit(session)
 
     def removeSession(self, session):
         if session not in self.sessions:
             return
-        self._pop_session(session)
-        self.sessionsRemoved.emit([session])
-
-    def removeSessions(self, indexes):
-        sessions = self._pop_sessions(indexes)
-        for session in sessions:
-            session.widget = Null
-        self.sessionsRemoved.emit(sessions)
+        self._remove_session(session)
+        self.sessionRemoved.emit(session)
 
     def test(self):
         self.addSession(SessionItem('Dan Pascu', 'dan@umts.ro', []))
