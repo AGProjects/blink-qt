@@ -454,6 +454,7 @@ class SessionModel(QAbstractListModel):
                 self.endInsertRows()
                 session_list.openPersistentEditor(self.index(position))
                 source.conference = target.conference
+                session_list.scrollTo(self.index(position), session_list.EnsureVisible) # or PositionAtBottom
             else:
                 target_row = index.row()
                 first, last = (source, target) if source_row < target_row else (target, source)
@@ -468,6 +469,7 @@ class SessionModel(QAbstractListModel):
                 first.conference = conference
                 last.conference = conference
                 position = self.sessions.index(source)
+                session_list.scrollToTop()
             session_list.setSelectionMode(selection_mode)
             selection_model.select(self.index(position), selection_model.Select)
         else:
@@ -488,11 +490,13 @@ class SessionModel(QAbstractListModel):
                 self._add_session(first)
                 self._add_session(last)
                 position = self.sessions.index(sibling)
+                session_list.scrollToBottom()
             else:
                 source.conference = None
                 self._pop_session(source)
                 self._add_session(source)
                 position = self.sessions.index(conference.sessions[0])
+                session_list.scrollTo(self.index(position), session_list.PositionAtCenter)
             session_list.setSelectionMode(selection_mode)
             selection_model.select(self.index(position), selection_model.Select)
         return True
