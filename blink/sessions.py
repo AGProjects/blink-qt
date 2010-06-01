@@ -189,7 +189,7 @@ class SessionWidget(base_class, ui_class):
         self.mute_button.hide()
         self.address_label.setText(session.name or session.uri)
         self.stream_info_label.session_type = session.type
-        self.stream_info_label.session_type = session.codec_info
+        self.stream_info_label.codec_info = session.codec_info
         self.latency_label.value = session.latency
         self.packet_loss_label.value = session.packet_loss
         self.tls_label.setVisible(bool(session.tls))
