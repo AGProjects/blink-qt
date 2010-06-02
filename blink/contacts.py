@@ -998,15 +998,6 @@ class ContactListView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
         self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
-        self.restore_timer = QTimer(self)
-        self.restore_timer.setSingleShot(True)
-        self.restore_timer.setInterval(1250)
-        self.restore_timer.timeout.connect(self._restore_groups)
-        self.needs_restore = False
-
-    def _restore_groups(self):
-        for group in self.model().contact_groups:
-            group.restore_state()
         self.needs_restore = False
 
     def paintEvent(self, event):
@@ -1165,8 +1156,8 @@ class ContactListView(QListView):
     def startDrag(self, supported_actions):
         super(ContactListView, self).startDrag(supported_actions)
         if self.needs_restore:
-            self.restore_timer.stop()
-            self._restore_groups()
+            for group in self.model().contact_groups:
+                group.restore_state()
             self.needs_restore = False
 
     def dragEnterEvent(self, event):
@@ -1191,7 +1182,6 @@ class ContactListView(QListView):
                         group.save_state()
                         group.collapse()
                     self.needs_restore = True
-                self.restore_timer.stop()
             event.accept()
             self.setState(self.DraggingState)
 
@@ -1201,8 +1191,6 @@ class ContactListView(QListView):
         self.drop_indicator_index = QModelIndex()
         for group in self.model().contact_groups:
             group.widget.drop_indicator = None
-        if self.needs_restore:
-            self.restore_timer.start()
 
     def dragMoveEvent(self, event):
         super(ContactListView, self).dragMoveEvent(event)
@@ -1232,9 +1220,6 @@ class ContactListView(QListView):
             event.accept()
         for group in model.contact_groups:
             group.widget.drop_indicator = None
-            if self.needs_restore:
-                group.restore_state()
-        self.needs_restore = False
         super(ContactListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
