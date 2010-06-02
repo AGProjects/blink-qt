@@ -103,7 +103,7 @@ class SegmentButton(QToolButton):
     shown  = pyqtSignal()
 
     def __init__(self, parent=None):
-        super(SegmentButton, self).__init__()
+        super(SegmentButton, self).__init__(parent)
         self.type = SingleSegment
 
     def _get_type(self):
