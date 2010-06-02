@@ -1162,6 +1162,13 @@ class ContactListView(QListView):
     def _AH_ShareMyDesktop(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
 
+    def startDrag(self, supported_actions):
+        super(ContactListView, self).startDrag(supported_actions)
+        if self.needs_restore:
+            self.restore_timer.stop()
+            self._restore_groups()
+            self.needs_restore = False
+
     def dragEnterEvent(self, event):
         event_source = event.source()
         accepted_mime_types = set(self.model().accepted_mime_types)
