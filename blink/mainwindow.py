@@ -52,6 +52,8 @@ class MainWindow(base_class, ui_class):
         self.session_list.setModel(self.session_model)
         self.session_model.test()
 
+        self.session_list.selectionModel().selectionChanged.connect(self.session_list_selection_changed)
+
         self.contacts_panel.sibling_panel = self.sessions_panel
         self.contacts_panel.sibling_name = u'Switch to Calls'
         self.sessions_panel.sibling_panel = self.contacts_panel
@@ -147,6 +149,14 @@ class MainWindow(base_class, ui_class):
     def contact_list_selection_changed(self, selected, deselected):
         selected_items = self.contact_list.selectionModel().selectedIndexes()
         self.enable_call_buttons(len(selected_items)==1 and isinstance(self.contact_model.data(selected_items[0]), Contact))
+
+    def session_list_selection_changed(self, selected, deselected):
+        selected_indexes = selected.indexes()
+        if not selected_indexes:
+            self.conference_button.setChecked(False)
+        else:
+            active_session = self.session_model.data(selected_indexes[0])
+            self.conference_button.setChecked(active_session.conference is not None)
 
     def switch_main_view(self):
         widget = self.main_view.currentWidget().sibling_panel
