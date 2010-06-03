@@ -15,6 +15,7 @@ from blink.accounts import AccountModel, ActiveAccountModel
 from blink.contacts import Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
 from blink.sessions import SessionModel
 from blink.resources import Resources
+from blink.widgets.buttons import SwitchViewButton
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
@@ -54,16 +55,11 @@ class MainWindow(base_class, ui_class):
 
         self.session_list.selectionModel().selectionChanged.connect(self.session_list_selection_changed)
 
-        self.contacts_panel.sibling_panel = self.sessions_panel
-        self.contacts_panel.sibling_name = u'Switch to Calls'
-        self.sessions_panel.sibling_panel = self.contacts_panel
-        self.sessions_panel.sibling_name = u'Switch to Contacts'
-
         self.main_view.setCurrentWidget(self.contacts_panel)
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
         self.search_view.setCurrentWidget(self.search_list_panel)
 
-        self.switch_view_button.clicked.connect(self.switch_main_view)
+        self.switch_view_button.viewChanged.connect(self.switch_main_view)
 
         self.search_box.textChanged.connect(self.search_box_text_changed)
         self.contact_model.itemsAdded.connect(self.contact_model_added_items)
@@ -119,8 +115,7 @@ class MainWindow(base_class, ui_class):
 
     def search_box_text_changed(self, text):
         if text:
-            self.main_view.setCurrentWidget(self.contacts_panel)
-            self.switch_view_button.setText(self.contacts_panel.sibling_name)
+            self.switch_view_button.view = SwitchViewButton.ContactView
             self.enable_call_buttons(True)
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
@@ -158,10 +153,8 @@ class MainWindow(base_class, ui_class):
             active_session = self.session_model.data(selected_indexes[0])
             self.conference_button.setChecked(active_session.conference is not None)
 
-    def switch_main_view(self):
-        widget = self.main_view.currentWidget().sibling_panel
-        self.main_view.setCurrentWidget(widget)
-        self.switch_view_button.setText(widget.sibling_name)
+    def switch_main_view(self, view):
+        self.main_view.setCurrentWidget(self.contacts_panel if view is SwitchViewButton.ContactView else self.sessions_panel)
 
 del ui_class, base_class
 

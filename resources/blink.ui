@@ -224,7 +224,7 @@
      </layout>
     </item>
     <item>
-     <widget class="QPushButton" name="switch_view_button">
+     <widget class="SwitchViewButton" name="switch_view_button">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
         <horstretch>0</horstretch>
@@ -864,6 +864,11 @@ buttons below.</string>
    <class>SessionListView</class>
    <extends>QListView</extends>
    <header>blink.sessions</header>
+  </customwidget>
+  <customwidget>
+   <class>SwitchViewButton</class>
+   <extends>QPushButton</extends>
+   <header>blink.widgets.buttons</header>
   </customwidget>
  </customwidgets>
  <tabstops>

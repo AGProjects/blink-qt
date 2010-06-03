@@ -1159,10 +1159,12 @@ class ContactListView(QListView):
             for group in self.model().contact_groups:
                 group.restore_state()
             self.needs_restore = False
+        self.model().main_window.switch_view_button.dnd_active = False
 
     def dragEnterEvent(self, event):
+        model = self.model()
         event_source = event.source()
-        accepted_mime_types = set(self.model().accepted_mime_types)
+        accepted_mime_types = set(model.accepted_mime_types)
         provided_mime_types = set(str(x) for x in event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         has_blink_contacts = 'application/x-blink-contact-list' in provided_mime_types
@@ -1178,10 +1180,12 @@ class ContactListView(QListView):
                 event.setDropAction(Qt.MoveAction)
             if has_blink_contacts or has_blink_groups:
                 if not self.needs_restore:
-                    for group in self.model().contact_groups:
+                    for group in model.contact_groups:
                         group.save_state()
                         group.collapse()
                     self.needs_restore = True
+            if has_blink_contacts:
+                model.main_window.switch_view_button.dnd_active = True
             event.accept()
             self.setState(self.DraggingState)
 
@@ -1197,13 +1201,14 @@ class ContactListView(QListView):
         if event.source() is self:
             event.setDropAction(Qt.MoveAction)
 
-        for mime_type in self.model().accepted_mime_types:
+        model = self.model()
+        for mime_type in model.accepted_mime_types:
             if event.provides(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
-                item = self.model().data(index)
+                item = model.data(index)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
@@ -1400,11 +1405,19 @@ class ContactSearchListView(QListView):
     def _AH_ShareMyDesktop(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
 
+    def startDrag(self, supported_actions):
+        super(ContactSearchListView, self).startDrag(supported_actions)
+        self.model().main_window.switch_view_button.dnd_active = False
+
     def dragEnterEvent(self, event):
-        accepted_mime_types = set(self.model().accepted_mime_types)
+        model = self.model()
+        accepted_mime_types = set(model.accepted_mime_types)
         provided_mime_types = set(str(x) for x in event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
-        if event.source() is self or not acceptable_mime_types:
+        if event.source() is self:
+            event.ignore()
+            model.main_window.switch_view_button.dnd_active = True
+        elif not acceptable_mime_types:
             event.ignore()
         else:
             event.accept()
