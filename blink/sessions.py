@@ -9,7 +9,7 @@ import cPickle as pickle
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QMimeData, QModelIndex, QSize, QStringList, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QListView, QMenu, QPainter, QPen, QPixmap, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QBrush, QColor, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QStyle, QStyledItemDelegate
 
 from application.python.util import Null
 
@@ -165,6 +165,10 @@ class SessionWidget(base_class, ui_class):
         super(SessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        # add a left margin for the colored band
+        self.address_layout.setContentsMargins(8, -1, -1, -1)
+        self.stream_layout.setContentsMargins(8, -1, -1, -1)
+        self.bottom_layout.setContentsMargins(8, -1, -1, -1)
         font = self.latency_label.font()
         font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
         self.latency_label.setFont(font)
@@ -258,15 +262,39 @@ class SessionWidget(base_class, ui_class):
         # draw inner rect and border
         #
         if self.selected:
-            painter.setBrush(QBrush(QColor('#d3dcff'))) # c3c9ff, d3d9ff/d3dcff, e3e9ff
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#75c0ff'))
+            background.setColorAt(0.99, QColor('#75c0ff'))
+            background.setColorAt(1.00, QColor('#ffffff'))
+            painter.setBrush(QBrush(background))
             painter.setPen(QPen(QBrush(QColor('#606060' if self.conference_position is None else '#b0b0b0')), 2.0))
         elif self.conference_position is not None:
-            painter.setBrush(QBrush(QColor('#d3ffdc')))
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#95ff95'))
+            background.setColorAt(0.99, QColor('#95ff95'))
+            background.setColorAt(1.00, QColor('#ffffff'))
+            painter.setBrush(QBrush(background))
             painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
         else:
-            painter.setBrush(Qt.NoBrush)
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#d0d0d0'))
+            background.setColorAt(0.99, QColor('#d0d0d0'))
+            background.setColorAt(1.00, QColor('#ffffff'))
+            painter.setBrush(QBrush(background))
             painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
         painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
+
+        # for conferences extend the left marker over the whole conference
+        #
+        if self.conference_position is not None:
+            painter.setPen(Qt.NoPen)
+            left_rect = rect.adjusted(0, 0, 10-rect.width(), 0)
+            if self.conference_position is Top:
+                painter.drawRect(left_rect.adjusted(2, 5, 0, 5))
+            elif self.conference_position is Middle:
+                painter.drawRect(left_rect.adjusted(2, -5, 0, 5))
+            elif self.conference_position is Bottom:
+                painter.drawRect(left_rect.adjusted(2, -5, 0, -5))
 
         # draw outer border
         #
@@ -275,7 +303,7 @@ class SessionWidget(base_class, ui_class):
             if self.drop_indicator:
                 painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             elif self.selected:
-                painter.setPen(QPen(QBrush(QColor('#606060')), 2.0))
+                painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0)) # or #2070c0 (next best look) or gray: #606060
 
             if self.conference_position is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
@@ -291,7 +319,7 @@ class SessionWidget(base_class, ui_class):
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
         elif self.conference_position is not None:
             painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QBrush(QColor('#237523')), 2.0)) # or 257a25
+            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0)) # or 237523, #2b8f2b
             if self.conference_position is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
             elif self.conference_position is Middle:
