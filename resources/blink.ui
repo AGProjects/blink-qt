@@ -686,6 +686,9 @@ buttons below.</string>
           <property name="dragDropMode">
            <enum>QAbstractItemView::DragDrop</enum>
           </property>
+          <property name="verticalScrollMode">
+           <enum>QAbstractItemView::ScrollPerPixel</enum>
+          </property>
          </widget>
         </item>
         <item>

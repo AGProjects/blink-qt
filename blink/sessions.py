@@ -8,8 +8,8 @@ __all__ = ['Conference', 'SessionItem', 'SessionModel', 'SessionListView']
 import cPickle as pickle
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QMimeData, QModelIndex, QSize, QStringList, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QStyle, QStyledItemDelegate
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QSize, QStringList, QTimer, pyqtSignal
+from PyQt4.QtGui  import QAction, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QStyle, QStyledItemDelegate
 
 from application.python.util import Null
 
@@ -388,17 +388,6 @@ class SessionDelegate(QStyledItemDelegate):
             # of the size that the widget ever had, so it will never shrink it.
             session.widget.resize(option.rect.size())
 
-        if option.state & QStyle.State_Selected and not option.state & QStyle.State_HasFocus:
-            # This condition is met when dragging is started on this session.
-            # We use this to to draw the dragged session image.
-            painter.save()
-            pixmap = QPixmap(option.rect.size())
-            widget = DraggedSessionWidget(session.widget, None)
-            widget.resize(option.rect.size())
-            widget.render(pixmap)
-            painter.drawPixmap(option.rect, pixmap)
-            painter.restore()
-
     def sizeHint(self, option, index):
         return self.size_hint
 
@@ -463,17 +452,16 @@ class SessionModel(QAbstractListModel):
     def _DH_ApplicationXBlinkSessionList(self, mime_data, action, index):
         session_list = self.session_list
         selection_model = session_list.selectionModel()
-        selected_index = selection_model.selectedIndexes()[0]
-        source_row = selected_index.row()
-        source = self.sessions[source_row]
+        selection_mode = session_list.selectionMode()
+        session_list.setSelectionMode(session_list.NoSelection)
+        source = self.session_list.dragged_session
         target = self.sessions[index.row()] if index.isValid() else None
         if source.conference is None:
             # the dragged session is not in a conference yet
             if target is None:
                 return False
-            selection_mode = session_list.selectionMode()
-            session_list.setSelectionMode(session_list.NoSelection)
-            selection_model.clearSelection()
+            source_selected = source.widget.selected
+            target_selected = target.widget.selected
             if target.conference is not None:
                 self._remove_session(source)
                 position = self.sessions.index(target.conference.sessions[-1]) + 1
@@ -482,8 +470,14 @@ class SessionModel(QAbstractListModel):
                 self.endInsertRows()
                 session_list.openPersistentEditor(self.index(position))
                 source.conference = target.conference
-                session_list.scrollTo(self.index(position), session_list.EnsureVisible) # or PositionAtBottom
+                source_index = self.index(position)
+                if source_selected:
+                    selection_model.select(source_index, selection_model.Select)
+                elif target_selected:
+                    source.widget.selected = True
+                session_list.scrollTo(source_index, session_list.EnsureVisible) # or PositionAtBottom
             else:
+                source_row = self.sessions.index(source)
                 target_row = index.row()
                 first, last = (source, target) if source_row < target_row else (target, source)
                 self._remove_session(source)
@@ -496,19 +490,18 @@ class SessionModel(QAbstractListModel):
                 conference = Conference()
                 first.conference = conference
                 last.conference = conference
-                position = self.sessions.index(source)
+                if source_selected:
+                    selection_model.select(self.index(self.sessions.index(source)), selection_model.Select)
+                elif target_selected:
+                    selection_model.select(self.index(self.sessions.index(target)), selection_model.Select)
                 session_list.scrollToTop()
-            session_list.setSelectionMode(selection_mode)
-            selection_model.select(self.index(position), selection_model.Select)
         else:
             # the dragged session is in a conference
             if target is not None and target.conference is source.conference:
                 return False
-            selection_mode = session_list.selectionMode()
-            session_list.setSelectionMode(session_list.NoSelection)
             conference = source.conference
             if len(conference.sessions) == 2:
-                selection_model.clearSelection()
+                conference_selected = source.widget.selected
                 first, last = conference.sessions
                 sibling = first if source is last else last
                 source.conference = None
@@ -517,16 +510,24 @@ class SessionModel(QAbstractListModel):
                 self._remove_session(last)
                 self._add_session(first)
                 self._add_session(last)
-                position = self.sessions.index(sibling)
+                if conference_selected:
+                    selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
                 session_list.scrollToBottom()
             else:
+                try:
+                    selected_index = selection_model.selectedIndexes()[0]
+                except IndexError:
+                    pass
+                else:
+                    if self.sessions[selected_index.row()] is source:
+                        sibling = (session for session in source.conference.sessions if session is not source).next()
+                        selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
                 source.conference = None
                 self._remove_session(source)
                 self._add_session(source)
                 position = self.sessions.index(conference.sessions[0])
                 session_list.scrollTo(self.index(position), session_list.PositionAtCenter)
-            session_list.setSelectionMode(selection_mode)
-            selection_model.select(self.index(position), selection_model.Select)
+        session_list.setSelectionMode(selection_mode)
         return True
 
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
@@ -600,6 +601,9 @@ class SessionListView(QListView):
         self.setItemDelegate(SessionDelegate(self))
         self.setDropIndicatorShown(False)
         self.actions = ContextMenuActions()
+        self.dragged_session = None
+        self._pressed_position = None
+        self._pressed_index = None
 
     def setModel(self, model):
         selection_model = self.selectionModel() or Null
@@ -624,6 +628,48 @@ class SessionListView(QListView):
 
     def contextMenuEvent(self, event):
         pass
+
+    def mousePressEvent(self, event):
+        self._pressed_position = event.pos()
+        self._pressed_index = self.indexAt(self._pressed_position)
+        super(SessionListView, self).mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._pressed_position = None
+        self._pressed_index = None
+        super(SessionListView, self).mouseReleaseEvent(event)
+
+    def selectionCommand(self, index, event=None):
+        selection_model = self.selectionModel()
+        if not index.isValid() or event is None:
+            return selection_model.NoUpdate
+        elif event.type() == QEvent.MouseButtonPress and not selection_model.selectedIndexes():
+            return selection_model.ClearAndSelect
+        elif event.type() in (QEvent.MouseButtonPress, QEvent.MouseMove):
+            return selection_model.NoUpdate
+        elif event.type() == QEvent.MouseButtonRelease:
+            return selection_model.ClearAndSelect
+        else:
+            return super(SessionListView, self).selectionCommand(index, event)
+
+    def startDrag(self, supported_actions):
+        if self._pressed_index is not None and self._pressed_index.isValid():
+            model = self.model()
+            self.dragged_session = model.data(self._pressed_index)
+            rect = self.visualRect(self._pressed_index)
+            pixmap = QPixmap(rect.size())
+            pixmap.fill(Qt.transparent)
+            widget = DraggedSessionWidget(self.dragged_session.widget, None)
+            widget.resize(rect.size())
+            widget.render(pixmap)
+            drag = QDrag(self)
+            drag.setPixmap(pixmap)
+            drag.setMimeData(model.mimeData([self._pressed_index]))
+            drag.setHotSpot(self._pressed_position - rect.topLeft())
+            drag.exec_(supported_actions, Qt.CopyAction)
+            self.dragged_session = None
+            self._pressed_position = None
+            self._pressed_index = None
 
     def dragEnterEvent(self, event):
         event_source = event.source()
@@ -678,9 +724,9 @@ class SessionListView(QListView):
         super(SessionListView, self).dropEvent(event)
 
     def _DH_ApplicationXBlinkSessionList(self, event, index, rect, session):
-        model = self.model()
-        dragged_session = (model.data(index) for index in self.selectionModel().selectedIndexes()).next()
+        dragged_session = self.dragged_session
         if not index.isValid():
+            model = self.model()
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(len(model.sessions)-1)).bottom())
             if dragged_session.conference is not None:
