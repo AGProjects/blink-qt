@@ -339,6 +339,10 @@ class DraggedSessionWidget(base_class, ui_class):
         super(DraggedSessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        # add a left margin for the colored band
+        self.address_layout.setContentsMargins(8, -1, -1, -1)
+        self.stream_layout.setContentsMargins(8, -1, -1, -1)
+        self.bottom_layout.setContentsMargins(8, -1, -1, -1)
         self.mute_button.hide()
         self.hold_button.hide()
         self.record_button.hide()
@@ -350,16 +354,38 @@ class DraggedSessionWidget(base_class, ui_class):
         self.duration_label.hide()
         self.stream_info_label.setText(u'')
         self.address_label.setText(session_widget.address_label.text())
-        if session_widget.conference_position is None:
-            self.status_label.setText(u'Drop over a session to conference them')
-        else:
+        self.selected = session_widget.selected
+        self.in_conference = session_widget.conference_position is not None
+        if self.in_conference:
             self.status_label.setText(u'Drop outside the conference to detach')
+        else:
+            self.status_label.setText(u'Drop over a session to conference them')
+
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setBrush(QBrush(QColor('#f8f8f8')))
-        painter.setPen(QPen(QBrush(QColor('#606060')), 2.0))
+        if self.in_conference:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#95ff95'))
+            background.setColorAt(0.99, QColor('#95ff95'))
+            background.setColorAt(1.00, QColor('#f8f8f8'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0))
+        elif self.selected:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#75c0ff'))
+            background.setColorAt(0.99, QColor('#75c0ff'))
+            background.setColorAt(1.00, QColor('#f8f8f8'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0))
+        else:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#d0d0d0'))
+            background.setColorAt(0.99, QColor('#d0d0d0'))
+            background.setColorAt(1.00, QColor('#f8f8f8'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#808080')), 2.0))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
         painter.end()
         super(DraggedSessionWidget, self).paintEvent(event)
@@ -655,6 +681,7 @@ class SessionListView(QListView):
             model = self.model()
             self.dragged_session = model.data(self._pressed_index)
             rect = self.visualRect(self._pressed_index)
+            rect.adjust(1, 1, -1, -1)
             pixmap = QPixmap(rect.size())
             pixmap.fill(Qt.transparent)
             widget = DraggedSessionWidget(self.dragged_session.widget, None)
