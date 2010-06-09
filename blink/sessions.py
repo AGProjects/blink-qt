@@ -514,14 +514,10 @@ class SessionModel(QAbstractListModel):
                     selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
                 session_list.scrollToBottom()
             else:
-                try:
-                    selected_index = selection_model.selectedIndexes()[0]
-                except IndexError:
-                    pass
-                else:
-                    if self.sessions[selected_index.row()] is source:
-                        sibling = (session for session in source.conference.sessions if session is not source).next()
-                        selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
+                selected_index = selection_model.selectedIndexes()[0]
+                if self.sessions[selected_index.row()] is source:
+                    sibling = (session for session in source.conference.sessions if session is not source).next()
+                    selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
                 source.conference = None
                 self._remove_session(source)
                 self._add_session(source)
