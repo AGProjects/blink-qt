@@ -641,7 +641,9 @@ class SessionListView(QListView):
 
     def selectionCommand(self, index, event=None):
         selection_model = self.selectionModel()
-        if not index.isValid() or event is None:
+        if self.selectionMode() == self.NoSelection:
+            return selection_model.NoUpdate
+        elif not index.isValid() or event is None:
             return selection_model.NoUpdate
         elif event.type() == QEvent.MouseButtonPress and not selection_model.selectedIndexes():
             return selection_model.ClearAndSelect
