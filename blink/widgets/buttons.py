@@ -1,10 +1,10 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['ToolButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'SwitchViewButton']
+__all__ = ['ToolButton', 'ConferenceButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'SwitchViewButton']
 
 from PyQt4.QtCore import QTimer, pyqtSignal
-from PyQt4.QtGui  import QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
+from PyQt4.QtGui  import QAction, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
 
 
 class ToolButton(QToolButton):
@@ -15,6 +15,26 @@ class ToolButton(QToolButton):
         self.initStyleOption(option)
         option.features &= ~QStyleOptionToolButton.HasMenu
         painter.drawComplexControl(QStyle.CC_ToolButton, option)
+
+
+class ConferenceButton(ToolButton):
+    makeConference  = pyqtSignal()
+    breakConference = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super(ConferenceButton, self).__init__(parent)
+        self.make_conference_action = QAction(u'Conference all single sessions', self, triggered=self.makeConference.emit)
+        self.break_conference_action = QAction(u'Break selected conference', self, triggered=self.breakConference.emit)
+        self.toggled.connect(self._SH_Toggled)
+        self.addAction(self.make_conference_action)
+
+    def _SH_Toggled(self, checked):
+        if checked:
+            self.removeAction(self.make_conference_action)
+            self.addAction(self.break_conference_action)
+        else:
+            self.removeAction(self.break_conference_action)
+            self.addAction(self.make_conference_action)
 
 
 class SegmentTypeMeta(type):
