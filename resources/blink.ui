@@ -548,7 +548,7 @@ buttons below.</string>
               </property>
               <property name="icon">
                <iconset>
-                <normaloff>icons/audio.png</normaloff>icons/audio.png</iconset>
+                <normaloff>icons/green-handset.png</normaloff>icons/green-handset.png</iconset>
               </property>
               <property name="iconSize">
                <size>

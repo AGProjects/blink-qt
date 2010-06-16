@@ -603,7 +603,7 @@ QToolButton:pressed {
          </property>
          <property name="icon">
           <iconset>
-           <normaloff>icons/hangup.png</normaloff>icons/hangup.png</iconset>
+           <normaloff>icons/red-handset.png</normaloff>icons/red-handset.png</iconset>
          </property>
          <property name="iconSize">
           <size>
