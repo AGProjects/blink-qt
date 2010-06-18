@@ -1,10 +1,10 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['ToolButton', 'ConferenceButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'SwitchViewButton']
+__all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'SwitchViewButton']
 
 from PyQt4.QtCore import QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
+from PyQt4.QtGui  import QAction, QIcon, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
 
 
 class ToolButton(QToolButton):
@@ -35,6 +35,61 @@ class ConferenceButton(ToolButton):
         else:
             self.removeAction(self.break_conference_action)
             self.addAction(self.make_conference_action)
+
+
+class StreamButton(QToolButton):
+    hidden = pyqtSignal()
+    shown  = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super(StreamButton, self).__init__(parent)
+        self.default_icon = QIcon()
+        self.alternate_icon = QIcon()
+        self.clicked.connect(self._clicked)
+
+    def _clicked(self):
+        super(StreamButton, self).setIcon(self.default_icon)
+
+    def _get_accepted(self):
+        return not self.isChecked()
+
+    def _set_accepted(self, accepted):
+        super(StreamButton, self).setIcon(self.alternate_icon)
+        self.setChecked(not accepted)
+
+    accepted = property(_get_accepted, _set_accepted)
+    del _get_accepted, _set_accepted
+
+    def _get_active(self):
+        return self.isEnabled()
+
+    def _set_active(self, active):
+        self.setEnabled(bool(active))
+
+    active = property(_get_active, _set_active)
+    del _get_active, _set_active
+
+    @property
+    def in_use(self):
+        return self.isVisibleTo(self.parent())
+
+    def setVisible(self, visible):
+        super(StreamButton, self).setVisible(visible)
+        if visible:
+            self.shown.emit()
+        else:
+            self.hidden.emit()
+
+    def setIcon(self, icon):
+        self.default_icon = icon
+        self.alternate_icon = QIcon(icon)
+        normal_sizes = icon.availableSizes(QIcon.Normal, QIcon.On)
+        selected_sizes = icon.availableSizes(QIcon.Selected, QIcon.On)
+        selected_additional_sizes = [size for size in selected_sizes if size not in normal_sizes]
+        for size in normal_sizes + selected_additional_sizes:
+            pixmap = icon.pixmap(size, QIcon.Selected, QIcon.On)
+            self.alternate_icon.addPixmap(pixmap, QIcon.Normal, QIcon.On)
+        super(StreamButton, self).setIcon(icon)
 
 
 class SegmentTypeMeta(type):

@@ -786,3 +786,75 @@ class SessionListView(QListView):
                 session.widget.drop_indicator = True
 
 
+ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
+
+class IncomingDialog(base_class, ui_class):
+    def __init__(self, parent=None):
+        super(IncomingDialog, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        font = self.username_label.font()
+        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() + 3)
+        font.setFamily("Sans Serif")
+        self.username_label.setFont(font)
+        font = self.note_label.font()
+        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
+        self.note_label.setFont(font)
+        self.reject_mode = 'ignore'
+        self.busy_button.released.connect(self._set_busy_mode)
+        self.reject_button.released.connect(self._set_reject_mode)
+        for stream in self.streams:
+            stream.toggled.connect(self._update_accept_button)
+            stream.hidden.connect(self._update_streams_layout)
+            stream.shown.connect(self._update_streams_layout)
+        self.desktopsharing_stream.hidden.connect(self.desktopsharing_label.hide)
+        self.desktopsharing_stream.shown.connect(self.desktopsharing_label.show)
+        for stream in self.streams:
+            stream.hide()
+
+    @property
+    def streams(self):
+        return (self.audio_stream, self.chat_stream, self.desktopsharing_stream, self.video_stream)
+
+    @property
+    def accepted_streams(self):
+        return [stream for stream in self.streams if stream.in_use and stream.accepted]
+
+    def _set_busy_mode(self):
+        self.reject_mode = 'busy'
+
+    def _set_reject_mode(self):
+        self.reject_mode = 'reject'
+
+    def _update_accept_button(self):
+        was_enabled = self.accept_button.isEnabled()
+        self.accept_button.setEnabled(len(self.accepted_streams) > 0)
+        if self.accept_button.isEnabled() != was_enabled:
+            self.accept_button.setFocus()
+
+    def _update_streams_layout(self):
+        if len([stream for stream in self.streams if stream.in_use]) > 1:
+            self.audio_stream.active = True
+            self.chat_stream.active = True
+            self.desktopsharing_stream.active = True
+            self.video_stream.active = True
+            self.note_label.setText(u'To refuse a stream click its icon')
+        else:
+            self.audio_stream.active = False
+            self.chat_stream.active = False
+            self.desktopsharing_stream.active = False
+            self.video_stream.active = False
+            if self.audio_stream.in_use:
+                self.note_label.setText(u'Audio call')
+            elif self.chat_stream.in_use:
+                self.note_label.setText(u'Chat session')
+            elif self.video_stream.in_use:
+                self.note_label.setText(u'Video call')
+            elif self.desktopsharing_stream.in_use:
+                self.note_label.setText(u'Desktop sharing request')
+            else:
+                self.note_label.setText(u'')
+        self._update_accept_button()
+
+del ui_class, base_class
+
