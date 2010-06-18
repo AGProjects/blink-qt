@@ -138,13 +138,12 @@ class SegmentButton(QToolButton):
     type = property(_get_type, _set_type)
     del _get_type, _set_type
 
-    def hide(self):
-        super(SegmentButton, self).hide()
-        self.hidden.emit()
-
-    def show(self):
-        super(SegmentButton, self).show()
-        self.shown.emit()
+    def setVisible(self, visible):
+        super(SegmentButton, self).setVisible(visible)
+        if visible:
+            self.shown.emit()
+        else:
+            self.hidden.emit()
 
 
 class SwitchViewButton(QPushButton):
