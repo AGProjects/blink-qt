@@ -75,10 +75,8 @@ class StreamButton(QToolButton):
 
     def setVisible(self, visible):
         super(StreamButton, self).setVisible(visible)
-        if visible:
-            self.shown.emit()
-        else:
-            self.hidden.emit()
+        signal = self.shown if visible else self.hidden
+        signal.emit()
 
     def setIcon(self, icon):
         self.default_icon = icon
@@ -195,10 +193,8 @@ class SegmentButton(QToolButton):
 
     def setVisible(self, visible):
         super(SegmentButton, self).setVisible(visible)
-        if visible:
-            self.shown.emit()
-        else:
-            self.hidden.emit()
+        signal = self.shown if visible else self.hidden
+        signal.emit()
 
 
 class SwitchViewButton(QPushButton):
