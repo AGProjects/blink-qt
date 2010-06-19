@@ -2,12 +2,12 @@
 Audio device sharing on Linux
 -----------------------------
 
-Some audio devices support hardware mixing. Such devices can be opened
-multiple times from different application natively. If this is not the
-case, you will notice that is not possible to play music or process audio 
-in other applications while running Blink.
+Some audio cards support hardware mixing. Such cards can be opened at the
+same time from different applications natively. If this is not the case,
+you will notice that is not possible to play music or process audio in
+other applications while running Blink.
 
-For audio devices that can be opened only once at a time, there are
+For audio cards that can be opened only once at a time, there are
 workarounds. More information about them can be found at:
 
 http://sipsimpleclient.com/wiki/SipAudioDeviceSharingLinux
