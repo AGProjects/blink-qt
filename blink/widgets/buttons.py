@@ -87,6 +87,11 @@ class StreamButton(QToolButton):
         for size in normal_sizes + selected_additional_sizes:
             pixmap = icon.pixmap(size, QIcon.Selected, QIcon.On)
             self.alternate_icon.addPixmap(pixmap, QIcon.Normal, QIcon.On)
+        disabled_sizes = icon.availableSizes(QIcon.Disabled, QIcon.On)
+        selected_additional_sizes = [size for size in selected_sizes if size not in disabled_sizes]
+        for size in disabled_sizes + selected_additional_sizes:
+            pixmap = icon.pixmap(size, QIcon.Selected, QIcon.On)
+            self.alternate_icon.addPixmap(pixmap, QIcon.Disabled, QIcon.On)
         super(StreamButton, self).setIcon(icon)
 
 
