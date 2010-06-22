@@ -8,6 +8,7 @@ __all__ = ['BonjourGroup', 'BonjourNeighbour', 'Contact', 'ContactGroup', 'Conta
 import cPickle as pickle
 import errno
 import os
+import sys
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QRegExp, QSize, QStringList, pyqtSignal
@@ -18,6 +19,7 @@ from application.notification import IObserver, NotificationCenter
 from application.python.decorator import decorator, preserve_signature
 from application.python.queue import EventQueue
 from application.python.util import Null
+from application.system import unlink
 from functools import partial
 from operator import attrgetter
 from zope.interface import implements
@@ -778,10 +780,14 @@ class ContactModel(QAbstractListModel):
         file.write(data)
         file.close()
         try:
+            if sys.platform == 'win32':
+                unlink(bak_filename)
             os.rename(filename, bak_filename)
         except OSError, e:
             if e.errno != errno.ENOENT:
                 raise
+        if sys.platform == 'win32':
+            unlink(filename)
         os.rename(tmp_filename, filename)
 
     @updates_contacts_db
