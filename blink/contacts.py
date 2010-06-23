@@ -1099,9 +1099,12 @@ class ContactListView(QListView):
 
     def _AH_AddGroup(self):
         group = ContactGroup("")
-        self.model().addGroup(group)
+        model = self.model()
+        selection_model = self.selectionModel()
+        model.addGroup(group)
         self.scrollToBottom()
         group.widget.edit()
+        selection_model.select(model.index(model.rowCount()-1), selection_model.ClearAndSelect)
 
     def _AH_AddContact(self):
         model = self.model()
