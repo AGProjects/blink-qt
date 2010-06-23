@@ -230,7 +230,6 @@ class ContactGroupWidget(base_class, ui_class):
         self.selected = False
         self.drop_indicator = None
         self._disable_dnd = False
-        self.setFocusProxy(parent)
         self.label_widget.setFocusProxy(self)
         self.name_view.setCurrentWidget(self.label_widget)
         self.name_editor.editingFinished.connect(self._end_editing)
