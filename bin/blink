@@ -5,6 +5,10 @@ import sys
 
 # We need to mangle Python's import path in case blink is run directly from
 # the bin/ directory.
+try:
+    __file__
+except NameError:
+    __file__ = file = sys.argv[0]
 script_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(script_dir)
 if os.path.basename(script_dir)=='bin' and os.path.exists(os.path.join(parent_dir, 'blink', '__init__.py')):
