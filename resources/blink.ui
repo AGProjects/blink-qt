@@ -887,7 +887,24 @@ buttons below.</string>
  </customwidgets>
  <tabstops>
   <tabstop>search_box</tabstop>
+  <tabstop>search_list</tabstop>
+  <tabstop>activity_note</tabstop>
+  <tabstop>status</tabstop>
+  <tabstop>display_name</tabstop>
+  <tabstop>switch_view_button</tabstop>
+  <tabstop>contact_list</tabstop>
+  <tabstop>back_to_contacts_button</tabstop>
+  <tabstop>add_search_contact_button</tabstop>
   <tabstop>identity</tabstop>
+  <tabstop>add_contact_button</tabstop>
+  <tabstop>audio_call_button</tabstop>
+  <tabstop>im_session_button</tabstop>
+  <tabstop>ds_session_button</tabstop>
+  <tabstop>silent_button</tabstop>
+  <tabstop>session_list</tabstop>
+  <tabstop>hangup_all_button</tabstop>
+  <tabstop>conference_button</tabstop>
+  <tabstop>mute_button</tabstop>
  </tabstops>
  <resources/>
  <connections>

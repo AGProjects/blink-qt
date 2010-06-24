@@ -1353,6 +1353,14 @@ class ContactSearchListView(QListView):
         self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
         self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
 
+    def focusInEvent(self, event):
+        super(ContactSearchListView, self).focusInEvent(event)
+        model = self.model()
+        selection_model = self.selectionModel()
+        if not selection_model.selectedIndexes() and model.rowCount() > 0:
+            selection_model.select(model.index(0, 0), selection_model.Select)
+            selection_model.setCurrentIndex(model.index(0, 0), selection_model.Select)
+
     def paintEvent(self, event):
         super(ContactSearchListView, self).paintEvent(event)
         if self.drop_indicator_index.isValid():
