@@ -680,10 +680,10 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Reject the session on this device only</string>
+        <string>Reject the session on this device</string>
        </property>
        <property name="text">
-        <string>Busy</string>
+        <string>Busy here</string>
        </property>
       </widget>
      </item>
@@ -715,7 +715,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Accept the session</string>
+        <string/>
        </property>
        <property name="text">
         <string>Accept</string>

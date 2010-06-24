@@ -45,7 +45,7 @@
    <item row="0" column="1">
     <widget class="LineEdit" name="sip_address_editor">
      <property name="toolTip">
-      <string>SIP address for the contact</string>
+      <string/>
      </property>
      <property name="inactiveText" stdset="0">
       <string>user@domain</string>
@@ -112,7 +112,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Clear the existing picture</string>
+        <string/>
        </property>
        <property name="text">
         <string>Clear</string>
@@ -134,7 +134,7 @@
    <item row="1" column="1">
     <widget class="LineEdit" name="display_name_editor">
      <property name="toolTip">
-      <string>Name displayed in the contacts list</string>
+      <string/>
      </property>
      <property name="inactiveText" stdset="0">
       <string>Contact Name</string>
@@ -163,7 +163,7 @@
       </sizepolicy>
      </property>
      <property name="toolTip">
-      <string>Group the contact belongs to</string>
+      <string/>
      </property>
      <property name="editable">
       <bool>true</bool>
@@ -202,7 +202,7 @@
    <item row="5" column="1" colspan="2">
     <widget class="LineEdit" name="chat_aliases_editor">
      <property name="toolTip">
-      <string>Used to combine chat sessions from multiple recipients</string>
+      <string>Chat to these addresses are combined in the same window</string>
      </property>
      <property name="inactiveText" stdset="0">
       <string>List of SIP addresses separated by ;</string>
@@ -234,7 +234,7 @@
       </sizepolicy>
      </property>
      <property name="toolTip">
-      <string>Local or remote storage for the contact</string>
+      <string/>
      </property>
      <item>
       <property name="text">
@@ -254,7 +254,7 @@
       <bool>false</bool>
      </property>
      <property name="toolTip">
-      <string>Subscribe to the presence information published by this contact</string>
+      <string/>
      </property>
      <property name="text">
       <string>Subscribe To Presence</string>
@@ -267,7 +267,7 @@
       <bool>false</bool>
      </property>
      <property name="toolTip">
-      <string>Subscribe to the sessions of this contact</string>
+      <string/>
      </property>
      <property name="text">
       <string>Subscribe To Dialogs</string>
@@ -314,7 +314,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Cancel and close window</string>
+        <string/>
        </property>
        <property name="text">
         <string>Cancel</string>
@@ -330,7 +330,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Add/edit contact</string>
+        <string/>
        </property>
        <property name="text">
         <string>Add</string>
@@ -348,7 +348,7 @@
       </sizepolicy>
      </property>
      <property name="toolTip">
-      <string>Default session type when double click the contact</string>
+      <string/>
      </property>
      <item>
       <property name="text">

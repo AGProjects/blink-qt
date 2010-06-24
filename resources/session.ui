@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>275</width>
+    <width>327</width>
     <height>62</height>
    </rect>
   </property>
@@ -55,7 +55,7 @@
         </font>
        </property>
        <property name="toolTip">
-        <string>Remote party</string>
+        <string/>
        </property>
        <property name="text">
         <string>test@example.com</string>
@@ -143,7 +143,7 @@
         </sizepolicy>
        </property>
        <property name="toolTip">
-        <string>Negotiated audio codec</string>
+        <string/>
        </property>
        <property name="text">
         <string>Audio (PCM 8kHz)</string>
@@ -416,7 +416,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Session duration</string>
+        <string/>
        </property>
        <property name="text">
         <string>0:00:00</string>
@@ -508,7 +508,7 @@ QToolButton#mute_button:pressed {
           </size>
          </property>
          <property name="toolTip">
-          <string>Put the session on hold </string>
+          <string>Toggle hold status</string>
          </property>
          <property name="styleSheet">
           <string>QToolButton {

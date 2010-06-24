@@ -68,7 +68,7 @@
        </size>
       </property>
       <property name="toolTip">
-       <string>Type text to search the contacts list and press return to start a session to the selected contact </string>
+       <string/>
       </property>
       <property name="inactiveText" stdset="0">
        <string>Search Contacts or Enter Address</string>
@@ -268,7 +268,7 @@
        <enum>Qt::TabFocus</enum>
       </property>
       <property name="toolTip">
-       <string>Switch between audio sessions and contacts list</string>
+       <string/>
       </property>
       <property name="text">
        <string>Switch to Calls</string>
@@ -284,7 +284,7 @@
     <item>
      <widget class="QStackedWidget" name="main_view">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="contacts_panel">
        <layout class="QVBoxLayout" name="verticalLayout_8">
@@ -765,7 +765,7 @@ buttons below.</string>
              <enum>Qt::TabFocus</enum>
             </property>
             <property name="toolTip">
-             <string>Hangup all audio sessions</string>
+             <string/>
             </property>
             <property name="text">
              <string>Hangup all</string>
@@ -790,7 +790,7 @@ buttons below.</string>
              <enum>Qt::TabFocus</enum>
             </property>
             <property name="toolTip">
-             <string>Create and terminate conferences</string>
+             <string/>
             </property>
             <property name="text">
              <string>Conference</string>
@@ -863,7 +863,7 @@ buttons below.</string>
      <x>0</x>
      <y>0</y>
      <width>285</width>
-     <height>22</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuBlink">
