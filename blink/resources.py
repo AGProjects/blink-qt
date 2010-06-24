@@ -14,6 +14,7 @@ from PyQt4.QtCore import Qt
 from PyQt4.QtGui  import QPixmap
 from application import log
 from application.python.util import Singleton
+from application.system import unlink
 from collections import deque
 from sipsimple.util import classproperty, makedirs
 
@@ -154,6 +155,8 @@ class IconCache(object):
                 file = open(map_tempname, 'wb')
                 pickle.dump(self.filemap, file)
                 file.close()
+                if sys.platform == 'win32':
+                    unlink(map_filename)
                 os.rename(map_tempname, map_filename)
             except Exception, e:
                 log.error("could not save icon cache file mappings: %s" % e)
