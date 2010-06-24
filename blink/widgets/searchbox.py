@@ -2,7 +2,7 @@
 #
 
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QAbstractButton, QPainter, QPalette, QPixmap, QWidget
+from PyQt4.QtGui import QAbstractButton, QPainter, QPalette, QPixmap, QStyle, QWidget, QStyleOptionFrameV2
 
 from blink.resources import Resources
 from blink.widgets.lineedit import LineEdit
@@ -87,6 +87,11 @@ class SearchBox(LineEdit):
         self.clear_button = ClearButton(self)
         self.addHeadWidget(self.search_icon)
         self.addTailWidget(self.clear_button)
+        option = QStyleOptionFrameV2()
+        self.initStyleOption(option)
+        frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
+        widgets_height = max(self.search_icon.minimumHeight(), self.clear_button.minimumHeight())
+        self.setMinimumHeight(widgets_height + 2 + 2*frame_width)
         self.clear_button.hide()
         self.clear_button.clicked.connect(self.clear)
         self.textChanged.connect(self.text_changed)
