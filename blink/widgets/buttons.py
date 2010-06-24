@@ -1,7 +1,7 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'SwitchViewButton']
+__all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'RecordButton', 'SwitchViewButton']
 
 from PyQt4.QtCore import QTimer, pyqtSignal
 from PyQt4.QtGui  import QAction, QIcon, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
@@ -200,6 +200,52 @@ class SegmentButton(QToolButton):
         super(SegmentButton, self).setVisible(visible)
         signal = self.shown if visible else self.hidden
         signal.emit()
+
+
+class RecordButton(SegmentButton):
+    def __init__(self, parent=None):
+        super(RecordButton, self).__init__(parent)
+        self.timer_id = None
+        self.toggled.connect(self._SH_Toggled)
+        self.animation_icons = []
+        self.animation_icon_index = 0
+
+    def _get_animation_icon_index(self):
+        return self.__dict__['animation_icon_index']
+
+    def _set_animation_icon_index(self, index):
+        self.__dict__['animation_icon_index'] = index
+        self.update()
+
+    animation_icon_index = property(_get_animation_icon_index, _set_animation_icon_index)
+    del _get_animation_icon_index, _set_animation_icon_index
+
+    def setIcon(self, icon):
+        super(RecordButton, self).setIcon(icon)
+        on_icon = QIcon(icon)
+        off_icon = QIcon(icon)
+        for size in off_icon.availableSizes(QIcon.Normal, QIcon.On):
+            pixmap = off_icon.pixmap(size, QIcon.Normal, QIcon.Off)
+            off_icon.addPixmap(pixmap, QIcon.Normal, QIcon.On)
+        self.animation_icons = [on_icon, off_icon]
+
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        option = QStyleOptionToolButton()
+        self.initStyleOption(option)
+        option.icon = self.animation_icons[self.animation_icon_index]
+        painter.drawComplexControl(QStyle.CC_ToolButton, option)
+
+    def timerEvent(self, event):
+        self.animation_icon_index = (self.animation_icon_index+1) % len(self.animation_icons)
+
+    def _SH_Toggled(self, checked):
+        if checked:
+            self.timer_id = self.startTimer(1000)
+            self.animation_icon_index = 0
+        else:
+            self.killTimer(self.timer_id)
+            self.timer_id = None
 
 
 class SwitchViewButton(QPushButton):

@@ -13,9 +13,12 @@ from zope.interface import implements
 
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.backend.file import FileBackend
+from sipsimple.configuration.settings import SIPSimpleSettings
 
+from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.mainwindow import MainWindow
 from blink.resources import ApplicationData
+from blink.sessions import SessionManager
 from blink.util import QSingleton, run_in_gui_thread
 
 
@@ -28,6 +31,10 @@ class Blink(QApplication):
         super(Blink, self).__init__(sys.argv)
         self.application = SIPApplication()
         self.main_window = MainWindow()
+
+        SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
+        session_manager = SessionManager()
+        session_manager.initialize(self.main_window, self.main_window.session_model)
 
     def run(self):
         from blink.util import call_in_gui_thread as call_later

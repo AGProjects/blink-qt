@@ -24,11 +24,13 @@ from functools import partial
 from operator import attrgetter
 from zope.interface import implements
 
-from sipsimple.account import BonjourAccount
+from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.util import makedirs
 
 from blink.resources import ApplicationData, Resources, IconCache
+from blink.sessions import SessionManager
 from blink.util import run_in_gui_thread
+from blink.widgets.buttons import SwitchViewButton
 
 
 # Functions decorated with updates_contacts_db or ignore_contacts_db_updates must
@@ -859,6 +861,12 @@ class ContactModel(QAbstractListModel):
         self.deleted_items.append(items)
         self.itemsRemoved.emit(items)
 
+    def iter_contacts(self):
+        return (item for item in self.items if isinstance(item, Contact))
+
+    def iter_contact_groups(self):
+        return (item for item in self.items if isinstance(item, ContactGroup))
+
     def load(self):
         try:
             try:
@@ -1092,10 +1100,30 @@ class ContactListView(QListView):
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
+            account_manager = AccountManager()
+            default_account = account_manager.default_account
+            self.actions.start_audio_session.setEnabled(default_account is not None)
+            self.actions.start_chat_session.setEnabled(default_account is not None)
+            self.actions.send_sms.setEnabled(default_account is not None)
+            self.actions.send_files.setEnabled(default_account is not None)
+            self.actions.request_remote_desktop.setEnabled(default_account is not None)
+            self.actions.share_my_desktop.setEnabled(default_account is not None)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         menu.exec_(event.globalPos())
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
+            selected_indexes = self.selectionModel().selectedIndexes()
+            if len(selected_indexes) == 1:
+                contact = self.model().data(selected_indexes[0])
+                if not isinstance(contact, Contact):
+                    return
+                session_manager = SessionManager()
+                session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        else:
+            super(ContactListView, self).keyPressEvent(event)
 
     def _AH_AddGroup(self):
         group = ContactGroup("")
@@ -1145,6 +1173,8 @@ class ContactListView(QListView):
 
     def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        session_manager = SessionManager()
+        session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _AH_StartChatSession(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
@@ -1167,7 +1197,10 @@ class ContactListView(QListView):
             for group in self.model().contact_groups:
                 group.restore_state()
             self.needs_restore = False
-        self.model().main_window.switch_view_button.dnd_active = False
+        main_window = self.model().main_window
+        main_window.switch_view_button.dnd_active = False
+        if not main_window.session_model.sessions:
+            main_window.switch_view_button.view = SwitchViewButton.ContactView
 
     def dragEnterEvent(self, event):
         model = self.model()
@@ -1374,10 +1407,30 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
+            account_manager = AccountManager()
+            default_account = account_manager.default_account
+            self.actions.start_audio_session.setEnabled(default_account is not None)
+            self.actions.start_chat_session.setEnabled(default_account is not None)
+            self.actions.send_sms.setEnabled(default_account is not None)
+            self.actions.send_files.setEnabled(default_account is not None)
+            self.actions.request_remote_desktop.setEnabled(default_account is not None)
+            self.actions.share_my_desktop.setEnabled(default_account is not None)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         menu.exec_(event.globalPos())
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
+            selected_indexes = self.selectionModel().selectedIndexes()
+            if len(selected_indexes) == 1:
+                contact = self.model().data(selected_indexes[0])
+                if not isinstance(contact, Contact):
+                    return
+                session_manager = SessionManager()
+                session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        else:
+            super(ContactSearchListView, self).keyPressEvent(event)
 
     def _AH_EditItem(self):
         model = self.model()
@@ -1397,6 +1450,8 @@ class ContactSearchListView(QListView):
 
     def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        session_manager = SessionManager()
+        session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _AH_StartChatSession(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
@@ -1415,7 +1470,10 @@ class ContactSearchListView(QListView):
 
     def startDrag(self, supported_actions):
         super(ContactSearchListView, self).startDrag(supported_actions)
-        self.model().main_window.switch_view_button.dnd_active = False
+        main_window = self.model().main_window
+        main_window.switch_view_button.dnd_active = False
+        if not main_window.session_model.sessions:
+            main_window.switch_view_button.view = SwitchViewButton.ContactView
 
     def dragEnterEvent(self, event):
         model = self.model()

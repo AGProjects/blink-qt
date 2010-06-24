@@ -1,12 +1,13 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['IconSelector', 'LatencyLabel', 'PacketLossLabel', 'StreamInfoLabel']
+__all__ = ['DurationLabel', 'IconSelector', 'LatencyLabel', 'PacketLossLabel', 'StatusLabel', 'StreamInfoLabel']
 
 import os
+from datetime import timedelta
 
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QFileDialog, QFontMetrics, QLabel, QPixmap
+from PyQt4.QtGui import QColor, QFileDialog, QFontMetrics, QLabel, QPalette, QPixmap
 
 from blink.resources import ApplicationData, Resources
 from blink.widgets.util import QtDynamicProperty
@@ -86,10 +87,29 @@ class StreamInfoLabel(QLabel):
         self.setText(text)
 
 
+class DurationLabel(QLabel):
+    def __init__(self, parent=None):
+        super(DurationLabel, self).__init__(parent)
+        self.value = timedelta(0)
+
+    def _get_value(self):
+        return self.__dict__['value']
+
+    def _set_value(self, value):
+        self.__dict__['value'] = value
+        seconds = value.seconds % 60
+        minutes = value.seconds // 60 % 60
+        hours = value.seconds//3600 + value.days*24
+        self.setText(u'%d:%02d:%02d' % (hours, minutes, seconds))
+
+    value = property(_get_value, _set_value)
+    del _get_value, _set_value
+
+
 class LatencyLabel(QLabel):
     def __init__(self, parent=None):
         super(LatencyLabel, self).__init__(parent)
-        self.treshold = 99
+        self.threshold = 99
         self.value = 0
 
     def _get_value(self):
@@ -97,7 +117,7 @@ class LatencyLabel(QLabel):
 
     def _set_value(self, value):
         self.__dict__['value'] = value
-        if value > self.treshold:
+        if value > self.threshold:
             text = u'Latency %sms' % value
             self.setMinimumWidth(QFontMetrics(self.font()).width(text))
             self.setText(text)
@@ -112,7 +132,7 @@ class LatencyLabel(QLabel):
 class PacketLossLabel(QLabel):
     def __init__(self, parent=None):
         super(PacketLossLabel, self).__init__(parent)
-        self.treshold = 0
+        self.threshold = 0
         self.value = 0
 
     def _get_value(self):
@@ -120,10 +140,35 @@ class PacketLossLabel(QLabel):
 
     def _set_value(self, value):
         self.__dict__['value'] = value
-        if value > self.treshold:
+        if value > self.threshold:
             text = u'Packet loss %s%%' % value
             self.setMinimumWidth(QFontMetrics(self.font()).width(text))
             self.setText(text)
+            self.show()
+        else:
+            self.hide()
+
+    value = property(_get_value, _set_value)
+    del _get_value, _set_value
+
+
+class StatusLabel(QLabel):
+    def __init__(self, parent=None):
+        super(StatusLabel, self).__init__(parent)
+        self.value = None
+
+    def _get_value(self):
+        return self.__dict__['value']
+
+    def _set_value(self, value):
+        self.__dict__['value'] = value
+        if value is not None:
+            color = QColor(value.color)
+            palette = self.palette()
+            palette.setColor(QPalette.WindowText, color)
+            palette.setColor(QPalette.Text, color)
+            self.setPalette(palette)
+            self.setText(unicode(value))
             self.show()
         else:
             self.hide()
