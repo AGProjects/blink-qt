@@ -657,6 +657,9 @@
          <height>24</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Reject sessions on all my devices</string>
+       </property>
        <property name="text">
         <string>Reject</string>
        </property>
@@ -675,6 +678,9 @@
          <width>16777215</width>
          <height>24</height>
         </size>
+       </property>
+       <property name="toolTip">
+        <string>Reject the session on this device only</string>
        </property>
        <property name="text">
         <string>Busy</string>
@@ -707,6 +713,9 @@
          <width>16777215</width>
          <height>24</height>
         </size>
+       </property>
+       <property name="toolTip">
+        <string>Accept the session</string>
        </property>
        <property name="text">
         <string>Accept</string>

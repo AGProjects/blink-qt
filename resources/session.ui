@@ -54,6 +54,9 @@
          <bold>true</bold>
         </font>
        </property>
+       <property name="toolTip">
+        <string>Remote party</string>
+       </property>
        <property name="text">
         <string>test@example.com</string>
        </property>
@@ -101,6 +104,9 @@
          <height>14</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Signaling is encrypted using TLS</string>
+       </property>
        <property name="text">
         <string/>
        </property>
@@ -135,6 +141,9 @@
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
+       </property>
+       <property name="toolTip">
+        <string>Negotiated audio codec</string>
        </property>
        <property name="text">
         <string>Audio (PCM 8kHz)</string>
@@ -371,6 +380,9 @@
          <height>14</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Media is encrypted using sRTP</string>
+       </property>
        <property name="text">
         <string/>
        </property>
@@ -403,6 +415,9 @@
          <height>0</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Session duration</string>
+       </property>
        <property name="text">
         <string>0:00:00</string>
        </property>
@@ -415,6 +430,9 @@
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
+       </property>
+       <property name="toolTip">
+        <string>Session state</string>
        </property>
       </widget>
      </item>
@@ -436,6 +454,9 @@
            <width>18</width>
            <height>16</height>
           </size>
+         </property>
+         <property name="toolTip">
+          <string>Mute this participant</string>
          </property>
          <property name="styleSheet">
           <string>QToolButton#mute_button {
@@ -486,6 +507,9 @@ QToolButton#mute_button:pressed {
            <height>16</height>
           </size>
          </property>
+         <property name="toolTip">
+          <string>Put the session on hold </string>
+         </property>
          <property name="styleSheet">
           <string>QToolButton {
 	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
@@ -534,6 +558,9 @@ QToolButton:pressed {
            <height>16</height>
           </size>
          </property>
+         <property name="toolTip">
+          <string>Record the audio session to file</string>
+         </property>
          <property name="styleSheet">
           <string>QToolButton {
 	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
@@ -581,6 +608,9 @@ QToolButton:pressed {
            <width>17</width>
            <height>16</height>
           </size>
+         </property>
+         <property name="toolTip">
+          <string>Hangup</string>
          </property>
          <property name="styleSheet">
           <string>QToolButton {

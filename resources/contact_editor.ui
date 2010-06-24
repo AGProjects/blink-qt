@@ -44,6 +44,9 @@
    </item>
    <item row="0" column="1">
     <widget class="LineEdit" name="sip_address_editor">
+     <property name="toolTip">
+      <string>SIP address for the contact</string>
+     </property>
      <property name="inactiveText" stdset="0">
       <string>user@domain</string>
      </property>
@@ -77,6 +80,9 @@
          <height>60</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Click to select a picture</string>
+       </property>
        <property name="frameShape">
         <enum>QFrame::StyledPanel</enum>
        </property>
@@ -105,6 +111,9 @@
          <height>20</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Clear the existing picture</string>
+       </property>
        <property name="text">
         <string>Clear</string>
        </property>
@@ -124,6 +133,9 @@
    </item>
    <item row="1" column="1">
     <widget class="LineEdit" name="display_name_editor">
+     <property name="toolTip">
+      <string>Name displayed in the contacts list</string>
+     </property>
      <property name="inactiveText" stdset="0">
       <string>Contact Name</string>
      </property>
@@ -149,6 +161,9 @@
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
+     </property>
+     <property name="toolTip">
+      <string>Group the contact belongs to</string>
      </property>
      <property name="editable">
       <bool>true</bool>
@@ -186,6 +201,9 @@
    </item>
    <item row="5" column="1" colspan="2">
     <widget class="LineEdit" name="chat_aliases_editor">
+     <property name="toolTip">
+      <string>Used to combine chat sessions from multiple recipients</string>
+     </property>
      <property name="inactiveText" stdset="0">
       <string>List of SIP addresses separated by ;</string>
      </property>
@@ -215,6 +233,9 @@
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
+     <property name="toolTip">
+      <string>Local or remote storage for the contact</string>
+     </property>
      <item>
       <property name="text">
        <string>Local</string>
@@ -232,6 +253,9 @@
      <property name="enabled">
       <bool>false</bool>
      </property>
+     <property name="toolTip">
+      <string>Subscribe to the presence information published by this contact</string>
+     </property>
      <property name="text">
       <string>Subscribe To Presence</string>
      </property>
@@ -241,6 +265,9 @@
     <widget class="QCheckBox" name="subscribe_dialogs">
      <property name="enabled">
       <bool>false</bool>
+     </property>
+     <property name="toolTip">
+      <string>Subscribe to the sessions of this contact</string>
      </property>
      <property name="text">
       <string>Subscribe To Dialogs</string>
@@ -286,6 +313,9 @@
          <height>25</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Cancel and close window</string>
+       </property>
        <property name="text">
         <string>Cancel</string>
        </property>
@@ -298,6 +328,9 @@
          <width>85</width>
          <height>25</height>
         </size>
+       </property>
+       <property name="toolTip">
+        <string>Add/edit contact</string>
        </property>
        <property name="text">
         <string>Add</string>
@@ -313,6 +346,9 @@
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
+     </property>
+     <property name="toolTip">
+      <string>Default session type when double click the contact</string>
      </property>
      <item>
       <property name="text">

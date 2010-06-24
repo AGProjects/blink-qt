@@ -48,6 +48,9 @@
         <height>20</height>
        </size>
       </property>
+      <property name="toolTip">
+       <string>Select the SIP account used for outbound sessions</string>
+      </property>
      </widget>
     </item>
     <item>
@@ -63,6 +66,9 @@
         <width>0</width>
         <height>29</height>
        </size>
+      </property>
+      <property name="toolTip">
+       <string>Type text to search the contacts list and press return to start a session to the selected contact </string>
       </property>
       <property name="inactiveText" stdset="0">
        <string>Search Contacts or Enter Address</string>
@@ -93,6 +99,9 @@
           <width>36</width>
           <height>36</height>
          </size>
+        </property>
+        <property name="toolTip">
+         <string>Click to change your picture</string>
         </property>
         <property name="frameShape">
          <enum>QFrame::StyledPanel</enum>
@@ -129,6 +138,9 @@
               <height>18</height>
              </size>
             </property>
+            <property name="toolTip">
+             <string>Set the display name shown to remote parties</string>
+            </property>
             <property name="styleSheet">
              <string>background-color: transparent;</string>
             </property>
@@ -136,7 +148,7 @@
              <bool>false</bool>
             </property>
             <property name="inactiveText" stdset="0">
-             <string>Type your name here</string>
+             <string>My display name</string>
             </property>
             <property name="widgetSpacing" stdset="0">
              <number>0</number>
@@ -150,6 +162,12 @@
               <width>16777215</width>
               <height>18</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string>Select your presence activity</string>
+            </property>
+            <property name="statusTip">
+             <string/>
             </property>
             <property name="iconSize">
              <size>
@@ -205,6 +223,9 @@
             <height>18</height>
            </size>
           </property>
+          <property name="toolTip">
+           <string>Select your presence activity note</string>
+          </property>
           <property name="styleSheet">
            <string>background-color: transparent;</string>
           </property>
@@ -245,6 +266,9 @@
       </property>
       <property name="focusPolicy">
        <enum>Qt::TabFocus</enum>
+      </property>
+      <property name="toolTip">
+       <string>Switch between audio sessions and contacts list</string>
       </property>
       <property name="text">
        <string>Switch to Calls</string>
@@ -499,6 +523,9 @@ buttons below.</string>
               <height>24</height>
              </size>
             </property>
+            <property name="toolTip">
+             <string>Add a new contact</string>
+            </property>
             <property name="text">
              <string>+</string>
             </property>
@@ -546,6 +573,9 @@ buttons below.</string>
                 <height>24</height>
                </size>
               </property>
+              <property name="toolTip">
+               <string>Start and audio session</string>
+              </property>
               <property name="icon">
                <iconset>
                 <normaloff>icons/green-handset.png</normaloff>icons/green-handset.png</iconset>
@@ -571,6 +601,9 @@ buttons below.</string>
                 <width>29</width>
                 <height>24</height>
                </size>
+              </property>
+              <property name="toolTip">
+               <string>Start a chat session or send SMS</string>
               </property>
               <property name="text">
                <string>IM</string>
@@ -599,6 +632,9 @@ buttons below.</string>
                 <width>29</width>
                 <height>24</height>
                </size>
+              </property>
+              <property name="toolTip">
+               <string>Start desktop sharing </string>
               </property>
               <property name="icon">
                <iconset>
@@ -643,6 +679,9 @@ buttons below.</string>
               <width>29</width>
               <height>24</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string>Disable ringtones (silent mode)</string>
             </property>
             <property name="text">
              <string>M</string>
@@ -725,6 +764,9 @@ buttons below.</string>
             <property name="focusPolicy">
              <enum>Qt::TabFocus</enum>
             </property>
+            <property name="toolTip">
+             <string>Hangup all audio sessions</string>
+            </property>
             <property name="text">
              <string>Hangup all</string>
             </property>
@@ -746,6 +788,9 @@ buttons below.</string>
             </property>
             <property name="focusPolicy">
              <enum>Qt::TabFocus</enum>
+            </property>
+            <property name="toolTip">
+             <string>Create and terminate conferences</string>
             </property>
             <property name="text">
              <string>Conference</string>
@@ -787,6 +832,9 @@ buttons below.</string>
               <width>29</width>
               <height>24</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string>Mute microphone</string>
             </property>
             <property name="text">
              <string/>
