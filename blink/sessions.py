@@ -412,6 +412,14 @@ class SessionItem(QObject):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _NH_AudioStreamICENegotiationStateDidChange(self, notification):
+        if notification.data.state == 'ICE Candidates Gathering':
+            self.status = Status('Gathering ICE Candidates')
+        elif notification.data.state == 'ICE Session Initialized':
+            self.status = Status('Connecting...')
+        elif notification.data.state == 'ICE Negotiation In Progress':
+            self.status = Status('Negotiating ICE')
+
     def _NH_AudioStreamGotDTMF(self, notification):
         digit_map = {'*': 'star'}
         filename = 'sounds/dtmf_%s_tone.wav' % digit_map.get(notification.data.digit, notification.data.digit)
