@@ -414,7 +414,7 @@ class SessionItem(QObject):
 
     def _NH_AudioStreamICENegotiationStateDidChange(self, notification):
         if notification.data.state == 'ICE Candidates Gathering':
-            self.status = Status('Gathering ICE Candidates')
+            self.status = Status('Gathering ICE candidates')
         elif notification.data.state == 'ICE Session Initialized':
             self.status = Status('Connecting...')
         elif notification.data.state == 'ICE Negotiation In Progress':
