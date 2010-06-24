@@ -14,6 +14,8 @@ from application.python.util import Null
 from zope.interface import implements
 
 from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.application import SIPApplication
+from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.accounts import AccountModel, ActiveAccountModel
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
@@ -82,6 +84,8 @@ class MainWindow(base_class, ui_class):
 
         self.identity.activated[int].connect(self._SH_IdentityChanged)
 
+        self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
+
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
         self.contact_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
         self.search_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
@@ -92,6 +96,7 @@ class MainWindow(base_class, ui_class):
         self.hangup_all_button.clicked.connect(self._SH_HangupAllButtonClicked)
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
+        self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
@@ -182,6 +187,9 @@ class MainWindow(base_class, ui_class):
     def _SH_MakeConference(self):
         self.session_model.conferenceSessions([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal])
 
+    def _SH_MuteButtonClicked(self, muted):
+        SIPApplication.voice_audio_bridge.mixer.muted = muted
+
     def _SH_SearchBoxReturnPressed(self):
         address = unicode(self.search_box.text())
         session_manager = SessionManager()
@@ -234,6 +242,11 @@ class MainWindow(base_class, ui_class):
             self.conference_button.setEnabled(len([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal]) > 1)
             self.conference_button.setChecked(False)
 
+    def _SH_SilentButtonClicked(self, silent):
+        settings = SIPSimpleSettings()
+        settings.audio.silent = silent
+        settings.save()
+
     def _SH_SwitchViewButtonChangedView(self, view):
         self.main_view.setCurrentWidget(self.contacts_panel if view is SwitchViewButton.ContactView else self.sessions_panel)
 
@@ -243,9 +256,17 @@ class MainWindow(base_class, ui_class):
         handler(notification)
 
     def _NH_SIPApplicationWillStart(self, notification):
+        settings = SIPSimpleSettings()
         account_manager = AccountManager()
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=settings, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, sender=account_manager, name='SIPAccountManagerDidChangeDefaultAccount')
+        self.silent_button.setChecked(settings.audio.silent)
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if 'audio.silent' in notification.data.modified:
+            settings = SIPSimpleSettings()
+            self.silent_button.setChecked(settings.audio.silent)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         if notification.data.account is None:
