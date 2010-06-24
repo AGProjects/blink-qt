@@ -208,7 +208,7 @@ class MainWindow(base_class, ui_class):
         if text:
             self.switch_view_button.view = SwitchViewButton.ContactView
             selected_items = self.search_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1)
+            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)<=1)
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and type(self.contact_model.data(selected_items[0])) is Contact)
@@ -223,7 +223,7 @@ class MainWindow(base_class, ui_class):
     def _SH_SearchListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
         selected_items = self.search_list.selectionModel().selectedIndexes()
-        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1)
+        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)<=1)
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         selected_indexes = selected.indexes()
