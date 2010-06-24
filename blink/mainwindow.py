@@ -7,7 +7,7 @@ __all__ = ['MainWindow']
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui  import QBrush, QColor, QPainter, QPen, QPixmap
+from PyQt4.QtGui  import QBrush, QColor, QPainter, QPen, QPixmap, QStyle, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
@@ -35,6 +35,14 @@ class MainWindow(base_class, ui_class):
 
         with Resources.directory:
             self.setupUi(self)
+
+        # adjust search box height depending on theme as the value set in designer isn't suited for all themes
+        search_box = self.search_box
+        option = QStyleOptionFrameV2()
+        search_box.initStyleOption(option)
+        frame_width = search_box.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, search_box)
+        if frame_width < 4:
+            search_box.setMinimumHeight(20 + 2*frame_width)
 
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
