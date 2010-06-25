@@ -31,6 +31,7 @@ from sipsimple.session import Session
 from sipsimple.streams import MediaStreamRegistry
 from sipsimple.util import limit
 
+from blink.configuration.datatypes import DefaultPath
 from blink.resources import Resources
 from blink.util import call_later, run_in_gui_thread
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment, SwitchViewButton
@@ -971,6 +972,10 @@ class SessionModel(QAbstractListModel):
         self.session_list = parent.session_list
         self.ignore_selection_changes = False
 
+    @property
+    def active_sessions(self):
+        return [session for session in self.sessions if not session.pending_removal]
+
     def flags(self, index):
         if index.isValid():
             return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled | Qt.ItemIsEditable
@@ -1588,6 +1593,24 @@ class IncomingSession(QObject):
         self.dialog.accepted.connect(self._SH_DialogAccepted)
         self.dialog.rejected.connect(self._SH_DialogRejected)
 
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __gt__(self, other):
+        return self.priority > other.priority
+
+    def __ge__(self, other):
+        return self.priority >= other.priority
+
     @property
     def accepted_streams(self):
         streams = []
@@ -1617,6 +1640,35 @@ class IncomingSession(QObject):
     def desktopsharing_accepted(self):
         return self.dialog.desktopsharing_stream.in_use and self.dialog.desktopsharing_stream.accepted
 
+    @property
+    def priority(self):
+        if self.audio_stream:
+            return 0
+        elif self.video_stream:
+            return 1
+        elif self.desktopsharing_stream:
+            return 2
+        elif self.chat_stream:
+            return 3
+        else:
+            return 4
+
+    @property
+    def ringtone(self):
+        if 'ringtone' not in self.__dict__:
+            if self.audio_stream or self.video_stream or self.desktopsharing_stream:
+                sound_file = self.session.account.sounds.inbound_ringtone
+                if sound_file is not None and sound_file.path is DefaultPath:
+                    settings = SIPSimpleSettings()
+                    sound_file = settings.sounds.inbound_ringtone
+                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, sound_file.path, volume=sound_file.volume, loop_count=0, pause_time=6) if sound_file is not None else Null
+                ringtone.bridge = SIPApplication.alert_audio_bridge
+            else:
+                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=6)
+                ringtone.bridge = SIPApplication.alert_audio_bridge
+            self.__dict__['ringtone'] = ringtone
+        return self.__dict__['ringtone']
+
     def _SH_DialogAccepted(self):
         self.accepted.emit()
 
@@ -1634,10 +1686,12 @@ class SessionManager(object):
         self.session_model = None
         self.incoming_sessions = []
         self.dialog_positions = range(1, 100)
+        self.current_ringtone = Null
 
     def initialize(self, main_window, session_model):
         self.main_window = main_window
         self.session_model = session_model
+        session_model.structureChanged.connect(self.update_ringtone)
         session_model.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
@@ -1673,6 +1727,38 @@ class SessionManager(object):
             self.session_model.session_list.setFocus()
             self.main_window.search_box.update()
             session_item.connect()
+
+    def update_ringtone(self):
+        if not self.incoming_sessions:
+            self.current_ringtone = Null
+        elif self.session_model.active_sessions:
+            self.current_ringtone = self.beeping_ringtone
+        else:
+            self.current_ringtone = self.incoming_sessions[0].ringtone
+
+    @property
+    def beeping_ringtone(self):
+        if 'beeping_ringtone' not in self.__dict__:
+            ringtone = WavePlayer(SIPApplication.voice_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=6)
+            ringtone.bridge = SIPApplication.voice_audio_bridge
+            self.__dict__['beeping_ringtone'] = ringtone
+        return self.__dict__['beeping_ringtone']
+
+    def _get_current_ringtone(self):
+        return self.__dict__['current_ringtone']
+
+    def _set_current_ringtone(self, ringtone):
+        old_ringtone = self.__dict__.get('current_ringtone', Null)
+        if ringtone is not Null and ringtone is old_ringtone:
+            return
+        old_ringtone.stop()
+        old_ringtone.bridge.remove(old_ringtone)
+        ringtone.bridge.add(ringtone)
+        ringtone.start()
+        self.__dict__['current_ringtone'] = ringtone
+
+    current_ringtone = property(_get_current_ringtone, _set_current_ringtone)
+    del _get_current_ringtone, _set_current_ringtone
 
     @staticmethod
     def create_stream(account, type):
@@ -1713,18 +1799,19 @@ class SessionManager(object):
         if incoming_session.dialog.position is not None:
             bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
         self.incoming_sessions.remove(incoming_session)
+        self.update_ringtone()
         session = incoming_session.session
         if incoming_session.audio_accepted and incoming_session.video_accepted:
             session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, audio_stream=incoming_session.audio_stream, video_stream=incoming_session.video_stream)
         elif incoming_session.audio_accepted:
             try:
-                session_item = (session_item for session_item in self.session_model.sessions if session_item.session is session and session_item.audio_stream is None and not session_item.pending_removal).next()
+                session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.audio_stream is None).next()
                 session_item.audio_stream = incoming_session.audio_stream
             except StopIteration:
                 session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, audio_stream=incoming_session.audio_stream)
         elif incoming_session.video_accepted:
             try:
-                session_item = (session_item for session_item in self.session_model.sessions if session_item.session is session and session_item.video_stream is None and not session_item.pending_removal).next()
+                session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.video_stream is None).next()
                 session_item.video_stream = incoming_session.video_stream
             except StopIteration:
                 session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, video_stream=incoming_session.video_stream)
@@ -1762,6 +1849,7 @@ class SessionManager(object):
         if incoming_session.dialog.position is not None:
             bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
         self.incoming_sessions.remove(incoming_session)
+        self.update_ringtone()
         if incoming_session.proposal:
             incoming_session.session.reject_proposal(488)
         elif mode == 'busy':
@@ -1826,7 +1914,7 @@ class SessionManager(object):
             desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
             dialog = IncomingDialog()
             incoming_session = IncomingSession(dialog, session, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
-            self.incoming_sessions.append(incoming_session)
+            bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
             from blink import Blink
@@ -1834,7 +1922,8 @@ class SessionManager(object):
                 position = self.dialog_positions.pop(0)
             except IndexError:
                 position = None
-            incoming_session.dialog.show(activate=Blink().activeWindow() is not None, position=position)
+            incoming_session.dialog.show(activate=Blink().activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
+            self.update_ringtone()
 
     def _NH_SIPSessionGotProposal(self, notification):
         session = notification.sender
@@ -1859,7 +1948,7 @@ class SessionManager(object):
             desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
             dialog = IncomingDialog()
             incoming_session = IncomingSession(dialog, session, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
-            self.incoming_sessions.append(incoming_session)
+            bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
             from blink import Blink
@@ -1867,7 +1956,8 @@ class SessionManager(object):
                 position = self.dialog_positions.pop(0)
             except IndexError:
                 position = None
-            incoming_session.dialog.show(activate=Blink().activeWindow() is not None, position=position)
+            incoming_session.dialog.show(activate=Blink().activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
+            self.update_ringtone()
 
     def _NH_SIPSessionDidFail(self, notification):
         if notification.data.code != 487:
@@ -1881,6 +1971,7 @@ class SessionManager(object):
                 bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
             incoming_session.dialog.hide()
             self.incoming_sessions.remove(incoming_session)
+            self.update_ringtone()
 
     def _NH_SIPSessionGotRejectProposal(self, notification):
         if notification.data.code != 487:
@@ -1894,5 +1985,6 @@ class SessionManager(object):
                 bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
             incoming_session.dialog.hide()
             self.incoming_sessions.remove(incoming_session)
+            self.update_ringtone()
 
 

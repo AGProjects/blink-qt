@@ -3,9 +3,10 @@
 
 """Definitions of datatypes for use in settings extensions."""
 
-__all__ = ['ApplicationDataPath', 'SoundFile']
+__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile']
 
 import os
+import re
 
 from blink.resources import ApplicationData
 
@@ -26,7 +27,7 @@ class SoundFile(object):
     def __init__(self, path, volume=100):
         self.path = path
         self.volume = int(volume)
-        if self.volume < 0 or self.volume > 100:
+        if not (0 <= self.volume <= 100):
             raise ValueError('illegal volume level: %d' % self.volume)
 
     def __getstate__(self):
@@ -49,6 +50,49 @@ class SoundFile(object):
         path = os.path.normpath(path)
         if path.startswith(ApplicationData.directory+os.path.sep):
             path = path[len(ApplicationData.directory+os.path.sep):]
+        self.__dict__['path'] = path
+    path = property(_get_path, _set_path)
+    del _get_path, _set_path
+
+
+class DefaultPath(object):
+    def __repr__(self):
+        return self.__class__.__name__
+
+class CustomSoundFile(object):
+    def __init__(self, path=DefaultPath, volume=100):
+        self.path = path
+        self.volume = int(volume)
+        if self.volume < 0 or self.volume > 100:
+            raise ValueError('illegal volume level: %d' % self.volume)
+
+    def __getstate__(self):
+        if self.path is DefaultPath:
+            return u'default'
+        else:
+            return u'file:%s,%s' % (self.__dict__['path'], self.volume)
+
+    def __setstate__(self, state):
+        match = re.match(r'^(?P<type>default|file:)(?P<path>.+?)?(,(?P<volume>\d+))?$', state)
+        if match is None:
+            raise ValueError('illegal value: %r' % state)
+        data = match.groupdict()
+        if data.pop('type') == 'default':
+            data['path'] = DefaultPath
+        data['volume'] = data['volume'] or 100
+        self.__init__(**data)
+
+    def __repr__(self):
+        return '%s(%r, %r)' % (self.__class__.__name__, self.path, self.volume)
+
+    def _get_path(self):
+        path = self.__dict__['path']
+        return path if path is DefaultPath else ApplicationData.get(path)
+    def _set_path(self, path):
+        if path is not DefaultPath:
+            path = os.path.normpath(path)
+            if path.startswith(ApplicationData.directory+os.path.sep):
+                path = path[len(ApplicationData.directory+os.path.sep):]
         self.__dict__['path'] = path
     path = property(_get_path, _set_path)
     del _get_path, _set_path

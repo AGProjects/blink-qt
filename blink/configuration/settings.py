@@ -17,7 +17,8 @@ class AudioSettingsExtension(AudioSettings):
 
 
 class SoundSettings(SettingsGroup):
-    outbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/ring_outbound.wav')), nillable=True)
+    inbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/inbound_ringtone.wav')), nillable=True)
+    outbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/outbound_ringtone.wav')), nillable=True)
 
 
 class SIPSimpleSettingsExtension(SettingsObjectExtension):

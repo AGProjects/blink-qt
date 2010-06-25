@@ -11,10 +11,12 @@ from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
 from zope.interface import implements
 
+from sipsimple.account import Account, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.backend.file import FileBackend
 from sipsimple.configuration.settings import SIPSimpleSettings
 
+from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.mainwindow import MainWindow
 from blink.resources import ApplicationData
@@ -32,6 +34,8 @@ class Blink(QApplication):
         self.application = SIPApplication()
         self.main_window = MainWindow()
 
+        Account.register_extension(AccountExtension)
+        BonjourAccount.register_extension(BonjourAccountExtension)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
         session_manager = SessionManager()
         session_manager.initialize(self.main_window, self.main_window.session_model)
