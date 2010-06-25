@@ -67,9 +67,6 @@
         <height>29</height>
        </size>
       </property>
-      <property name="toolTip">
-       <string/>
-      </property>
       <property name="inactiveText" stdset="0">
        <string>Search Contacts or Enter Address</string>
       </property>
@@ -108,9 +105,6 @@
         </property>
         <property name="frameShadow">
          <enum>QFrame::Sunken</enum>
-        </property>
-        <property name="text">
-         <string/>
         </property>
         <property name="pixmap">
          <pixmap>icons/default-avatar.png</pixmap>
@@ -165,9 +159,6 @@
             </property>
             <property name="toolTip">
              <string>Select your presence activity</string>
-            </property>
-            <property name="statusTip">
-             <string/>
             </property>
             <property name="iconSize">
              <size>
@@ -266,9 +257,6 @@
       </property>
       <property name="focusPolicy">
        <enum>Qt::TabFocus</enum>
-      </property>
-      <property name="toolTip">
-       <string/>
       </property>
       <property name="text">
        <string>Switch to Calls</string>
@@ -764,9 +752,6 @@ buttons below.</string>
             <property name="focusPolicy">
              <enum>Qt::TabFocus</enum>
             </property>
-            <property name="toolTip">
-             <string/>
-            </property>
             <property name="text">
              <string>Hangup all</string>
             </property>
@@ -788,9 +773,6 @@ buttons below.</string>
             </property>
             <property name="focusPolicy">
              <enum>Qt::TabFocus</enum>
-            </property>
-            <property name="toolTip">
-             <string/>
             </property>
             <property name="text">
              <string>Conference</string>
@@ -835,9 +817,6 @@ buttons below.</string>
             </property>
             <property name="toolTip">
              <string>Mute microphone</string>
-            </property>
-            <property name="text">
-             <string/>
             </property>
             <property name="icon">
              <iconset>

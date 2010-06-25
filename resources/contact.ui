@@ -107,9 +107,6 @@
        <height>36</height>
       </size>
      </property>
-     <property name="text">
-      <string/>
-     </property>
      <property name="pixmap">
       <pixmap>icons/default-avatar.png</pixmap>
      </property>

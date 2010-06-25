@@ -54,9 +54,6 @@
          <bold>true</bold>
         </font>
        </property>
-       <property name="toolTip">
-        <string/>
-       </property>
        <property name="text">
         <string>test@example.com</string>
        </property>
@@ -75,9 +72,6 @@
          <width>1</width>
          <height>15</height>
         </size>
-       </property>
-       <property name="text">
-        <string/>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -106,9 +100,6 @@
        </property>
        <property name="toolTip">
         <string>Signaling is encrypted using TLS</string>
-       </property>
-       <property name="text">
-        <string/>
        </property>
        <property name="pixmap">
         <pixmap>icons/blue-lock.png</pixmap>
@@ -142,9 +133,6 @@
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
-       <property name="toolTip">
-        <string/>
-       </property>
        <property name="text">
         <string>Audio (PCM 8kHz)</string>
        </property>
@@ -163,9 +151,6 @@
          <width>1</width>
          <height>15</height>
         </size>
-       </property>
-       <property name="text">
-        <string/>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -383,9 +368,6 @@
        <property name="toolTip">
         <string>Media is encrypted using sRTP</string>
        </property>
-       <property name="text">
-        <string/>
-       </property>
        <property name="pixmap">
         <pixmap>icons/orange-lock.png</pixmap>
        </property>
@@ -415,9 +397,6 @@
          <height>0</height>
         </size>
        </property>
-       <property name="toolTip">
-        <string/>
-       </property>
        <property name="text">
         <string>0:00:00</string>
        </property>
@@ -430,9 +409,6 @@
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
-       </property>
-       <property name="toolTip">
-        <string>Session state</string>
        </property>
       </widget>
      </item>
@@ -473,9 +449,6 @@ QToolButton#mute_button:pressed {
 	border-style: inset;
 }
 </string>
-         </property>
-         <property name="text">
-          <string/>
          </property>
          <property name="icon">
           <iconset>
@@ -525,9 +498,6 @@ QToolButton:pressed {
 }
 </string>
          </property>
-         <property name="text">
-          <string/>
-         </property>
          <property name="icon">
           <iconset>
            <normaloff>icons/pause.png</normaloff>
@@ -575,9 +545,6 @@ QToolButton:pressed {
 	border-style: inset;
 }
 </string>
-         </property>
-         <property name="text">
-          <string/>
          </property>
          <property name="icon">
           <iconset>
@@ -628,9 +595,6 @@ QToolButton:pressed {
 	border-style: inset;
 }
 </string>
-         </property>
-         <property name="text">
-          <string/>
          </property>
          <property name="icon">
           <iconset>

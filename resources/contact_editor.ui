@@ -44,9 +44,6 @@
    </item>
    <item row="0" column="1">
     <widget class="LineEdit" name="sip_address_editor">
-     <property name="toolTip">
-      <string/>
-     </property>
      <property name="inactiveText" stdset="0">
       <string>user@domain</string>
      </property>
@@ -89,9 +86,6 @@
        <property name="frameShadow">
         <enum>QFrame::Sunken</enum>
        </property>
-       <property name="text">
-        <string/>
-       </property>
        <property name="pixmap">
         <pixmap>icons/default-avatar.png</pixmap>
        </property>
@@ -110,9 +104,6 @@
          <width>60</width>
          <height>20</height>
         </size>
-       </property>
-       <property name="toolTip">
-        <string/>
        </property>
        <property name="text">
         <string>Clear</string>
@@ -133,9 +124,6 @@
    </item>
    <item row="1" column="1">
     <widget class="LineEdit" name="display_name_editor">
-     <property name="toolTip">
-      <string/>
-     </property>
      <property name="inactiveText" stdset="0">
       <string>Contact Name</string>
      </property>
@@ -161,9 +149,6 @@
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
-     </property>
-     <property name="toolTip">
-      <string/>
      </property>
      <property name="editable">
       <bool>true</bool>
@@ -233,9 +218,6 @@
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
-     <property name="toolTip">
-      <string/>
-     </property>
      <item>
       <property name="text">
        <string>Local</string>
@@ -253,9 +235,6 @@
      <property name="enabled">
       <bool>false</bool>
      </property>
-     <property name="toolTip">
-      <string/>
-     </property>
      <property name="text">
       <string>Subscribe To Presence</string>
      </property>
@@ -265,9 +244,6 @@
     <widget class="QCheckBox" name="subscribe_dialogs">
      <property name="enabled">
       <bool>false</bool>
-     </property>
-     <property name="toolTip">
-      <string/>
      </property>
      <property name="text">
       <string>Subscribe To Dialogs</string>
@@ -313,9 +289,6 @@
          <height>25</height>
         </size>
        </property>
-       <property name="toolTip">
-        <string/>
-       </property>
        <property name="text">
         <string>Cancel</string>
        </property>
@@ -328,9 +301,6 @@
          <width>85</width>
          <height>25</height>
         </size>
-       </property>
-       <property name="toolTip">
-        <string/>
        </property>
        <property name="text">
         <string>Add</string>
@@ -346,9 +316,6 @@
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
-     </property>
-     <property name="toolTip">
-      <string/>
      </property>
      <item>
       <property name="text">
