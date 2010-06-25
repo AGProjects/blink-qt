@@ -132,7 +132,7 @@ class LatencyLabel(QLabel):
 class PacketLossLabel(QLabel):
     def __init__(self, parent=None):
         super(PacketLossLabel, self).__init__(parent)
-        self.threshold = 0
+        self.threshold = 3
         self.value = 0
 
     def _get_value(self):
