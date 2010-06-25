@@ -1583,7 +1583,7 @@ class IncomingSession(QObject):
                 self.dialog.desktopsharing_label.setText(u'is asking to share your desktop')
             self.dialog.desktopsharing_stream.accepted = False # Remove when implemented later -Luci
             self.dialog.desktopsharing_stream.show()
-        self.dialog.audio_device_label.setText(u'Selected audio device is %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
+        self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 
         self.dialog.accepted.connect(self._SH_DialogAccepted)
         self.dialog.rejected.connect(self._SH_DialogRejected)
