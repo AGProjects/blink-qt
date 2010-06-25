@@ -136,7 +136,10 @@
              <string>Set the display name shown to remote parties</string>
             </property>
             <property name="styleSheet">
-             <string>background-color: transparent;</string>
+             <string>QLineEdit {
+	background-color: transparent;
+}
+</string>
             </property>
             <property name="frame">
              <bool>false</bool>
@@ -218,7 +221,10 @@
            <string>Select your presence activity note</string>
           </property>
           <property name="styleSheet">
-           <string>background-color: transparent;</string>
+           <string>QLineEdit {
+	background-color: transparent;
+}
+</string>
           </property>
           <property name="frame">
            <bool>false</bool>
