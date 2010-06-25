@@ -128,7 +128,7 @@
         <item>
          <layout class="QHBoxLayout" name="name_status_layout">
           <property name="spacing">
-           <number>2</number>
+           <number>4</number>
           </property>
           <item>
            <widget class="LineEdit" name="display_name">
