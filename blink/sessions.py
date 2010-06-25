@@ -83,7 +83,7 @@ class SessionItem(QObject):
         from blink import Blink
         self.remote_party_name = None
         for contact in Blink().main_window.contact_model.iter_contacts():
-            if uri.matches(contact.uri):
+            if uri.matches(contact.uri) or any(uri.matches(alias) for alias in contact.sip_aliases):
                 self.remote_party_name = contact.name
                 break
         if not self.remote_party_name:
@@ -1568,7 +1568,7 @@ class IncomingSession(QObject):
         address = u'%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         for contact in Blink().main_window.contact_model.iter_contacts():
-            if session.remote_identity.uri.matches(contact.uri):
+            if session.remote_identity.uri.matches(contact.uri) or any(session.remote_identity.uri.matches(alias) for alias in contact.sip_aliases):
                 self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
                 self.dialog.user_icon.setPixmap(contact.icon)
                 break

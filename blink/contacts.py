@@ -159,6 +159,7 @@ class Contact(object):
         self.name = name
         self.uri = uri
         self.image = image
+        self.sip_aliases = []
         self.preferred_media = 'Audio'
         self.status = 'unknown'
 
@@ -169,7 +170,7 @@ class Contact(object):
         return u'%s <%s>' % (self.name, self.uri) if self.name else self.uri
 
     def __reduce__(self):
-        return (self.__class__, (self.group, self.name, self.uri, self.image), dict(preferred_media=self.preferred_media))
+        return (self.__class__, (self.group, self.name, self.uri, self.image), dict(preferred_media=self.preferred_media, sip_aliases=self.sip_aliases))
 
     def _get_image(self):
         return self.__dict__['image']
@@ -1575,6 +1576,7 @@ class ContactEditorDialog(base_class, ui_class):
     def open_for_add(self, sip_address=u'', target_group=None):
         self.sip_address_editor.setText(sip_address)
         self.display_name_editor.setText(u'')
+        self.sip_aliases_editor.setText(u'')
         for index in xrange(self.group.count()):
             if self.group.itemData(index).toPyObject() is target_group:
                 break
@@ -1591,6 +1593,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.edited_contact = contact
         self.sip_address_editor.setText(contact.uri)
         self.display_name_editor.setText(contact.name)
+        self.sip_aliases_editor.setText(u'; '.join(contact.sip_aliases))
         for index in xrange(self.group.count()):
             if self.group.itemData(index).toPyObject() is contact.group:
                 break
@@ -1616,6 +1619,7 @@ class ContactEditorDialog(base_class, ui_class):
         name = unicode(self.display_name_editor.text())
         image = IconCache().store(self.icon_selector.filename)
         preferred_media = unicode(self.preferred_media.currentText())
+        sip_aliases = [alias.strip() for alias in unicode(self.sip_aliases_editor.text()).split(u';')]
         group_index = self.group.currentIndex()
         group_name = self.group.currentText()
         if group_name != self.group.itemText(group_index):
@@ -1629,9 +1633,10 @@ class ContactEditorDialog(base_class, ui_class):
             group = self.group.itemData(group_index).toPyObject()
         if self.edited_contact is None:
             contact = Contact(group, name, uri, image)
+            contact.sip_aliases = sip_aliases
             contact_model.addContact(contact)
         else:
-            attributes = dict(group=group, name=name, uri=uri, image=image, preferred_media=preferred_media)
+            attributes = dict(group=group, name=name, uri=uri, image=image, preferred_media=preferred_media, sip_aliases=sip_aliases)
             contact_model.updateContact(self.edited_contact, attributes)
             self.edited_contact = None
 

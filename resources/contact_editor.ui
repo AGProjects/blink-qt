@@ -175,7 +175,7 @@
     </spacer>
    </item>
    <item row="5" column="0">
-    <widget class="QLabel" name="chat_aliases_label">
+    <widget class="QLabel" name="sip_aliases_label">
      <property name="text">
       <string>SIP Aliases:</string>
      </property>
@@ -185,7 +185,7 @@
     </widget>
    </item>
    <item row="5" column="1" colspan="2">
-    <widget class="LineEdit" name="chat_aliases_editor">
+    <widget class="LineEdit" name="sip_aliases_editor">
      <property name="inactiveText" stdset="0">
       <string>List of SIP addresses separated by ;</string>
      </property>
@@ -361,7 +361,7 @@
   <tabstop>group</tabstop>
   <tabstop>clear_button</tabstop>
   <tabstop>preferred_media</tabstop>
-  <tabstop>chat_aliases_editor</tabstop>
+  <tabstop>sip_aliases_editor</tabstop>
   <tabstop>storage_place</tabstop>
   <tabstop>subscribe_presence</tabstop>
   <tabstop>subscribe_dialogs</tabstop>
