@@ -549,7 +549,7 @@ QToolButton:pressed {
          <property name="icon">
           <iconset>
            <normaloff>icons/record.png</normaloff>
-           <normalon>../../../blink-qt/resources/icons/recording.png</normalon>icons/record.png</iconset>
+           <normalon>icons/recording.png</normalon>icons/record.png</iconset>
          </property>
          <property name="iconSize">
           <size>
