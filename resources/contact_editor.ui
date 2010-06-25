@@ -186,9 +186,6 @@
    </item>
    <item row="5" column="1" colspan="2">
     <widget class="LineEdit" name="chat_aliases_editor">
-     <property name="toolTip">
-      <string>Chat to these addresses are combined in the same window</string>
-     </property>
      <property name="inactiveText" stdset="0">
       <string>List of SIP addresses separated by ;</string>
      </property>

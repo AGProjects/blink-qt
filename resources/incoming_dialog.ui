@@ -643,7 +643,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Reject sessions on all my devices</string>
+        <string>Refuse the call and stop ringing on any other device</string>
        </property>
        <property name="text">
         <string>Reject</string>
@@ -665,10 +665,10 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Reject the session on this device</string>
+        <string>Refuse the call but leave other devices ringing</string>
        </property>
        <property name="text">
-        <string>Busy here</string>
+        <string>Busy</string>
        </property>
       </widget>
      </item>

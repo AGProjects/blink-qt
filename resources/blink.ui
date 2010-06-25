@@ -49,7 +49,7 @@
        </size>
       </property>
       <property name="toolTip">
-       <string>Select the SIP account used for outbound sessions</string>
+       <string>Select the SIP account used for outbound calls</string>
       </property>
      </widget>
     </item>
@@ -133,7 +133,7 @@
              </size>
             </property>
             <property name="toolTip">
-             <string>Set the display name shown to remote parties</string>
+             <string>Click to change your display name</string>
             </property>
             <property name="styleSheet">
              <string>QLineEdit {
@@ -145,7 +145,7 @@
              <bool>false</bool>
             </property>
             <property name="inactiveText" stdset="0">
-             <string>My display name</string>
+             <string>Type your name here</string>
             </property>
             <property name="widgetSpacing" stdset="0">
              <number>0</number>
@@ -159,9 +159,6 @@
               <width>16777215</width>
               <height>18</height>
              </size>
-            </property>
-            <property name="toolTip">
-             <string>Select your presence activity</string>
             </property>
             <property name="iconSize">
              <size>
@@ -216,9 +213,6 @@
             <width>16777215</width>
             <height>18</height>
            </size>
-          </property>
-          <property name="toolTip">
-           <string>Select your presence activity note</string>
           </property>
           <property name="styleSheet">
            <string>QLineEdit {
@@ -278,7 +272,7 @@
     <item>
      <widget class="QStackedWidget" name="main_view">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="contacts_panel">
        <layout class="QVBoxLayout" name="verticalLayout_8">
@@ -568,7 +562,7 @@ buttons below.</string>
                </size>
               </property>
               <property name="toolTip">
-               <string>Start and audio session</string>
+               <string>Make an audio call</string>
               </property>
               <property name="icon">
                <iconset>
@@ -597,7 +591,7 @@ buttons below.</string>
                </size>
               </property>
               <property name="toolTip">
-               <string>Start a chat session or send SMS</string>
+               <string>Start a chat session or send an SMS</string>
               </property>
               <property name="text">
                <string>IM</string>

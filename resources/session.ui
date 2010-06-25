@@ -481,7 +481,7 @@ QToolButton#mute_button:pressed {
           </size>
          </property>
          <property name="toolTip">
-          <string>Toggle hold status</string>
+          <string>Hold the call</string>
          </property>
          <property name="styleSheet">
           <string>QToolButton {
@@ -529,7 +529,7 @@ QToolButton:pressed {
           </size>
          </property>
          <property name="toolTip">
-          <string>Record the audio session to file</string>
+          <string>Record this call</string>
          </property>
          <property name="styleSheet">
           <string>QToolButton {
