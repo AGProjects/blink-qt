@@ -885,8 +885,7 @@ class ContactModel(QAbstractListModel):
             group = ContactGroup('Test')
             contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', icon_cache.store(Resources.get('icons/3333@sip2sip.info.png'))),
                         Contact(group, 'Echo Test', '4444@sip2sip.info', icon_cache.store(Resources.get('icons/4444@sip2sip.info.png'))),
-                        Contact(group, 'Multi-Party Chat', '123@chatserver.ag-projects.com'),
-                        Contact(group, 'VUC Conference', '200901@login.zipdx.com', icon_cache.store(Resources.get('icons/200901@login.zipdx.com.png')))]
+                        Contact(group, 'VUC Conference http://vuc.me', '200901@login.zipdx.com', icon_cache.store(Resources.get('icons/200901@login.zipdx.com.png')))]
             contacts.sort(key=attrgetter('name'))
             items = [group] + contacts
         self.beginResetModel()
