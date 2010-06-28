@@ -1010,6 +1010,12 @@ class ContactListView(QListView):
         self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
         self.needs_restore = False
 
+    def setModel(self, model):
+        selection_model = self.selectionModel() or Null
+        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
+        super(ContactListView, self).setModel(model)
+        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+
     def paintEvent(self, event):
         super(ContactListView, self).paintEvent(event)
         if self.drop_indicator_index.isValid():
@@ -1331,6 +1337,13 @@ class ContactListView(QListView):
         else:
             event.ignore(rect)
 
+    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
+
 
 class ContactSearchListView(QListView):
     def __init__(self, parent=None):
@@ -1350,13 +1363,18 @@ class ContactSearchListView(QListView):
         self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
         self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
 
+    def setModel(self, model):
+        selection_model = self.selectionModel() or Null
+        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
+        super(ContactSearchListView, self).setModel(model)
+        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+
     def focusInEvent(self, event):
         super(ContactSearchListView, self).focusInEvent(event)
         model = self.model()
         selection_model = self.selectionModel()
         if not selection_model.selectedIndexes() and model.rowCount() > 0:
             selection_model.select(model.index(0, 0), selection_model.Select)
-            selection_model.setCurrentIndex(model.index(0, 0), selection_model.Select)
 
     def paintEvent(self, event):
         super(ContactSearchListView, self).paintEvent(event)
@@ -1534,6 +1552,13 @@ class ContactSearchListView(QListView):
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
             event.ignore(rect)
+
+    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
 
 
 # The contact editor dialog
