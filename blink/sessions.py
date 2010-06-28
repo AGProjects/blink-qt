@@ -1769,6 +1769,7 @@ class SessionManager(object):
 
     @staticmethod
     def create_uri(account, address):
+        address = re.sub(r'\(\s?0\s?\)|[-() ]', '', address)
         if not address.startswith('sip:') and not address.startswith('sips:'):
             address = 'sip:' + address
         if '@' not in address:
