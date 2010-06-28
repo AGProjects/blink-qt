@@ -724,7 +724,6 @@ class SessionWidget(base_class, ui_class):
         self.stream_info_label.codec_info = session.codec_info
         self.duration_label.value = session.duration
         self.latency_label.value = session.latency
-        self.packet_loss_label.threshold = 0
         self.packet_loss_label.value = session.packet_loss
         self.status_label.value = session.status
         self.tls_label.setVisible(bool(session.tls))
