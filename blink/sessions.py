@@ -1251,28 +1251,9 @@ class SessionListView(QListView):
 
     def setModel(self, model):
         selection_model = self.selectionModel() or Null
-        selection_model.selectionChanged.disconnect(self._selection_changed)
+        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
         super(SessionListView, self).setModel(model)
-        self.selectionModel().selectionChanged.connect(self._selection_changed)
-
-    def _selection_changed(self, selected, deselected):
-        model = self.model()
-        for session in (model.data(index) for index in deselected.indexes()):
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
-                    sibling.widget.selected = False
-            else:
-                session.widget.selected = False
-        for session in (model.data(index) for index in selected.indexes()):
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
-                    sibling.widget.selected = True
-            else:
-                session.widget.selected = True
-        if not selected.isEmpty():
-            self.setCurrentIndex(selected.indexes()[0])
-        else:
-            self.setCurrentIndex(model.index(-1))
+        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
 
     def contextMenuEvent(self, event):
         pass
@@ -1435,6 +1416,25 @@ class SessionListView(QListView):
                     sibling.widget.drop_indicator = True
             else:
                 session.widget.drop_indicator = True
+
+    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
+        model = self.model()
+        for session in (model.data(index) for index in deselected.indexes()):
+            if session.conference is not None:
+                for sibling in session.conference.sessions:
+                    sibling.widget.selected = False
+            else:
+                session.widget.selected = False
+        for session in (model.data(index) for index in selected.indexes()):
+            if session.conference is not None:
+                for sibling in session.conference.sessions:
+                    sibling.widget.selected = True
+            else:
+                session.widget.selected = True
+        if not selected.isEmpty():
+            self.setCurrentIndex(selected.indexes()[0])
+        else:
+            self.setCurrentIndex(model.index(-1))
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
