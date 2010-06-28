@@ -1770,6 +1770,8 @@ class SessionManager(object):
     @staticmethod
     def create_uri(account, address):
         address = re.sub(r'\(\s?0\s?\)|[-() ]', '', address)
+        if isinstance(account, Account) and account.pstn.idd_prefix is not None:
+            address = re.sub(r'^\+', account.pstn.idd_prefix, address)
         if not address.startswith('sip:') and not address.startswith('sips:'):
             address = 'sip:' + address
         if '@' not in address:
