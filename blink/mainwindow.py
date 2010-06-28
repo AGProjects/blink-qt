@@ -7,7 +7,7 @@ __all__ = ['MainWindow']
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui  import QBrush, QColor, QPainter, QPen, QPixmap, QStyle, QStyleOptionFrameV2
+from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
@@ -34,15 +34,7 @@ class MainWindow(base_class, ui_class):
         super(MainWindow, self).__init__(parent)
 
         with Resources.directory:
-            self.setupUi(self)
-
-        # adjust search box height depending on theme as the value set in designer isn't suited for all themes
-        search_box = self.search_box
-        option = QStyleOptionFrameV2()
-        search_box.initStyleOption(option)
-        frame_width = search_box.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, search_box)
-        if frame_width < 4:
-            search_box.setMinimumHeight(20 + 2*frame_width)
+            self.setupUi()
 
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
@@ -108,6 +100,30 @@ class MainWindow(base_class, ui_class):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
+
+    def setupUi(self):
+        super(MainWindow, self).setupUi(self)
+
+        # adjust search box height depending on theme as the value set in designer isn't suited for all themes
+        search_box = self.search_box
+        option = QStyleOptionFrameV2()
+        search_box.initStyleOption(option)
+        frame_width = search_box.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, search_box)
+        if frame_width < 4:
+            search_box.setMinimumHeight(20 + 2*frame_width)
+
+        # adjust status combo-box font size to fit the combo-box
+        option = QStyleOptionComboBox()
+        self.status.initStyleOption(option)
+        frame_width = self.status.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self.status)
+        font = self.status.font()
+        font.setFamily('Sans Serif')
+        font.setPointSize(font.pointSize() - 1) # make it 1 point smaller then the default font size
+        font_metrics = QFontMetrics(font)
+        if font_metrics.height() > self.status.maximumHeight() - 2*frame_width:
+            pixel_size = 11 - (frame_width - 2) # subtract 1 pixel for every frame pixel over 2 pixels
+            font.setPixelSize(pixel_size)
+        self.status.setFont(font)
 
     def set_user_icon(self, image_file_name):
         pixmap = QPixmap(32, 32)
