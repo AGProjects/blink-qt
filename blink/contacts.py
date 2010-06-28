@@ -1557,7 +1557,7 @@ class ContactSearchListView(QListView):
         selection_model = self.selectionModel()
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
-            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
             selection_model.setCurrentIndex(index, selection_model.Select)
 
 
