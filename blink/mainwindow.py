@@ -229,6 +229,8 @@ class MainWindow(base_class, ui_class):
             self.display_name.setText(account.display_name)
             self.display_name.setEnabled(True)
             self.activity_note.setEnabled(True)
+            if not self.session_model.active_sessions:
+                self.status.setCurrentIndex(self.idle_status_index)
         else:
             self.display_name.clear()
             self.display_name.setEnabled(False)
