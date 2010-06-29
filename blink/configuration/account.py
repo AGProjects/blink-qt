@@ -7,6 +7,7 @@ __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
 from sipsimple.account import PSTNSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
+from sipsimple.util import user_info
 
 from blink.configuration.datatypes import CustomSoundFile, DefaultPath
 
@@ -22,6 +23,8 @@ class SoundSettings(SettingsGroup):
 class AccountExtension(SettingsObjectExtension):
     pstn = PSTNSettingsExtension
     sounds = SoundSettings
+
+    display_name = Setting(type=str, default=user_info.fullname, nillable=True)
 
 
 class BonjourAccountExtension(SettingsObjectExtension):

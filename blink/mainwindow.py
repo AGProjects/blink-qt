@@ -83,6 +83,9 @@ class MainWindow(base_class, ui_class):
         self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
 
         self.identity.activated[int].connect(self._SH_IdentityChanged)
+        self.identity.currentIndexChanged[int].connect(self._SH_IdentityCurrentIndexChanged)
+
+        self.display_name.editingFinished.connect(self._SH_DisplayNameEditingFinished)
 
         self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
 
@@ -200,6 +203,15 @@ class MainWindow(base_class, ui_class):
             active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
             self.search_view.setCurrentWidget(active_widget)
 
+    def _SH_DisplayNameEditingFinished(self):
+        self.display_name.clearFocus()
+        index = self.identity.currentIndex()
+        if index != -1:
+            name = unicode(self.display_name.text())
+            account = self.identity.itemData(index).toPyObject().account
+            account.display_name = name if name else None
+            account.save()
+
     def _SH_HangupAllButtonClicked(self):
         for session in self.session_model.sessions:
             session.end()
@@ -207,6 +219,15 @@ class MainWindow(base_class, ui_class):
     def _SH_IdentityChanged(self, index):
         account_manager = AccountManager()
         account_manager.default_account = self.identity.itemData(index).toPyObject().account
+
+    def _SH_IdentityCurrentIndexChanged(self, index):
+        if index != -1:
+            account = self.identity.itemData(index).toPyObject().account
+            self.display_name.setText(account.display_name)
+            self.display_name.setEnabled(True)
+        else:
+            self.display_name.clear()
+            self.display_name.setEnabled(False)
 
     def _SH_MakeConference(self):
         self.session_model.conferenceSessions([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal])
@@ -286,6 +307,8 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, sender=settings, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, sender=account_manager, name='SIPAccountManagerDidChangeDefaultAccount')
         self.silent_button.setChecked(settings.audio.silent)
+        if all(not account.enabled for account in account_manager.iter_accounts()):
+            self.display_name.setEnabled(False)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if 'audio.silent' in notification.data.modified:
