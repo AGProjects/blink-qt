@@ -229,12 +229,15 @@ class MainWindow(base_class, ui_class):
             self.display_name.setText(account.display_name)
             self.display_name.setEnabled(True)
             self.activity_note.setEnabled(True)
+            self.status.setEnabled(True)
             if not self.session_model.active_sessions:
                 self.status.setCurrentIndex(self.idle_status_index)
         else:
             self.display_name.clear()
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
+            self.status.setEnabled(False)
+            self.status.setCurrentIndex(self.status.findText(u'Offline'))
 
     def _SH_MakeConference(self):
         self.session_model.conferenceSessions([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal])
@@ -293,7 +296,7 @@ class MainWindow(base_class, ui_class):
         else:
             self.conference_button.setEnabled(len([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal]) > 1)
             self.conference_button.setChecked(False)
-        if self.session_model.active_sessions:
+        if self.status.currentText() != u'Offline' and self.session_model.active_sessions:
             self.status.setCurrentIndex(self.status.findText(u'On the phone'))
         else:
             self.status.setCurrentIndex(self.idle_status_index)
