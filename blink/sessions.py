@@ -55,7 +55,6 @@ class SessionItem(QObject):
         super(SessionItem, self).__init__()
         if (audio_stream, video_stream) == (None, None):
             raise ValueError('SessionItem must represent at least one audio or video stream')
-        self.name = name
         self.uri = uri
         self.session = session
         self.contact = contact
@@ -81,11 +80,11 @@ class SessionItem(QObject):
         if self.audio_stream is None:
             self.hold_tone = Null
 
-        self.remote_party_name = contact.name if contact else None
-        if not self.remote_party_name:
+        self.name = contact.name if contact else None
+        if not self.name:
             address = '%s@%s' % (uri.user, uri.host)
             match = re.match(r'^(?P<number>(\+|00)[1-9][0-9]\d{5,15})@(\d{1,3}\.){3}\d{1,3}$', address)
-            self.remote_party_name = name or (match.group('number') if match else address)
+            self.name = name or (match.group('number') if match else address)
 
         self.timer.timeout.connect(self._SH_TimerFired)
         notification_center = NotificationCenter()
@@ -715,7 +714,7 @@ class SessionWidget(base_class, ui_class):
         self.mute_button.setEnabled(False)
         self.hold_button.setEnabled(False)
         self.record_button.setEnabled(False)
-        self.address_label.setText(session.remote_party_name)
+        self.address_label.setText(session.name)
         self.stream_info_label.session_type = session.type
         self.stream_info_label.codec_info = session.codec_info
         self.duration_label.value = session.duration
