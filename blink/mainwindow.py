@@ -167,7 +167,7 @@ class MainWindow(base_class, ui_class):
         address = contact.uri or unicode(self.search_box.text())
         name = contact.name or None
         session_manager = SessionManager()
-        session_manager.start_call(name, address, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _SH_BreakConference(self):
         active_session = self.session_model.data(self.session_list.selectionModel().selectedIndexes()[0])
@@ -178,7 +178,7 @@ class MainWindow(base_class, ui_class):
         if not isinstance(contact, Contact):
             return
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _SH_ContactListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()

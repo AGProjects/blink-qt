@@ -1124,7 +1124,7 @@ class ContactListView(QListView):
                 if not isinstance(contact, Contact):
                     return
                 session_manager = SessionManager()
-                session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+                session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
         else:
             super(ContactListView, self).keyPressEvent(event)
 
@@ -1177,7 +1177,7 @@ class ContactListView(QListView):
     def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _AH_StartChatSession(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
@@ -1451,7 +1451,7 @@ class ContactSearchListView(QListView):
                 if not isinstance(contact, Contact):
                     return
                 session_manager = SessionManager()
-                session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+                session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
         else:
             super(ContactSearchListView, self).keyPressEvent(event)
 
@@ -1474,7 +1474,7 @@ class ContactSearchListView(QListView):
     def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _AH_StartChatSession(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])

@@ -51,13 +51,14 @@ class SessionItem(QObject):
     deactivated = pyqtSignal()
     ended = pyqtSignal()
 
-    def __init__(self, name, uri, session, audio_stream=None, video_stream=None):
+    def __init__(self, name, uri, session, contact=None, audio_stream=None, video_stream=None):
         super(SessionItem, self).__init__()
         if (audio_stream, video_stream) == (None, None):
             raise ValueError('SessionItem must represent at least one audio or video stream')
         self.name = name
         self.uri = uri
         self.session = session
+        self.contact = contact
         self.audio_stream = audio_stream
         self.video_stream = video_stream
         self.widget = Null
@@ -80,12 +81,7 @@ class SessionItem(QObject):
         if self.audio_stream is None:
             self.hold_tone = Null
 
-        from blink import Blink
-        self.remote_party_name = None
-        for contact in Blink().main_window.contact_model.iter_contacts():
-            if uri.matches(contact.uri) or any(uri.matches(alias) for alias in contact.sip_aliases):
-                self.remote_party_name = contact.name
-                break
+        self.remote_party_name = contact.name if contact else None
         if not self.remote_party_name:
             address = '%s@%s' % (uri.user, uri.host)
             match = re.match(r'^(?P<number>(\+|00)[1-9][0-9]\d{5,15})@(\d{1,3}\.){3}\d{1,3}$', address)
@@ -1108,7 +1104,7 @@ class SessionModel(QAbstractListModel):
         contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
         session_manager = SessionManager()
         for contact in contacts:
-            session_manager.start_call(contact.name, contact.uri, conference_sibling=session)
+            session_manager.start_call(contact.name, contact.uri, contact=contact, conference_sibling=session)
         return True
 
     def _add_session(self, session):
@@ -1546,10 +1542,11 @@ class IncomingSession(QObject):
     accepted = pyqtSignal()
     rejected = pyqtSignal(str)
 
-    def __init__(self, dialog, session, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, desktopsharing_stream=None):
+    def __init__(self, dialog, session, contact=None, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, desktopsharing_stream=None):
         super(IncomingSession, self).__init__()
         self.dialog = dialog
         self.session = session
+        self.contact = contact
         self.proposal = proposal
         self.audio_stream = audio_stream
         self.video_stream = video_stream
@@ -1563,14 +1560,11 @@ class IncomingSession(QObject):
         else:
             self.dialog.setWindowTitle(u'Incoming session request')
             self.dialog.setWindowIconText(u'Incoming session request')
-        from blink import Blink
         address = u'%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
-        for contact in Blink().main_window.contact_model.iter_contacts():
-            if session.remote_identity.uri.matches(contact.uri) or any(session.remote_identity.uri.matches(alias) for alias in contact.sip_aliases):
-                self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
-                self.dialog.user_icon.setPixmap(contact.icon)
-                break
+        if self.contact:
+            self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
+            self.dialog.user_icon.setPixmap(contact.icon)
         else:
             self.dialog.username_label.setText(session.remote_identity.display_name or address)
         if self.audio_stream:
@@ -1680,6 +1674,8 @@ class SessionManager(object):
 
     implements(IObserver)
 
+    number_strip_re = re.compile(r'\(\s?0\s?\)|[-() ]')
+
     def __init__(self):
         self.main_window = None
         self.session_model = None
@@ -1699,7 +1695,7 @@ class SessionManager(object):
         notification_center.add_observer(self, name='SIPSessionGotRejectProposal')
         notification_center.add_observer(self, name='SIPSessionDidRenegotiateStreams')
 
-    def start_call(self, name, address, account=None, conference_sibling=None, audio=True, video=False):
+    def start_call(self, name, address, contact=None, account=None, conference_sibling=None, audio=True, video=False):
         account_manager = AccountManager()
         account = account or account_manager.default_account
         if account is None or not account.enabled:
@@ -1710,9 +1706,15 @@ class SessionManager(object):
             print 'Invalid URI: %s' % e # Replace with pop-up
         else:
             session = Session(account)
+            if contact is None:
+                for contact in self.main_window.contact_model.iter_contacts():
+                    if remote_uri.matches(self.normalize_number(account, contact.uri)) or any(remote_uri.matches(self.normalize_number(account, alias)) for alias in contact.sip_aliases):
+                        break
+                else:
+                    contact = None
             audio_stream = self.create_stream(account, 'audio') if audio else None
             video_stream = self.create_stream(account, 'vidoe') if video else None
-            session_item = SessionItem(name, remote_uri, session, audio_stream=audio_stream, video_stream=video_stream)
+            session_item = SessionItem(name, remote_uri, session, contact, audio_stream=audio_stream, video_stream=video_stream)
             session_item.activated.connect(partial(self._SH_SessionActivated, session_item))
             session_item.deactivated.connect(partial(self._SH_SessionDeactivated, session_item))
             session_item.ended.connect(partial(self._SH_SessionEnded, session_item))
@@ -1767,11 +1769,9 @@ class SessionManager(object):
         else:
             raise ValueError('unknown stream type: %s' % type)
 
-    @staticmethod
-    def create_uri(account, address):
-        address = re.sub(r'\(\s?0\s?\)|[-() ]', '', address)
-        if isinstance(account, Account) and account.pstn.idd_prefix is not None:
-            address = re.sub(r'^\+', account.pstn.idd_prefix, address)
+    @classmethod
+    def create_uri(cls, account, address):
+        address = cls.normalize_number(account, address)
         if not address.startswith('sip:') and not address.startswith('sips:'):
             address = 'sip:' + address
         if '@' not in address:
@@ -1780,6 +1780,13 @@ class SessionManager(object):
             else:
                 raise ValueError('SIP address without domain')
         return SIPURI.parse(str(address))
+
+    @classmethod
+    def normalize_number(cls, account, address):
+        address = cls.number_strip_re.sub('', address)
+        if isinstance(account, Account) and account.pstn.idd_prefix is not None:
+            address = re.sub(r'^\+', account.pstn.idd_prefix, address)
+        return address
 
     def _remove_session(self, session):
         session_list = self.session_model.session_list
@@ -1804,19 +1811,19 @@ class SessionManager(object):
         self.update_ringtone()
         session = incoming_session.session
         if incoming_session.audio_accepted and incoming_session.video_accepted:
-            session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, audio_stream=incoming_session.audio_stream, video_stream=incoming_session.video_stream)
+            session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, incoming_session.contact, audio_stream=incoming_session.audio_stream, video_stream=incoming_session.video_stream)
         elif incoming_session.audio_accepted:
             try:
                 session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.audio_stream is None).next()
                 session_item.audio_stream = incoming_session.audio_stream
             except StopIteration:
-                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, audio_stream=incoming_session.audio_stream)
+                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, incoming_session.contact, audio_stream=incoming_session.audio_stream)
         elif incoming_session.video_accepted:
             try:
                 session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.video_stream is None).next()
                 session_item.video_stream = incoming_session.video_stream
             except StopIteration:
-                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, video_stream=incoming_session.video_stream)
+                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, incoming_session.contact, video_stream=incoming_session.video_stream)
         else: # Handle other streams -Luci
             if incoming_session.proposal:
                 session.reject_proposal(488)
@@ -1907,6 +1914,12 @@ class SessionManager(object):
             session.reject(488)
             return
         session.send_ring_indication()
+        uri = session.remote_identity.uri
+        for contact in self.main_window.contact_model.iter_contacts():
+            if uri.matches(self.normalize_number(session.account, contact.uri)) or any(uri.matches(self.normalize_number(session.account, alias)) for alias in contact.sip_aliases):
+                break
+        else:
+            contact = None
         if filetransfer_streams:
             filetransfer_stream = filetransfer_streams[0]
         else:
@@ -1915,7 +1928,7 @@ class SessionManager(object):
             chat_stream = chat_streams[0] if chat_streams else None
             desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
             dialog = IncomingDialog()
-            incoming_session = IncomingSession(dialog, session, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
+            incoming_session = IncomingSession(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
@@ -1941,6 +1954,12 @@ class SessionManager(object):
             session.reject_proposal(488)
             return
         session.send_ring_indication()
+        uri = session.remote_identity.uri
+        for contact in self.main_window.contact_model.iter_contacts():
+            if uri.matches(self.normalize_number(session.account, contact.uri)) or any(uri.matches(self.normalize_number(session.account, alias)) for alias in contact.sip_aliases):
+                break
+        else:
+            contact = None
         if filetransfer_streams:
             filetransfer_stream = filetransfer_streams[0]
         else:
@@ -1949,7 +1968,7 @@ class SessionManager(object):
             chat_stream = chat_streams[0] if chat_streams else None
             desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
             dialog = IncomingDialog()
-            incoming_session = IncomingSession(dialog, session, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
+            incoming_session = IncomingSession(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
