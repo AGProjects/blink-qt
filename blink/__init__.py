@@ -3,6 +3,8 @@
 
 __all__ = ['Blink']
 
+__version__ = '0.1.0'
+
 import sys
 
 from PyQt4.QtGui import QApplication
