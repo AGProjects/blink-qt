@@ -86,6 +86,7 @@ class MainWindow(base_class, ui_class):
         self.identity.currentIndexChanged[int].connect(self._SH_IdentityCurrentIndexChanged)
 
         self.display_name.editingFinished.connect(self._SH_DisplayNameEditingFinished)
+        self.status.activated[int].connect(self._SH_StatusChanged)
 
         self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
 
@@ -100,6 +101,8 @@ class MainWindow(base_class, ui_class):
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
         self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
+
+        self.idle_status_index = 0
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
@@ -286,11 +289,18 @@ class MainWindow(base_class, ui_class):
         else:
             self.conference_button.setEnabled(len([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal]) > 1)
             self.conference_button.setChecked(False)
+        if self.session_model.active_sessions:
+            self.status.setCurrentIndex(self.status.findText(u'On the phone'))
+        else:
+            self.status.setCurrentIndex(self.idle_status_index)
 
     def _SH_SilentButtonClicked(self, silent):
         settings = SIPSimpleSettings()
         settings.audio.silent = silent
         settings.save()
+
+    def _SH_StatusChanged(self, index):
+        self.idle_status_index = index
 
     def _SH_SwitchViewButtonChangedView(self, view):
         self.main_view.setCurrentWidget(self.contacts_panel if view is SwitchViewButton.ContactView else self.sessions_panel)
