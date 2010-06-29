@@ -202,6 +202,15 @@
                <normaloff>icons/red-dot.svg</normaloff>icons/red-dot.svg</iconset>
              </property>
             </item>
+            <item>
+             <property name="text">
+              <string>Offline</string>
+             </property>
+             <property name="icon">
+              <iconset>
+               <normaloff>icons/grey-dot.svg</normaloff>icons/grey-dot.svg</iconset>
+             </property>
+            </item>
            </widget>
           </item>
          </layout>
