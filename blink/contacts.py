@@ -838,6 +838,7 @@ class ContactModel(QAbstractListModel):
         if group not in self.items:
             return
         items = self._pop_group(group)
+        group.widget = Null
         if type(group) is ContactGroup:
             self.deleted_items.append(items)
         self.itemsRemoved.emit(items)
