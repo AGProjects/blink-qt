@@ -228,9 +228,11 @@ class MainWindow(base_class, ui_class):
             account = self.identity.itemData(index).toPyObject().account
             self.display_name.setText(account.display_name)
             self.display_name.setEnabled(True)
+            self.activity_note.setEnabled(True)
         else:
             self.display_name.clear()
             self.display_name.setEnabled(False)
+            self.activity_note.setEnabled(False)
 
     def _SH_MakeConference(self):
         self.session_model.conferenceSessions([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal])
@@ -319,6 +321,9 @@ class MainWindow(base_class, ui_class):
         self.silent_button.setChecked(settings.audio.silent)
         if all(not account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
+            self.activity_note.setEnabled(False)
+            self.status.setEnabled(False)
+            self.status.setCurrentIndex(self.status.findText(u'Offline'))
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if 'audio.silent' in notification.data.modified:
