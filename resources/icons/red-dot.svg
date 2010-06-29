@@ -13,8 +13,8 @@
    height="16px"
    id="svg2816"
    version="1.1"
-   inkscape:version="0.47pre2 r22153"
-   sodipodi:docname="New document 2">
+   inkscape:version="0.47 r22583"
+   sodipodi:docname="red-dot.svg">
   <defs
      id="defs2818">
     <linearGradient
@@ -44,7 +44,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="11.313708"
-     inkscape:cx="7.7834049"
+     inkscape:cx="-6.4029255"
      inkscape:cy="8"
      inkscape:current-layer="layer1"
      showgrid="true"
@@ -63,7 +63,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -73,13 +73,13 @@
      inkscape:groupmode="layer">
     <path
        sodipodi:type="arc"
-       style="fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:#a00000;stroke-width:0.76077157;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       style="fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:#800000;stroke-width:0.76077157;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="path2826"
        sodipodi:cx="9.4130964"
        sodipodi:cy="10.059078"
        sodipodi:rx="5.7179384"
        sodipodi:ry="5.7179384"
        d="m 15.131035,10.059078 a 5.7179384,5.7179384 0 1 1 -11.435877,0 5.7179384,5.7179384 0 1 1 11.435877,0 z"
-       transform="matrix(1.3118261,0,0,1.3118261,-4.3483457,-5.1957615)" />
+       transform="matrix(1.3118261,0,0,1.3118261,-4.3483456,-5.1957613)" />
   </g>
 </svg>

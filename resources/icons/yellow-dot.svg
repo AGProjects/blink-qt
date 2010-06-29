@@ -13,8 +13,8 @@
    height="16px"
    id="svg2816"
    version="1.1"
-   inkscape:version="0.47pre2 r22153"
-   sodipodi:docname="green-dot.svg">
+   inkscape:version="0.47 r22583"
+   sodipodi:docname="yellow-dot.svg">
   <defs
      id="defs2818">
     <linearGradient
@@ -44,7 +44,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="8"
-     inkscape:cx="7.7834049"
+     inkscape:cx="-12.154095"
      inkscape:cy="8"
      inkscape:current-layer="layer1"
      showgrid="true"
@@ -52,8 +52,8 @@
      inkscape:document-units="px"
      inkscape:window-width="1169"
      inkscape:window-height="861"
-     inkscape:window-x="245"
-     inkscape:window-y="97"
+     inkscape:window-x="255"
+     inkscape:window-y="90"
      inkscape:window-maximized="0" />
   <metadata
      id="metadata2821">
@@ -63,7 +63,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -73,7 +73,7 @@
      inkscape:groupmode="layer">
     <path
        sodipodi:type="arc"
-       style="fill:#fff000;fill-opacity:1;fill-rule:nonzero;stroke:#ffe000;stroke-width:0.76077156999999984;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       style="fill:#fff000;fill-opacity:1;fill-rule:nonzero;stroke:#d0a000;stroke-width:0.76077156999999984;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
        id="path2826"
        sodipodi:cx="9.4130964"
        sodipodi:cy="10.059078"
