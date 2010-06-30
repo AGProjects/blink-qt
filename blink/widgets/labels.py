@@ -17,7 +17,7 @@ class IconSelector(QLabel):
     default_icon = QtDynamicProperty('default_icon',  unicode)
 
     def __init__(self, parent=None):
-        super(QLabel, self).__init__(parent)
+        super(IconSelector, self).__init__(parent)
         self.setMinimumSize(36, 36)
         self.filename = None
         self.default_icon = None
