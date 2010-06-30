@@ -1674,6 +1674,7 @@ class SessionManager(object):
     implements(IObserver)
 
     number_strip_re = re.compile(r'\(\s?0\s?\)|[-() ]')
+    number_re = re.compile(r'^\+?[-\d\s()]+$')
 
     def __init__(self):
         self.main_window = None
@@ -1782,9 +1783,10 @@ class SessionManager(object):
 
     @classmethod
     def normalize_number(cls, account, address):
-        address = cls.number_strip_re.sub('', address)
-        if isinstance(account, Account) and account.pstn.idd_prefix is not None:
-            address = re.sub(r'^\+', account.pstn.idd_prefix, address)
+        if cls.number_re.match(address):
+            address = cls.number_strip_re.sub('', address)
+            if isinstance(account, Account) and account.pstn.idd_prefix is not None:
+                address = re.sub(r'^\+', account.pstn.idd_prefix, address)
         return address
 
     def _remove_session(self, session):
