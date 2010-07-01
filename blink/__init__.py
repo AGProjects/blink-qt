@@ -20,6 +20,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.settings import SIPSimpleSettingsExtension
+from blink.log import LogManager
 from blink.mainwindow import MainWindow
 from blink.resources import ApplicationData
 from blink.sessions import SessionManager
@@ -63,9 +64,17 @@ class Blink(QApplication):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _NH_SIPApplicationWillStart(self, notification):
+        log_manager = LogManager()
+        log_manager.start()
+
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):
         self.main_window.show()
+
+    def _NH_SIPApplicationDidEnd(self, notification):
+        log_manager = LogManager()
+        log_manager.stop()
 
     def _initialize_sipsimple(self):
         notification_center = NotificationCenter()
