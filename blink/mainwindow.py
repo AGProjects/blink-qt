@@ -7,7 +7,7 @@ __all__ = ['MainWindow']
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
+from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
@@ -101,6 +101,10 @@ class MainWindow(base_class, ui_class):
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
         self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
+
+        self.search_box.shortcut = QShortcut(self.search_box)
+        self.search_box.shortcut.setKey('CTRL+F')
+        self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
         self.idle_status_index = 0
 
