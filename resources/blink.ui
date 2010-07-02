@@ -854,36 +854,337 @@ buttons below.</string>
      <height>22</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuBlink">
+   <widget class="QMenu" name="blink_menu">
     <property name="title">
-     <string>Blink</string>
+     <string>&amp;Blink</string>
     </property>
-    <addaction name="actionAbout"/>
-    <addaction name="actionQuit"/>
+    <widget class="QMenu" name="accounts_menu">
+     <property name="title">
+      <string>&amp;Accounts</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/default-avatar.png</normaloff>icons/default-avatar.png</iconset>
+     </property>
+     <addaction name="add_account_action"/>
+     <addaction name="manage_accounts_action"/>
+     <addaction name="separator"/>
+    </widget>
+    <widget class="QMenu" name="quick_settings_menu">
+     <property name="title">
+      <string>Quick &amp;settings</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/quick-settings.png</normaloff>icons/quick-settings.png</iconset>
+     </property>
+     <addaction name="auto_accept_chat_action"/>
+     <addaction name="auto_accept_files_action"/>
+    </widget>
+    <addaction name="about_action"/>
+    <addaction name="check_for_updates_action"/>
+    <addaction name="separator"/>
+    <addaction name="preferences_action"/>
+    <addaction name="quick_settings_menu"/>
+    <addaction name="accounts_menu"/>
+    <addaction name="separator"/>
+    <addaction name="help_action"/>
+    <addaction name="release_notes_action"/>
+    <addaction name="separator"/>
+    <addaction name="quit_action"/>
    </widget>
-   <addaction name="menuBlink"/>
+   <widget class="QMenu" name="history_menu">
+    <property name="title">
+     <string>&amp;History</string>
+    </property>
+    <widget class="QMenu" name="missed_calls_menu">
+     <property name="title">
+      <string>&amp;Missed calls</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/missed-calls.png</normaloff>icons/missed-calls.png</iconset>
+     </property>
+    </widget>
+    <widget class="QMenu" name="placed_calls_menu">
+     <property name="title">
+      <string>&amp;Placed calls</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/placed-calls.png</normaloff>icons/placed-calls.png</iconset>
+     </property>
+    </widget>
+    <widget class="QMenu" name="received_calls_menu">
+     <property name="title">
+      <string>&amp;Received calls</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/received-calls.png</normaloff>icons/received-calls.png</iconset>
+     </property>
+    </widget>
+    <addaction name="redial_action"/>
+    <addaction name="history_action"/>
+    <addaction name="separator"/>
+    <addaction name="missed_calls_menu"/>
+    <addaction name="placed_calls_menu"/>
+    <addaction name="received_calls_menu"/>
+   </widget>
+   <widget class="QMenu" name="audio_menu">
+    <property name="title">
+     <string>&amp;Audio</string>
+    </property>
+    <widget class="QMenu" name="output_device_menu">
+     <property name="title">
+      <string>&amp;Output device</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/speaker.png</normaloff>icons/speaker.png</iconset>
+     </property>
+    </widget>
+    <widget class="QMenu" name="input_device_menu">
+     <property name="title">
+      <string>&amp;Input device</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/mic.png</normaloff>icons/mic.png</iconset>
+     </property>
+    </widget>
+    <widget class="QMenu" name="alert_device_menu">
+     <property name="title">
+      <string>&amp;Alert device</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/bell.png</normaloff>icons/bell.png</iconset>
+     </property>
+    </widget>
+    <addaction name="mute_action"/>
+    <addaction name="silent_action"/>
+    <addaction name="separator"/>
+    <addaction name="output_device_menu"/>
+    <addaction name="input_device_menu"/>
+    <addaction name="alert_device_menu"/>
+   </widget>
+   <widget class="QMenu" name="tools_menu">
+    <property name="title">
+     <string>&amp;Tools</string>
+    </property>
+    <addaction name="answering_machine_action"/>
+    <addaction name="separator"/>
+    <addaction name="sip_server_settings_action"/>
+    <addaction name="search_for_people_action"/>
+    <addaction name="separator"/>
+    <addaction name="file_transfers_action"/>
+    <addaction name="logs_action"/>
+   </widget>
+   <addaction name="blink_menu"/>
+   <addaction name="audio_menu"/>
+   <addaction name="history_menu"/>
+   <addaction name="tools_menu"/>
   </widget>
-  <action name="actionQuit">
+  <action name="quit_action">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/application-exit.png</normaloff>icons/application-exit.png</iconset>
+   </property>
    <property name="text">
-    <string>Quit</string>
+    <string>&amp;Quit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::QuitRole</enum>
    </property>
   </action>
-  <action name="actionAbout">
+  <action name="about_action">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/blink48.png</normaloff>icons/blink48.png</iconset>
+   </property>
    <property name="text">
-    <string>About</string>
+    <string>About &amp;Blink</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::AboutRole</enum>
+   </property>
+  </action>
+  <action name="preferences_action">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/configure.png</normaloff>icons/configure.png</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Preferences...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+P</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::PreferencesRole</enum>
+   </property>
+  </action>
+  <action name="check_for_updates_action">
+   <property name="text">
+    <string>Check for &amp;updates...</string>
+   </property>
+  </action>
+  <action name="logs_action">
+   <property name="text">
+    <string>&amp;Logs</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+L</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="file_transfers_action">
+   <property name="text">
+    <string>&amp;File transfers</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+T</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="answering_machine_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Enable &amp;Answering Machine</string>
+   </property>
+  </action>
+  <action name="sip_server_settings_action">
+   <property name="text">
+    <string>&amp;Settings on SIP server...</string>
+   </property>
+  </action>
+  <action name="redial_action">
+   <property name="text">
+    <string>&amp;Redial</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="mute_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Mute</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+M</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="silent_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Silent</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="search_for_people_action">
+   <property name="text">
+    <string>Search for &amp;people...</string>
+   </property>
+  </action>
+  <action name="auto_accept_chat_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Auto-accept &amp;chat from my contacts</string>
+   </property>
+  </action>
+  <action name="auto_accept_files_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Auto-accept &amp;files from my contacts</string>
+   </property>
+  </action>
+  <action name="add_account_action">
+   <property name="text">
+    <string>&amp;Add account...</string>
+   </property>
+  </action>
+  <action name="help_action">
+   <property name="text">
+    <string>Blink &amp;Help</string>
+   </property>
+   <property name="shortcut">
+    <string>F1</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="release_notes_action">
+   <property name="text">
+    <string>&amp;Release notes</string>
+   </property>
+  </action>
+  <action name="history_action">
+   <property name="text">
+    <string>&amp;History</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+H</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="manage_accounts_action">
+   <property name="text">
+    <string>&amp;Manage accounts...</string>
    </property>
   </action>
  </widget>
  <customwidgets>
   <customwidget>
-   <class>SearchBox</class>
-   <extends>QLineEdit</extends>
-   <header>blink.widgets.searchbox</header>
-  </customwidget>
-  <customwidget>
    <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
+  </customwidget>
+  <customwidget>
+   <class>SearchBox</class>
+   <extends>QLineEdit</extends>
+   <header>blink.widgets.searchbox</header>
   </customwidget>
   <customwidget>
    <class>ContactListView</class>
@@ -945,7 +1246,7 @@ buttons below.</string>
  <resources/>
  <connections>
   <connection>
-   <sender>actionQuit</sender>
+   <sender>quit_action</sender>
    <signal>activated()</signal>
    <receiver>main_window</receiver>
    <slot>close()</slot>
