@@ -137,6 +137,10 @@ class MainWindow(base_class, ui_class):
             font.setPixelSize(pixel_size)
         self.status.setFont(font)
 
+    def closeEvent(self, event):
+        super(MainWindow, self).closeEvent(event)
+        self.contact_editor.close()
+
     def set_user_icon(self, image_file_name):
         pixmap = QPixmap(32, 32)
         pixmap.fill(QColor(Qt.transparent))
