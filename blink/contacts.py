@@ -1612,7 +1612,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setCurrentIndex(0)
         self.accept_button.setText(u'Add')
         self.accept_button.setEnabled(sip_address != u'')
-        self.open()
+        self.show()
 
     def open_for_edit(self, contact):
         self.edited_contact = contact
@@ -1629,7 +1629,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setCurrentIndex(self.preferred_media.findText(contact.preferred_media))
         self.accept_button.setText(u'Ok')
         self.accept_button.setEnabled(True)
-        self.open()
+        self.show()
 
     def reset_icon(self):
         self.icon_selector.filename = None
