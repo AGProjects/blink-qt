@@ -106,6 +106,8 @@ class MainWindow(base_class, ui_class):
         self.search_box.shortcut.setKey('CTRL+F')
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
+        self.quit_action.triggered.connect(self.close)
+
         self.idle_status_index = 0
 
         notification_center = NotificationCenter()

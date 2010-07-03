@@ -1244,22 +1244,5 @@ buttons below.</string>
   <tabstop>mute_button</tabstop>
  </tabstops>
  <resources/>
- <connections>
-  <connection>
-   <sender>quit_action</sender>
-   <signal>activated()</signal>
-   <receiver>main_window</receiver>
-   <slot>close()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>-1</x>
-     <y>-1</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>124</x>
-     <y>249</y>
-    </hint>
-   </hints>
-  </connection>
- </connections>
+ <connections/>
 </ui>
