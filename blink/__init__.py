@@ -3,7 +3,10 @@
 
 __all__ = ['Blink']
 
+
 __version__ = '0.1.0'
+__date__    = 'July 5, 2010'
+
 
 import sys
 
