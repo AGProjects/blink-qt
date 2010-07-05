@@ -17,6 +17,7 @@ from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
 
+from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
 from blink.sessions import SessionManager, SessionModel
@@ -57,6 +58,7 @@ class MainWindow(base_class, ui_class):
 
         self.contact_model.load()
 
+        self.about_panel = AboutPanel(self)
         self.contact_editor = ContactEditorDialog(self.contact_model, self)
 
         self.session_model = SessionModel(self)
@@ -106,6 +108,7 @@ class MainWindow(base_class, ui_class):
         self.search_box.shortcut.setKey('CTRL+F')
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
+        self.about_action.triggered.connect(self.about_panel.show)
         self.quit_action.triggered.connect(self.close)
 
         self.idle_status_index = 0
@@ -139,6 +142,7 @@ class MainWindow(base_class, ui_class):
 
     def closeEvent(self, event):
         super(MainWindow, self).closeEvent(event)
+        self.about_panel.close()
         self.contact_editor.close()
 
     def set_user_icon(self, image_file_name):
