@@ -27,7 +27,7 @@ credits_text = """
 <body>
 <table width="100%" cellspacing="2" cellpadding="0" border="0">
  <tr><td class="name" align="right">AG Projects</td><td align="left"><a href="http://ag-projects.com/">http://ag-projects.com/</a></td></tr>
- <tr><td class="name" align="right">NLNET Foundation</td><td align="left"><a href="http://nlnet.nl/">http://nlnet.nl/</a></td></tr>
+ <tr><td class="name" align="right">NLnet Foundation</td><td align="left"><a href="http://nlnet.nl/">http://nlnet.nl/</a></td></tr>
  <tr><td class="name" align="right">IETF Community</td><td align="left"><a href="http://ietf.org/">http://ietf.org/</a></td></tr>
  <tr><td class="name" align="right">SIP Simple Client</td><td align="left"><a href="http://sipsimpleclient.com/">http://sipsimpleclient.com/</a></td></tr>
 </table>
