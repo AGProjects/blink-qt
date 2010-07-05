@@ -6,8 +6,8 @@ from __future__ import with_statement
 __all__ = ['MainWindow']
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
+from PyQt4.QtCore import Qt, QVariant
+from PyQt4.QtGui  import QAction, QActionGroup, QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
@@ -113,6 +113,13 @@ class MainWindow(base_class, ui_class):
 
         self.idle_status_index = 0
 
+        self.output_devices_group = QActionGroup(self)
+        self.input_devices_group = QActionGroup(self)
+        self.alert_devices_group = QActionGroup(self)
+        self.output_devices_group.triggered.connect(self._SH_AudioOutputDeviceChanged)
+        self.input_devices_group.triggered.connect(self._SH_AudioInputDeviceChanged)
+        self.alert_devices_group.triggered.connect(self._SH_AudioAlertDeviceChanged)
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
 
@@ -167,6 +174,48 @@ class MainWindow(base_class, ui_class):
         self.im_session_button.setEnabled(enabled)
         self.ds_session_button.setEnabled(enabled)
 
+    def load_audio_devices(self):
+        settings = SIPSimpleSettings()
+
+        action = QAction(u'Dummy', self.output_devices_group)
+        action.setData(QVariant(None))
+        action = QAction(u'System default', self.output_devices_group)
+        action.setData(QVariant(u'system_default'))
+        for device in SIPApplication.engine.output_devices:
+            action = QAction(device, self.output_devices_group)
+            action.setData(QVariant(device))
+        for action in self.output_devices_group.actions():
+            action.setCheckable(True)
+            if settings.audio.output_device == action.data().toPyObject():
+                action.setChecked(True)
+        self.output_device_menu.addActions(self.output_devices_group.actions())
+
+        action = QAction(u'Dummy', self.input_devices_group)
+        action.setData(QVariant(None))
+        action = QAction(u'System default', self.input_devices_group)
+        action.setData(QVariant(u'system_default'))
+        for device in SIPApplication.engine.input_devices:
+            action = QAction(device, self.input_devices_group)
+            action.setData(QVariant(device))
+        for action in self.input_devices_group.actions():
+            action.setCheckable(True)
+            if settings.audio.input_device == action.data().toPyObject():
+                action.setChecked(True)
+        self.input_device_menu.addActions(self.input_devices_group.actions())
+
+        action = QAction(u'Dummy', self.alert_devices_group)
+        action.setData(QVariant(None))
+        action = QAction(u'System default', self.alert_devices_group)
+        action.setData(QVariant(u'system_default'))
+        for device in SIPApplication.engine.output_devices:
+            action = QAction(device, self.alert_devices_group)
+            action.setData(QVariant(device))
+        for action in self.alert_devices_group.actions():
+            action.setCheckable(True)
+            if settings.audio.alert_device == action.data().toPyObject():
+                action.setChecked(True)
+        self.alert_device_menu.addActions(self.alert_devices_group.actions())
+
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
         selected_items = ((index.row(), model.data(index)) for index in self.contact_list.selectionModel().selectedIndexes())
@@ -188,6 +237,24 @@ class MainWindow(base_class, ui_class):
         name = contact.name or None
         session_manager = SessionManager()
         session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+
+    def _SH_AudioAlertDeviceChanged(self, action):
+        from twisted.internet import reactor
+        settings = SIPSimpleSettings()
+        settings.audio.alert_device = action.data().toPyObject()
+        reactor.callInThread(settings.save)
+
+    def _SH_AudioInputDeviceChanged(self, action):
+        from twisted.internet import reactor
+        settings = SIPSimpleSettings()
+        settings.audio.input_device = action.data().toPyObject()
+        reactor.callInThread(settings.save)
+
+    def _SH_AudioOutputDeviceChanged(self, action):
+        from twisted.internet import reactor
+        settings = SIPSimpleSettings()
+        settings.audio.output_device = action.data().toPyObject()
+        reactor.callInThread(settings.save)
 
     def _SH_BreakConference(self):
         active_session = self.session_model.data(self.session_list.selectionModel().selectedIndexes()[0])
@@ -336,8 +403,10 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         account_manager = AccountManager()
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=notification.sender)
         notification_center.add_observer(self, sender=settings, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, sender=account_manager, name='SIPAccountManagerDidChangeDefaultAccount')
+        notification_center.add_observer(self, name='AudioDevicesDidChange')
         self.silent_button.setChecked(settings.audio.silent)
         if all(not account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
@@ -345,10 +414,34 @@ class MainWindow(base_class, ui_class):
             self.status.setEnabled(False)
             self.status.setCurrentIndex(self.status.findText(u'Offline'))
 
+    def _NH_SIPApplicationDidStart(self, notification):
+        self.load_audio_devices()
+
+    def _NH_AudioDevicesDidChange(self, notification):
+        for action in self.output_devices_group.actions():
+            self.output_devices_group.removeAction(action)
+            self.output_device_menu.removeAction(action)
+        for action in self.input_devices_group.actions():
+            self.input_devices_group.removeAction(action)
+            self.input_device_menu.removeAction(action)
+        for action in self.alert_devices_group.actions():
+            self.alert_devices_group.removeAction(action)
+            self.alert_device_menu.removeAction(action)
+        self.load_audio_devices()
+
     def _NH_CFGSettingsObjectDidChange(self, notification):
+        settings = notification.sender
         if 'audio.silent' in notification.data.modified:
-            settings = SIPSimpleSettings()
             self.silent_button.setChecked(settings.audio.silent)
+        if 'audio.output_device' in notification.data.modified:
+            action = (action for action in self.output_devices_group.actions() if action.data().toPyObject() == settings.audio.output_device).next()
+            action.setChecked(True)
+        if 'audio.input_device' in notification.data.modified:
+            action = (action for action in self.input_devices_group.actions() if action.data().toPyObject() == settings.audio.input_device).next()
+            action.setChecked(True)
+        if 'audio.alert_device' in notification.data.modified:
+            action = (action for action in self.alert_devices_group.actions() if action.data().toPyObject() == settings.audio.alert_device).next()
+            action.setChecked(True)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         if notification.data.account is None:
