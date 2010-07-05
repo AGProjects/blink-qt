@@ -24,6 +24,7 @@ from blink.log import LogManager
 from blink.mainwindow import MainWindow
 from blink.resources import ApplicationData
 from blink.sessions import SessionManager
+from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
 
 
@@ -37,6 +38,10 @@ class Blink(QApplication):
         self.application = SIPApplication()
         self.main_window = MainWindow()
 
+        self.update_manager = UpdateManager()
+        self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
+        self.main_window.check_for_updates_action.setEnabled(self.update_manager != Null)
+
         Account.register_extension(AccountExtension)
         BonjourAccount.register_extension(BonjourAccountExtension)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
@@ -47,6 +52,7 @@ class Blink(QApplication):
         from blink.util import call_in_gui_thread as call_later
         call_later(self._initialize_sipsimple)
         self.exec_()
+        self.update_manager.shutdown()
         self.application.stop()
 
     def customEvent(self, event):
@@ -71,6 +77,7 @@ class Blink(QApplication):
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):
         self.main_window.show()
+        self.update_manager.initialize()
 
     def _NH_SIPApplicationDidEnd(self, notification):
         log_manager = LogManager()
