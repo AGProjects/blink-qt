@@ -1079,7 +1079,7 @@ buttons below.</string>
   </action>
   <action name="redial_action">
    <property name="text">
-    <string>&amp;Redial</string>
+    <string>Re&amp;dial</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
