@@ -180,6 +180,8 @@ class AccountSelector(QComboBox):
             self.setPalette(palette)
 
     def selection_changed(self, index):
+        if index == -1:
+            return
         account_info = self.itemData(index).toPyObject()
         palette = self.palette()
         if account_info.registration_state == 'succeeded':
