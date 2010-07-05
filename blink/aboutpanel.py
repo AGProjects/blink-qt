@@ -9,6 +9,7 @@ from PyQt4 import uic
 from PyQt4.QtCore import QSize
 from PyQt4.QtGui  import QFontMetrics
 
+from blink import __date__, __version__
 from blink.resources import Resources
 from blink.util import QSingleton
 
@@ -45,6 +46,8 @@ class AboutPanel(base_class, ui_class):
 
         with Resources.directory:
             self.setupUi(self)
+
+        self.version.setText(u'Version %s\n%s' % (__version__, __date__))
 
         credits_width = QFontMetrics(self.credits_text.currentFont()).width("NLNET Foundation" + "http://sipsimpleclient.com") + 40
         self.credits_text.setMinimumWidth(credits_width)
