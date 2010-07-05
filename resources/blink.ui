@@ -1160,7 +1160,7 @@ buttons below.</string>
   </action>
   <action name="history_action">
    <property name="text">
-    <string>&amp;History</string>
+    <string>&amp;Sessions</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+H</string>
