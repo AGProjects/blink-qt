@@ -40,7 +40,7 @@ class Blink(QApplication):
 
         self.update_manager = UpdateManager()
         self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
-        self.main_window.check_for_updates_action.setEnabled(self.update_manager != Null)
+        self.main_window.check_for_updates_action.setVisible(self.update_manager != Null)
 
         Account.register_extension(AccountExtension)
         BonjourAccount.register_extension(BonjourAccountExtension)
