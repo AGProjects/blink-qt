@@ -64,6 +64,8 @@ class LogManager(object):
     implements(IObserver)
 
     def __init__(self):
+        self.name = os.path.basename(sys.argv[0]).rsplit('.py', 1)[0]
+        self.pid = os.getpid()
         self.msrp_level = log.level.INFO
         self.siptrace_file = Null
         self.msrptrace_file = Null
@@ -115,7 +117,7 @@ class LogManager(object):
         if notification.name not in ('SIPEngineLog', 'SIPEngineSIPTrace') and settings.logs.trace_notifications:
             message = 'Notification name=%s sender=%s data=%s' % (notification.name, notification.sender, pformat(notification.data))
             try:
-                self.notifications_file.write('%s: %s\n' % (datetime.now(), message))
+                self.notifications_file.write('%s [%s %d]: %s\n' % (datetime.now(), self.name, self.pid, message))
                 self.notifications_file.flush()
             except Exception:
                 pass
@@ -147,7 +149,7 @@ class LogManager(object):
         buf.append('--')
         message = '\n'.join(buf)
         try:
-            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, os.path.basename(sys.argv[0]).rstrip('.py'), os.getpid(), message))
+            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
             self.siptrace_file.flush()
         except Exception:
             pass
@@ -158,7 +160,7 @@ class LogManager(object):
             return
         message = "(%(level)d) %(sender)14s: %(message)s" % notification.data.__dict__
         try:
-            self.pjsiptrace_file.write('%s [%s %d] %s\n' % (notification.data.timestamp, os.path.basename(sys.argv[0]).rstrip('.py'), os.getpid(), message))
+            self.pjsiptrace_file.write('%s [%s %d] %s\n' % (notification.data.timestamp, self.name, self.pid, message))
             self.pjsiptrace_file.flush()
         except Exception:
             pass
@@ -184,7 +186,7 @@ class LogManager(object):
                            dns.resolver.Timeout: 'no DNS response received, the query has timed out'}
             message += ' failed: %s' % message_map.get(notification.data.error.__class__, '')
         try:
-            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, os.path.basename(sys.argv[0]).rstrip('.py'), os.getpid(), message))
+            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
             self.siptrace_file.flush()
         except Exception:
             pass
@@ -200,7 +202,7 @@ class LogManager(object):
         remote_address = '%s:%d' % (remote_address.host, remote_address.port)
         message = '%s %s %s\n' % (local_address, arrow, remote_address) + notification.data.data
         try:
-            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, os.path.basename(sys.argv[0]).rstrip('.py'), os.getpid(), message))
+            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
             self.msrptrace_file.flush()
         except Exception:
             pass
@@ -213,7 +215,7 @@ class LogManager(object):
             return
         message = '%s%s' % (notification.data.level.prefix, notification.data.message)
         try:
-            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, os.path.basename(sys.argv[0]).rstrip('.py'), os.getpid(), message))
+            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
             self.msrptrace_file.flush()
         except Exception:
             pass
