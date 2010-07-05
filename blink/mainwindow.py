@@ -5,6 +5,8 @@ from __future__ import with_statement
 
 __all__ = ['MainWindow']
 
+from functools import partial
+
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QVariant
 from PyQt4.QtGui  import QAction, QActionGroup, QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
@@ -13,7 +15,7 @@ from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
 from zope.interface import implements
 
-from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
 
@@ -216,6 +218,11 @@ class MainWindow(base_class, ui_class):
                 action.setChecked(True)
         self.alert_device_menu.addActions(self.alert_devices_group.actions())
 
+    def _SH_AccountActionTriggered(self, action, enabled):
+        account = action.data().toPyObject()
+        account.enabled = enabled
+        account.save()
+
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
         selected_items = ((index.row(), model.data(index)) for index in self.contact_list.selectionModel().selectedIndexes())
@@ -404,8 +411,8 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=notification.sender)
-        notification_center.add_observer(self, sender=settings, name='CFGSettingsObjectDidChange')
-        notification_center.add_observer(self, sender=account_manager, name='SIPAccountManagerDidChangeDefaultAccount')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification_center.add_observer(self, sender=account_manager)
         notification_center.add_observer(self, name='AudioDevicesDidChange')
         self.silent_button.setChecked(settings.audio.silent)
         if all(not account.enabled for account in account_manager.iter_accounts()):
@@ -413,6 +420,13 @@ class MainWindow(base_class, ui_class):
             self.activity_note.setEnabled(False)
             self.status.setEnabled(False)
             self.status.setCurrentIndex(self.status.findText(u'Offline'))
+        for account in account_manager.iter_accounts():
+            action = QAction(account.id if account is not BonjourAccount() else u'Bonjour', None)
+            action.setCheckable(True)
+            action.setData(QVariant(account))
+            action.setChecked(account.enabled)
+            action.triggered.connect(partial(self._SH_AccountActionTriggered, action))
+            self.accounts_menu.addAction(action)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
@@ -430,18 +444,37 @@ class MainWindow(base_class, ui_class):
         self.load_audio_devices()
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
-        settings = notification.sender
-        if 'audio.silent' in notification.data.modified:
-            self.silent_button.setChecked(settings.audio.silent)
-        if 'audio.output_device' in notification.data.modified:
-            action = (action for action in self.output_devices_group.actions() if action.data().toPyObject() == settings.audio.output_device).next()
-            action.setChecked(True)
-        if 'audio.input_device' in notification.data.modified:
-            action = (action for action in self.input_devices_group.actions() if action.data().toPyObject() == settings.audio.input_device).next()
-            action.setChecked(True)
-        if 'audio.alert_device' in notification.data.modified:
-            action = (action for action in self.alert_devices_group.actions() if action.data().toPyObject() == settings.audio.alert_device).next()
-            action.setChecked(True)
+        settings = SIPSimpleSettings()
+        if notification.sender is settings:
+            if 'audio.silent' in notification.data.modified:
+                self.silent_button.setChecked(settings.audio.silent)
+            if 'audio.output_device' in notification.data.modified:
+                action = (action for action in self.output_devices_group.actions() if action.data().toPyObject() == settings.audio.output_device).next()
+                action.setChecked(True)
+            if 'audio.input_device' in notification.data.modified:
+                action = (action for action in self.input_devices_group.actions() if action.data().toPyObject() == settings.audio.input_device).next()
+                action.setChecked(True)
+            if 'audio.alert_device' in notification.data.modified:
+                action = (action for action in self.alert_devices_group.actions() if action.data().toPyObject() == settings.audio.alert_device).next()
+                action.setChecked(True)
+        elif isinstance(notification.sender, Account) or notification.sender is BonjourAccount():
+            if 'enabled' in notification.data.modified:
+                account = notification.sender
+                action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
+                action.setChecked(account.enabled)
+
+    def _NH_SIPAccountManagerDidAddAccount(self, notification):
+        account = notification.data.account
+        action = QAction(account.id, None)
+        action.setCheckable(True)
+        action.setData(QVariant(account))
+        action.triggered.connect(partial(self._SH_AccountActionTriggered, action))
+        self.accounts_menu.addAction(action)
+
+    def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
+        account = notification.data.account
+        action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
+        self.account_menu.removeAction(action)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         if notification.data.account is None:
