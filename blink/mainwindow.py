@@ -111,6 +111,8 @@ class MainWindow(base_class, ui_class):
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
         self.about_action.triggered.connect(self.about_panel.show)
+        self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
+        self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
         self.quit_action.triggered.connect(self.close)
 
         self.idle_status_index = 0
@@ -331,6 +333,8 @@ class MainWindow(base_class, ui_class):
         self.session_model.conferenceSessions([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal])
 
     def _SH_MuteButtonClicked(self, muted):
+        self.mute_action.setChecked(muted)
+        self.mute_button.setChecked(muted)
         SIPApplication.voice_audio_bridge.mixer.muted = muted
 
     def _SH_SearchBoxReturnPressed(self):
@@ -414,6 +418,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, sender=account_manager)
         notification_center.add_observer(self, name='AudioDevicesDidChange')
+        self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
         if all(not account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
@@ -447,6 +452,7 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         if notification.sender is settings:
             if 'audio.silent' in notification.data.modified:
+                self.silent_action.setChecked(settings.audio.silent)
                 self.silent_button.setChecked(settings.audio.silent)
             if 'audio.output_device' in notification.data.modified:
                 action = (action for action in self.output_devices_group.actions() if action.data().toPyObject() == settings.audio.output_device).next()
