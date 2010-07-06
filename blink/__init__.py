@@ -23,7 +23,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.settings import SIPSimpleSettingsExtension
-from blink.log import LogManager
+from blink.logging import LogManager
 from blink.mainwindow import MainWindow
 from blink.resources import ApplicationData
 from blink.sessions import SessionManager
