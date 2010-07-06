@@ -261,8 +261,9 @@ class MainWindow(base_class, ui_class):
 
     def _SH_SearchBoxReturnPressed(self):
         address = unicode(self.search_box.text())
-        session_manager = SessionManager()
-        session_manager.start_call(None, address)
+        if address:
+            session_manager = SessionManager()
+            session_manager.start_call(None, address)
 
     def _SH_SearchBoxTextChanged(self, text):
         account_manager = AccountManager()
