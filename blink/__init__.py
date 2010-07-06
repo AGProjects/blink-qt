@@ -58,6 +58,8 @@ class Blink(QApplication):
         self.update_manager.shutdown()
         self.application.stop()
         self.application.thread.join()
+        log_manager = LogManager()
+        log_manager.stop()
 
     def customEvent(self, event):
         handler = getattr(self, '_EH_%s' % event.name, Null)
@@ -82,10 +84,6 @@ class Blink(QApplication):
     def _NH_SIPApplicationDidStart(self, notification):
         self.main_window.show()
         self.update_manager.initialize()
-
-    def _NH_SIPApplicationDidEnd(self, notification):
-        log_manager = LogManager()
-        log_manager.stop()
 
     def _initialize_sipsimple(self):
         notification_center = NotificationCenter()
