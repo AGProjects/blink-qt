@@ -1682,6 +1682,7 @@ class SessionManager(object):
         self.incoming_sessions = []
         self.dialog_positions = range(1, 100)
         self.current_ringtone = Null
+        self.last_dialed_uri = None
 
     def initialize(self, main_window, session_model):
         self.main_window = main_window
@@ -1705,6 +1706,7 @@ class SessionManager(object):
         except Exception, e:
             print 'Invalid URI: %s' % e # Replace with pop-up
         else:
+            self.last_dialed_uri = remote_uri
             session = Session(account)
             if contact is None:
                 for contact in self.main_window.contact_model.iter_contacts():

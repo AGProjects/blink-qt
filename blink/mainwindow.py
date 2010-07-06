@@ -112,6 +112,7 @@ class MainWindow(base_class, ui_class):
 
         self.about_action.triggered.connect(self.about_panel.show)
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
+        self.redial_action.triggered.connect(self._SH_RedialActionTriggered)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
         self.quit_action.triggered.connect(self.close)
 
@@ -336,6 +337,11 @@ class MainWindow(base_class, ui_class):
         self.mute_action.setChecked(muted)
         self.mute_button.setChecked(muted)
         SIPApplication.voice_audio_bridge.mixer.muted = muted
+
+    def _SH_RedialActionTriggered(self):
+        session_manager = SessionManager()
+        if session_manager.last_dialed_uri is not None:
+            session_manager.start_call(None, unicode(session_manager.last_dialed_uri))
 
     def _SH_SearchBoxReturnPressed(self):
         address = unicode(self.search_box.text())
