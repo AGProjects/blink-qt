@@ -1715,7 +1715,7 @@ class SessionManager(object):
                 else:
                     contact = None
             audio_stream = self.create_stream(account, 'audio') if audio else None
-            video_stream = self.create_stream(account, 'vidoe') if video else None
+            video_stream = self.create_stream(account, 'video') if video else None
             session_item = SessionItem(name, remote_uri, session, contact, audio_stream=audio_stream, video_stream=video_stream)
             session_item.activated.connect(partial(self._SH_SessionActivated, session_item))
             session_item.deactivated.connect(partial(self._SH_SessionDeactivated, session_item))
