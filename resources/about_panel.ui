@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>300</width>
-    <height>451</height>
+    <width>270</width>
+    <height>380</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -113,12 +113,6 @@ July 5, 2010</string>
    </item>
    <item>
     <widget class="QTextBrowser" name="credits_text">
-     <property name="minimumSize">
-      <size>
-       <width>294</width>
-       <height>194</height>
-      </size>
-     </property>
      <property name="html">
       <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
 &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
