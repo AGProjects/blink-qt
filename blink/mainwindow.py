@@ -182,44 +182,53 @@ class MainWindow(base_class, ui_class):
     def load_audio_devices(self):
         settings = SIPSimpleSettings()
 
-        action = QAction(u'Dummy', self.output_devices_group)
-        action.setData(QVariant(None))
         action = QAction(u'System default', self.output_devices_group)
         action.setData(QVariant(u'system_default'))
+        self.output_device_menu.addAction(action)
+        self.output_device_menu.addSeparator()
         for device in SIPApplication.engine.output_devices:
             action = QAction(device, self.output_devices_group)
             action.setData(QVariant(device))
+            self.output_device_menu.addAction(action)
+        action = QAction(u'None', self.output_devices_group)
+        action.setData(QVariant(None))
+        self.output_device_menu.addAction(action)
         for action in self.output_devices_group.actions():
             action.setCheckable(True)
             if settings.audio.output_device == action.data().toPyObject():
                 action.setChecked(True)
-        self.output_device_menu.addActions(self.output_devices_group.actions())
 
-        action = QAction(u'Dummy', self.input_devices_group)
-        action.setData(QVariant(None))
         action = QAction(u'System default', self.input_devices_group)
         action.setData(QVariant(u'system_default'))
+        self.input_device_menu.addAction(action)
+        self.input_device_menu.addSeparator()
         for device in SIPApplication.engine.input_devices:
             action = QAction(device, self.input_devices_group)
             action.setData(QVariant(device))
+            self.input_device_menu.addAction(action)
+        action = QAction(u'None', self.input_devices_group)
+        action.setData(QVariant(None))
+        self.input_device_menu.addAction(action)
         for action in self.input_devices_group.actions():
             action.setCheckable(True)
             if settings.audio.input_device == action.data().toPyObject():
                 action.setChecked(True)
-        self.input_device_menu.addActions(self.input_devices_group.actions())
 
-        action = QAction(u'Dummy', self.alert_devices_group)
-        action.setData(QVariant(None))
         action = QAction(u'System default', self.alert_devices_group)
         action.setData(QVariant(u'system_default'))
+        self.alert_device_menu.addAction(action)
+        self.alert_device_menu.addSeparator()
         for device in SIPApplication.engine.output_devices:
             action = QAction(device, self.alert_devices_group)
             action.setData(QVariant(device))
+            self.alert_device_menu.addAction(action)
+        action = QAction(u'None', self.alert_devices_group)
+        action.setData(QVariant(None))
+        self.alert_device_menu.addAction(action)
         for action in self.alert_devices_group.actions():
             action.setCheckable(True)
             if settings.audio.alert_device == action.data().toPyObject():
                 action.setChecked(True)
-        self.alert_device_menu.addActions(self.alert_devices_group.actions())
 
     def _SH_AccountActionTriggered(self, action, enabled):
         account = action.data().toPyObject()
@@ -443,13 +452,13 @@ class MainWindow(base_class, ui_class):
         self.load_audio_devices()
 
     def _NH_AudioDevicesDidChange(self, notification):
-        for action in self.output_devices_group.actions():
+        for action in self.output_device_menu.actions():
             self.output_devices_group.removeAction(action)
             self.output_device_menu.removeAction(action)
-        for action in self.input_devices_group.actions():
+        for action in self.input_device_menu.actions():
             self.input_devices_group.removeAction(action)
             self.input_device_menu.removeAction(action)
-        for action in self.alert_devices_group.actions():
+        for action in self.alert_device_menu.actions():
             self.alert_devices_group.removeAction(action)
             self.alert_device_menu.removeAction(action)
         self.load_audio_devices()
