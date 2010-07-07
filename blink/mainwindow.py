@@ -430,9 +430,7 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=notification.sender)
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, sender=account_manager)
-        notification_center.add_observer(self, name='AudioDevicesDidChange')
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
         if all(not account.enabled for account in account_manager.iter_accounts()):
@@ -450,6 +448,9 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification_center.add_observer(self, name='AudioDevicesDidChange')
 
     def _NH_AudioDevicesDidChange(self, notification):
         for action in self.output_device_menu.actions():
