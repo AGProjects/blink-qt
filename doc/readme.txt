@@ -27,7 +27,7 @@ Features
 
 The complete list of features and implemented standards are available at:
 
-http://icanblink.com/features.phtml
+http://icanblink.com/features.phtml#qt
 
 
 Installation 
@@ -47,23 +47,14 @@ For help on using Blink go to http://icanblink.com/help.phtml
 Changelog
 ---------
 
-The changelog is available at http://icanblink.com/changelog.phtml
+The changelog is available at http://icanblink.com/changelog-qt.phtml
 
 
 Credits
 -------
 
- * SIP SIMPLE client SDK: http://sipsimpleclient.com
- * PJSIP: http://www.pjsip.org
- * Portaudio: http://www.portaudio.com
- * Speex: http://www.speex.org
- * OpenSIPS: http://opensips.org
- * MSRPRelay: http://msrprelay.org 
- * OpenXCAP: http://openxcap.org
+ * AG Projects: http://ag-projects.com
+ * NLnet foundation: http://nlnet.nl
  * IETF Community: http://www.ietf.org
-
-The development of Blink has been sponsored by:
-
-AG Projects - http://ag-projects.com
-NLNet foundation - http://nlnet.nl
+ * SIP SIMPLE client: http://sipsimpleclient.com
 
