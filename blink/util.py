@@ -16,9 +16,8 @@ class QSingleton(Singleton, type(QObject)):
 
 
 def call_in_gui_thread(function, *args, **kw):
-    from blink import Blink
-    blink = Blink()
-    blink.postEvent(blink, CallFunctionEvent(function, args, kw))
+    application = QApplication.instance()
+    application.postEvent(application, CallFunctionEvent(function, args, kw))
 
 
 def call_later(interval, function, *args, **kw):
@@ -30,9 +29,8 @@ def call_later(interval, function, *args, **kw):
 def run_in_gui_thread(func):
     @preserve_signature(func)
     def wrapper(*args, **kw):
-        from blink import Blink
-        blink = Blink()
-        blink.postEvent(blink, CallFunctionEvent(func, args, kw))
+        application = QApplication.instance()
+        application.postEvent(application, CallFunctionEvent(func, args, kw))
     return wrapper
 
 

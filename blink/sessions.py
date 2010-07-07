@@ -14,7 +14,7 @@ from functools import partial
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QObject, QSize, QStringList, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QStyle, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null, Singleton
@@ -1935,12 +1935,11 @@ class SessionManager(object):
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
-            from blink import Blink
             try:
                 position = self.dialog_positions.pop(0)
             except IndexError:
                 position = None
-            incoming_session.dialog.show(activate=Blink().activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
+            incoming_session.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
             self.update_ringtone()
 
     def _NH_SIPSessionGotProposal(self, notification):
@@ -1975,12 +1974,11 @@ class SessionManager(object):
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
-            from blink import Blink
             try:
                 position = self.dialog_positions.pop(0)
             except IndexError:
                 position = None
-            incoming_session.dialog.show(activate=Blink().activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
+            incoming_session.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
             self.update_ringtone()
 
     def _NH_SIPSessionDidFail(self, notification):
