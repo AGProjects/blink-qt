@@ -10,6 +10,7 @@ __date__    = 'July 5, 2010'
 
 import sys
 
+from PyQt4.QtCore import QThread
 from PyQt4.QtGui import QApplication
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -31,6 +32,26 @@ from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
 
 
+class AuxiliaryThread(QThread):
+    def __init__(self, parent=None):
+        super(AuxiliaryThread, self).__init__(parent)
+        self.moveToThread(self)
+
+    def run(self):
+        self.exec_()
+
+    def customEvent(self, event):
+        handler = getattr(self, '_EH_%s' % event.name, Null)
+        handler(event)
+
+    def _EH_CallFunctionEvent(self, event):
+        try:
+            event.function(*event.args, **event.kw)
+        except:
+            log.error('Exception occured while calling function %s in the auxiliary thread' % event.function.__name__)
+            log.err()
+
+
 class Blink(QApplication):
     __metaclass__ = QSingleton
 
@@ -39,6 +60,7 @@ class Blink(QApplication):
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
         self.application = SIPApplication()
+        self.auxiliary_thread = AuxiliaryThread()
         self.main_window = MainWindow()
 
         self.update_manager = UpdateManager()
@@ -54,6 +76,7 @@ class Blink(QApplication):
     def run(self):
         from blink.util import call_in_gui_thread as call_later
         call_later(self._initialize_sipsimple)
+        self.auxiliary_thread.start()
         self.exec_()
         self.update_manager.shutdown()
         self.application.stop()

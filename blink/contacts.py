@@ -17,7 +17,6 @@ from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QReg
 
 from application.notification import IObserver, NotificationCenter
 from application.python.decorator import decorator, preserve_signature
-from application.python.queue import EventQueue
 from application.python.util import Null
 from application.system import unlink
 from functools import partial
@@ -29,7 +28,7 @@ from sipsimple.util import makedirs
 
 from blink.resources import ApplicationData, Resources, IconCache
 from blink.sessions import SessionManager
-from blink.util import run_in_gui_thread
+from blink.util import run_in_auxiliary_thread, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 
 
@@ -502,8 +501,6 @@ class ContactModel(QAbstractListModel):
             # emulate beginResetModel/endResetModel for QT < 4.6
             self.beginResetModel = Null # or use self.modelAboutToBeReset.emit (it'll be emited twice though in that case)
             self.endResetModel = self.reset
-        self.save_queue = EventQueue(self._store_contacts, name='ContactsSavingThread')
-        self.save_queue.start()
         self.bonjour_group = None
 
         notification_center = NotificationCenter()
@@ -774,6 +771,7 @@ class ContactModel(QAbstractListModel):
             self.endRemoveRows()
         return items
 
+    @run_in_auxiliary_thread
     def _store_contacts(self, data):
         makedirs(ApplicationData.directory)
         filename = ApplicationData.get('contacts')
@@ -913,7 +911,7 @@ class ContactModel(QAbstractListModel):
             items.remove(self.bonjour_group)
             position = items.index(reference) if reference in contact_groups else len(self.items)
             items.insert(position, group)
-        self.save_queue.put(pickle.dumps(items))
+        self._store_contacts(pickle.dumps(items))
 
 
 class ContactSearchModel(QSortFilterProxyModel):

@@ -24,7 +24,7 @@ from blink.accounts import AccountModel, ActiveAccountModel
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
 from blink.sessions import SessionManager, SessionModel
 from blink.resources import Resources
-from blink.util import run_in_gui_thread
+from blink.util import call_in_auxiliary_thread, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 
 
@@ -258,22 +258,19 @@ class MainWindow(base_class, ui_class):
         session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _SH_AudioAlertDeviceChanged(self, action):
-        from twisted.internet import reactor
         settings = SIPSimpleSettings()
         settings.audio.alert_device = action.data().toPyObject()
-        reactor.callInThread(settings.save)
+        call_in_auxiliary_thread(settings.save)
 
     def _SH_AudioInputDeviceChanged(self, action):
-        from twisted.internet import reactor
         settings = SIPSimpleSettings()
         settings.audio.input_device = action.data().toPyObject()
-        reactor.callInThread(settings.save)
+        call_in_auxiliary_thread(settings.save)
 
     def _SH_AudioOutputDeviceChanged(self, action):
-        from twisted.internet import reactor
         settings = SIPSimpleSettings()
         settings.audio.output_device = action.data().toPyObject()
-        reactor.callInThread(settings.save)
+        call_in_auxiliary_thread(settings.save)
 
     def _SH_BreakConference(self):
         active_session = self.session_model.data(self.session_list.selectionModel().selectedIndexes()[0])
