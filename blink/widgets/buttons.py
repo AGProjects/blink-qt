@@ -317,19 +317,14 @@ class SwitchViewButton(QPushButton):
         self.__dict__['dnd_active'] = value
         if value is True:
             self.dnd_timer.phase = 0
+            self.original_height = self.height()
             self.setStyleSheet(self.dnd_style_sheet1)
             self.setText(self.button_dnd_text[self.view])
-            self.original_height = self.height()
-            self.setMinimumHeight(40)
-            self.setMaximumHeight(40)
-            self.resize(self.width(), 40)
+            self.setFixedHeight(40)
         else:
             self.setStyleSheet('')
             self.setText(self.button_text[self.view])
-            height = self.original_height
-            self.setMinimumHeight(height)
-            self.setMaximumHeight(height)
-            self.resize(self.width(), height)
+            self.setFixedHeight(self.original_height)
 
     dnd_active = property(_get_dnd_active, _set_dnd_active)
     del _get_dnd_active, _set_dnd_active
