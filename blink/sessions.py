@@ -1653,10 +1653,10 @@ class IncomingSession(QObject):
                 if sound_file is not None and sound_file.path is DefaultPath:
                     settings = SIPSimpleSettings()
                     sound_file = settings.sounds.inbound_ringtone
-                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, sound_file.path, volume=sound_file.volume, loop_count=0, pause_time=6) if sound_file is not None else Null
+                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, sound_file.path, volume=sound_file.volume, loop_count=0, pause_time=2.7) if sound_file is not None else Null
                 ringtone.bridge = SIPApplication.alert_audio_bridge
             else:
-                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=6)
+                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=5)
                 ringtone.bridge = SIPApplication.alert_audio_bridge
             self.__dict__['ringtone'] = ringtone
         return self.__dict__['ringtone']
@@ -1742,7 +1742,7 @@ class SessionManager(object):
     @property
     def beeping_ringtone(self):
         if 'beeping_ringtone' not in self.__dict__:
-            ringtone = WavePlayer(SIPApplication.voice_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=6)
+            ringtone = WavePlayer(SIPApplication.voice_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=10)
             ringtone.bridge = SIPApplication.voice_audio_bridge
             self.__dict__['beeping_ringtone'] = ringtone
         return self.__dict__['beeping_ringtone']
