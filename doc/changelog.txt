@@ -1,0 +1,17 @@
+<html>
+<head>
+<title>Blink Changelog</title>
+<link rel='stylesheet' type='text/css' href='style.css'>
+</head>
+
+<body>
+
+<h2>Version 0.1.0</h2>
+<p>Date: TBD  
+
+<ul>
+<li>Initial release
+</ul>
+
+</body>
+</html>
