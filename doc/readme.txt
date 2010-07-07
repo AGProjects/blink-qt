@@ -27,7 +27,7 @@ Features
 
 The complete list of features and implemented standards are available at:
 
-http://icanblink.com/features.phtml#qt
+http://icanblink.com/features.phtml
 
 
 Installation 
