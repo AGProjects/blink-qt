@@ -340,7 +340,7 @@ class MainWindow(base_class, ui_class):
             self.status.setCurrentIndex(self.status.findText(u'Offline'))
 
     def _SH_MakeConference(self):
-        self.session_model.conferenceSessions([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal])
+        self.session_model.conferenceSessions([session for session in self.session_model.active_sessions if session.conference is None])
 
     def _SH_MuteButtonClicked(self, muted):
         self.mute_action.setChecked(muted)
@@ -387,7 +387,7 @@ class MainWindow(base_class, ui_class):
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
         else:
-            self.conference_button.setEnabled(len([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal]) > 1)
+            self.conference_button.setEnabled(len([session for session in self.session_model.active_sessions if session.conference is None]) > 1)
             self.conference_button.setChecked(False)
 
     def _SH_SessionModelAddedSession(self, session_item):
@@ -395,16 +395,17 @@ class MainWindow(base_class, ui_class):
             self.search_box.clear()
 
     def _SH_SessionModelChangedStructure(self):
-        self.hangup_all_button.setEnabled(any(not session.pending_removal for session in self.session_model.sessions))
+        active_sessions = self.session_model.active_sessions
+        self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
         active_session = self.session_model.data(selected_indexes[0]) if selected_indexes else Null
         if active_session.conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
         else:
-            self.conference_button.setEnabled(len([session for session in self.session_model.sessions if session.conference is None and not session.pending_removal]) > 1)
+            self.conference_button.setEnabled(len([session for session in active_sessions if session.conference is None]) > 1)
             self.conference_button.setChecked(False)
-        if self.status.currentText() != u'Offline' and self.session_model.active_sessions:
+        if active_sessions and self.status.currentText() != u'Offline':
             self.status.setCurrentIndex(self.status.findText(u'On the phone'))
         else:
             self.status.setCurrentIndex(self.idle_status_index)
