@@ -44,6 +44,7 @@ class MainWindow(base_class, ui_class):
 
         self.set_user_icon(Resources.get("icons/default-avatar.png")) # ":/resources/icons/default-avatar.png"
         self.enable_call_buttons(False)
+        self.active_sessions_label.hide()
 
         self.account_model = AccountModel(self)
         self.enabled_account_model = ActiveAccountModel(self.account_model, self)
@@ -393,6 +394,8 @@ class MainWindow(base_class, ui_class):
 
     def _SH_SessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
+        self.active_sessions_label.setText(u'There is 1 active call' if len(active_sessions)==1 else u'There are %d active calls' % len(active_sessions))
+        self.active_sessions_label.setVisible(any(active_sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
         active_session = self.session_model.data(selected_indexes[0]) if selected_indexes else Null

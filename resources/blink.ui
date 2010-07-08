@@ -281,7 +281,7 @@
     <item>
      <widget class="QStackedWidget" name="main_view">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="contacts_panel">
        <layout class="QVBoxLayout" name="verticalLayout_8">
@@ -294,7 +294,7 @@
         <item>
          <widget class="QStackedWidget" name="contacts_view">
           <property name="currentIndex">
-           <number>1</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="contact_list_panel">
            <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -487,6 +487,32 @@ buttons below.</string>
             </item>
            </layout>
           </widget>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="active_sessions_label">
+          <property name="font">
+           <font>
+            <family>Sans Serif</family>
+           </font>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #a0003a;
+border-style: outset;
+border-width: 1px;
+border-radius: 3px;
+border-color: #800040;
+color: white;
+margin-left: 1px;
+margin-right: 1px;
+padding: 2px;</string>
+          </property>
+          <property name="text">
+           <string>There are active calls</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
          </widget>
         </item>
         <item>
