@@ -365,7 +365,6 @@ class MainWindow(base_class, ui_class):
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and type(self.contact_model.data(selected_items[0])) is Contact)
-            # switch to the sessions panel if there are active sessions, else to the contacts panel -Dan
         active_widget = self.contact_list_panel if text.isEmpty() else self.search_panel
         if active_widget is self.search_panel and self.contacts_view.currentWidget() is not self.search_panel:
             self.search_list.selectionModel().clearSelection()
