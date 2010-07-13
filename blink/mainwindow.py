@@ -324,7 +324,7 @@ class MainWindow(base_class, ui_class):
     def _SH_IdentityCurrentIndexChanged(self, index):
         if index != -1:
             account = self.identity.itemData(index).toPyObject().account
-            self.display_name.setText(account.display_name)
+            self.display_name.setText(account.display_name or u'')
             self.display_name.setEnabled(True)
             self.activity_note.setEnabled(True)
             self.status.setEnabled(True)
