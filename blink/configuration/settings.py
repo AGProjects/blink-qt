@@ -5,9 +5,13 @@
 
 __all__ = ['SIPSimpleSettingsExtension']
 
+import platform
+import sys
+
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
 from sipsimple.configuration.settings import AudioSettings, LogsSettings
 
+from blink import __version__
 from blink.configuration.datatypes import ApplicationDataPath, SoundFile
 from blink.resources import Resources
 
@@ -32,5 +36,7 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
     audio = AudioSettingsExtension
     logs = LogsSettingsExtension
     sounds = SoundSettings
+
+    user_agent = Setting(type=str, default='Blink %s (%s)' % (__version__, platform.system() if sys.platform!='darwin' else 'MacOSX Qt'))
 
 
