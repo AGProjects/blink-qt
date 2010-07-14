@@ -153,6 +153,18 @@ class MainWindow(base_class, ui_class):
             font.setPixelSize(pixel_size)
         self.status.setFont(font)
 
+        # adjust the combo boxes for themes with too much padding (like the default theme on Ubuntu 10.04)
+        option = QStyleOptionComboBox()
+        self.status.initStyleOption(option)
+        font_metrics = self.status.fontMetrics()
+        text_width = max(font_metrics.width(self.status.itemText(index)) for index in xrange(self.status.count()))
+        frame_width = self.status.style().pixelMetric(QStyle.PM_ComboBoxFrameWidth, option, self.status)
+        arrow_width = self.status.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxArrow, self.status).width()
+        wide_padding = self.status.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, self.status).height() < 10
+        self.status.setFixedWidth(text_width + arrow_width + 2*frame_width + 30) # 30? Don't ask.
+        self.status.setStyleSheet("""QComboBox { padding: 0px 3px 0px 3px; }""" if wide_padding else "")
+        self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
+
     def closeEvent(self, event):
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
