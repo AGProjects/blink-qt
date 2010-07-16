@@ -62,7 +62,7 @@ class MainWindow(base_class, ui_class):
         self.contact_model.load()
 
         self.about_panel = AboutPanel(self)
-        self.contact_editor = ContactEditorDialog(self.contact_model, self)
+        self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
 
         self.session_model = SessionModel(self)
         self.session_list.setModel(self.session_model)
@@ -168,7 +168,7 @@ class MainWindow(base_class, ui_class):
     def closeEvent(self, event):
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
-        self.contact_editor.close()
+        self.contact_editor_dialog.close()
 
     def set_user_icon(self, image_file_name):
         pixmap = QPixmap(32, 32)
@@ -259,7 +259,7 @@ class MainWindow(base_class, ui_class):
                 preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
             except StopIteration:
                 preferred_group = None
-        self.contact_editor.open_for_add(self.search_box.text(), preferred_group)
+        self.contact_editor_dialog.open_for_add(self.search_box.text(), preferred_group)
 
     def _SH_AudioCallButtonClicked(self):
         list = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
