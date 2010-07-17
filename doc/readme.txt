@@ -2,9 +2,11 @@
 Blink
 -----
 
-This is Blink, a state of the art, easy to use SIP client.
+This is the QT version of Blink, a state of the art, easy to use SIP client
+for Linux and Microsoft Windows. For MacOSX, see the Cocoa version available
+at the home site.
 
-Copyright (c) 2009-2010 AG Projects
+Copyright (c) 2010 AG Projects
 http://ag-projects.com
 
 Homepage: http://iCanBlink.com
@@ -14,7 +16,7 @@ License
 -------
 
 Blink is licensed under GNU General Public License version 3. A copy of the
-license is available at http://www.fsf.org/licensing/licenses/agpl-3.0.html
+license is available at http://www.fsf.org/licensing/licenses/gpl-3.0.html
 
 The following restrictions apply:
 
