@@ -176,9 +176,8 @@ class StatusLabel(QLabel):
             palette.setColor(QPalette.Text, color)
             self.setPalette(palette)
             self.setText(unicode(value))
-            self.show()
         else:
-            self.hide()
+            self.setText(u'')
 
     value = property(_get_value, _set_value)
     del _get_value, _set_value
