@@ -7,6 +7,7 @@ __all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountD
 
 import os
 import re
+import sys
 import urllib
 import urllib2
 from collections import defaultdict
@@ -393,7 +394,7 @@ class AddAccountDialog(base_class, ui_class):
     @run_in_auxiliary_thread
     def _create_sip_account(self, username, password, email_address, display_name, timezone=None):
         red = '#cc0000'
-        if timezone is None:
+        if timezone is None and sys.platform != 'win32':
             try:
                 timezone = open('/etc/timezone').read().strip()
             except (OSError, IOError):
