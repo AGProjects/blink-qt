@@ -1,9 +1,14 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-from PyQt4.QtCore import Qt, QEvent, pyqtSignal
-from PyQt4.QtGui import QLineEdit, QBoxLayout, QHBoxLayout, QLayout, QPainter, QPalette, QSpacerItem, QSizePolicy, QStyle, QWidget, QStyleOptionFrameV2
+__all__ = ['LineEdit', 'ValidatingLineEdit']
 
+import re
+
+from PyQt4.QtCore import Qt, QEvent, pyqtSignal
+from PyQt4.QtGui import QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QPainter, QPalette, QPixmap, QSpacerItem, QSizePolicy, QStyle, QWidget, QStyleOptionFrameV2
+
+from blink.resources import Resources
 from blink.widgets.util import QtDynamicProperty
 
 
@@ -115,5 +120,48 @@ class LineEdit(QLineEdit):
         self.left_layout.removeWidget(widget)
         self.right_layout.removeWidget(widget)
         widget.hide()
+
+
+class ValidatingLineEdit(LineEdit):
+    statusChanged = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super(ValidatingLineEdit, self).__init__(parent)
+        self.invalid_entry_label = QLabel(self)
+        self.invalid_entry_label.setFixedSize(18, 16)
+        self.invalid_entry_label.setPixmap(QPixmap(Resources.get('icons/invalid16.png')))
+        self.invalid_entry_label.setScaledContents(False)
+        self.invalid_entry_label.setAlignment(Qt.AlignCenter)
+        self.invalid_entry_label.setObjectName('invalid_entry_label')
+        self.invalid_entry_label.hide()
+        self.addTailWidget(self.invalid_entry_label)
+        option = QStyleOptionFrameV2()
+        self.initStyleOption(option)
+        frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
+        self.setMinimumHeight(self.invalid_entry_label.minimumHeight() + 2 + 2*frame_width)
+        self.textChanged.connect(self.text_changed)
+        self.valid = True
+        self.regexp = re.compile(r'.*')
+
+    def _get_regexp(self):
+        return self.__dict__['regexp']
+
+    def _set_regexp(self, regexp):
+        self.__dict__['regexp'] = regexp
+        valid = regexp.search(unicode(self.text())) is not None
+        if self.valid != valid:
+            self.invalid_entry_label.setVisible(not valid)
+            self.valid = valid
+            self.statusChanged.emit()
+
+    regexp = property(_get_regexp, _set_regexp)
+    del _get_regexp, _set_regexp
+
+    def text_changed(self, text):
+        valid = self.regexp.search(unicode(text)) is not None
+        if self.valid != valid:
+            self.invalid_entry_label.setVisible(not valid)
+            self.valid = valid
+            self.statusChanged.emit()
 
 

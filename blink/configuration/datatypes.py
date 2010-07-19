@@ -3,10 +3,13 @@
 
 """Definitions of datatypes for use in settings extensions."""
 
-__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile']
+__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL']
 
 import os
 import re
+from urlparse import urlparse
+
+from sipsimple.configuration.datatypes import Hostname
 
 from blink.resources import ApplicationData
 
@@ -96,5 +99,17 @@ class CustomSoundFile(object):
         self.__dict__['path'] = path
     path = property(_get_path, _set_path)
     del _get_path, _set_path
+
+
+class HTTPURL(unicode):
+    def __new__(cls, value):
+        value = unicode(value)
+        url = urlparse(value)
+        if url.scheme not in (u'http', u'https'):
+            raise ValueError("illegal HTTP URL scheme (http and https only): %s" % url.scheme)
+        Hostname(url.hostname)
+        if url.port is not None and not (0 < url.port < 65536):
+            raise ValueError("illegal port value: %d" % url.port)
+        return value
 
 

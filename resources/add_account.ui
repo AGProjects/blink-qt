@@ -1,0 +1,606 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>531</width>
+    <height>459</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Add account</string>
+  </property>
+  <layout class="QVBoxLayout" name="dialog_layout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="sizeConstraint">
+    <enum>QLayout::SetFixedSize</enum>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>15</number>
+   </property>
+   <item>
+    <widget class="BackgroundFrame" name="background_frame">
+     <property name="minimumSize">
+      <size>
+       <width>522</width>
+       <height>400</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string>QFrame#background_frame {
+	background: url(resources/icons/blink.png);
+	background-repeat: no-repeat;
+	background-position: center left;
+}
+</string>
+     </property>
+     <property name="backgroundColor" stdset="0">
+      <string/>
+     </property>
+     <property name="backgroundImage" stdset="0">
+      <string>icons/blink.png</string>
+     </property>
+     <property name="imageGeometry" stdset="0">
+      <rect>
+       <x>-18</x>
+       <y>10</y>
+       <width>476</width>
+       <height>354</height>
+      </rect>
+     </property>
+     <layout class="QHBoxLayout" name="background_frame_layout">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="margin">
+       <number>0</number>
+      </property>
+      <item>
+       <spacer name="background_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>100</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QFrame" name="input_frame">
+        <property name="styleSheet">
+         <string>QFrame#input_frame {
+	border: 2px;
+	border-radius: 4px;
+	border-style: solid;
+	border-color: #545454;
+	background-color: rgba(244, 244, 244, 228); /* 244, 244, 244, 228 or 248, 248, 248, 224 */
+}
+</string>
+        </property>
+        <layout class="QGridLayout" name="input_frame_layout">
+         <property name="leftMargin">
+          <number>7</number>
+         </property>
+         <property name="rightMargin">
+          <number>22</number>
+         </property>
+         <item row="0" column="0" colspan="2">
+          <widget class="QLabel" name="title_label">
+           <property name="font">
+            <font>
+             <family>Sans Serif</family>
+             <pointsize>12</pointsize>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="text">
+            <string>Add account</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0" rowspan="7">
+          <spacer name="indent_spacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeType">
+            <enum>QSizePolicy::Fixed</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>15</width>
+             <height>48</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item row="1" column="1">
+          <spacer name="title_spacer">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeType">
+            <enum>QSizePolicy::Fixed</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>10</width>
+             <height>10</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="info_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Select whether you want to add a SIP account you already have or create a new one and then fill in the requested information.</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignJustify|Qt::AlignVCenter</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <spacer name="info_spacer">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeType">
+            <enum>QSizePolicy::Fixed</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>10</width>
+             <height>10</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item row="4" column="1">
+          <widget class="QRadioButton" name="add_account_button">
+           <property name="text">
+            <string>Add an existing SIP account</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QRadioButton" name="create_account_button">
+           <property name="text">
+            <string>Create a free SIP account</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <widget class="QStackedWidget" name="panel_view">
+           <property name="currentIndex">
+            <number>1</number>
+           </property>
+           <widget class="QWidget" name="add_account_panel">
+            <layout class="QGridLayout" name="add_panel_layout">
+             <property name="margin">
+              <number>0</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="display_name_label">
+               <property name="text">
+                <string>Display name:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="ValidatingLineEdit" name="display_name_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="sip_address_label">
+               <property name="text">
+                <string>SIP address:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="password_label">
+               <property name="text">
+                <string>Password:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="ValidatingLineEdit" name="sip_address_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="inactiveText" stdset="0">
+                <string/>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="ValidatingLineEdit" name="password_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="echoMode">
+                <enum>QLineEdit::Password</enum>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0" colspan="2">
+              <spacer name="panel_vertical_spacer">
+               <property name="orientation">
+                <enum>Qt::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>40</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item row="4" column="0" colspan="2">
+              <widget class="StatusLabel" name="add_status_label">
+               <property name="text">
+                <string/>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="create_account_panel">
+            <layout class="QGridLayout" name="create_panel_layout">
+             <property name="margin">
+              <number>0</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="name_label">
+               <property name="text">
+                <string>Your name:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="ValidatingLineEdit" name="name_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QLabel" name="username_label">
+               <property name="text">
+                <string>Choose a username:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="new_password_label">
+               <property name="text">
+                <string>Choose a password:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="0">
+              <widget class="QLabel" name="verify_password_label">
+               <property name="text">
+                <string>Verify password:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="0">
+              <widget class="QLabel" name="email_address_label">
+               <property name="text">
+                <string>E-mail address:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="ValidatingLineEdit" name="username_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="ValidatingLineEdit" name="new_password_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="echoMode">
+                <enum>QLineEdit::Password</enum>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="ValidatingLineEdit" name="verify_password_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="echoMode">
+                <enum>QLineEdit::Password</enum>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="4" column="1">
+              <widget class="ValidatingLineEdit" name="email_address_editor">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>22</height>
+                </size>
+               </property>
+               <property name="widgetSpacing" stdset="0">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1">
+              <widget class="QLabel" name="email_note_label">
+               <property name="text">
+                <string>The E-mail address is used when sending voicemail messages, missed call notifications and to recover a lost password.</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignJustify|Qt::AlignTop</set>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="6" column="0" colspan="2">
+              <widget class="StatusLabel" name="create_status_label">
+               <property name="text">
+                <string/>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <spacer name="panel_spacer">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeType">
+            <enum>QSizePolicy::Fixed</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>10</width>
+             <height>10</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="grid_spacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>10</width>
+       <height>15</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="button_box_layout">
+     <property name="spacing">
+      <number>6</number>
+     </property>
+     <item>
+      <spacer name="button_box_spacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="reject_button">
+       <property name="minimumSize">
+        <size>
+         <width>85</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Cancel</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="accept_button">
+       <property name="minimumSize">
+        <size>
+         <width>85</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Add</string>
+       </property>
+       <property name="default">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>BackgroundFrame</class>
+   <extends>QFrame</extends>
+   <header>blink.widgets.frames</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ValidatingLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>blink.widgets.lineedit</header>
+  </customwidget>
+  <customwidget>
+   <class>StatusLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
+  </customwidget>
+ </customwidgets>
+ <tabstops>
+  <tabstop>add_account_button</tabstop>
+  <tabstop>create_account_button</tabstop>
+  <tabstop>display_name_editor</tabstop>
+  <tabstop>sip_address_editor</tabstop>
+  <tabstop>password_editor</tabstop>
+  <tabstop>name_editor</tabstop>
+  <tabstop>username_editor</tabstop>
+  <tabstop>new_password_editor</tabstop>
+  <tabstop>verify_password_editor</tabstop>
+  <tabstop>email_address_editor</tabstop>
+  <tabstop>accept_button</tabstop>
+  <tabstop>reject_button</tabstop>
+ </tabstops>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>reject_button</sender>
+   <signal>clicked()</signal>
+   <receiver>Dialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>413</x>
+     <y>429</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>73</x>
+     <y>439</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

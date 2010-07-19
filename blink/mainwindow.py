@@ -20,7 +20,7 @@ from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
-from blink.accounts import AccountModel, ActiveAccountModel
+from blink.accounts import AccountModel, ActiveAccountModel, AddAccountDialog
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
 from blink.sessions import SessionManager, SessionModel
 from blink.resources import Resources
@@ -62,6 +62,7 @@ class MainWindow(base_class, ui_class):
         self.contact_model.load()
 
         self.about_panel = AboutPanel(self)
+        self.add_account_dialog = AddAccountDialog(self)
         self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
 
         self.session_model = SessionModel(self)
@@ -112,6 +113,7 @@ class MainWindow(base_class, ui_class):
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
         self.about_action.triggered.connect(self.about_panel.show)
+        self.add_account_action.triggered.connect(self.add_account_dialog.open_for_add)
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
         self.redial_action.triggered.connect(self._SH_RedialActionTriggered)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
@@ -168,6 +170,7 @@ class MainWindow(base_class, ui_class):
     def closeEvent(self, event):
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
+        self.add_account_dialog.close()
         self.contact_editor_dialog.close()
 
     def set_user_icon(self, image_file_name):
