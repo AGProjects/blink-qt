@@ -246,7 +246,7 @@ class MainWindow(base_class, ui_class):
             if settings.audio.alert_device == action.data().toPyObject():
                 action.setChecked(True)
 
-    def _SH_AccountActionTriggered(self, action, enabled):
+    def _AH_AccountActionTriggered(self, action, enabled):
         account = action.data().toPyObject()
         account.enabled = enabled
         account.save()
@@ -458,7 +458,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             action.setData(QVariant(account))
             action.setChecked(account.enabled)
-            action.triggered.connect(partial(self._SH_AccountActionTriggered, action))
+            action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
             self.accounts_menu.addAction(action)
 
     def _NH_SIPApplicationDidStart(self, notification):
@@ -505,7 +505,7 @@ class MainWindow(base_class, ui_class):
         action = QAction(account.id, None)
         action.setCheckable(True)
         action.setData(QVariant(account))
-        action.triggered.connect(partial(self._SH_AccountActionTriggered, action))
+        action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
         self.accounts_menu.addAction(action)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
