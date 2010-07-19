@@ -35,13 +35,7 @@ from blink.configuration.datatypes import DefaultPath
 from blink.resources import Resources
 from blink.util import call_later, run_in_gui_thread
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment, SwitchViewButton
-
-
-class Status(unicode):
-    def __new__(cls, value, color='black'):
-        instance = unicode.__new__(cls, value)
-        instance.color = color
-        return instance
+from blink.widgets.labels import Status
 
 
 class SessionItem(QObject):

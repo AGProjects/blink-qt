@@ -1,7 +1,7 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['DurationLabel', 'IconSelector', 'LatencyLabel', 'PacketLossLabel', 'StatusLabel', 'StreamInfoLabel']
+__all__ = ['DurationLabel', 'IconSelector', 'LatencyLabel', 'PacketLossLabel', 'Status', 'StatusLabel', 'StreamInfoLabel']
 
 import os
 from datetime import timedelta
@@ -150,6 +150,13 @@ class PacketLossLabel(QLabel):
 
     value = property(_get_value, _set_value)
     del _get_value, _set_value
+
+
+class Status(unicode):
+    def __new__(cls, value, color='black'):
+        instance = unicode.__new__(cls, value)
+        instance.color = color
+        return instance
 
 
 class StatusLabel(QLabel):
