@@ -1148,7 +1148,7 @@ class ContactListView(QListView):
                 preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
             except StopIteration:
                 preferred_group = None
-        main_window.contact_editor.open_for_add(main_window.search_box.text(), preferred_group)
+        main_window.contact_editor_dialog.open_for_add(main_window.search_box.text(), preferred_group)
 
     def _AH_EditItem(self):
         model = self.model()
@@ -1158,7 +1158,7 @@ class ContactListView(QListView):
             self.scrollTo(index)
             item.widget.edit()
         else:
-            model.main_window.contact_editor.open_for_edit(item)
+            model.main_window.contact_editor_dialog.open_for_edit(item)
 
     def _AH_DeleteSelection(self):
         model = self.model()
@@ -1457,7 +1457,7 @@ class ContactSearchListView(QListView):
     def _AH_EditItem(self):
         model = self.model()
         contact = model.data(self.selectionModel().selectedIndexes()[0])
-        model.main_window.contact_editor.open_for_edit(contact)
+        model.main_window.contact_editor_dialog.open_for_edit(contact)
 
     def _AH_DeleteSelection(self):
         model = self.model()
