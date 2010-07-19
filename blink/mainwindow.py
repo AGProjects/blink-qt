@@ -265,9 +265,9 @@ class MainWindow(base_class, ui_class):
         self.contact_editor_dialog.open_for_add(self.search_box.text(), preferred_group)
 
     def _SH_AudioCallButtonClicked(self):
-        list = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
-        selected_indexes = list.selectionModel().selectedIndexes()
-        contact = list.model().data(selected_indexes[0]) if selected_indexes else Null
+        list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
+        selected_indexes = list_view.selectionModel().selectedIndexes()
+        contact = list_view.model().data(selected_indexes[0]) if selected_indexes else Null
         address = contact.uri or unicode(self.search_box.text())
         name = contact.name or None
         session_manager = SessionManager()
