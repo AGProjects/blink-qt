@@ -1930,7 +1930,7 @@ class SessionManager(object):
             video_stream = video_streams[0] if video_streams else None
             chat_stream = chat_streams[0] if chat_streams else None
             desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
-            dialog = IncomingDialog()
+            dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one on which the main window resides.
             incoming_session = IncomingSession(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
@@ -1969,7 +1969,7 @@ class SessionManager(object):
             video_stream = video_streams[0] if video_streams else None
             chat_stream = chat_streams[0] if chat_streams else None
             desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
-            dialog = IncomingDialog()
+            dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one on which the main window resides.
             incoming_session = IncomingSession(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
