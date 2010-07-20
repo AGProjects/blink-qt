@@ -123,8 +123,8 @@ class MainWindow(base_class, ui_class):
 
         # menu actions that link to external web pages
         self.donate_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/payments.phtml')))
-        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help.phtml')))
-        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog.phtml')))
+        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
+        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
 
         self.idle_status_index = 0
 
