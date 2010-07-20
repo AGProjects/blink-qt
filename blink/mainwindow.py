@@ -8,8 +8,9 @@ __all__ = ['MainWindow']
 from functools import partial
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QVariant
-from PyQt4.QtGui  import QAction, QActionGroup, QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
+from PyQt4.QtCore import Qt, QUrl, QVariant
+from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
+from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
@@ -112,12 +113,18 @@ class MainWindow(base_class, ui_class):
         self.search_box.shortcut.setKey('CTRL+F')
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
+        # menu actions
         self.about_action.triggered.connect(self.about_panel.show)
         self.add_account_action.triggered.connect(self.add_account_dialog.open_for_add)
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
         self.redial_action.triggered.connect(self._SH_RedialActionTriggered)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
         self.quit_action.triggered.connect(self.close)
+
+        # menu actions that link to external web pages
+        self.donate_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/payments.phtml')))
+        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help.phtml')))
+        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog.phtml')))
 
         self.idle_status_index = 0
 
