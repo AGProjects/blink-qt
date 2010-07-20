@@ -364,7 +364,7 @@ class AddAccountDialog(base_class, ui_class):
             self.add_status_label.value = None
         # validate the create panel
         if not self.name_editor.valid:
-            self.create_status_label.value = Status("Display name cannot be empty", color=red)
+            self.create_status_label.value = Status("Name cannot be empty", color=red)
         elif not self.username_editor.valid:
             self.create_status_label.value = Status("Username should have at least 3 characters, start with a letter or a non-zero digit and contain only letters, digits and .-_", color=red)
         elif not self.new_password_editor.valid:
