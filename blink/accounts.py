@@ -401,7 +401,7 @@ class AddAccountDialog(base_class, ui_class):
                     timezone = '/'.join(os.readlink('/etc/localtime').split('/')[-2:])
                 except (OSError, IOError):
                     pass
-        enrollment_data = dict(username=username.encode('utf-8'),
+        enrollment_data = dict(username=username.lower().encode('utf-8'),
                                password=password.encode('utf-8'),
                                email=email_address.encode('utf-8'),
                                display_name=display_name.encode('utf-8'),
