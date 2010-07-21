@@ -263,7 +263,7 @@ class AddAccountDialog(base_class, ui_class):
         self.email_address_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
         self.display_name_editor.regexp = re.compile('^.*$')
         self.name_editor.regexp = re.compile('^.+$')
-        self.username_editor.regexp = re.compile('^[a-z1-9][a-z0-9_.-]{1,65}[a-z0-9]$', re.I | re.L)
+        self.username_editor.regexp = re.compile('^\w(?<=[^0_])[\w.-]{1,65}(?<=[^_.-])$', re.IGNORECASE) # in order to enable unicode characters add re.UNICODE to flags
         self.sip_address_editor.regexp = re.compile('^[^@]+@.+$')
         self.password_editor.regexp = re.compile('^.*$')
         self.new_password_editor.regexp = re.compile('^.{8,}$')
