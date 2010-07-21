@@ -384,7 +384,7 @@ class AddAccountDialog(base_class, ui_class):
 
     def _initialize(self):
         self.display_name = user_info.fullname
-        self.username = user_info.username
+        self.username = user_info.username.lower().replace(' ', '.')
         self.sip_address = u''
         self.password = u''
         self.verify_password = u''
