@@ -301,7 +301,7 @@
                 <string/>
                </property>
                <property name="alignment">
-                <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+                <set>Qt::AlignBottom|Qt::AlignJustify</set>
                </property>
                <property name="wordWrap">
                 <bool>true</bool>
@@ -455,7 +455,7 @@
                 <string/>
                </property>
                <property name="alignment">
-                <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+                <set>Qt::AlignBottom|Qt::AlignJustify</set>
                </property>
                <property name="wordWrap">
                 <bool>true</bool>
