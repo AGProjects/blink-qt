@@ -185,6 +185,14 @@ class Contact(object):
     def icon(self):
         return self.__dict__['icon']
 
+    @property
+    def name_detail(self):
+        return self.name
+
+    @property
+    def uri_detail(self):
+        return self.uri
+
 
 class NoGroup(object):
     pass
@@ -206,6 +214,14 @@ class BonjourNeighbour(Contact):
     editable = False
     deletable = False
 
+    def __init__(self, group, name, hostname, uri, image=None):
+        super(BonjourNeighbour, self).__init__(group, name, uri, image)
+        self.hostname = hostname
+
+    @property
+    def name_detail(self):
+        return "%s (%s)" % (self.name, self.hostname)
+
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact.ui'))
 
@@ -216,8 +232,8 @@ class ContactWidget(base_class, ui_class):
             self.setupUi(self)
 
     def set_contact(self, contact):
-        self.name.setText(contact.name or contact.uri)
-        self.uri.setText(contact.uri)
+        self.name.setText(contact.name_detail or contact.uri)
+        self.uri.setText(contact.uri_detail)
         self.icon.setPixmap(contact.icon)
 
 del ui_class, base_class
@@ -627,8 +643,7 @@ class ContactModel(QAbstractListModel):
 
     @ignore_contacts_db_updates
     def _NH_BonjourAccountDidAddNeighbour(self, notification):
-        display_name = '%s (%s)' % (notification.data.display_name, notification.data.host)
-        contact = BonjourNeighbour(self.bonjour_group, display_name, unicode(notification.data.uri))
+        contact = BonjourNeighbour(self.bonjour_group, notification.data.display_name, notification.data.host, unicode(notification.data.uri))
         self.addContact(contact)
 
     @ignore_contacts_db_updates
@@ -720,7 +735,7 @@ class ContactModel(QAbstractListModel):
         if contact.group in self.items:
             for position in xrange(self.items.index(contact.group)+1, len(self.items)):
                 item = self.items[position]
-                if isinstance(item, ContactGroup) or item.name > contact.name:
+                if isinstance(item, ContactGroup) or item.name_detail > contact.name_detail:
                     break
             else:
                 position = len(self.items)
@@ -882,9 +897,9 @@ class ContactModel(QAbstractListModel):
             file = None
             icon_cache = IconCache()
             group = ContactGroup('Test')
-            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', icon_cache.store(Resources.get('icons/3333@sip2sip.info.png'))),
-                        Contact(group, 'Echo Test', '4444@sip2sip.info', icon_cache.store(Resources.get('icons/4444@sip2sip.info.png'))),
-                        Contact(group, 'VUC Conference http://vuc.me', '200901@login.zipdx.com', icon_cache.store(Resources.get('icons/200901@login.zipdx.com.png')))]
+            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', image=icon_cache.store(Resources.get('icons/3333@sip2sip.info.png'))),
+                        Contact(group, 'Echo Test', '4444@sip2sip.info', image=icon_cache.store(Resources.get('icons/4444@sip2sip.info.png'))),
+                        Contact(group, 'VUC Conference http://vuc.me', '200901@login.zipdx.com', image=icon_cache.store(Resources.get('icons/200901@login.zipdx.com.png')))]
             contacts.sort(key=attrgetter('name'))
             items = [group] + contacts
         self.beginResetModel()
@@ -1655,7 +1670,7 @@ class ContactEditorDialog(base_class, ui_class):
         else:
             group = self.group.itemData(group_index).toPyObject()
         if self.edited_contact is None:
-            contact = Contact(group, name, uri, image)
+            contact = Contact(group, name, uri, image=image)
             contact.sip_aliases = sip_aliases
             contact_model.addContact(contact)
         else:
