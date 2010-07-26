@@ -205,96 +205,11 @@ class ProxiedHttpClient(HttpClient):
   HttpClient.request.
   """
   def _prepare_connection(self, url, headers):
-    proxy_auth = _get_proxy_auth()
-    if url.protocol == 'https':
-      # destination is https
-      proxy = os.environ.get('https_proxy')
-      if proxy:
-        # Set any proxy auth headers 
-        if proxy_auth:
-          proxy_auth = 'Proxy-authorization: %s' % proxy_auth
-          
-        # Construct the proxy connect command.
-        port = url.port
-        if not port:
-          port = '443'
-        proxy_connect = 'CONNECT %s:%s HTTP/1.0\r\n' % (url.host, port)
-        
-        # Set the user agent to send to the proxy
-        if headers and 'User-Agent' in headers:
-          user_agent = 'User-Agent: %s\r\n' % (headers['User-Agent'])
-        else:
-          user_agent = ''
-        
-        proxy_pieces = '%s%s%s\r\n' % (proxy_connect, proxy_auth, user_agent)
-        
-        # Find the proxy host and port.
-        proxy_url = atom_url.parse_url(proxy)
-        if not proxy_url.port:
-          proxy_url.port = '80'
-        
-        # Connect to the proxy server, very simple recv and error checking
-        p_sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        p_sock.connect((proxy_url.host, int(proxy_url.port)))
-        p_sock.sendall(proxy_pieces)
-        response = ''
-
-        # Wait for the full response.
-        while response.find("\r\n\r\n") == -1:
-          response += p_sock.recv(8192)
-       
-        p_status = response.split()[1]
-        if p_status != str(200):
-          raise ProxyError('Error status=%s' % str(p_status))
-
-        # Trivial setup for ssl socket.
-        sslobj = None
-        if ssl_imported:
-          sslobj = ssl.wrap_socket(p_sock, None, None)
-        else:
-          sock_ssl = socket.ssl(p_sock, None, None)
-          sslobj = httplib.FakeSocket(p_sock, sock_ssl)
- 
-        # Initalize httplib and replace with the proxy socket.
-        connection = httplib.HTTPConnection(proxy_url.host)
-        connection.sock = sslobj
-        return connection
-      else:
-        # The request was HTTPS, but there was no https_proxy set.
-        return HttpClient._prepare_connection(self, url, headers)
-    else:
-      proxy = os.environ.get('http_proxy')
-      if proxy:
-        # Find the proxy host and port.
-        proxy_url = atom_url.parse_url(proxy)
-        if not proxy_url.port:
-          proxy_url.port = '80'
-        
-        if proxy_auth:
-          headers['Proxy-Authorization'] = proxy_auth.strip()
-
-        return httplib.HTTPConnection(proxy_url.host, int(proxy_url.port))
-      else:
-        # The request was HTTP, but there was no http_proxy set.
-        return HttpClient._prepare_connection(self, url, headers)
+    # XXX: Non working proxy support removed. -Saul
+    return HttpClient._prepare_connection(self, url, headers)
 
   def _get_access_url(self, url):
     return url.to_string()
-
-
-def _get_proxy_auth():
-  proxy_username = os.environ.get('proxy-username')
-  if not proxy_username:
-    proxy_username = os.environ.get('proxy_username')
-  proxy_password = os.environ.get('proxy-password')
-  if not proxy_password:
-    proxy_password = os.environ.get('proxy_password')
-  if proxy_username:
-    user_auth = base64.encodestring('%s:%s' % (proxy_username,
-                                               proxy_password))
-    return 'Basic %s\r\n' % (user_auth.strip())
-  else:
-    return ''
 
 
 def _send_data_part(data, connection):

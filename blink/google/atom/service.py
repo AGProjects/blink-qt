@@ -376,77 +376,14 @@ def PrepareConnection(service, full_uri):
   (server, port, ssl, partial_uri) = ProcessUrl(service, full_uri)
   if ssl:
     # destination is https
-    proxy = os.environ.get('https_proxy')
-    if proxy:
-      (p_server, p_port, p_ssl, p_uri) = ProcessUrl(service, proxy, True)
-      proxy_username = os.environ.get('proxy-username')
-      if not proxy_username:
-        proxy_username = os.environ.get('proxy_username')
-      proxy_password = os.environ.get('proxy-password')
-      if not proxy_password:
-        proxy_password = os.environ.get('proxy_password')
-      if proxy_username:
-        user_auth = base64.encodestring('%s:%s' % (proxy_username,
-                                                   proxy_password))
-        proxy_authorization = ('Proxy-authorization: Basic %s\r\n' % (
-            user_auth.strip()))
-      else:
-        proxy_authorization = ''
-      proxy_connect = 'CONNECT %s:%s HTTP/1.0\r\n' % (server, port)
-      user_agent = 'User-Agent: %s\r\n' % (
-          service.additional_headers['User-Agent'])
-      proxy_pieces = (proxy_connect + proxy_authorization + user_agent
-                       + '\r\n')
-
-      #now connect, very simple recv and error checking
-      p_sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-      p_sock.connect((p_server,p_port))
-      p_sock.sendall(proxy_pieces)
-      response = ''
-
-      # Wait for the full response.
-      while response.find("\r\n\r\n") == -1:
-        response += p_sock.recv(8192)
-       
-      p_status=response.split()[1]
-      if p_status!=str(200):
-        raise 'Error status=',str(p_status)
-
-      # Trivial setup for ssl socket.
-      ssl = socket.ssl(p_sock, None, None)
-      fake_sock = httplib.FakeSocket(p_sock, ssl)
-
-      # Initalize httplib and replace with the proxy socket.
-      connection = httplib.HTTPConnection(server)
-      connection.sock=fake_sock
-      full_uri = partial_uri
-
-    else:
-      connection = httplib.HTTPSConnection(server, port)
-      full_uri = partial_uri
-
+    # XXX: Non working proxy support removed. -Saul
+    connection = httplib.HTTPSConnection(server, port)
+    full_uri = partial_uri
   else:
     # destination is http
-    proxy = os.environ.get('http_proxy')
-    if proxy:
-      (p_server, p_port, p_ssl, p_uri) = ProcessUrl(service.server, proxy, True)
-      proxy_username = os.environ.get('proxy-username')
-      if not proxy_username:
-        proxy_username = os.environ.get('proxy_username')
-      proxy_password = os.environ.get('proxy-password')
-      if not proxy_password:
-        proxy_password = os.environ.get('proxy_password')
-      if proxy_username:
-        UseBasicAuth(service, proxy_username, proxy_password, True)
-      connection = httplib.HTTPConnection(p_server, p_port)
-      if not full_uri.startswith("http://"):
-        if full_uri.startswith("/"):
-          full_uri = "http://%s%s" % (service.server, full_uri)
-        else:
-          full_uri = "http://%s/%s" % (service.server, full_uri)
-    else:
-      connection = httplib.HTTPConnection(server, port)
-      full_uri = partial_uri
+    # XXX: Non working proxy support removed. -Saul
+    connection = httplib.HTTPConnection(server, port)
+    full_uri = partial_uri
 
   return (connection, full_uri)
 
