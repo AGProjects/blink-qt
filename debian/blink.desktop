@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Blink
+GenericName=SIP client
+Comment=A state of the art, easy to use SIP client
+X-GNOME-FullName=Blink SIP client
+Type=Application
+Exec=blink
+Icon=/usr/share/blink/icons/blink48.png
+StartupNotify=false
+Terminal=false
+Categories=Qt;Network;Telephony;

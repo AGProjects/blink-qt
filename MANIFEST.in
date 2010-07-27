@@ -1,0 +1,9 @@
+include MANIFEST.in run
+include bin/blink
+recursive-include resources *.ui *.png *.svg *.wav
+recursive-include debian  changelog compat control copyright rules
+recursive-include debian  pycompat pyversions
+recursive-include debian  blink.* blink*.*
+recursive-include debian/source format
+recursive-include doc    *.txt
+prune debian/blink

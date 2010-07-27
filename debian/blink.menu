@@ -1,0 +1,6 @@
+?package(blink):\
+	needs="X11"\
+	section="Applications/Network/Communication"\
+	title="Blink"\
+	icon="/usr/share/pixmaps/blink.xpm"\
+	command="blink"

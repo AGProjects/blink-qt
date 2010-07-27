@@ -1,0 +1,36 @@
+This work was packaged for Debian by:
+
+    Saul Ibarra <saul@ag-projects.com> on Fri, 16 Jul 2010 13:04:56 +0200
+
+Upstream Author(s):
+
+    Adrian Georgescu
+    Dan Pascu
+    Lucian Stanescu
+    Saúl Ibarra
+
+Copyright:
+
+    Copyright (C) 2010 AG Projects
+
+License:
+
+    Blink is licensed under GNU General Public License version 3. A copy of the
+    license is available at http://www.gnu.org/licenses/gpl-3.0.html
+
+    The following restrictions apply:
+        * You may not alter the name of the software (Blink)
+        * You may not alter the Copyright and About notices
+
+The Debian packaging is:
+
+    Copyright (C) 2010 Saul Ibarra <saul@ag-projects.com>
+
+and is licensed under the GPL version 3,
+
+Blink contains the following 3rd party software packages:
+
+- GData API from Google Inc.
+Licensed under the Apache 2.0 license. A copy of the license can be found at
+/usr/share/common-licenses/Apache-2.0
+
