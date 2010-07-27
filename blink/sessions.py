@@ -6,8 +6,8 @@ from __future__ import with_statement
 __all__ = ['Conference', 'SessionItem', 'SessionModel', 'SessionListView', 'SessionManager']
 
 import bisect
-import os
 import cPickle as pickle
+import os
 import re
 from datetime import datetime, timedelta
 from functools import partial
