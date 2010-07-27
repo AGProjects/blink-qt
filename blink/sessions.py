@@ -14,7 +14,7 @@ from functools import partial
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QObject, QSize, QStringList, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null, Singleton
@@ -1237,6 +1237,14 @@ class SessionListView(QListView):
         self.dragged_session = None
         self._pressed_position = None
         self._pressed_index = None
+        self._hangup_shortcut = QShortcut(self)
+        self._hangup_shortcut.setKey('CTRL+ESC')
+        self._hangup_shortcut.setContext(Qt.ApplicationShortcut)
+        self._hangup_shortcut.activated.connect(self._SH_HangupShortcutActivated)
+        self._hold_shortcut = QShortcut(self)
+        self._hold_shortcut.setKey('CTRL+SPACE')
+        self._hold_shortcut.setContext(Qt.ApplicationShortcut)
+        self._hold_shortcut.activated.connect(self._SH_HoldShortcutActivated)
 
     def setModel(self, model):
         selection_model = self.selectionModel() or Null
@@ -1405,6 +1413,16 @@ class SessionListView(QListView):
                     sibling.widget.drop_indicator = True
             else:
                 session.widget.drop_indicator = True
+
+    def _SH_HangupShortcutActivated(self):
+        session = self.model().data(self.selectedIndexes()[0])
+        if session.conference is None:
+            session.widget.hangup_button.click()
+
+    def _SH_HoldShortcutActivated(self):
+        session = self.model().data(self.selectedIndexes()[0])
+        if session.conference is None:
+            session.widget.hold_button.click()
 
     def _SH_SelectionModelSelectionChanged(self, selected, deselected):
         model = self.model()
