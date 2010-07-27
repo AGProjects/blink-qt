@@ -366,7 +366,7 @@ class AddAccountDialog(base_class, ui_class):
         elif not self.sip_address_editor.text_correct:
             self.add_status_label.value = Status("SIP address should be specified as user@domain", color=red)
         elif not self.sip_address_editor.text_allowed:
-            self.add_status_label.value = Status("SIP address in use by another account", color=red)
+            self.add_status_label.value = Status("An account with this SIP address was already added", color=red)
         elif not self.password_editor.text_valid:
             self.add_status_label.value = Status("Password cannot be empty", color=red)
         else:
