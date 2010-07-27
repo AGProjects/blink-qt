@@ -1249,11 +1249,11 @@ class SessionListView(QListView):
 
     def keyPressEvent(self, event):
         digit = chr(event.key()) if event.key() < 256 else None
-        selection_model = self.selectionModel()
-        selected_indexes = selection_model.selectedIndexes()
-        if digit is not None and digit in '0123456789ABCD#*' and selected_indexes:
-            self.model().data(selected_indexes[0]).send_dtmf(digit)
+        if digit is not None and digit in '0123456789ABCD#*':
+            for session in (s for s in self.model().sessions if s.active):
+                session.send_dtmf(digit)
         elif event.key() in (Qt.Key_Up, Qt.Key_Down):
+            selection_model = self.selectionModel()
             current_index = selection_model.currentIndex()
             if current_index.isValid():
                 step = 1 if event.key() == Qt.Key_Down else -1
