@@ -140,7 +140,9 @@ class ValidatingLineEdit(LineEdit):
         frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
         self.setMinimumHeight(self.invalid_entry_label.minimumHeight() + 2 + 2*frame_width)
         self.textChanged.connect(self.text_changed)
-        self.valid = True
+        self.text_correct = True
+        self.text_allowed = True
+        self.exceptions = set()
         self.regexp = re.compile(r'.*')
 
     def _get_regexp(self):
@@ -148,21 +150,35 @@ class ValidatingLineEdit(LineEdit):
 
     def _set_regexp(self, regexp):
         self.__dict__['regexp'] = regexp
-        valid = regexp.search(unicode(self.text())) is not None
-        if self.valid != valid:
-            self.invalid_entry_label.setVisible(not valid)
-            self.valid = valid
-            self.statusChanged.emit()
+        self.validate()
 
     regexp = property(_get_regexp, _set_regexp)
     del _get_regexp, _set_regexp
 
+    @property
+    def text_valid(self):
+        return self.text_correct and self.text_allowed
+
     def text_changed(self, text):
-        valid = self.regexp.search(unicode(text)) is not None
-        if self.valid != valid:
-            self.invalid_entry_label.setVisible(not valid)
-            self.valid = valid
+        self.validate()
+
+    def validate(self):
+        text = unicode(self.text())
+        text_correct = self.regexp.search(text) is not None
+        text_allowed = text not in self.exceptions
+        if self.text_correct != text_correct or self.text_allowed != text_allowed:
+            self.text_correct = text_correct
+            self.text_allowed = text_allowed
+            self.invalid_entry_label.setVisible(not self.text_valid)
             self.statusChanged.emit()
+
+    def addException(self, exception):
+        self.exceptions.add(exception)
+        self.validate()
+
+    def removeException(self, exception):
+        self.exceptions.remove(exception)
+        self.validate()
 
 
 class SearchIcon(QWidget):

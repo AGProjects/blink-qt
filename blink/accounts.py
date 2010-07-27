@@ -22,7 +22,7 @@ from application.python.util import Null
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
-from sipsimple.account import Account, AccountManager, BonjourAccount
+from sipsimple.account import Account, AccountExists, AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.util import user_info
 
@@ -232,6 +232,8 @@ ui_class, base_class = uic.loadUiType(Resources.get('add_account.ui'))
 class AddAccountDialog(base_class, ui_class):
     __metaclass__ = QSingleton
 
+    implements(IObserver)
+
     def __init__(self, parent=None):
         super(AddAccountDialog, self).__init__(parent)
         with Resources.directory:
@@ -270,6 +272,10 @@ class AddAccountDialog(base_class, ui_class):
         self.new_password_editor.regexp = re.compile('^.{8,}$')
         self.verify_password_editor.regexp = re.compile('^$')
         self.email_address_editor.regexp = re.compile('^[^@\s]+@[^@\s]+$')
+
+        account_manager = AccountManager()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=account_manager)
 
     def _get_display_name(self):
         if self.panel_view.currentWidget() is self.add_account_panel:
@@ -347,7 +353,7 @@ class AddAccountDialog(base_class, ui_class):
             inputs = [self.display_name_editor, self.sip_address_editor, self.password_editor]
         else:
             inputs = [self.name_editor, self.username_editor, self.new_password_editor, self.verify_password_editor, self.email_address_editor]
-        self.accept_button.setEnabled(all(input.valid for input in inputs))
+        self.accept_button.setEnabled(all(input.text_valid for input in inputs))
 
     def _SH_PasswordTextChanged(self, text):
         self.verify_password_editor.regexp = re.compile(u'^%s$' % re.escape(unicode(text)))
@@ -355,24 +361,28 @@ class AddAccountDialog(base_class, ui_class):
     def _SH_ValidityStatusChanged(self):
         red = '#cc0000'
         # validate the add panel
-        if not self.display_name_editor.valid:
+        if not self.display_name_editor.text_valid:
             self.add_status_label.value = Status("Display name cannot be empty", color=red)
-        elif not self.sip_address_editor.valid:
+        elif not self.sip_address_editor.text_correct:
             self.add_status_label.value = Status("SIP address should be specified as user@domain", color=red)
-        elif not self.password_editor.valid:
+        elif not self.sip_address_editor.text_allowed:
+            self.add_status_label.value = Status("SIP address in use by another account", color=red)
+        elif not self.password_editor.text_valid:
             self.add_status_label.value = Status("Password cannot be empty", color=red)
         else:
             self.add_status_label.value = None
         # validate the create panel
-        if not self.name_editor.valid:
+        if not self.name_editor.text_valid:
             self.create_status_label.value = Status("Name cannot be empty", color=red)
-        elif not self.username_editor.valid:
+        elif not self.username_editor.text_correct:
             self.create_status_label.value = Status("Username should have 5 to 32 characters, start with a letter or non-zero digit, contain only letters, digits or .-_ and end with a letter or digit", color=red)
-        elif not self.new_password_editor.valid:
+        elif not self.username_editor.text_allowed:
+            self.create_status_label.value = Status("The username you requested is already taken. Please choose another one and try again.", color=red)
+        elif not self.new_password_editor.text_valid:
             self.create_status_label.value = Status("Password should contain at least 8 characters", color=red)
-        elif not self.verify_password_editor.valid:
+        elif not self.verify_password_editor.text_valid:
             self.create_status_label.value = Status("Passwords do not match", color=red)
-        elif not self.email_address_editor.valid:
+        elif not self.email_address_editor.text_valid:
             self.create_status_label.value = Status("E-mail address should be specified as user@domain", color=red)
         else:
             self.create_status_label.value = None
@@ -381,7 +391,7 @@ class AddAccountDialog(base_class, ui_class):
             inputs = [self.display_name_editor, self.sip_address_editor, self.password_editor]
         else:
             inputs = [self.name_editor, self.username_editor, self.new_password_editor, self.verify_password_editor, self.email_address_editor]
-        self.accept_button.setEnabled(all(input.valid for input in inputs))
+        self.accept_button.setEnabled(all(input.text_valid for input in inputs))
 
     def _initialize(self):
         self.display_name = user_info.fullname
@@ -421,7 +431,11 @@ class AddAccountDialog(base_class, ui_class):
                         certificate_path = Blink().save_certificates(response_data['sip_address'], passport['crt'], passport['key'], passport['ca'])
                 except (GNUTLSError, IOError, OSError):
                     pass
-                account = Account(response_data['sip_address'])
+                account_manager = AccountManager()
+                try:
+                    account = Account(response_data['sip_address'])
+                except AccountExists:
+                    account = account_manager.get_account(response_data['sip_address'])
                 account.enabled = True
                 account.display_name = display_name
                 account.auth.password = password
@@ -431,11 +445,10 @@ class AddAccountDialog(base_class, ui_class):
                 account.tls.certificate = certificate_path
                 account.server.settings_url = response_data['settings_url']
                 account.save()
-                account_manager = AccountManager()
                 account_manager.default_account = account
                 call_in_gui_thread(self.accept)
             elif response_data['error'] == 'user_exists':
-                call_in_gui_thread(setattr, self.create_status_label, 'value', Status('The username you requested is already taken. Please choose another one and try again.', color=red))
+                call_in_gui_thread(self.username_editor.addException, username)
             else:
                 call_in_gui_thread(setattr, self.create_status_label, 'value', Status(response_data['error_message'], color=red))
         except (cjson.DecodeError, KeyError):
@@ -444,6 +457,18 @@ class AddAccountDialog(base_class, ui_class):
             call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Failed to contact server: %s' % e.reason, color=red))
         finally:
             call_in_gui_thread(self.setEnabled, True)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPAccountManagerDidAddAccount(self, notification):
+        account = notification.data.account
+        self.sip_address_editor.addException(notification.data.account.id)
+
+    def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
+        self.sip_address_editor.removeException(notification.data.account.id)
 
     def open_for_add(self):
         self.add_account_button.click()
