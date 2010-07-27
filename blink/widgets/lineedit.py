@@ -139,7 +139,7 @@ class ValidatingLineEdit(LineEdit):
         self.initStyleOption(option)
         frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
         self.setMinimumHeight(self.invalid_entry_label.minimumHeight() + 2 + 2*frame_width)
-        self.textChanged.connect(self.text_changed)
+        self.textChanged.connect(self._SH_TextChanged)
         self.text_correct = True
         self.text_allowed = True
         self.exceptions = set()
@@ -150,7 +150,7 @@ class ValidatingLineEdit(LineEdit):
 
     def _set_regexp(self, regexp):
         self.__dict__['regexp'] = regexp
-        self.validate()
+        self._validate()
 
     regexp = property(_get_regexp, _set_regexp)
     del _get_regexp, _set_regexp
@@ -159,10 +159,10 @@ class ValidatingLineEdit(LineEdit):
     def text_valid(self):
         return self.text_correct and self.text_allowed
 
-    def text_changed(self, text):
-        self.validate()
+    def _SH_TextChanged(self, text):
+        self._validate()
 
-    def validate(self):
+    def _validate(self):
         text = unicode(self.text())
         text_correct = self.regexp.search(text) is not None
         text_allowed = text not in self.exceptions
@@ -174,11 +174,11 @@ class ValidatingLineEdit(LineEdit):
 
     def addException(self, exception):
         self.exceptions.add(exception)
-        self.validate()
+        self._validate()
 
     def removeException(self, exception):
         self.exceptions.remove(exception)
-        self.validate()
+        self._validate()
 
 
 class SearchIcon(QWidget):
@@ -268,10 +268,10 @@ class SearchBox(LineEdit):
         self.setMinimumHeight(widgets_height + 2 + 2*frame_width)
         self.clear_button.hide()
         self.clear_button.clicked.connect(self.clear)
-        self.textChanged.connect(self.text_changed)
+        self.textChanged.connect(self._SH_TextChanged)
         self.inactiveText = u"Search"
 
-    def text_changed(self, text):
+    def _SH_TextChanged(self, text):
         self.clear_button.setVisible(not text.isEmpty())
 
 
