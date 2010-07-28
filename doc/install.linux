@@ -1,0 +1,101 @@
+
+Blink QT installation on Debian and Ubuntu Linux
+------------------------------------------------
+
+Copyright (c) 2010 AG Projects
+http://ag-projects.com
+
+Home page: http://icanblink.com
+
+This document describes the installation procedure on Debian and Ubuntu
+operating systems from the official public repository maintained by AG
+Projects.
+
+
+Configure Repository
+--------------------
+
+Install the AG Projects debian software signing key:
+
+wget http://download.ag-projects.com/agp-debian-gpg.key
+sudo apt-key add agp-debian-gpg.key
+
+Add these lines to /etc/apt/sources.list:
+
+
+Debian Unstable (Sid)
+---------------------
+
+deb     http://ag-projects.com/debian unstable main
+deb-src http://ag-projects.com/debian unstable main
+
+
+Ubuntu Karmic (9.10)
+--------------------
+
+deb     http://ag-projects.com/ubuntu karmic main
+deb-src http://ag-projects.com/ubuntu karmic main
+
+
+Ubuntu Lucid (10.04)
+--------------------
+
+deb     http://ag-projects.com/ubuntu lucid main
+deb-src http://ag-projects.com/ubuntu lucid main
+
+Update the list of available packages:
+
+sudo apt-get update
+
+Install Blink
+
+sudo apt-get install blink
+
+
+Manual installation
+-------------------
+
+Retrieve and unpack the tar archive from:
+http://download.ag-projects.com/Blink/Linux/
+
+Install the runtime dependencies:
+
+ * python-application (>= 1.2.4)
+ * python-cjson 
+ * python-eventlet-0.8 (>= 0.8.11.2)
+ * python-qt4 (>= 4.6)
+ * python-twisted-core (>= 8.1.0)
+ * python-sipsimple (>= 0.15.2)
+ * python-zope.interface
+
+After installing the above dependencies, install Blink system wide using:
+
+sudo python setup.py install
+ 
+
+Creating Debian Packages
+------------------------
+
+Install the building dependencies:
+
+ * cdbs (>= 0.4.47)
+ * debhelper (>= 7)
+ * python-all (>= 2.5)
+ * python-qt4 (>=4.6)
+ * python-support
+ * build-essential
+ * python-all-dev
+ * devscripts
+
+Create a clean distribution file:
+
+python setup.py sdist
+
+Go to the ./dist directory and untar the file created at the step above.
+
+Go to the newly created directory and type:
+
+debuild
+
+The .deb and related files are built in the upper directory.
+
