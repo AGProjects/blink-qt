@@ -501,7 +501,7 @@ class MainWindow(base_class, ui_class):
             if 'audio.alert_device' in notification.data.modified:
                 action = (action for action in self.alert_devices_group.actions() if action.data().toPyObject() == settings.audio.alert_device).next()
                 action.setChecked(True)
-        elif isinstance(notification.sender, Account) or notification.sender is BonjourAccount():
+        elif isinstance(notification.sender, (Account, BonjourAccount)):
             if 'enabled' in notification.data.modified:
                 account = notification.sender
                 action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
