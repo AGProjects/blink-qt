@@ -3,7 +3,7 @@
 
 from __future__ import with_statement
 
-__all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountDialog']
+__all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountDialog', 'ServerToolsAccountModel', 'ServerToolsWindow']
 
 import os
 import re
@@ -13,8 +13,10 @@ import urllib2
 from collections import defaultdict
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex
-from PyQt4.QtGui  import QButtonGroup, QComboBox, QIcon, QPalette, QPixmap, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QUrl, QVariant
+from PyQt4.QtGui  import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QPalette, QPixmap, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtNetwork import QNetworkAccessManager
+from PyQt4.QtWebKit  import QWebView
 
 import cjson
 from application.notification import IObserver, NotificationCenter
@@ -57,8 +59,7 @@ class AccountModel(QAbstractListModel):
         self.accounts = []
 
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='SIPAccountDidActivate')
-        notification_center.add_observer(self, name='SIPAccountDidDeactivate')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, name='SIPAccountWillRegister')
         notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='SIPAccountRegistrationDidFail')
@@ -102,19 +103,16 @@ class AccountModel(QAbstractListModel):
         self.accounts.append(AccountInfo(name, account, icon))
         self.endInsertRows()
 
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if isinstance(notification.sender, (Account, BonjourAccount)):
+            position = self.accounts.index(notification.sender)
+            self.dataChanged.emit(self.index(position), self.index(position))
+
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         position = self.accounts.index(notification.data.account)
         self.beginRemoveRows(QModelIndex(), position, position)
         del self.accounts[position]
         self.endRemoveRows()
-
-    def _NH_SIPAccountDidActivate(self, notification):
-        position = self.accounts.index(notification.sender)
-        self.dataChanged.emit(self.index(position), self.index(position))
-
-    def _NH_SIPAccountDidDeactivate(self, notification):
-        position = self.accounts.index(notification.sender)
-        self.dataChanged.emit(self.index(position), self.index(position))
 
     def _NH_SIPAccountWillRegister(self, notification):
         position = self.accounts.index(notification.sender)
@@ -482,6 +480,172 @@ class AddAccountDialog(base_class, ui_class):
         self.create_account_button.setFocus()
         self.accept_button.setEnabled(False)
         self._initialize()
+        self.show()
+
+del ui_class, base_class
+
+
+# Account server tools
+#
+
+class ServerToolsAccountModel(QSortFilterProxyModel):
+    def __init__(self, model, parent=None):
+        super(ServerToolsAccountModel, self).__init__(parent)
+        self.setSourceModel(model)
+        self.setDynamicSortFilter(True)
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        source_model = self.sourceModel()
+        source_index = source_model.index(source_row, 0, source_parent)
+        account_info = source_model.data(source_index, Qt.UserRole)
+        return bool(account_info.account is not BonjourAccount() and account_info.account.enabled and account_info.account.server.settings_url)
+
+
+class ServerToolsWebView(QWebView):
+    implements(IObserver)
+
+    def __init__(self, parent=None):
+        super(ServerToolsWebView, self).__init__(parent)
+        self.access_manager = Null
+        self.authenticated = False
+        self.account = None
+        self.user_agent = 'blink'
+        self.tab = None
+        self.task = None
+        self.urlChanged.connect(self._SH_URLChanged)
+
+    @property
+    def query_items(self):
+        all_items = ('user_agent', 'tab', 'task')
+        return [(name, value) for name, value in self.__dict__.iteritems() if name in all_items and value is not None]
+
+    def _get_account(self):
+        return self.__dict__['account']
+
+    def _set_account(self, account):
+        notification_center = NotificationCenter()
+        old_account = self.__dict__.get('account', Null)
+        if account is old_account:
+            return
+        self.__dict__['account'] = account
+        self.authenticated = False
+        if old_account:
+            notification_center.remove_observer(self, sender=old_account)
+        if account:
+            notification_center.add_observer(self, sender=account)
+        self.access_manager.authenticationRequired.disconnect(self._SH_AuthenticationRequired)
+        self.access_manager = QNetworkAccessManager(self)
+        self.access_manager.authenticationRequired.connect(self._SH_AuthenticationRequired)
+        self.page().setNetworkAccessManager(self.access_manager)
+
+    account = property(_get_account, _set_account)
+    del _get_account, _set_account
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if 'id' in notification.data.modified or 'auth.password' in notification.data.modified:
+            self.authenticated = False
+            self.reload()
+
+    def _SH_AuthenticationRequired(self, reply, auth):
+        if self.account and not self.authenticated:
+            auth.setUser(self.account.id)
+            auth.setPassword(self.account.auth.password)
+            self.authenticated = True
+        else:
+            # we were already authenticated, yet it asks for the auth again. this means our credentials are not good.
+            # we do not provide credentials anymore in order to fail and not try indefinitely, but we also reset the
+            # authenticated status so that we try again when the page is reloaded.
+            self.authenticated = False
+
+    def _SH_URLChanged(self, url):
+        query_items = dict((unicode(name), unicode(value)) for name, value in url.queryItems())
+        self.tab = query_items.get('tab') or self.tab
+        self.task = query_items.get('task') or self.task
+
+    def load_account_page(self, account, tab=None, task=None):
+        self.tab = tab
+        self.task = task
+        self.account = account
+        url = QUrl(account.server.settings_url)
+        for name, value in self.query_items:
+            url.addQueryItem(name, value)
+        self.load(url)
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('server_tools.ui'))
+
+class ServerToolsWindow(base_class, ui_class):
+    __metaclass__ = QSingleton
+
+    def __init__(self, model, parent=None):
+        super(ServerToolsWindow, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        while self.tab_widget.count():
+            self.tab_widget.removeTab(0) # remove the tab(s) added in designer
+        self.tab_widget.tabBar().hide()
+        self.account_button.setMenu(QMenu(self.account_button))
+        self.setWindowTitle('Blink Server Tools')
+        self.setWindowIconText('Server Tools')
+        self.model = model
+        self.tab_widget.addTab(ServerToolsWebView(self), '')
+        font = self.account_label.font()
+        font.setPointSizeF(self.account_label.fontInfo().pointSizeF() + 2)
+        font.setFamily("Sans Serif")
+        self.account_label.setFont(font)
+        self.model.rowsInserted.connect(self._SH_ModelChanged)
+        self.model.rowsRemoved.connect(self._SH_ModelChanged)
+        self.account_button.menu().triggered.connect(self._SH_AccountButtonMenuTriggered)
+
+    def _SH_AccountButtonMenuTriggered(self, action):
+        view = self.tab_widget.currentWidget()
+        account = action.data().toPyObject()
+        self.account_label.setText(account.id)
+        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
+        view.load_account_page(account, tab=view.tab, task=view.task)
+
+    def _SH_ModelChanged(self, parent_index, start, end):
+        menu = self.account_button.menu()
+        menu.clear()
+        for row in xrange(self.model.rowCount()):
+            account_info = self.model.data(self.model.index(row, 0), Qt.UserRole).toPyObject()
+            action = QAction(account_info.name, self)
+            action.setData(QVariant(account_info.account))
+            menu.addAction(action)
+
+    def open_settings_page(self, account):
+        view = self.tab_widget.currentWidget()
+        account = account or view.account
+        if account is None or account.server.settings_url is None:
+            account = self.account_button.menu().actions()[0].data().toPyObject()
+        self.account_label.setText(account.id)
+        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
+        view.load_account_page(account, tab='settings')
+        self.show()
+
+    def open_search_for_people_page(self, account):
+        view = self.tab_widget.currentWidget()
+        account = account or view.account
+        if account is None or account.server.settings_url is None:
+            account = self.account_button.menu().actions()[0].data().toPyObject()
+        self.account_label.setText(account.id)
+        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
+        view.load_account_page(account, tab='contacts', task='directory')
+        self.show()
+
+    def open_history_page(self, account):
+        view = self.tab_widget.currentWidget()
+        account = account or view.account
+        if account is None or account.server.settings_url is None:
+            account = self.account_button.menu().actions()[0].data().toPyObject()
+        self.account_label.setText(account.id)
+        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
+        view.load_account_page(account, tab='calls')
         self.show()
 
 del ui_class, base_class

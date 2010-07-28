@@ -21,7 +21,7 @@ from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
-from blink.accounts import AccountModel, ActiveAccountModel, AddAccountDialog
+from blink.accounts import AccountModel, ActiveAccountModel, AddAccountDialog, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
 from blink.sessions import SessionManager, SessionModel
 from blink.resources import Resources
@@ -36,110 +36,126 @@ class MainWindow(base_class, ui_class):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
+        self.idle_status_index = 0
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationWillStart')
 
         with Resources.directory:
             self.setupUi()
 
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
-
         self.set_user_icon(Resources.get("icons/default-avatar.png")) # ":/resources/icons/default-avatar.png"
-        self.enable_call_buttons(False)
-        self.active_sessions_label.hide()
 
+        self.active_sessions_label.hide()
+        self.enable_call_buttons(False)
+        self.conference_button.setEnabled(False)
+        self.hangup_all_button.setEnabled(False)
+        self.sip_server_settings_action.setEnabled(False)
+        self.search_for_people_action.setEnabled(False)
+        self.history_on_server_action.setEnabled(False)
+        self.main_view.setCurrentWidget(self.contacts_panel)
+        self.contacts_view.setCurrentWidget(self.contact_list_panel)
+        self.search_view.setCurrentWidget(self.search_list_panel)
+
+        # Accounts
         self.account_model = AccountModel(self)
         self.enabled_account_model = ActiveAccountModel(self.account_model, self)
+        self.server_tools_account_model = ServerToolsAccountModel(self.account_model, self)
         self.identity.setModel(self.enabled_account_model)
 
+        # Contacts
         self.contact_model = ContactModel(self)
         self.contact_search_model = ContactSearchModel(self.contact_model, self)
         self.contact_list.setModel(self.contact_model)
         self.search_list.setModel(self.contact_search_model)
 
-        self.contact_list.selectionModel().selectionChanged.connect(self._SH_ContactListSelectionChanged)
-        self.search_list.selectionModel().selectionChanged.connect(self._SH_SearchListSelectionChanged)
-        self.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
-
-        self.contact_model.load()
-
-        self.about_panel = AboutPanel(self)
-        self.add_account_dialog = AddAccountDialog(self)
-        self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
-
+        # Sessions
         self.session_model = SessionModel(self)
         self.session_list.setModel(self.session_model)
 
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
 
-        self.main_view.setCurrentWidget(self.contacts_panel)
-        self.contacts_view.setCurrentWidget(self.contact_list_panel)
-        self.search_view.setCurrentWidget(self.search_list_panel)
+        # Windows, dialogs and panels
+        self.about_panel = AboutPanel(self)
+        self.add_account_dialog = AddAccountDialog(self)
+        self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
+        self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
 
-        self.conference_button.setEnabled(False)
-        self.hangup_all_button.setEnabled(False)
+        # Signals
+        self.add_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
+        self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
+        self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
+        self.back_to_contacts_button.clicked.connect(self.search_box.clear) # this can be set in designer -Dan
+        self.conference_button.makeConference.connect(self._SH_MakeConference)
+        self.conference_button.breakConference.connect(self._SH_BreakConference)
 
-        self.switch_view_button.viewChanged.connect(self._SH_SwitchViewButtonChangedView)
-
-        self.search_box.textChanged.connect(self._SH_SearchBoxTextChanged)
+        self.contact_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
+        self.contact_list.selectionModel().selectionChanged.connect(self._SH_ContactListSelectionChanged)
         self.contact_model.itemsAdded.connect(self._SH_ContactModelAddedItems)
         self.contact_model.itemsRemoved.connect(self._SH_ContactModelRemovedItems)
 
-        self.back_to_contacts_button.clicked.connect(self.search_box.clear) # this can be set in designer -Dan
-
-        self.add_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
-        self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
+        self.display_name.editingFinished.connect(self._SH_DisplayNameEditingFinished)
+        self.hangup_all_button.clicked.connect(self._SH_HangupAllButtonClicked)
 
         self.identity.activated[int].connect(self._SH_IdentityChanged)
         self.identity.currentIndexChanged[int].connect(self._SH_IdentityCurrentIndexChanged)
 
-        self.display_name.editingFinished.connect(self._SH_DisplayNameEditingFinished)
-        self.status.activated[int].connect(self._SH_StatusChanged)
+        self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
 
-        self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
-
-        self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
-        self.contact_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
-        self.search_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
+        self.search_box.textChanged.connect(self._SH_SearchBoxTextChanged)
+        self.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
         self.search_box.returnPressed.connect(self._SH_SearchBoxReturnPressed)
+        self.search_box.shortcut.activated.connect(self.search_box.setFocus)
+
+        self.search_list.selectionModel().selectionChanged.connect(self._SH_SearchListSelectionChanged)
+        self.search_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
+
+        self.server_tools_account_model.rowsInserted.connect(self._SH_ServerToolsAccountModelChanged)
+        self.server_tools_account_model.rowsRemoved.connect(self._SH_ServerToolsAccountModelChanged)
 
         self.session_model.sessionAdded.connect(self._SH_SessionModelAddedSession)
         self.session_model.structureChanged.connect(self._SH_SessionModelChangedStructure)
-        self.hangup_all_button.clicked.connect(self._SH_HangupAllButtonClicked)
-        self.conference_button.makeConference.connect(self._SH_MakeConference)
-        self.conference_button.breakConference.connect(self._SH_BreakConference)
-        self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
+
+        self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
+        self.status.activated[int].connect(self._SH_StatusChanged)
+        self.switch_view_button.viewChanged.connect(self._SH_SwitchViewButtonChangedView)
+
+        # Blink menu actions
+        self.about_action.triggered.connect(self.about_panel.show)
+        self.donate_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/payments.phtml')))
+        self.add_account_action.triggered.connect(self.add_account_dialog.open_for_add)
+        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
+        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
+        self.quit_action.triggered.connect(self.close)
+
+        # Audio menu actions
+        self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
+        self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
+        self.output_devices_group.triggered.connect(self._AH_AudioOutputDeviceChanged)
+        self.input_devices_group.triggered.connect(self._AH_AudioInputDeviceChanged)
+        self.alert_devices_group.triggered.connect(self._AH_AudioAlertDeviceChanged)
+
+        # History menu actions
+        self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
+
+        # Tools menu actions
+        self.sip_server_settings_action.triggered.connect(self._AH_SIPServerSettings)
+        self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
+        self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
+
+        self.contact_model.load()
+
+    def setupUi(self):
+        super(MainWindow, self).setupUi(self)
 
         self.search_box.shortcut = QShortcut(self.search_box)
         self.search_box.shortcut.setKey('CTRL+F')
-        self.search_box.shortcut.activated.connect(self.search_box.setFocus)
-
-        # menu actions
-        self.about_action.triggered.connect(self.about_panel.show)
-        self.add_account_action.triggered.connect(self.add_account_dialog.open_for_add)
-        self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
-        self.redial_action.triggered.connect(self._SH_RedialActionTriggered)
-        self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
-        self.quit_action.triggered.connect(self.close)
-
-        # menu actions that link to external web pages
-        self.donate_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/payments.phtml')))
-        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
-        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
-
-        self.idle_status_index = 0
 
         self.output_devices_group = QActionGroup(self)
         self.input_devices_group = QActionGroup(self)
         self.alert_devices_group = QActionGroup(self)
-        self.output_devices_group.triggered.connect(self._SH_AudioOutputDeviceChanged)
-        self.input_devices_group.triggered.connect(self._SH_AudioInputDeviceChanged)
-        self.alert_devices_group.triggered.connect(self._SH_AudioAlertDeviceChanged)
-
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='SIPApplicationWillStart')
-
-    def setupUi(self):
-        super(MainWindow, self).setupUi(self)
 
         # adjust search box height depending on theme as the value set in designer isn't suited for all themes
         search_box = self.search_box
@@ -179,6 +195,7 @@ class MainWindow(base_class, ui_class):
         self.about_panel.close()
         self.add_account_dialog.close()
         self.contact_editor_dialog.close()
+        self.server_tools_window.close()
 
     def set_user_icon(self, image_file_name):
         pixmap = QPixmap(32, 32)
@@ -258,6 +275,41 @@ class MainWindow(base_class, ui_class):
         account.enabled = enabled
         account.save()
 
+    def _AH_AudioAlertDeviceChanged(self, action):
+        settings = SIPSimpleSettings()
+        settings.audio.alert_device = action.data().toPyObject()
+        call_in_auxiliary_thread(settings.save)
+
+    def _AH_AudioInputDeviceChanged(self, action):
+        settings = SIPSimpleSettings()
+        settings.audio.input_device = action.data().toPyObject()
+        call_in_auxiliary_thread(settings.save)
+
+    def _AH_AudioOutputDeviceChanged(self, action):
+        settings = SIPSimpleSettings()
+        settings.audio.output_device = action.data().toPyObject()
+        call_in_auxiliary_thread(settings.save)
+
+    def _AH_RedialActionTriggered(self):
+        session_manager = SessionManager()
+        if session_manager.last_dialed_uri is not None:
+            session_manager.start_call(None, unicode(session_manager.last_dialed_uri))
+
+    def _AH_SIPServerSettings(self, checked):
+        account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
+        account = account if account is not BonjourAccount() and account.server.settings_url else None
+        self.server_tools_window.open_settings_page(account)
+
+    def _AH_SearchForPeople(self, checked):
+        account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
+        account = account if account is not BonjourAccount() and account.server.settings_url else None
+        self.server_tools_window.open_search_for_people_page(account)
+
+    def _AH_HistoryOnServer(self, checked):
+        account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
+        account = account if account is not BonjourAccount() and account.server.settings_url else None
+        self.server_tools_window.open_history_page(account)
+
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
         selected_items = ((index.row(), model.data(index)) for index in self.contact_list.selectionModel().selectedIndexes())
@@ -279,21 +331,6 @@ class MainWindow(base_class, ui_class):
         name = contact.name or None
         session_manager = SessionManager()
         session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
-
-    def _SH_AudioAlertDeviceChanged(self, action):
-        settings = SIPSimpleSettings()
-        settings.audio.alert_device = action.data().toPyObject()
-        call_in_auxiliary_thread(settings.save)
-
-    def _SH_AudioInputDeviceChanged(self, action):
-        settings = SIPSimpleSettings()
-        settings.audio.input_device = action.data().toPyObject()
-        call_in_auxiliary_thread(settings.save)
-
-    def _SH_AudioOutputDeviceChanged(self, action):
-        settings = SIPSimpleSettings()
-        settings.audio.output_device = action.data().toPyObject()
-        call_in_auxiliary_thread(settings.save)
 
     def _SH_BreakConference(self):
         active_session = self.session_model.data(self.session_list.selectionModel().selectedIndexes()[0])
@@ -367,11 +404,6 @@ class MainWindow(base_class, ui_class):
         self.mute_button.setChecked(muted)
         SIPApplication.voice_audio_bridge.mixer.muted = muted
 
-    def _SH_RedialActionTriggered(self):
-        session_manager = SessionManager()
-        if session_manager.last_dialed_uri is not None:
-            session_manager.start_call(None, unicode(session_manager.last_dialed_uri))
-
     def _SH_SearchBoxReturnPressed(self):
         address = unicode(self.search_box.text())
         if address:
@@ -398,6 +430,12 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         selected_items = self.search_list.selectionModel().selectedIndexes()
         self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)<=1)
+
+    def _SH_ServerToolsAccountModelChanged(self, parent_index, start, end):
+        server_tools_enabled = self.server_tools_account_model.rowCount() > 0
+        self.sip_server_settings_action.setEnabled(server_tools_enabled)
+        self.search_for_people_action.setEnabled(server_tools_enabled)
+        self.history_on_server_action.setEnabled(server_tools_enabled)
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         selected_indexes = selected.indexes()
