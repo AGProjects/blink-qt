@@ -909,6 +909,9 @@ padding: 2px;</string>
      <addaction name="separator"/>
     </widget>
     <widget class="QMenu" name="quick_settings_menu">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
      <property name="title">
       <string>Quick &amp;settings</string>
      </property>
@@ -937,6 +940,9 @@ padding: 2px;</string>
      <string>&amp;History</string>
     </property>
     <widget class="QMenu" name="missed_calls_menu">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
      <property name="title">
       <string>&amp;Missed calls</string>
      </property>
@@ -946,6 +952,9 @@ padding: 2px;</string>
      </property>
     </widget>
     <widget class="QMenu" name="placed_calls_menu">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
      <property name="title">
       <string>&amp;Placed calls</string>
      </property>
@@ -955,6 +964,9 @@ padding: 2px;</string>
      </property>
     </widget>
     <widget class="QMenu" name="received_calls_menu">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
      <property name="title">
       <string>&amp;Received calls</string>
      </property>
@@ -1060,6 +1072,9 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="preferences_action">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="icon">
     <iconset>
      <normaloff>icons/configure.png</normaloff>icons/configure.png</iconset>
@@ -1083,6 +1098,9 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="logs_action">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="text">
     <string>&amp;Logs</string>
    </property>
@@ -1094,6 +1112,9 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="file_transfers_action">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="text">
     <string>&amp;File transfers</string>
    </property>
@@ -1107,6 +1128,9 @@ padding: 2px;</string>
   <action name="answering_machine_action">
    <property name="checkable">
     <bool>true</bool>
+   </property>
+   <property name="enabled">
+    <bool>false</bool>
    </property>
    <property name="text">
     <string>Enable &amp;Answering Machine</string>
@@ -1199,6 +1223,9 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="history_action">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="text">
     <string>&amp;Sessions</string>
    </property>
