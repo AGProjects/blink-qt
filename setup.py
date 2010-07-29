@@ -26,10 +26,10 @@ setup(name         = "blink",
           "Programming Language :: Python"
       ],
       packages     = find_packages('blink'),
-      data_files   = [('bin', ['bin/blink']),
-                      ('share/blink', glob.glob('resources/*.ui')),
+      data_files   = [('share/blink', glob.glob('resources/*.ui')),
                       ('share/blink/icons', glob.glob('resources/icons/*.png')+glob.glob('resources/icons/*.svg')),
                       ('share/blink/sounds', glob.glob('resources/sounds/*.wav'))
-      ]
+      ],
+      scripts      = ['bin/blink', 'bin/blink-settings']
 )
 
