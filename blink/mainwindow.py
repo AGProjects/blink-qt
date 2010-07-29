@@ -216,8 +216,8 @@ class MainWindow(base_class, ui_class):
 
     def enable_call_buttons(self, enabled):
         self.audio_call_button.setEnabled(enabled)
-        self.im_session_button.setEnabled(enabled)
-        self.ds_session_button.setEnabled(enabled)
+        self.im_session_button.setEnabled(False)
+        self.ds_session_button.setEnabled(False)
 
     def load_audio_devices(self):
         settings = SIPSimpleSettings()

@@ -1237,6 +1237,9 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="manage_accounts_action">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="text">
     <string>&amp;Manage accounts...</string>
    </property>
