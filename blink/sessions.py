@@ -9,8 +9,10 @@ import bisect
 import cPickle as pickle
 import os
 import re
+import string
 from datetime import datetime, timedelta
 from functools import partial
+from itertools import chain, izip, repeat
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QObject, QSize, QStringList, QTimer, pyqtSignal
@@ -1257,9 +1259,11 @@ class SessionListView(QListView):
 
     def keyPressEvent(self, event):
         digit = chr(event.key()) if event.key() < 256 else None
-        if digit is not None and digit in '0123456789ABCD#*':
+        if digit is not None and digit in string.digits+string.uppercase+'#*':
+            letter_map = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
+            letter_map = dict(chain(*(izip(letters, repeat(digit)) for digit, letters in letter_map.iteritems())))
             for session in (s for s in self.model().sessions if s.active):
-                session.send_dtmf(digit)
+                session.send_dtmf(letter_map.get(digit, digit))
         elif event.key() in (Qt.Key_Up, Qt.Key_Down):
             selection_model = self.selectionModel()
             current_index = selection_model.currentIndex()
