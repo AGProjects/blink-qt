@@ -1032,6 +1032,8 @@ padding: 2px;</string>
     <addaction name="separator"/>
     <addaction name="file_transfers_action"/>
     <addaction name="logs_action"/>
+    <addaction name="separator"/>
+    <addaction name="google_contacts_action"/>
    </widget>
    <addaction name="blink_menu"/>
    <addaction name="audio_menu"/>
@@ -1247,6 +1249,11 @@ padding: 2px;</string>
   <action name="donate_action">
    <property name="text">
     <string>Donate if you like Blink</string>
+   </property>
+  </action>
+  <action name="google_contacts_action">
+   <property name="text">
+    <string>Enable Google Contacts</string>
    </property>
   </action>
   <action name="history_on_server_action">

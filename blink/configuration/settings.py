@@ -12,12 +12,17 @@ from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtens
 from sipsimple.configuration.settings import AudioSettings, LogsSettings, TLSSettings
 
 from blink import __version__
-from blink.configuration.datatypes import ApplicationDataPath, HTTPURL, SoundFile
+from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, HTTPURL, SoundFile
 from blink.resources import Resources
 
 
 class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'), nillable=False)
+
+
+class GoogleContactsSettings(SettingsGroup):
+    authorization_token = Setting(type=AuthorizationToken, default=None, nillable=True)
+    username = Setting(type=unicode, default=None, nillable=True)
 
 
 class LogsSettingsExtension(LogsSettings):
@@ -42,6 +47,7 @@ class TLSSettingsExtension(TLSSettings):
 
 class SIPSimpleSettingsExtension(SettingsObjectExtension):
     audio = AudioSettingsExtension
+    google_contacts = GoogleContactsSettings
     logs = LogsSettingsExtension
     server = ServerSettings
     sounds = SoundSettings

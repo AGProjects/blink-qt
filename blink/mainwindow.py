@@ -22,7 +22,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, AddAccountDialog, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel
+from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
 from blink.sessions import SessionManager, SessionModel
 from blink.resources import Resources
 from blink.util import call_in_auxiliary_thread, run_in_gui_thread
@@ -81,6 +81,7 @@ class MainWindow(base_class, ui_class):
         self.about_panel = AboutPanel(self)
         self.add_account_dialog = AddAccountDialog(self)
         self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
+        self.google_contacts_dialog = GoogleContactsDialog(self)
         self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
 
         # Signals
@@ -195,6 +196,7 @@ class MainWindow(base_class, ui_class):
         self.about_panel.close()
         self.add_account_dialog.close()
         self.contact_editor_dialog.close()
+        self.google_contacts_dialog.close()
         self.server_tools_window.close()
 
     def set_user_icon(self, image_file_name):
@@ -289,6 +291,15 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         settings.audio.output_device = action.data().toPyObject()
         call_in_auxiliary_thread(settings.save)
+
+    def _AH_GoogleContactsActionTriggered(self):
+        settings = SIPSimpleSettings()
+        if settings.google_contacts.authorization_token:
+            settings = SIPSimpleSettings()
+            settings.google_contacts.authorization_token = None
+            settings.save()
+        else:
+            self.google_contacts_dialog.open()
 
     def _AH_RedialActionTriggered(self):
         session_manager = SessionManager()
@@ -493,6 +504,16 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, sender=account_manager)
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
+        if settings.google_contacts.authorization_token:
+            self.google_contacts_action.setText(u'Disable Google Contacts')
+        elif settings.google_contacts.authorization_token is not None:
+            # Token is invalid
+            self.google_contacts_action.setText(u'Disable Google Contacts')
+            # Maybe this should be moved to DidStart so that the dialog is shown *after* the MainWindow. -Saul
+            self.google_contacts_dialog.open_for_incorrect_password()
+        else:
+            self.google_contacts_action.setText(u'Enable Google Contacts')
+        self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
         if all(not account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
@@ -539,6 +560,15 @@ class MainWindow(base_class, ui_class):
             if 'audio.alert_device' in notification.data.modified:
                 action = (action for action in self.alert_devices_group.actions() if action.data().toPyObject() == settings.audio.alert_device).next()
                 action.setChecked(True)
+            if 'google_contacts.authorization_token' in notification.data.modified:
+                authorization_token = notification.sender.google_contacts.authorization_token
+                if authorization_token:
+                    self.google_contacts_action.setText(u'Disable Google Contacts')
+                elif authorization_token is not None:
+                    # Token is invalid
+                    self.google_contacts_dialog.open_for_incorrect_password()
+                else:
+                    self.google_contacts_action.setText(u'Enable Google Contacts')
         elif isinstance(notification.sender, (Account, BonjourAccount)):
             if 'enabled' in notification.data.modified:
                 account = notification.sender

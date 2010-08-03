@@ -16,6 +16,7 @@ from application import log
 from application.python.util import Singleton
 from application.system import unlink
 from collections import deque
+from hashlib import sha512
 from sipsimple.util import classproperty, makedirs
 
 
@@ -165,4 +166,39 @@ class IconCache(object):
             self.available_names.appendleft(os.path.basename(destination_name))
             return filename
 
+    def store_image(self, data):
+        if data is None:
+            return None
+        data_hash = sha512(data).hexdigest()
+        try:
+            return self.filemap[data_hash].destination
+        except KeyError:
+            pass
+        try:
+            destination_name = os.path.join('images', self.available_names.popleft())
+        except IndexError:
+            # No more available file names.
+            return None
+        pixmap = QPixmap()
+        if pixmap.loadFromData(data):
+            pixmap = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        makedirs(ApplicationData.get('images'))
+        if pixmap.save(ApplicationData.get(destination_name)):
+            file_mapping = FileMapping(data_hash, destination_name)
+            self.filemap[data_hash] = file_mapping
+            map_filename = ApplicationData.get(os.path.join('images', '.cached_icons.map'))
+            map_tempname = map_filename + '.tmp'
+            try:
+                file = open(map_tempname, 'wb')
+                pickle.dump(self.filemap, file)
+                file.close()
+                if sys.platform == 'win32':
+                    unlink(map_filename)
+                os.rename(map_tempname, map_filename)
+            except Exception, e:
+                log.error("could not save icon cache file mappings: %s" % e)
+            return destination_name
+        else:
+            self.available_names.appendleft(os.path.basename(destination_name))
+            return None
 

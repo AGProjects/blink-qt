@@ -3,7 +3,7 @@
 
 """Definitions of datatypes for use in settings extensions."""
 
-__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL']
+__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL', 'InvalidToken', 'AuthorizationToken']
 
 import os
 import re
@@ -111,5 +111,35 @@ class HTTPURL(unicode):
         if url.port is not None and not (0 < url.port < 65536):
             raise ValueError("illegal port value: %d" % url.port)
         return value
+
+
+class InvalidToken(object):
+    def __repr__(self):
+        return self.__class__.__name__
+
+class AuthorizationToken(object):
+    def __init__(self, token=None):
+        self.token = token
+
+    def __getstate__(self):
+        if self.token is InvalidToken:
+            return u'invalid'
+        else:
+            return u'value:%s' % (self.__dict__['token'])
+
+    def __setstate__(self, state):
+        match = re.match(r'^(?P<type>invalid|value:)(?P<token>.+?)?$', state)
+        if match is None:
+            raise ValueError('illegal value: %r' % state)
+        data = match.groupdict()
+        if data.pop('type') == 'invalid':
+            data['token'] = InvalidToken
+        self.__init__(data['token'])
+
+    def __nonzero__(self):
+        return self.token is not InvalidToken
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, self.token)
 
 

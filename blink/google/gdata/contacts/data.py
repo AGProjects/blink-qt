@@ -410,6 +410,12 @@ class ContactEntry(PersonEntry):
         return a_link
     return None
 
+  def get_entry_photo_data(self):
+    photo = self.GetPhotoLink()
+    if photo._other_attributes.get('{http://schemas.google.com/g/2005}etag'):
+      return (photo.href, photo._other_attributes.get('{http://schemas.google.com/g/2005}etag').strip('"'))
+    return (None, None)
+
 
 class ContactsFeed(gdata_data.BatchFeed):
   """A collection of Contacts."""
