@@ -23,7 +23,7 @@ from application.python.util import Null
 from application.system import unlink
 from collections import deque
 from eventlet import api
-from eventlet.green import urllib2
+from eventlet.green import httplib, urllib2
 from functools import partial
 from operator import attrgetter
 from twisted.internet import reactor
@@ -41,7 +41,7 @@ from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_auxili
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.labels import Status
 
-from blink.google.gdata.client import BadAuthentication, CaptchaChallenge, RequestError, Unauthorized
+from blink.google.gdata.client import CaptchaChallenge, RequestError, Unauthorized
 from blink.google.gdata.contacts.client import ContactsClient
 from blink.google.gdata.contacts.data import ContactsFeed
 from blink.google.gdata.contacts.service import ContactsQuery
@@ -412,7 +412,7 @@ class GoogleContactsManager(object):
         except Unauthorized:
             settings.google_contacts.authorization_token = AuthorizationToken(InvalidToken)
             settings.save()
-        except (ConnectionLost, RequestError, socket.error):
+        except (ConnectionLost, RequestError, httplib.HTTPException, socket.error):
             self._load_timer = reactor.callLater(60, self.load_contacts)
         else:
             if update_timestamp:
@@ -548,7 +548,7 @@ class GoogleContactsDialog(base_class, ui_class):
                 self.captcha_token = e.captcha_token
                 call_in_gui_thread(self._set_captcha_image, captcha_data)
                 call_in_gui_thread(self.enable_captcha, True)
-        except (BadAuthentication, RequestError):
+        except RequestError:
             self.captcha_token = None
             call_in_gui_thread(self.username_editor.setEnabled, True)
             call_in_gui_thread(setattr, self.status_label, 'value', Status('Error authenticating with Google', color=red))
