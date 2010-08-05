@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Add account</string>
+   <string>Add Account</string>
   </property>
   <layout class="QVBoxLayout" name="dialog_layout">
    <property name="spacing">

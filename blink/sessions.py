@@ -1569,12 +1569,12 @@ class IncomingSession(QObject):
         self.desktopsharing_stream = desktopsharing_stream
 
         if proposal:
-            self.dialog.setWindowTitle(u'Incoming session update')
-            self.dialog.setWindowIconText(u'Incoming session update')
+            self.dialog.setWindowTitle(u'Incoming Session Update')
+            self.dialog.setWindowIconText(u'Incoming Session Update')
             self.dialog.busy_button.hide()
         else:
-            self.dialog.setWindowTitle(u'Incoming session request')
-            self.dialog.setWindowIconText(u'Incoming session request')
+            self.dialog.setWindowTitle(u'Incoming Session Request')
+            self.dialog.setWindowIconText(u'Incoming Session Request')
         address = u'%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         if self.contact:
