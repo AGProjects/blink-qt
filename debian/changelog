@@ -1,6 +1,7 @@
 blink (0.1.1) unstable; urgency=low
 
   * First public release for Debian and Ubuntu Linux
+  * Release notes available at http://icanblink.com/blink-qt-beta.phtml
   * Multiple SIP accounts
   * Easy to setup accounts, only the SIP address and password are required
   * Bonjour discovery mechanism
@@ -28,13 +29,12 @@ blink (0.1.1) unstable; urgency=low
   * Strip unwanted characters from telephone numbers
   * Redial last call
   * Multi-party conferencing with unlimited number of participants
+  * Multiple simultaneous conferences
   * Drag and Drop contacts to conferences
   * Mute individual participants
   * Audio recording
   * Display the caller icon and name retrieved from Address Book
   * Reject calls with 486 Busy  or 603 Decline
-  * Accept partial offers when INVITE contains multiple streams
-  * Multiple simultaneous conferences
   * SIP, DNS, MSRP protocol trace to file
 
  -- Adrian Georgescu <ag@ag-projects.com>  Wed, 04 Aug 2010 22:53:46 +0200
