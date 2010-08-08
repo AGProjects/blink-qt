@@ -1,5 +1,5 @@
 
-Blink QT installation on Debian and Ubuntu Linux
+Blink QT Installation on Debian and Ubuntu Linux
 ------------------------------------------------
 
 Copyright (c) 2010 AG Projects
@@ -52,7 +52,7 @@ Install Blink
 sudo apt-get install blink
 
 
-Manual installation
+Manual Installation
 -------------------
 
 Retrieve and unpack the tar archive from:
@@ -98,4 +98,3 @@ Go to the newly created directory and type:
 debuild
 
 The .deb and related files are built in the upper directory.
-

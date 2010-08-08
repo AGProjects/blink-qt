@@ -1,5 +1,5 @@
 
-Audio device sharing on Linux
+Audio Device Sharing on Linux
 -----------------------------
 
 Some audio cards support hardware mixing. Such cards can be opened at the
