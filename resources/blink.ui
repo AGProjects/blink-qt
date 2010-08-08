@@ -1029,6 +1029,7 @@ padding: 2px;</string>
     <addaction name="sip_server_settings_action"/>
     <addaction name="search_for_people_action"/>
     <addaction name="history_on_server_action"/>
+    <addaction name="purchase_pstn_access_action"/>
     <addaction name="separator"/>
     <addaction name="file_transfers_action"/>
     <addaction name="logs_action"/>
@@ -1259,6 +1260,11 @@ padding: 2px;</string>
   <action name="history_on_server_action">
    <property name="text">
     <string>Call history on server...</string>
+   </property>
+  </action>
+  <action name="purchase_pstn_access_action">
+   <property name="text">
+    <string>Purchase access to PSTN...</string>
    </property>
   </action>
  </widget>

@@ -648,6 +648,16 @@ class ServerToolsWindow(base_class, ui_class):
         view.load_account_page(account, tab='calls')
         self.show()
 
+    def open_purchase_pstn_access_page(self, account):
+        view = self.tab_widget.currentWidget()
+        account = account or view.account
+        if account is None or account.server.settings_url is None:
+            account = self.account_button.menu().actions()[0].data().toPyObject()
+        self.account_label.setText(account.id)
+        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
+        view.load_account_page(account, tab='payments')
+        self.show()
+
 del ui_class, base_class
 
 
