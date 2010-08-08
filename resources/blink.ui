@@ -1030,6 +1030,7 @@ padding: 2px;</string>
     <addaction name="search_for_people_action"/>
     <addaction name="history_on_server_action"/>
     <addaction name="purchase_pstn_access_action"/>
+    <addaction name="internet_domain_action"/>
     <addaction name="separator"/>
     <addaction name="file_transfers_action"/>
     <addaction name="logs_action"/>
@@ -1265,6 +1266,11 @@ padding: 2px;</string>
   <action name="purchase_pstn_access_action">
    <property name="text">
     <string>Purchase access to PSTN...</string>
+   </property>
+  </action>
+  <action name="internet_domain_action">
+   <property name="text">
+    <string>Use your Internet domain with Blink...</string>
    </property>
   </action>
  </widget>

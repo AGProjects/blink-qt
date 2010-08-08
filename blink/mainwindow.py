@@ -147,6 +147,7 @@ class MainWindow(base_class, ui_class):
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.purchase_pstn_access_action.triggered.connect(self._AH_PurchasePstnAccess)
+        self.internet_domain_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'https://mdns.sipthor.net')))
 
         self.contact_model.load()
 
