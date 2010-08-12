@@ -7,7 +7,7 @@ blink (0.1.1) unstable; urgency=low
   * Bonjour discovery mechanism
   * Automatic detection of IP address changes
   * TLS Security for both signaling and media
-  * NAT traversal using ICE and MSRP relay
+  * NAT traversal using ICE
   * Built-in DNS resolver to by-pass broken implementations in NAT routers
   * Re-INVITE support for adding and removing media streams
   * One-click SIP account sign-up at http://sip2sip.info
@@ -32,12 +32,11 @@ blink (0.1.1) unstable; urgency=low
   * Multiple simultaneous conferences
   * Drag and Drop contacts to conferences
   * Mute individual participants
-  * Audio recording
   * Display the caller icon and name retrieved from Address Book
-  * Reject calls with 486 Busy  or 603 Decline
+  * Reject calls with 486 Busy or 603 Decline
   * SIP, DNS, MSRP protocol trace to file
 
- -- Adrian Georgescu <ag@ag-projects.com>  Wed, 04 Aug 2010 22:53:46 +0200
+ -- Adrian Georgescu <adigeo@ubuntu>  Thu, 12 Aug 2010 21:18:52 +0200
 
 blink (0.1.0) unstable; urgency=low
 
