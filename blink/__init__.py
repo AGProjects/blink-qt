@@ -68,6 +68,7 @@ class Blink(QApplication):
         super(Blink, self).__init__(sys.argv)
         self.application = SIPApplication()
         self.auxiliary_thread = AuxiliaryThread()
+        self.first_run = False
         self.main_window = MainWindow()
 
         self.update_manager = UpdateManager()
@@ -189,12 +190,14 @@ class Blink(QApplication):
     def _NH_SIPApplicationDidStart(self, notification):
         account_manager = AccountManager()
         self.fetch_account()
-        if account_manager.get_accounts() == [BonjourAccount()]:
+        if account_manager.get_accounts() == [] or (self.first_run and account_manager.get_accounts() == [BonjourAccount()]):
             self.main_window.add_account_dialog.open_for_create()
         self.main_window.show()
         self.update_manager.initialize()
 
     def _initialize_sipsimple(self):
+        if not os.path.exists(ApplicationData.get('config')):
+            self.first_run = True
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.application)
         self.application.start(FileBackend(ApplicationData.get('config')))
