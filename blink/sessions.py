@@ -1938,7 +1938,16 @@ class SessionManager(object):
             if uri.matches(self.normalize_number(session.account, contact.uri)) or any(uri.matches(self.normalize_number(session.account, alias)) for alias in contact.sip_aliases):
                 break
         else:
-            contact = None
+            matched_contacts = []
+            if self.number_re.match(uri.user):
+                number = uri.user.lstrip('0')
+                for contact in (contact for contact in self.main_window.contact_model.iter_contacts() if self.number_re.match(contact.uri)):
+                    if len(number) > 7 and self.normalize_number(session.account, contact.uri).endswith(number):
+                        matched_contacts.append(contact)
+            if not matched_contacts or len(matched_contacts) > 1:
+                contact = None
+            else:
+                contact = matched_contacts[0]
         if filetransfer_streams:
             filetransfer_stream = filetransfer_streams[0]
         else:
