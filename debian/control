@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Dan Pascu <dan@ag-projects.com>
 Uploaders: Adrian Georgescu <ag@ag-projects.com>, Lucian Stanescu <luci@ag-projects.com>, Saul Ibarra <saul@ag-projects.com>
 Build-Depends: cdbs (>= 0.4.47), debhelper (>= 7), python-all (>= 2.5), python-qt4 (>= 4.6), python-support
-Standards-Version: 3.9.0
+Standards-Version: 3.9.1
 Homepage: http://icanblink.com
 
 Package: blink
