@@ -590,8 +590,8 @@ class ServerToolsWindow(base_class, ui_class):
             self.tab_widget.removeTab(0) # remove the tab(s) added in designer
         self.tab_widget.tabBar().hide()
         self.account_button.setMenu(QMenu(self.account_button))
-        self.setWindowTitle('Account Settings on SIP Server')
-        self.setWindowIconText('SIP Server page')
+        self.setWindowTitle('Blink Services on SIP Server')
+        self.setWindowIconText('Blink Services')
         self.model = model
         self.tab_widget.addTab(ServerToolsWebView(self), '')
         font = self.account_label.font()
