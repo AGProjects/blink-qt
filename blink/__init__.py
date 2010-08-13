@@ -88,7 +88,8 @@ class Blink(QApplication):
         self.exec_()
         self.update_manager.shutdown()
         self.application.stop()
-        self.application.thread.join()
+        # TODO: timeout should be removed when the Engine is fixed so that it never hangs. -Saul
+        self.application.thread.join(60.0)
         log_manager = LogManager()
         log_manager.stop()
 
