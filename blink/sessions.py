@@ -326,6 +326,8 @@ class SessionItem(QObject):
                 player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get(filename))
                 notification_center = NotificationCenter()
                 notification_center.add_observer(self, sender=player)
+                if self.session.account.rtp.inband_dtmf:
+                    self.audio_stream.bridge.add(player)
                 SIPApplication.voice_audio_bridge.add(player)
                 player.start()
 

@@ -5,7 +5,7 @@
 
 __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
-from sipsimple.account import PSTNSettings, TLSSettings
+from sipsimple.account import PSTNSettings, RTPSettings, TLSSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
 from sipsimple.util import user_info
 
@@ -14,6 +14,10 @@ from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, 
 
 class PSTNSettingsExtension(PSTNSettings):
     idd_prefix = Setting(type=unicode, default=None, nillable=True)
+
+
+class RTPSettingsExtension(RTPSettings):
+    inband_dtmf = Setting(type=bool, default=False)                                                                                                                                          
 
 
 class ServerSettings(SettingsGroup):
@@ -30,6 +34,7 @@ class TLSSettingsExtension(TLSSettings):
 
 class AccountExtension(SettingsObjectExtension):
     pstn = PSTNSettingsExtension
+    rtp = RTPSettingsExtension
     server = ServerSettings
     sounds = SoundSettings
     tls = TLSSettingsExtension
