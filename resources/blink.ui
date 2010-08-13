@@ -1025,17 +1025,15 @@ padding: 2px;</string>
      <string>&amp;Tools</string>
     </property>
     <addaction name="answering_machine_action"/>
+    <addaction name="google_contacts_action"/>
     <addaction name="separator"/>
     <addaction name="sip_server_settings_action"/>
     <addaction name="search_for_people_action"/>
     <addaction name="history_on_server_action"/>
-    <addaction name="purchase_pstn_access_action"/>
-    <addaction name="internet_domain_action"/>
+    <addaction name="buy_pstn_access_action"/>
     <addaction name="separator"/>
     <addaction name="file_transfers_action"/>
     <addaction name="logs_action"/>
-    <addaction name="separator"/>
-    <addaction name="google_contacts_action"/>
    </widget>
    <addaction name="blink_menu"/>
    <addaction name="audio_menu"/>
@@ -1263,14 +1261,9 @@ padding: 2px;</string>
     <string>Call history on server...</string>
    </property>
   </action>
-  <action name="purchase_pstn_access_action">
+  <action name="buy_pstn_access_action">
    <property name="text">
-    <string>Purchase access to PSTN...</string>
-   </property>
-  </action>
-  <action name="internet_domain_action">
-   <property name="text">
-    <string>Use your Internet domain with Blink...</string>
+    <string>Buy access to PSTN...</string>
    </property>
   </action>
  </widget>

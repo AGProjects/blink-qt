@@ -648,7 +648,7 @@ class ServerToolsWindow(base_class, ui_class):
         view.load_account_page(account, tab='calls')
         self.show()
 
-    def open_purchase_pstn_access_page(self, account):
+    def open_buy_pstn_access_page(self, account):
         view = self.tab_widget.currentWidget()
         account = account or view.account
         if account is None or account.server.settings_url is None:

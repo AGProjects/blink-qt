@@ -55,7 +55,7 @@ class MainWindow(base_class, ui_class):
         self.sip_server_settings_action.setEnabled(False)
         self.search_for_people_action.setEnabled(False)
         self.history_on_server_action.setEnabled(False)
-        self.purchase_pstn_access_action.setEnabled(False)
+        self.buy_pstn_access_action.setEnabled(False)
         self.main_view.setCurrentWidget(self.contacts_panel)
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
         self.search_view.setCurrentWidget(self.search_list_panel)
@@ -146,8 +146,7 @@ class MainWindow(base_class, ui_class):
         self.sip_server_settings_action.triggered.connect(self._AH_SIPServerSettings)
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
-        self.purchase_pstn_access_action.triggered.connect(self._AH_PurchasePstnAccess)
-        self.internet_domain_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'https://mdns.sipthor.net')))
+        self.buy_pstn_access_action.triggered.connect(self._AH_PurchasePstnAccess)
 
         self.contact_model.load()
 
@@ -327,7 +326,7 @@ class MainWindow(base_class, ui_class):
     def _AH_PurchasePstnAccess(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
         account = account if account is not BonjourAccount() and account.server.settings_url else None
-        self.server_tools_window.open_purchase_pstn_access_page(account)
+        self.server_tools_window.open_buy_pstn_access_page(account)
 
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
@@ -455,7 +454,7 @@ class MainWindow(base_class, ui_class):
         self.sip_server_settings_action.setEnabled(server_tools_enabled)
         self.search_for_people_action.setEnabled(server_tools_enabled)
         self.history_on_server_action.setEnabled(server_tools_enabled)
-        self.purchase_pstn_access_action.setEnabled(server_tools_enabled)
+        self.buy_pstn_access_action.setEnabled(server_tools_enabled)
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         selected_indexes = selected.indexes()
