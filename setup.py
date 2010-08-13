@@ -4,14 +4,14 @@ from distutils.core import setup
 import os
 import glob
 
-import blink
+from blink import __version__
 
 
 def find_packages(toplevel):
     return [directory.replace('/', '.') for directory, subdirs, files in os.walk(toplevel) if '__init__.py' in files]
 
 setup(name         = "blink",
-      version      = blink.__version__,
+      version      = __version__,
       author       = "AG Projects",
       author_email = "support@ag-projects.com",
       url          = "http://icanblink.com",
