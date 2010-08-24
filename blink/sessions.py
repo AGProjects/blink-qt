@@ -48,6 +48,9 @@ class SessionItem(QObject):
     ended = pyqtSignal()
 
     def __init__(self, name, uri, session, contact=None, audio_stream=None, video_stream=None):
+        # All of name, uri and contact need to be passed to determine what will be displayed in the
+        # SessionWidget because uri may not be exactly what contact holds due to fuzzy matching and
+        # the session may not have been connected (and thus session.remote_identity may be None).
         super(SessionItem, self).__init__()
         if (audio_stream, video_stream) == (None, None):
             raise ValueError('SessionItem must represent at least one audio or video stream')
