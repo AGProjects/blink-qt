@@ -1193,7 +1193,7 @@ class ContactModel(QAbstractListModel):
     def addContact(self, contact):
         if contact in self.items:
             return
-        added_items = [contact.group, contact] if contact.group in self.items else [contact]
+        added_items = [contact] if contact.group in self.items else [contact.group, contact]
         self._add_contact(contact)
         self.itemsAdded.emit(added_items)
 
@@ -1209,9 +1209,8 @@ class ContactModel(QAbstractListModel):
             self._add_contact(contact)
             if new_group:
                 self.itemsAdded.emit([group])
-        else:
-            index = self.index(self.items.index(contact))
-            self.dataChanged.emit(index, index)
+        index = self.index(self.items.index(contact))
+        self.dataChanged.emit(index, index)
 
     @updates_contacts_db
     def removeContact(self, contact):
