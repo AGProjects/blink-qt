@@ -14,6 +14,7 @@ from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, 
 
 class PSTNSettingsExtension(PSTNSettings):
     idd_prefix = Setting(type=unicode, default=None, nillable=True)
+    prefix = Setting(type=unicode, default=None, nillable=True)
 
 
 class RTPSettingsExtension(RTPSettings):

@@ -1810,6 +1810,8 @@ class SessionManager(object):
             address = cls.number_strip_re.sub('', address)
             if isinstance(account, Account) and account.pstn.idd_prefix is not None:
                 address = re.sub(r'^\+', account.pstn.idd_prefix, address)
+            if isinstance(account, Account) and account.pstn.prefix is not None:
+                address = account.pstn.prefix + address
         return address
 
     def _remove_session(self, session):
