@@ -40,6 +40,8 @@ class MainWindow(base_class, ui_class):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, sender=AccountManager())
 
         with Resources.directory:
             self.setupUi()
@@ -506,10 +508,6 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPApplicationWillStart(self, notification):
         settings = SIPSimpleSettings()
-        account_manager = AccountManager()
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=notification.sender)
-        notification_center.add_observer(self, sender=account_manager)
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
         if settings.google_contacts.authorization_token:
@@ -522,6 +520,7 @@ class MainWindow(base_class, ui_class):
         else:
             self.google_contacts_action.setText(u'Enable Google Contacts')
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
+        account_manager = AccountManager()
         if all(not account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
