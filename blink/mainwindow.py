@@ -529,7 +529,7 @@ class MainWindow(base_class, ui_class):
         for account in account_manager.iter_accounts():
             action = QAction(account.id if account is not BonjourAccount() else u'Bonjour', None)
             action.setCheckable(True)
-            action.setEnabled(True if account is not BonjourAccount() else account.enabled)
+            action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
             action.setData(QVariant(account))
             action.setChecked(account.enabled)
             action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
