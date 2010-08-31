@@ -1797,11 +1797,14 @@ class SessionManager(object):
         address = cls.normalize_number(account, address)
         if not address.startswith('sip:') and not address.startswith('sips:'):
             address = 'sip:' + address
-        if '@' not in address:
-            if isinstance(account, Account):
-                address = address + '@' + account.id.domain
-            else:
-                raise ValueError('SIP address without domain')
+        username, separator, domain = address.partition('@')
+        if not domain and isinstance(account, Account):
+            domain = account.id.domain
+        elif '.' not in domain and isinstance(account, Account):
+            domain += '.' + account.id.domain
+        elif not domain:
+            raise ValueError('SIP address without domain')
+        address = username + '@' + domain
         return SIPURI.parse(str(address))
 
     @classmethod
