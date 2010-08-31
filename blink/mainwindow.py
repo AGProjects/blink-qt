@@ -41,7 +41,6 @@ class MainWindow(base_class, ui_class):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
-        notification_center.add_observer(self, sender=AccountManager())
 
         with Resources.directory:
             self.setupUi()
@@ -521,6 +520,8 @@ class MainWindow(base_class, ui_class):
             self.google_contacts_action.setText(u'Enable Google Contacts')
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
         account_manager = AccountManager()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=account_manager)
         if all(not account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
