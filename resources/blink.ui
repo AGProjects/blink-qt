@@ -939,6 +939,14 @@ padding: 2px;</string>
     <property name="title">
      <string>&amp;History</string>
     </property>
+    <widget class="QMenu" name="voicemail_menu">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
+     <property name="title">
+      <string>&amp;Voicemail</string>
+     </property>
+    </widget>
     <widget class="QMenu" name="missed_calls_menu">
      <property name="enabled">
       <bool>false</bool>
@@ -978,6 +986,7 @@ padding: 2px;</string>
     <addaction name="redial_action"/>
     <addaction name="history_action"/>
     <addaction name="separator"/>
+    <addaction name="voicemail_menu"/>
     <addaction name="missed_calls_menu"/>
     <addaction name="placed_calls_menu"/>
     <addaction name="received_calls_menu"/>

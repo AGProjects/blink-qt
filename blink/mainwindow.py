@@ -329,6 +329,13 @@ class MainWindow(base_class, ui_class):
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_buy_pstn_access_page(account)
 
+    def _AH_VoicemailActionTriggered(self, action, checked):
+        account, received_voicemail_uri = action.data().toPyObject()
+        voicemail_uri = account.message_summary.voicemail_uri or received_voicemail_uri
+        if voicemail_uri:
+            session_manager = SessionManager()
+            session_manager.start_call(voicemail_uri, voicemail_uri, account=account)
+
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
         selected_items = ((index.row(), model.data(index)) for index in self.contact_list.selectionModel().selectedIndexes())
@@ -535,6 +542,12 @@ class MainWindow(base_class, ui_class):
             action.setChecked(account.enabled)
             action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
             self.accounts_menu.addAction(action)
+            if isinstance(account, Account) and account.enabled and account.message_summary.enabled:
+                vm_action = QAction(account.id, None)
+                vm_action.setData(QVariant((account, None)))
+                vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
+                vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
+                self.voicemail_menu.addAction(vm_action)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
@@ -589,10 +602,41 @@ class MainWindow(base_class, ui_class):
                 else:
                     self.google_contacts_action.setText(u'Enable Google Contacts')
         elif isinstance(notification.sender, (Account, BonjourAccount)):
+            account = notification.sender
             if 'enabled' in notification.data.modified:
-                account = notification.sender
                 action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
                 action.setChecked(account.enabled)
+                if account.enabled and account.message_summary.enabled:
+                    vm_action = QAction(account.id, None)
+                    vm_action.setData(QVariant((account, None)))
+                    vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
+                    vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
+                    self.voicemail_menu.addAction(vm_action)
+                else:
+                    try:
+                        vm_action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
+                    except StopIteration:
+                        pass
+                    else:
+                        self.voicemail_menu.removeAction(vm_action)
+            if 'message_summary.enabled' in notification.data.modified:
+                if account.message_summary.enabled:
+                    vm_action = QAction(account.id, None)
+                    vm_action.setData(QVariant((account, None)))
+                    vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
+                    vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
+                    self.voicemail_menu.addAction(vm_action)
+                else:
+                    vm_action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
+                    self.voicemail_menu.removeAction(action)
+            if 'message_summary.voicemail_uri' in notification.data.modified:
+                if account.message_summary.enabled:
+                    vm_action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
+                    vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
+
+    def _NH_SIPAccountManagerWillStart(self, notification):
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPAccountMWIDidGetSummary')
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
@@ -606,6 +650,9 @@ class MainWindow(base_class, ui_class):
         account = notification.data.account
         action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
         self.account_menu.removeAction(action)
+        if isinstance(account, Account) and account.enabled and account.message_summary.enabled:
+            action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
+            self.voicemail_menu.removeAction(action)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         if notification.data.account is None:
@@ -613,6 +660,19 @@ class MainWindow(base_class, ui_class):
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(len(selected_items)==1 and isinstance(self.contact_model.data(selected_items[0]), Contact))
+
+    def _NH_SIPAccountMWIDidGetSummary(self, notification):
+        account = notification.sender
+        summary = notification.data.message_summary
+        action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
+        action.setData(QVariant((account, summary.message_account)))
+        action.setEnabled(True if account.message_summary.voicemail_uri is not None or summary.message_account is not None else False)
+        if summary.messages_waiting and summary.summaries.get('voice-message') is not None:
+            new_messages = int(summary.summaries.get('voice-message').get('new_messages', 0))
+            vm_text = u'%d new messages' % new_messages if new_messages > 0 else u'No new messages'
+        else:
+            vm_text = u'No new messages'
+        action.setText(u'%s  -  %s' % (account.id, vm_text))
 
 del ui_class, base_class
 
