@@ -2060,6 +2060,7 @@ class ContactEditorDialog(base_class, ui_class):
             group = self.group.itemData(group_index).toPyObject()
         if self.edited_contact is None:
             contact = Contact(group, name, uri, image=image)
+            contact.preferred_media = preferred_media
             contact.sip_aliases = sip_aliases
             contact_model.addContact(contact)
         else:
