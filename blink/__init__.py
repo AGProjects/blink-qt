@@ -4,8 +4,8 @@
 __all__ = ['Blink']
 
 
-__version__ = '0.1.1'
-__date__    = 'August 13th, 2010'
+__version__ = '0.1.3'
+__date__    = 'September 2nd, 2010'
 
 
 import os
