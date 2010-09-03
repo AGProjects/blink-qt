@@ -649,7 +649,7 @@ class MainWindow(base_class, ui_class):
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account
         action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
-        self.account_menu.removeAction(action)
+        self.accounts_menu.removeAction(action)
         if isinstance(account, Account) and account.enabled and account.message_summary.enabled:
             action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
             self.voicemail_menu.removeAction(action)
