@@ -543,7 +543,7 @@ class MainWindow(base_class, ui_class):
             action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
             self.accounts_menu.addAction(action)
             if isinstance(account, Account) and account.enabled and account.message_summary.enabled:
-                vm_action = QAction(account.id, None)
+                vm_action = QAction(u'%s  -  No new messages' % account.id, None)
                 vm_action.setData(QVariant((account, None)))
                 vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
                 vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
@@ -607,7 +607,7 @@ class MainWindow(base_class, ui_class):
                 action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
                 action.setChecked(account.enabled)
                 if account.enabled and account.message_summary.enabled:
-                    vm_action = QAction(account.id, None)
+                    vm_action = QAction(u'%s  -  No new messages' % account.id, None)
                     vm_action.setData(QVariant((account, None)))
                     vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
                     vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
@@ -621,7 +621,7 @@ class MainWindow(base_class, ui_class):
                         self.voicemail_menu.removeAction(vm_action)
             if 'message_summary.enabled' in notification.data.modified:
                 if account.message_summary.enabled:
-                    vm_action = QAction(account.id, None)
+                    vm_action = QAction(u'%s  -  No new messages' % account.id, None)
                     vm_action.setData(QVariant((account, None)))
                     vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
                     vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
