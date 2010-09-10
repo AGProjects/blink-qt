@@ -529,7 +529,7 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=account_manager)
-        if all(not account.enabled for account in account_manager.iter_accounts()):
+        if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
             self.status.setEnabled(False)
