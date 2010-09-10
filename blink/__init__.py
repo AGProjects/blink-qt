@@ -88,6 +88,7 @@ class Blink(QApplication):
         self.exec_()
         self.update_manager.shutdown()
         self.application.stop()
+        self.application.thread.join()
         log_manager = LogManager()
         log_manager.stop()
 
