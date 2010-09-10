@@ -188,9 +188,9 @@ class Blink(QApplication):
 
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):
-        account_manager = AccountManager()
         self.fetch_account()
-        if account_manager.get_accounts() == [] or (self.first_run and account_manager.get_accounts() == [BonjourAccount()]):
+        accounts = AccountManager().get_accounts()
+        if not accounts or (self.first_run and accounts==[BonjourAccount()]):
             self.main_window.add_account_dialog.open_for_create()
         self.main_window.show()
         self.update_manager.initialize()
