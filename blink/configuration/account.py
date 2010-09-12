@@ -45,5 +45,5 @@ class AccountExtension(SettingsObjectExtension):
 
 class BonjourAccountExtension(SettingsObjectExtension):
     sounds = SoundSettings
-
+    rtp = RTPSettingsExtension
 
