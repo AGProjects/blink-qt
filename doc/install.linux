@@ -63,7 +63,7 @@ Install the runtime dependencies:
  * python (>=2.5)
  * python-application (>= 1.2.5)
  * python-cjson 
- * python-eventlet-0.8 (>= 0.8.11.2)
+ * python-eventlet-0.8 (>= 0.8.11.3)
  * python-qt4 (>= 4.7)
  * python-twisted-core (>= 8.1.0)
  * python-sipsimple (>= 0.16.1)
@@ -99,3 +99,4 @@ Go to the newly created directory and type:
 debuild
 
 The .deb and related files are built in the upper directory.
+
