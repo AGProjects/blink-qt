@@ -60,12 +60,13 @@ http://download.ag-projects.com/Blink/Linux/
 
 Install the runtime dependencies:
 
- * python-application (>= 1.2.4)
+ * python (>=2.5)
+ * python-application (>= 1.2.5)
  * python-cjson 
  * python-eventlet-0.8 (>= 0.8.11.2)
- * python-qt4 (>= 4.6)
+ * python-qt4 (>= 4.7)
  * python-twisted-core (>= 8.1.0)
- * python-sipsimple (>= 0.15.2)
+ * python-sipsimple (>= 0.16.1)
  * python-zope.interface
 
 After installing the above dependencies, install Blink system wide using:
