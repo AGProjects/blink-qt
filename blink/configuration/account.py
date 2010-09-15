@@ -34,16 +34,15 @@ class TLSSettingsExtension(TLSSettings):
 
 
 class AccountExtension(SettingsObjectExtension):
-    pstn = PSTNSettings
+    pstn = PSTNSettingsExtension
     rtp = RTPSettingsExtension
     server = ServerSettings
     sounds = SoundSettings
     tls = TLSSettingsExtension
 
-    display_name = Setting(type=str, default=user_info.fullname, nillable=True)
-
 
 class BonjourAccountExtension(SettingsObjectExtension):
     sounds = SoundSettings
     rtp = RTPSettingsExtension
+
 
