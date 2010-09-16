@@ -12,7 +12,7 @@ from sipsimple.util import user_info
 from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL
 
 
-class PSTNSettingsExtension(SettingsGroup):
+class PSTNSettings(SettingsGroup):
     idd_prefix = Setting(type=unicode, default=None, nillable=True)
     prefix = Setting(type=unicode, default=None, nillable=True)
 
@@ -34,7 +34,7 @@ class TLSSettingsExtension(TLSSettings):
 
 
 class AccountExtension(SettingsObjectExtension):
-    pstn = PSTNSettingsExtension
+    pstn = PSTNSettings
     rtp = RTPSettingsExtension
     server = ServerSettings
     sounds = SoundSettings
