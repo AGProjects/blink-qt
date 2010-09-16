@@ -5,14 +5,14 @@
 
 __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
-from sipsimple.account import PSTNSettings, RTPSettings, TLSSettings
+from sipsimple.account import RTPSettings, TLSSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
 from sipsimple.util import user_info
 
 from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL
 
 
-class PSTNSettingsExtension(PSTNSettings):
+class PSTNSettingsExtension(SettingsGroup):
     idd_prefix = Setting(type=unicode, default=None, nillable=True)
     prefix = Setting(type=unicode, default=None, nillable=True)
 
