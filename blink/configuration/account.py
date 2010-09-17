@@ -34,7 +34,8 @@ class TLSSettingsExtension(TLSSettings):
 
 
 class AccountExtension(SettingsObjectExtension):
-    pstn = PSTNSettingsExtension
+    display_name = Setting(type=str, default=user_info.fullname, nillable=True)
+    pstn = PSTNSettings
     rtp = RTPSettingsExtension
     server = ServerSettings
     sounds = SoundSettings
