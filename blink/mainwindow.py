@@ -565,16 +565,17 @@ class MainWindow(base_class, ui_class):
         for action in self.alert_device_menu.actions():
             self.alert_devices_group.removeAction(action)
             self.alert_device_menu.removeAction(action)
-        # TODO replace the following code with a device switch choosing window
-        old_devices = set(notification.data.old_devices)
-        new_devices = set(notification.data.new_devices)
-        added_devices = new_devices - old_devices
-        if added_devices:
-            new_device = added_devices.pop()
-            settings = SIPSimpleSettings()
-            settings.audio.input_device = new_device
-            settings.audio.output_device = new_device
-            settings.save()
+        if self.session_model.active_sessions:
+            old_devices = set(notification.data.old_devices)
+            new_devices = set(notification.data.new_devices)
+            added_devices = new_devices - old_devices
+            if added_devices:
+                new_device = added_devices.pop()
+                settings = SIPSimpleSettings()
+                settings.audio.input_device = new_device
+                settings.audio.output_device = new_device
+                settings.save()
+        # TODO: Add a confirmation window when no active sessions
         self.load_audio_devices()
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
