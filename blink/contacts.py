@@ -349,9 +349,6 @@ class GoogleContactsManager(object):
                 self.stop_adding_contacts = False
                 self.load_contacts()
             elif authorization_token is None:
-                if self._load_timer is not None and self._load_timer.active():
-                    self._load_timer.cancel()
-                self._load_timer = None
                 if self.greenlet is not None:
                     api.kill(self.greenlet, api.GreenletExit())
                     self.greenlet = None
