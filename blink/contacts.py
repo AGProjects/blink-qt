@@ -515,7 +515,7 @@ class GoogleContactsDialog(base_class, ui_class):
         self.username_editor.setEnabled(True)
         self.username_editor.setText(settings.google_contacts.username or u'')
         self.password_editor.setText(u'')
-        super(GoogleContactsDialog, self).show()
+        self.show()
 
     def open_for_incorrect_password(self):
         red = '#cc0000'
@@ -523,7 +523,7 @@ class GoogleContactsDialog(base_class, ui_class):
         self.username_editor.setEnabled(False)
         self.username_editor.setText(settings.google_contacts.username)
         self.status_label.value = Status('Error authenticating with Google. Please enter your password:', color=red)
-        super(GoogleContactsDialog, self).show()
+        self.show()
 
     @run_in_green_thread
     def _authorize_google_account(self):
