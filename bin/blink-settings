@@ -18,6 +18,22 @@ from sipsimple.configuration.backend.file import FileBackend
 from sipsimple.configuration.datatypes import List, STUNServerAddress
 from sipsimple.configuration.settings import SIPSimpleSettings
 
+# We need to mangle Python's import path in case blink-settings is run
+# directly from the bin/ directory.
+script = globals().get('__file__', sys.argv[0])
+script_dir = os.path.dirname(os.path.realpath(script))
+parent_dir = os.path.dirname(script_dir)
+if os.path.basename(script_dir)=='bin' and os.path.exists(os.path.join(parent_dir, 'blink', '__init__.py')):
+    # Insert the parent path just before the existing script's path. We need
+    # to do this in order to work with debuggers which insert their own paths
+    # at the beginning. The script's path is the last Python itself inserted
+    # so we should insert just before that.
+    try:
+        position = sys.path.index(script_dir)
+    except ValueError:
+        position = 0
+    sys.path.insert(position, parent_dir)
+
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.resources import ApplicationData
