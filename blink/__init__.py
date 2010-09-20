@@ -30,6 +30,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.util import makedirs
 
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
+from blink.configuration.datatypes import InvalidToken
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.logging import LogManager
 from blink.mainwindow import MainWindow
@@ -190,9 +191,12 @@ class Blink(QApplication):
     def _NH_SIPApplicationDidStart(self, notification):
         self.fetch_account()
         self.main_window.show()
+        settings = SIPSimpleSettings()
         accounts = AccountManager().get_accounts()
         if not accounts or (self.first_run and accounts==[BonjourAccount()]):
             self.main_window.add_account_dialog.open_for_create()
+        if settings.google_contacts.authorization_token is InvalidToken:
+            self.main_window.google_contacts_dialog.open_for_incorrect_password()
         self.update_manager.initialize()
 
     def _initialize_sipsimple(self):

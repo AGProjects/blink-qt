@@ -340,10 +340,10 @@ class GoogleContactsManager(object):
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if 'google_contacts.authorization_token' in notification.data.modified:
-            authorization_token = notification.sender.google_contacts.authorization_token
             if self._load_timer is not None and self._load_timer.active():
                 self._load_timer.cancel()
             self._load_timer = None
+            authorization_token = notification.sender.google_contacts.authorization_token
             if authorization_token:
                 call_in_gui_thread(self.contact_model.addGroup, self.contact_model.google_contacts_group)
                 self.stop_adding_contacts = False
@@ -369,7 +369,7 @@ class GoogleContactsManager(object):
         self._load_timer = None
 
         settings = SIPSimpleSettings()
-        self.client.auth_token = ClientLoginToken(settings.google_contacts.authorization_token.token)
+        self.client.auth_token = ClientLoginToken(settings.google_contacts.authorization_token)
 
         try:
             if self.group.id is None:
@@ -407,7 +407,7 @@ class GoogleContactsManager(object):
                 self.update_contacts(updated_contacts)
                 feed = self.client.get_next(feed) if feed.find_next_link() is not None else None
         except Unauthorized:
-            settings.google_contacts.authorization_token = AuthorizationToken(InvalidToken)
+            settings.google_contacts.authorization_token = InvalidToken
             settings.save()
         except (ConnectionLost, RequestError, httplib.HTTPException, socket.error):
             self._load_timer = reactor.callLater(60, self.load_contacts)

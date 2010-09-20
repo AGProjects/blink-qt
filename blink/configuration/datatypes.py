@@ -3,7 +3,7 @@
 
 """Definitions of datatypes for use in settings extensions."""
 
-__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL', 'InvalidToken', 'AuthorizationToken']
+__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL', 'AuthorizationToken', 'InvalidToken']
 
 import os
 import re
@@ -113,33 +113,26 @@ class HTTPURL(unicode):
         return value
 
 
-class InvalidToken(object):
+class AuthorizationTokenMeta(type):
+    def __init__(cls, name, bases, dic):
+        super(AuthorizationTokenMeta, cls).__init__(name, bases, dic)
+        cls._instances = {}
+    def __call__(cls, *args):
+        if len(args) > 1:
+            raise TypeError('%s() takes at most 1 argument (%d given)' % (cls.__name__, len(args)))
+        key = args[0] if args else ''
+        if key not in cls._instances:
+            cls._instances[key] = super(AuthorizationTokenMeta, cls).__call__(*args)
+        return cls._instances[key]
+
+class AuthorizationToken(str):
+    __metaclass__ = AuthorizationTokenMeta
     def __repr__(self):
-        return self.__class__.__name__
-
-class AuthorizationToken(object):
-    def __init__(self, token=None):
-        self.token = token
-
-    def __getstate__(self):
-        if self.token is InvalidToken:
-            return u'invalid'
+        if self is InvalidToken:
+            return 'InvalidToken'
         else:
-            return u'value:%s' % (self.__dict__['token'])
+            return '%s(%s)' % (self.__class__.__name__, str.__repr__(self))
 
-    def __setstate__(self, state):
-        match = re.match(r'^(?P<type>invalid|value:)(?P<token>.+?)?$', state)
-        if match is None:
-            raise ValueError('illegal value: %r' % state)
-        data = match.groupdict()
-        if data.pop('type') == 'invalid':
-            data['token'] = InvalidToken
-        self.__init__(data['token'])
-
-    def __nonzero__(self):
-        return self.token is not InvalidToken
-
-    def __repr__(self):
-        return '%s(%r)' % (self.__class__.__name__, self.token)
+InvalidToken = AuthorizationToken() # a valid token is never empty
 
 

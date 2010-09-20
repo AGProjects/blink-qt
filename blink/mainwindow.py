@@ -24,6 +24,7 @@ from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, AddAccountDialog, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
 from blink.sessions import SessionManager, SessionModel
+from blink.configuration.datatypes import InvalidToken
 from blink.resources import Resources
 from blink.util import call_in_auxiliary_thread, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
@@ -297,7 +298,7 @@ class MainWindow(base_class, ui_class):
 
     def _AH_GoogleContactsActionTriggered(self):
         settings = SIPSimpleSettings()
-        if settings.google_contacts.authorization_token:
+        if settings.google_contacts.authorization_token is not None:
             settings.google_contacts.authorization_token = None
             settings.save()
         else:
@@ -515,15 +516,10 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
-        if settings.google_contacts.authorization_token:
-            self.google_contacts_action.setText(u'Disable Google Contacts')
-        elif settings.google_contacts.authorization_token is not None:
-            # Token is invalid
-            self.google_contacts_action.setText(u'Disable Google Contacts')
-            # Maybe this should be moved to DidStart so that the dialog is shown *after* the MainWindow. -Saul
-            self.google_contacts_dialog.open_for_incorrect_password()
-        else:
+        if settings.google_contacts.authorization_token is None:
             self.google_contacts_action.setText(u'Enable Google Contacts')
+        else:
+            self.google_contacts_action.setText(u'Disable Google Contacts')
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
         account_manager = AccountManager()
         notification_center = NotificationCenter()
@@ -594,13 +590,12 @@ class MainWindow(base_class, ui_class):
                 action.setChecked(True)
             if 'google_contacts.authorization_token' in notification.data.modified:
                 authorization_token = notification.sender.google_contacts.authorization_token
-                if authorization_token:
-                    self.google_contacts_action.setText(u'Disable Google Contacts')
-                elif authorization_token is not None:
-                    # Token is invalid
-                    self.google_contacts_dialog.open_for_incorrect_password()
-                else:
+                if authorization_token is None:
                     self.google_contacts_action.setText(u'Enable Google Contacts')
+                else:
+                    self.google_contacts_action.setText(u'Disable Google Contacts')
+                if authorization_token is InvalidToken:
+                    self.google_contacts_dialog.open_for_incorrect_password()
         elif isinstance(notification.sender, (Account, BonjourAccount)):
             account = notification.sender
             if 'enabled' in notification.data.modified:
