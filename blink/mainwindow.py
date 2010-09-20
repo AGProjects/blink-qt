@@ -301,6 +301,7 @@ class MainWindow(base_class, ui_class):
         if settings.google_contacts.authorization_token is not None:
             settings.google_contacts.authorization_token = None
             settings.save()
+            self.google_contacts_dialog.hide()
         else:
             self.google_contacts_dialog.open()
 
