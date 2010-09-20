@@ -10,7 +10,7 @@ from functools import partial
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QUrl, QVariant
 from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
-from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
+from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QIcon, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
@@ -19,6 +19,7 @@ from zope.interface import implements
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.util import limit
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, AddAccountDialog, ServerToolsAccountModel, ServerToolsWindow
@@ -42,6 +43,11 @@ class MainWindow(base_class, ui_class):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='SIPAccountMWIDidGetSummary')
+        notification_center.add_observer(self, sender=AccountManager())
+
+        self.mwi_icons = [QIcon(Resources.get('icons/mwi-%d.png' % i)) for i in xrange(0, 11)]
+        self.mwi_icons.append(QIcon(Resources.get('icons/mwi-many.png')))
 
         with Resources.directory:
             self.setupUi()
@@ -331,11 +337,9 @@ class MainWindow(base_class, ui_class):
         self.server_tools_window.open_buy_pstn_access_page(account)
 
     def _AH_VoicemailActionTriggered(self, action, checked):
-        account, received_voicemail_uri = action.data().toPyObject()
-        voicemail_uri = account.message_summary.voicemail_uri or received_voicemail_uri
-        if voicemail_uri:
-            session_manager = SessionManager()
-            session_manager.start_call(voicemail_uri, voicemail_uri, account=account)
+        account = action.data().toPyObject()
+        voicemail_uri = account.message_summary.uri
+        SessionManager().start_call("Voicemail", voicemail_uri, account=account)
 
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
@@ -514,6 +518,7 @@ class MainWindow(base_class, ui_class):
         handler(notification)
 
     def _NH_SIPApplicationWillStart(self, notification):
+        account_manager = AccountManager()
         settings = SIPSimpleSettings()
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
@@ -522,28 +527,11 @@ class MainWindow(base_class, ui_class):
         else:
             self.google_contacts_action.setText(u'Disable Google Contacts')
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
-        account_manager = AccountManager()
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=account_manager)
         if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
             self.status.setEnabled(False)
             self.status.setCurrentIndex(self.status.findText(u'Offline'))
-        for account in account_manager.iter_accounts():
-            action = QAction(account.id if account is not BonjourAccount() else u'Bonjour', None)
-            action.setCheckable(True)
-            action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
-            action.setData(QVariant(account))
-            action.setChecked(account.enabled)
-            action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
-            self.accounts_menu.addAction(action)
-            if isinstance(account, Account) and account.enabled and account.message_summary.enabled:
-                vm_action = QAction(u'%s  -  No new messages' % account.id, None)
-                vm_action.setData(QVariant((account, None)))
-                vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
-                vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
-                self.voicemail_menu.addAction(vm_action)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
@@ -571,7 +559,6 @@ class MainWindow(base_class, ui_class):
                 settings.audio.input_device = new_device
                 settings.audio.output_device = new_device
                 settings.save()
-        # TODO: Add a confirmation window when no active sessions
         self.load_audio_devices()
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
@@ -602,53 +589,33 @@ class MainWindow(base_class, ui_class):
             if 'enabled' in notification.data.modified:
                 action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
                 action.setChecked(account.enabled)
-                if account.enabled and account.message_summary.enabled:
-                    vm_action = QAction(u'%s  -  No new messages' % account.id, None)
-                    vm_action.setData(QVariant((account, None)))
-                    vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
-                    vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
-                    self.voicemail_menu.addAction(vm_action)
-                else:
-                    try:
-                        vm_action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
-                    except StopIteration:
-                        pass
-                    else:
-                        self.voicemail_menu.removeAction(vm_action)
-            if 'message_summary.enabled' in notification.data.modified:
-                if account.message_summary.enabled:
-                    vm_action = QAction(u'%s  -  No new messages' % account.id, None)
-                    vm_action.setData(QVariant((account, None)))
-                    vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
-                    vm_action.triggered.connect(partial(self._AH_VoicemailActionTriggered, vm_action))
-                    self.voicemail_menu.addAction(vm_action)
-                else:
-                    vm_action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
-                    self.voicemail_menu.removeAction(action)
-            if 'message_summary.voicemail_uri' in notification.data.modified:
-                if account.message_summary.enabled:
-                    vm_action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
-                    vm_action.setEnabled(account.message_summary.voicemail_uri is not None)
-
-    def _NH_SIPAccountManagerWillStart(self, notification):
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='SIPAccountMWIDidGetSummary')
+            if set(['enabled', 'message_summary.enabled', 'message_summary.voicemail_uri']).intersection(notification.data.modified):
+                action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
+                action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
+                action.setEnabled(False if account is BonjourAccount() else account.message_summary.uri is not None)
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
-        action = QAction(account.id, None)
+        action = QAction(account.id if account is not BonjourAccount() else u'Bonjour', None)
+        action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
         action.setCheckable(True)
+        action.setChecked(account.enabled)
         action.setData(QVariant(account))
         action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
         self.accounts_menu.addAction(action)
+        action = QAction(self.mwi_icons[0], account.id, None)
+        action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
+        action.setEnabled(False if account is BonjourAccount() else account.message_summary.uri is not None)
+        action.setData(QVariant(account))
+        action.triggered.connect(partial(self._AH_VoicemailActionTriggered, action))
+        self.voicemail_menu.addAction(action)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account
         action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
         self.accounts_menu.removeAction(action)
-        if isinstance(account, Account) and account.enabled and account.message_summary.enabled:
-            action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
-            self.voicemail_menu.removeAction(action)
+        action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
+        self.voicemail_menu.removeAction(action)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         if notification.data.account is None:
@@ -660,15 +627,16 @@ class MainWindow(base_class, ui_class):
     def _NH_SIPAccountMWIDidGetSummary(self, notification):
         account = notification.sender
         summary = notification.data.message_summary
-        action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject()[0] is account).next()
-        action.setData(QVariant((account, summary.message_account)))
-        action.setEnabled(True if account.message_summary.voicemail_uri is not None or summary.message_account is not None else False)
-        if summary.messages_waiting and summary.summaries.get('voice-message') is not None:
-            new_messages = int(summary.summaries.get('voice-message').get('new_messages', 0))
-            vm_text = u'%d new messages' % new_messages if new_messages > 0 else u'No new messages'
+        action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
+        action.setEnabled(account.message_summary.uri is not None)
+        if summary.messages_waiting:
+            try:
+                new_messages = limit(int(summary.summaries['voice-message']['new_messages']), min=0, max=11)
+            except (KeyError, ValueError):
+                new_messages = 0
         else:
-            vm_text = u'No new messages'
-        action.setText(u'%s  -  %s' % (account.id, vm_text))
+            new_messages = 0
+        action.setIcon(self.mwi_icons[new_messages])
 
 del ui_class, base_class
 
