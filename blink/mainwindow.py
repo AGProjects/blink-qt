@@ -298,7 +298,6 @@ class MainWindow(base_class, ui_class):
     def _AH_GoogleContactsActionTriggered(self):
         settings = SIPSimpleSettings()
         if settings.google_contacts.authorization_token:
-            settings = SIPSimpleSettings()
             settings.google_contacts.authorization_token = None
             settings.save()
         else:
