@@ -168,8 +168,8 @@ class AccountSelector(QComboBox):
 
     def __init__(self, parent=None):
         super(AccountSelector, self).__init__(parent)
-        self.currentIndexChanged[int].connect(self.selection_changed)
-        self.model().dataChanged.connect(self.data_changed)
+        self.currentIndexChanged[int].connect(self._SH_SelectionChanged)
+        self.model().dataChanged.connect(self._SH_DataChanged)
         self.view().setItemDelegate(AccountDelegate(self.view()))
 
         notification_center = NotificationCenter()
@@ -177,11 +177,11 @@ class AccountSelector(QComboBox):
         notification_center.add_observer(self, name="SIPAccountManagerDidStart")
 
     def setModel(self, model):
-        self.model().dataChanged.disconnect(self.data_changed)
-        model.dataChanged.connect(self.data_changed)
+        self.model().dataChanged.disconnect(self._SH_DataChanged)
+        model.dataChanged.connect(self._SH_DataChanged)
         super(AccountSelector, self).setModel(model)
 
-    def data_changed(self, topLeft, bottomRight):
+    def _SH_DataChanged(self, topLeft, bottomRight):
         index = self.currentIndex()
         if topLeft.row() <= index <= bottomRight.row():
             account_info = self.itemData(index).toPyObject()
@@ -192,7 +192,7 @@ class AccountSelector(QComboBox):
                 palette.setColor(QPalette.Text, Qt.gray)
             self.setPalette(palette)
 
-    def selection_changed(self, index):
+    def _SH_SelectionChanged(self, index):
         if index == -1:
             return
         account_info = self.itemData(index).toPyObject()
