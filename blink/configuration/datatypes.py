@@ -66,7 +66,7 @@ class CustomSoundFile(object):
     def __init__(self, path=DefaultPath, volume=100):
         self.path = path
         self.volume = int(volume)
-        if self.volume < 0 or self.volume > 100:
+        if not (0 <= self.volume <= 100):
             raise ValueError('illegal volume level: %d' % self.volume)
 
     def __getstate__(self):
