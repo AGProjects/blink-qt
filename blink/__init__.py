@@ -84,7 +84,7 @@ class Blink(QApplication):
 
     def run(self):
         from blink.util import call_in_gui_thread as call_later
-        call_later(self._initialize_sipsimple)
+        call_later(self._initialize_sipsimple) # initialize sipsimple after the qt event loop is started
         self.auxiliary_thread.start()
         self.exec_()
         self.update_manager.shutdown()
