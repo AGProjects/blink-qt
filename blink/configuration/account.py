@@ -18,7 +18,7 @@ class PSTNSettings(SettingsGroup):
 
 
 class RTPSettingsExtension(RTPSettings):
-    inband_dtmf = Setting(type=bool, default=False)                                                                                                                                          
+    inband_dtmf = Setting(type=bool, default=True)
 
 
 class ServerSettings(SettingsGroup):
