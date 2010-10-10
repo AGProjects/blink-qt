@@ -1,3 +1,9 @@
+blink (0.2.0) unstable; urgency=low
+
+  * TBW
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Sun, 10 Oct 2010 13:47:41 +0200
+
 blink (0.1.4) unstable; urgency=low
 
   * Save preferred media when creating a contact
