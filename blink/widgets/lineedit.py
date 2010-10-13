@@ -1,7 +1,7 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['LineEdit', 'ValidatingLineEdit', 'SearchBox']
+__all__ = ['LineEdit', 'ValidatingLineEdit', 'SearchBox', 'LocationBar']
 
 import re
 
@@ -270,6 +270,30 @@ class SearchBox(LineEdit):
         self.clear_button.clicked.connect(self.clear)
         self.textChanged.connect(self._SH_TextChanged)
         self.inactiveText = u"Search"
+
+    def _SH_TextChanged(self, text):
+        self.clear_button.setVisible(not text.isEmpty())
+
+
+class LocationBar(LineEdit):
+    locationCleared = pyqtSignal()
+
+    def __init__(self, parent=None):
+        LineEdit.__init__(self, parent=parent)
+        self.clear_button = ClearButton(self)
+        self.addTailWidget(self.clear_button)
+        option = QStyleOptionFrameV2()
+        self.initStyleOption(option)
+        frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
+        widgets_height = self.clear_button.minimumHeight()
+        self.setMinimumHeight(widgets_height + 2 + 2*frame_width)
+        self.clear_button.hide()
+        self.clear_button.clicked.connect(self._SH_ClearButtonClicked)
+        self.textChanged.connect(self._SH_TextChanged)
+
+    def _SH_ClearButtonClicked(self):
+        self.clear()
+        self.locationCleared.emit()
 
     def _SH_TextChanged(self, text):
         self.clear_button.setVisible(not text.isEmpty())
