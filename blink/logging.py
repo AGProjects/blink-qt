@@ -8,7 +8,9 @@ __all__ = ['LogManager']
 
 import os
 import sys
+
 from datetime import datetime
+from pprint import pformat
 from threading import RLock
 
 from application import log
@@ -16,7 +18,6 @@ from application.notification import IObserver, NotificationCenter
 from application.python.queue import EventQueue
 from application.python.util import Null, Singleton
 from zope.interface import implements
-from pprint import pformat
 
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.util import makedirs
