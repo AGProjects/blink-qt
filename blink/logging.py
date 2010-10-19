@@ -74,7 +74,7 @@ class LogManager(object):
         self.msrptrace_file = Null
         self.pjsiptrace_file = Null
         self.notifications_file = Null
-        self.event_queue = EventQueue(handler=self._process_notification, name='Log handling')
+        self.event_queue = Null
         self._lock = Null
         self._siptrace_start_time = None
         self._siptrace_packet_count = None
@@ -94,6 +94,7 @@ class LogManager(object):
         self._lock = RLock()
         self._siptrace_start_time = datetime.now()
         self._siptrace_packet_count = 0
+        self.event_queue = EventQueue(handler=self._process_notification, name='Log handling')
         self.event_queue.start()
 
     def stop(self):
