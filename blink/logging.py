@@ -2,8 +2,6 @@
 # This module will be replaced by an improved logging system. -Luci
 #
 
-from __future__ import with_statement
-
 __all__ = ['LogManager']
 
 import os
@@ -11,7 +9,6 @@ import sys
 
 from datetime import datetime
 from pprint import pformat
-from threading import RLock
 
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -76,7 +73,6 @@ class LogManager(object):
         self.pjsiptrace_file = Null
         self.notifications_file = Null
         self.event_queue = Null
-        self._lock = Null
         self._siptrace_start_time = None
         self._siptrace_packet_count = None
 
@@ -92,7 +88,6 @@ class LogManager(object):
             self.pjsiptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'pjsip_trace.txt'))
         if settings.logs.trace_notifications:
             self.notifications_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'notifications_trace.txt'))
-        self._lock = RLock()
         self._siptrace_start_time = datetime.now()
         self._siptrace_packet_count = 0
         self.event_queue = EventQueue(handler=self._process_notification, name='Log handling')
@@ -102,12 +97,9 @@ class LogManager(object):
         notification_center = NotificationCenter()
         notification_center.remove_observer(self)
 
-        with self._lock:
-            event_queue = self.event_queue
-            self.event_queue = Null
-            event_queue.stop()
-            self._lock = Null
-        event_queue.join()
+        self.event_queue.stop()
+        self.event_queue.join()
+        self.event_queue = Null
 
         self.siptrace_file = Null
         self.msrptrace_file = Null
@@ -115,8 +107,7 @@ class LogManager(object):
         self.notifications_file = Null
 
     def handle_notification(self, notification):
-        with self._lock:
-            self.event_queue.put(notification)
+        self.event_queue.put(notification)
 
     def _process_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
