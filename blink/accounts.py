@@ -119,22 +119,34 @@ class AccountModel(QAbstractListModel):
         self.endRemoveRows()
 
     def _NH_SIPAccountWillRegister(self, notification):
-        position = self.accounts.index(notification.sender)
+        try:
+            position = self.accounts.index(notification.sender)
+        except ValueError:
+            return
         self.accounts[position].registration_state = 'started'
         self.dataChanged.emit(self.index(position), self.index(position))
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
-        position = self.accounts.index(notification.sender)
+        try:
+            position = self.accounts.index(notification.sender)
+        except ValueError:
+            return
         self.accounts[position].registration_state = 'succeeded'
         self.dataChanged.emit(self.index(position), self.index(position))
 
     def _NH_SIPAccountRegistrationDidFail(self, notification):
-        position = self.accounts.index(notification.sender)
+        try:
+            position = self.accounts.index(notification.sender)
+        except ValueError:
+            return
         self.accounts[position].registration_state = 'failed'
         self.dataChanged.emit(self.index(position), self.index(position))
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
-        position = self.accounts.index(notification.sender)
+        try:
+            position = self.accounts.index(notification.sender)
+        except ValueError:
+            return
         self.accounts[position].registration_state = 'ended'
         self.dataChanged.emit(self.index(position), self.index(position))
 
