@@ -45,6 +45,8 @@ class AccountInfo(object):
             return self.name == other
         elif isinstance(other, (Account, BonjourAccount)):
             return self.account == other
+        elif isinstance(other, AccountInfo):
+            return self.account == other.account
         return False
 
     def __ne__(self, other):
