@@ -34,11 +34,14 @@ from blink.util import QSingleton, call_in_auxiliary_thread, call_in_gui_thread,
 
 
 class AccountInfo(object):
-    def __init__(self, name, account, icon=None):
-        self.name = name
+    def __init__(self, account, icon=None):
         self.account = account
         self.icon = icon
         self.registration_state = None
+
+    @property
+    def name(self):
+        return u'Bonjour' if self.account is BonjourAccount() else unicode(self.account.id)
 
     def __eq__(self, other):
         if isinstance(other, basestring):
@@ -94,7 +97,6 @@ class AccountModel(QAbstractListModel):
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
-        name = u'Bonjour' if account is BonjourAccount() else unicode(account.id)
         icon = None
         if account is BonjourAccount():
             pixmap = QPixmap()
@@ -102,7 +104,7 @@ class AccountModel(QAbstractListModel):
                 pixmap = pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 icon = QIcon(pixmap)
         self.beginInsertRows(QModelIndex(), len(self.accounts), len(self.accounts))
-        self.accounts.append(AccountInfo(name, account, icon))
+        self.accounts.append(AccountInfo(account, icon))
         self.endInsertRows()
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
