@@ -79,14 +79,19 @@ class LineEdit(QLineEdit):
         self.right_widget.setGeometry(text_rect)
 
     def event(self, event):
-        if event.type() == QEvent.LayoutDirectionChange:
+        event_type = event.type()
+        if event_type == QEvent.LayoutDirectionChange:
             box_direction = QBoxLayout.RightToLeft if self.isRightToLeft() else QBoxLayout.LeftToRight
             self.left_layout.setDirection(box_direction)
             self.right_layout.setDirection(box_direction)
-        elif event.type() == QEvent.DynamicPropertyChange and event.propertyName() == 'widgetSpacing':
-            self.left_layout.setSpacing(self.widgetSpacing)
-            self.right_layout.setSpacing(self.widgetSpacing)
-            self._update_text_margins()
+        elif event_type == QEvent.DynamicPropertyChange:
+            property_name = event.propertyName()
+            if property_name == 'widgetSpacing':
+                self.left_layout.setSpacing(self.widgetSpacing)
+                self.right_layout.setSpacing(self.widgetSpacing)
+                self._update_text_margins()
+            elif property_name == 'inactiveText':
+                self.update()
         return QLineEdit.event(self, event)
 
     def resizeEvent(self, event):
