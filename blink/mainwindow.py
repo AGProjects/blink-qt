@@ -338,8 +338,7 @@ class MainWindow(base_class, ui_class):
 
     def _AH_VoicemailActionTriggered(self, action, checked):
         account = action.data().toPyObject()
-        voicemail_uri = account.message_summary.uri
-        SessionManager().start_call("Voicemail", voicemail_uri, account=account)
+        SessionManager().start_call("Voicemail", account.voicemail_uri, account=account)
 
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
@@ -592,7 +591,7 @@ class MainWindow(base_class, ui_class):
             if set(['enabled', 'message_summary.enabled', 'message_summary.voicemail_uri']).intersection(notification.data.modified):
                 action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
                 action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
-                action.setEnabled(False if account is BonjourAccount() else account.message_summary.uri is not None)
+                action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
@@ -605,7 +604,7 @@ class MainWindow(base_class, ui_class):
         self.accounts_menu.addAction(action)
         action = QAction(self.mwi_icons[0], account.id, None)
         action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
-        action.setEnabled(False if account is BonjourAccount() else account.message_summary.uri is not None)
+        action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
         action.setData(QVariant(account))
         action.triggered.connect(partial(self._AH_VoicemailActionTriggered, action))
         self.voicemail_menu.addAction(action)
@@ -628,7 +627,7 @@ class MainWindow(base_class, ui_class):
         account = notification.sender
         summary = notification.data.message_summary
         action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
-        action.setEnabled(account.message_summary.uri is not None)
+        action.setEnabled(account.voicemail_uri is not None)
         if summary.messages_waiting:
             try:
                 new_messages = limit(int(summary.summaries['voice-message']['new_messages']), min=0, max=11)
