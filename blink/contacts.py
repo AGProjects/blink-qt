@@ -1999,6 +1999,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.accepted.connect(self.process_contact)
 
     def open_for_add(self, sip_address=u'', target_group=None):
+        self.edited_contact = None
         self.sip_address_editor.setText(sip_address)
         self.display_name_editor.setText(u'')
         self.sip_aliases_editor.setText(u'')
