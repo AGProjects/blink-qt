@@ -909,9 +909,6 @@ padding: 2px;</string>
      <addaction name="separator"/>
     </widget>
     <widget class="QMenu" name="quick_settings_menu">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
      <property name="title">
       <string>Quick &amp;settings</string>
      </property>
@@ -1083,9 +1080,6 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="preferences_action">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="icon">
     <iconset>
      <normaloff>icons/configure.png</normaloff>icons/configure.png</iconset>
@@ -1139,9 +1133,6 @@ padding: 2px;</string>
   <action name="answering_machine_action">
    <property name="checkable">
     <bool>true</bool>
-   </property>
-   <property name="enabled">
-    <bool>false</bool>
    </property>
    <property name="text">
     <string>Enable &amp;Answering Machine</string>
@@ -1248,9 +1239,6 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="manage_accounts_action">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
     <string>&amp;Manage accounts...</string>
    </property>

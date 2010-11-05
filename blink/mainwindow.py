@@ -22,8 +22,9 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.util import limit
 
 from blink.aboutpanel import AboutPanel
-from blink.accounts import AccountModel, ActiveAccountModel, AddAccountDialog, ServerToolsAccountModel, ServerToolsWindow
+from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
+from blink.preferences import PreferencesWindow
 from blink.sessions import SessionManager, SessionModel
 from blink.configuration.datatypes import InvalidToken
 from blink.resources import Resources
@@ -88,9 +89,9 @@ class MainWindow(base_class, ui_class):
 
         # Windows, dialogs and panels
         self.about_panel = AboutPanel(self)
-        self.add_account_dialog = AddAccountDialog(self)
         self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
         self.google_contacts_dialog = GoogleContactsDialog(self)
+        self.preferences_window = PreferencesWindow(self.account_model, None)
         self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
 
         # Signals
@@ -135,8 +136,12 @@ class MainWindow(base_class, ui_class):
         # Blink menu actions
         self.about_action.triggered.connect(self.about_panel.show)
         self.donate_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/payments.phtml')))
-        self.add_account_action.triggered.connect(self.add_account_dialog.open_for_add)
+        self.add_account_action.triggered.connect(self.preferences_window.show_add_account_dialog)
+        self.manage_accounts_action.triggered.connect(self.preferences_window.show_for_accounts)
         self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
+        self.preferences_action.triggered.connect(self.preferences_window.show)
+        self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatTriggered)
+        self.auto_accept_files_action.triggered.connect(self._AH_AutoAcceptFilesTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
         self.quit_action.triggered.connect(self.close)
 
@@ -151,6 +156,7 @@ class MainWindow(base_class, ui_class):
         self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
 
         # Tools menu actions
+        self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
         self.sip_server_settings_action.triggered.connect(self._AH_SIPServerSettings)
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
@@ -204,9 +210,9 @@ class MainWindow(base_class, ui_class):
     def closeEvent(self, event):
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
-        self.add_account_dialog.close()
         self.contact_editor_dialog.close()
         self.google_contacts_dialog.close()
+        self.preferences_window.close()
         self.server_tools_window.close()
 
     def set_user_icon(self, image_file_name):
@@ -301,6 +307,21 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         settings.audio.output_device = action.data().toPyObject()
         call_in_auxiliary_thread(settings.save)
+
+    def _AH_AutoAcceptChatTriggered(self, checked):
+        settings = SIPSimpleSettings()
+        settings.chat.auto_accept = checked
+        settings.save()
+
+    def _AH_AutoAcceptFilesTriggered(self, checked):
+        settings = SIPSimpleSettings()
+        settings.file_transfer.auto_accept = checked
+        settings.save()
+
+    def _AH_EnableAnsweringMachineTriggered(self, checked):
+        settings = SIPSimpleSettings()
+        settings.answering_machine.enabled = checked
+        settings.save()
 
     def _AH_GoogleContactsActionTriggered(self):
         settings = SIPSimpleSettings()
@@ -521,6 +542,9 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
+        self.answering_machine_action.setChecked(settings.answering_machine.enabled)
+        self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
+        self.auto_accept_files_action.setChecked(settings.file_transfer.auto_accept)
         if settings.google_contacts.authorization_token is None:
             self.google_contacts_action.setText(u'Enable Google Contacts')
         else:
@@ -575,6 +599,12 @@ class MainWindow(base_class, ui_class):
             if 'audio.alert_device' in notification.data.modified:
                 action = (action for action in self.alert_devices_group.actions() if action.data().toPyObject() == settings.audio.alert_device).next()
                 action.setChecked(True)
+            if 'answering_machine.enabled' in notification.data.modified:
+                self.answering_machine_action.setChecked(settings.answering_machine.enabled)
+            if 'chat.auto_accept' in notification.data.modified:
+                self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
+            if 'file_transfer.auto_accept' in notification.data.modified:
+                self.auto_accept_files_action.setChecked(settings.file_transfer.auto_accept)
             if 'google_contacts.authorization_token' in notification.data.modified:
                 authorization_token = notification.sender.google_contacts.authorization_token
                 if authorization_token is None:
@@ -584,10 +614,13 @@ class MainWindow(base_class, ui_class):
                 if authorization_token is InvalidToken:
                     self.google_contacts_dialog.open_for_incorrect_password()
         elif isinstance(notification.sender, (Account, BonjourAccount)):
+            account_manager = AccountManager()
             account = notification.sender
             if 'enabled' in notification.data.modified:
                 action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
                 action.setChecked(account.enabled)
+            if 'display_name' in notification.data.modified and account is account_manager.default_account:
+                self.display_name.setText(account.display_name or u'')
             if set(['enabled', 'message_summary.enabled', 'message_summary.voicemail_uri']).intersection(notification.data.modified):
                 action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
                 action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
