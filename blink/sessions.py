@@ -400,8 +400,9 @@ class SessionItem(QObject):
 
     def _SH_TimerFired(self):
         stats = self.video_stream.statistics if self.video_stream else self.audio_stream.statistics
-        self.latency = stats['rtt']['avg'] / 1000
-        self.packet_loss = int(stats['rx']['packets_lost']*100.0/stats['rx']['packets']) if stats['rx']['packets'] else 0
+        if stats is not None:
+            self.latency = stats['rtt']['avg'] / 1000
+            self.packet_loss = int(stats['rx']['packets_lost']*100.0/stats['rx']['packets']) if stats['rx']['packets'] else 0
         self.duration += timedelta(seconds=1)
 
     @run_in_gui_thread
