@@ -1197,12 +1197,14 @@ class ContactModel(QAbstractListModel):
     @updates_contacts_db
     def updateContact(self, contact, attributes):
         group = attributes.pop('group')
-        for name, value in attributes.iteritems():
-            setattr(contact, name, value)
-        if contact.group != group:
+        name = attributes.pop('name')
+        for attr, value in attributes.iteritems():
+            setattr(contact, attr, value)
+        if contact.name != name or contact.group != group:
             new_group = group not in self.items
             self._pop_contact(contact)
             contact.group = group
+            contact.name = name
             self._add_contact(contact)
             if new_group:
                 self.itemsAdded.emit([group])
