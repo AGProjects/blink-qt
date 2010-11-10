@@ -1260,7 +1260,7 @@ padding: 2px;</string>
   </action>
   <action name="buy_pstn_access_action">
    <property name="text">
-    <string>Buy access to dial phone numbers...</string>
+    <string>Buy prepaid credit...</string>
    </property>
   </action>
  </widget>
