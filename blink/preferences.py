@@ -15,7 +15,7 @@ from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QListView, QLi
 from application import log
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
-from gnutls.crypto import X509Certificate
+from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
@@ -972,7 +972,9 @@ class PreferencesWindow(base_class, ui_class):
             cert_path = os.path.normpath(cert_path)
             if cert_path != account.tls.certificate:
                 try:
-                    X509Certificate(open(cert_path).read())
+                    contents = open(cert_path).read()
+                    X509Certificate(contents)
+                    X509PrivateKey(contents)
                 except (OSError, IOError), e:
                     QMessageBox.critical(self, u"TLS Certificate Error", u"The certificate file could not be opened: %s" % e.strerror)
                 except GNUTLSError, e:
