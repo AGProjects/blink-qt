@@ -32,6 +32,6 @@ setup(name         = "blink",
                       ('share/blink/icons', glob.glob('resources/icons/*.png') + glob.glob('resources/icons/*.svg')),
                       ('share/blink/sounds', glob.glob('resources/sounds/*.wav'))
       ],
-      scripts      = ['bin/blink', 'bin/blink-settings']
+      scripts      = ['bin/blink']
 )
 
