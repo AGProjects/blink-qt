@@ -14,5 +14,4 @@ Description: A state of the art, easy to use SIP client
  Blink is a fully featured SIP client written in Python and built on top of
  SIP SIMPLE client SDK. Blink provides real time applications based on SIP
  and related protocols for Audio, Instant Messaging, File Transfers, Desktop
- Sharing and Presence. Other media types can be easily added by using an
- extensible high-level API.
+ Sharing and Presence.
