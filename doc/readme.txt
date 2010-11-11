@@ -5,8 +5,6 @@ Blink
 This is the Qt version of Blink, a state of the art, easy to use SIP client
 for Linux and Microsoft Windows.
 
-For MacOSX, see the Cocoa version available at the home site.
-
 Copyright (c) 2010 AG Projects
 http://ag-projects.com
 
@@ -44,7 +42,7 @@ http://icanblink.com/download.phtml
 Support
 -------
 
-For help on using Blink go to http://icanblink.com/help.phtml
+For help on using Blink Qt go to http://icanblink.com/help-qt.phtml
 
 
 Changelog

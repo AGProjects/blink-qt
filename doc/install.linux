@@ -43,11 +43,19 @@ Ubuntu Lucid (10.04)
 deb     http://ag-projects.com/ubuntu lucid main
 deb-src http://ag-projects.com/ubuntu lucid main
 
+
+Ubuntu Maverick (10.10)
+-----------------------
+
+deb     http://ag-projects.com/ubuntu maverick main
+deb-src http://ag-projects.com/ubuntu maverick main
+
 Update the list of available packages:
 
 sudo apt-get update
 
 Install Blink
+-------------
 
 sudo apt-get install blink
 
@@ -63,10 +71,10 @@ Install the runtime dependencies:
  * python (>=2.5)
  * python-application (>= 1.2.5)
  * python-cjson 
- * python-eventlet-0.8 (>= 0.8.11.3)
+ * python-eventlet-0.8 (>= 0.8.11.4)
  * python-qt4 (>= 4.7)
  * python-twisted-core (>= 8.1.0)
- * python-sipsimple (>= 0.16.1)
+ * python-sipsimple (>= 0.16.2)
  * python-zope.interface
 
 After installing the above dependencies, install Blink system wide using:
@@ -82,7 +90,7 @@ Install the building dependencies:
  * cdbs (>= 0.4.47)
  * debhelper (>= 7)
  * python-all (>= 2.5)
- * python-qt4 (>=4.6)
+ * python-qt4 (>=4.7)
  * python-support
  * build-essential
  * python-all-dev
