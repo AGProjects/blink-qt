@@ -1,8 +1,18 @@
 blink (0.2.0) unstable; urgency=low
 
-  * TBW
+  * Added the preferences panel
+  * Enable inband DTMF by default
+  * Disable ICE by default
+  * Simplified MWI code and improved its user interface
+  * Improve handling of Google contacts
+  * Open the dialog for adding the initial account after the main window
+  * Switch to new plugged-in device automatically if we have active calls
+  * Added transparency for contact icons
+  * Added conference contact on first start
+  * Many bug fixes in the middleware
+  * Adapted to the latest changes in SIP SIMPLE client SDK
 
- -- Adrian Georgescu <ag@ag-projects.com>  Sun, 10 Oct 2010 13:47:41 +0200
+ -- Adrian Georgescu <ag@ag-projects.com>  Thu, 11 Nov 2010 14:36:40 +0100
 
 blink (0.1.4) unstable; urgency=low
 
