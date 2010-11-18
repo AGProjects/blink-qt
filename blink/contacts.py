@@ -1196,8 +1196,8 @@ class ContactModel(QAbstractListModel):
 
     @updates_contacts_db
     def updateContact(self, contact, attributes):
-        group = attributes.pop('group')
-        name = attributes.pop('name')
+        group = attributes.pop('group', contact.group)
+        name = attributes.pop('name', contact.name)
         for attr, value in attributes.iteritems():
             setattr(contact, attr, value)
         if contact.name != name or contact.group != group:
