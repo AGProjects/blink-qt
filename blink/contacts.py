@@ -230,9 +230,10 @@ class BonjourNeighbour(Contact):
     editable = False
     deletable = False
 
-    def __init__(self, group, name, hostname, uri, image=None):
+    def __init__(self, group, name, uri, hostname, neighbour, image=None):
         super(BonjourNeighbour, self).__init__(group, name, uri, image)
         self.hostname = hostname
+        self.neighbour = neighbour
 
     @property
     def name_detail(self):
@@ -901,6 +902,7 @@ class ContactModel(QAbstractListModel):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BonjourAccountDidAddNeighbour')
+        notification_center.add_observer(self, name='BonjourAccountDidUpdateNeighbour')
         notification_center.add_observer(self, name='BonjourAccountDidRemoveNeighbour')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
         notification_center.add_observer(self, name='SIPAccountManagerDidStart')
@@ -1023,13 +1025,27 @@ class ContactModel(QAbstractListModel):
 
     @ignore_contacts_db_updates
     def _NH_BonjourAccountDidAddNeighbour(self, notification):
-        contact = BonjourNeighbour(self.bonjour_group, notification.data.display_name, notification.data.host, unicode(notification.data.uri))
+        contact = BonjourNeighbour(self.bonjour_group, notification.data.display_name, unicode(notification.data.uri), notification.data.host, notification.data.neighbour)
         self.addContact(contact)
 
     @ignore_contacts_db_updates
-    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
+    def _NH_BonjourAccountDidUpdateNeighbour(self, notification):
+        neighbour = notification.data.neighbour
+        display_name = notification.data.display_name
+        host = notification.data.host
         uri = unicode(notification.data.uri)
-        for contact in [c for c in self.items if type(c) is BonjourNeighbour and c.uri == uri]:
+        try:
+            contact = (contact for contact in self.items if type(contact) is BonjourNeighbour and contact.neighbour == neighbour).next()
+        except StopIteration:
+            contact = BonjourNeighbour(self.bonjour_group, display_name, uri, host, neighbour)
+            self.addContact(contact)
+        else:
+            self.updateContact(contact, dict(name=display_name, hostname=host, uri=uri))
+
+    @ignore_contacts_db_updates
+    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
+        neighbour = notification.data.neighbour
+        for contact in [c for c in self.items if type(c) is BonjourNeighbour and c.neighbour == neighbour]:
             self.removeContact(contact)
 
     def _NH_SIPAccountDidActivate(self, notification):
