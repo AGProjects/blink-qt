@@ -291,9 +291,14 @@ class SessionItem(QObject):
         self.offer_in_progress = True
         account = self.session.account
         settings = SIPSimpleSettings()
-        if isinstance(account, Account) and account.sip.outbound_proxy is not None:
-            proxy = account.sip.outbound_proxy
-            uri = SIPURI(host=proxy.host, port=proxy.port, parameters={'transport': proxy.transport})
+        if isinstance(account, Account):
+            if account.sip.outbound_proxy is not None:
+                proxy = account.sip.outbound_proxy
+                uri = SIPURI(host=proxy.host, port=proxy.port, parameters={'transport': proxy.transport})
+            elif account.sip.always_use_my_proxy:
+                uri = SIPURI(host=account.id.domain)
+            else:
+                uri = self.uri
         else:
             uri = self.uri
         self.status = Status('Looking up destination')
