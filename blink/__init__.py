@@ -194,7 +194,7 @@ class Blink(QApplication):
         settings = SIPSimpleSettings()
         accounts = AccountManager().get_accounts()
         if not accounts or (self.first_run and accounts==[BonjourAccount()]):
-            self.main_window.add_account_dialog.open_for_create()
+            self.main_window.preferences_window.show_create_account_dialog()
         if settings.google_contacts.authorization_token is InvalidToken:
             self.main_window.google_contacts_dialog.open_for_incorrect_password()
         self.update_manager.initialize()
