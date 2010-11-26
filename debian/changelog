@@ -1,3 +1,13 @@
+blink (0.2.1) unstable; urgency=low
+
+  * Allow name and group attributes to be missing when updating a contact
+  * Handle bonjour neighbour record updates
+  * Updated debian dependency on python-sipsimple
+  * Honor the account.sip.always_use_my_proxy setting
+  * Fixed opening the create account dialog on first run
+
+ -- Saul Ibarra <saul@ag-projects.com>  Fri, 26 Nov 2010 15:34:51 +0100
+
 blink (0.2.0) unstable; urgency=low
 
   * Added the preferences panel
