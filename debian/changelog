@@ -1,3 +1,10 @@
+blink (0.2.2) unstable; urgency=low
+
+  * Fixed detection of audio codecs without a rtpmap line in SDP
+  * Fixed exception for MWI NOTIFY without a Message-Account body
+
+ -- Saul Ibarra <saul@ag-projects.com>  Mon, 29 Nov 2010 19:14:17 +0100
+
 blink (0.2.1) unstable; urgency=low
 
   * Allow name and group attributes to be missing when updating a contact
