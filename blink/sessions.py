@@ -1463,7 +1463,8 @@ ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
 
 class IncomingDialog(base_class, ui_class):
     def __init__(self, parent=None):
-        super(IncomingDialog, self).__init__(parent, flags=Qt.WindowStaysOnTopHint)
+        super(IncomingDialog, self).__init__(parent)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
