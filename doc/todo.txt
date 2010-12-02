@@ -1,0 +1,33 @@
+
+Main tasks
+----------
+
++ XCAP storage
++ Presence
++ Video
+- Call history
+- File transfer
+- SMS and Chat
+- Desktop sharing
+- Logs window
+
+
+Side tasks
+----------
+
+- Dial SIP URI from server web page
+- Display load progress of server web page
+- Show register status
+- Answering Machine
+
+
+Nice to have
+------------
+
+- Dial SIP URIs from the system
+- Minimize to Windows system tray
+- Call transfer
+- Desktop notifications
+- Fedora packaging
+- MeeGo Packaging
+
