@@ -1,4 +1,4 @@
-include MANIFEST.in run
+include MANIFEST.in TODO run
 include bin/blink
 recursive-include resources *.ui *.png *.svg *.wav
 recursive-include debian  changelog compat control copyright rules
