@@ -69,7 +69,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="account_label">
+       <widget class="QFrame" name="location_frame">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
           <horstretch>0</horstretch>
@@ -77,7 +77,7 @@
          </sizepolicy>
         </property>
         <property name="styleSheet">
-         <string>QLabel {
+         <string>QFrame#location_frame {
 	background: #2060c0;
 	border-style: outset;
 	border-width: 1px;
@@ -89,8 +89,92 @@
 	padding-right: 2px;
 	color: white;
 }
+
+QWidget {
+	color: white;
+}
 </string>
         </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Plain</enum>
+        </property>
+        <property name="lineWidth">
+         <number>0</number>
+        </property>
+        <layout class="QHBoxLayout" name="location_layout">
+         <property name="spacing">
+          <number>7</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="account_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QProgressBar" name="progress_bar">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>12</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string>QProgressBar {
+    border: 1px solid white;
+    border-radius: 2px;
+}
+
+QProgressBar::chunk {
+    background-color: #2060c0;
+    width: 3px;
+    margin-right: 1px;
+}</string>
+           </property>
+           <property name="value">
+            <number>30</number>
+           </property>
+           <property name="textVisible">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="spinner_label">
+           <property name="pixmap">
+            <pixmap>icons/servertools-spinner.mng</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>

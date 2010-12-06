@@ -14,7 +14,7 @@ from collections import defaultdict
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QUrl, QVariant
-from PyQt4.QtGui  import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QPalette, QPixmap, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QMovie, QPalette, QPixmap, QSortFilterProxyModel, QStyledItemDelegate
 from PyQt4.QtNetwork import QNetworkAccessManager
 from PyQt4.QtWebKit  import QWebView
 
@@ -528,6 +528,7 @@ class ServerToolsWebView(QWebView):
         self.user_agent = 'blink'
         self.tab = None
         self.task = None
+        self.last_error = None
         self.urlChanged.connect(self._SH_URLChanged)
 
     @property
@@ -550,8 +551,10 @@ class ServerToolsWebView(QWebView):
         if account:
             notification_center.add_observer(self, sender=account)
         self.access_manager.authenticationRequired.disconnect(self._SH_AuthenticationRequired)
+        self.access_manager.finished.disconnect(self._SH_Finished)
         self.access_manager = QNetworkAccessManager(self)
         self.access_manager.authenticationRequired.connect(self._SH_AuthenticationRequired)
+        self.access_manager.finished.connect(self._SH_Finished)
         self.page().setNetworkAccessManager(self.access_manager)
 
     account = property(_get_account, _set_account)
@@ -578,6 +581,12 @@ class ServerToolsWebView(QWebView):
             # authenticated status so that we try again when the page is reloaded.
             self.authenticated = False
 
+    def _SH_Finished(self, reply):
+        if reply.error() != reply.NoError:
+            self.last_error = reply.errorString()
+        else:
+            self.last_error = None
+
     def _SH_URLChanged(self, url):
         query_items = dict((unicode(name), unicode(value)) for name, value in url.queryItems())
         self.tab = query_items.get('tab') or self.tab
@@ -602,6 +611,10 @@ class ServerToolsWindow(base_class, ui_class):
         super(ServerToolsWindow, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        self.spinner_movie = QMovie(Resources.get('icons/servertools-spinner.mng'))
+        self.spinner_label.setMovie(self.spinner_movie)
+        self.spinner_label.hide()
+        self.progress_bar.hide()
         while self.tab_widget.count():
             self.tab_widget.removeTab(0) # remove the tab(s) added in designer
         self.tab_widget.tabBar().hide()
@@ -617,6 +630,10 @@ class ServerToolsWindow(base_class, ui_class):
         self.model.rowsInserted.connect(self._SH_ModelChanged)
         self.model.rowsRemoved.connect(self._SH_ModelChanged)
         self.account_button.menu().triggered.connect(self._SH_AccountButtonMenuTriggered)
+        web_view = self.tab_widget.currentWidget()
+        web_view.loadStarted.connect(self._SH_WebViewLoadStarted)
+        web_view.loadFinished.connect(self._SH_WebViewLoadFinished)
+        web_view.loadProgress.connect(self._SH_WebViewLoadProgress)
 
     def _SH_AccountButtonMenuTriggered(self, action):
         view = self.tab_widget.currentWidget()
@@ -624,6 +641,44 @@ class ServerToolsWindow(base_class, ui_class):
         self.account_label.setText(account.id)
         self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
         view.load_account_page(account, tab=view.tab, task=view.task)
+
+    def _SH_WebViewLoadStarted(self):
+        self.spinner_label.setMovie(self.spinner_movie)
+        self.spinner_label.show()
+        self.spinner_movie.start()
+        self.progress_bar.setValue(0)
+        #self.progress_bar.show()
+
+    def _SH_WebViewLoadFinished(self, load_ok):
+        self.spinner_movie.stop()
+        self.spinner_label.hide()
+        self.progress_bar.hide()
+        if not load_ok:
+            web_view = self.tab_widget.currentWidget()
+            icon_path = Resources.get('icons/invalid.png')
+            error_message = web_view.last_error or 'Unknown error'
+            html = """
+            <html>
+             <head>
+              <style>
+                .icon    { width: 64px; height: 64px; float: left; }
+                .message { margin-left: 74px; line-height: 64px; vertical-align: middle; }
+              </style>
+             </head>
+             <body>
+              <img class="icon" src="file:%s" />
+              <div class="message">Failed to load web page: <b>%s</b></div>
+             </body>
+            </html>
+            """ % (icon_path, error_message)
+            web_view.loadStarted.disconnect(self._SH_WebViewLoadStarted)
+            web_view.loadFinished.disconnect(self._SH_WebViewLoadFinished)
+            web_view.setHtml(html)
+            web_view.loadStarted.connect(self._SH_WebViewLoadStarted)
+            web_view.loadFinished.connect(self._SH_WebViewLoadFinished)
+
+    def _SH_WebViewLoadProgress(self, percent):
+        self.progress_bar.setValue(percent)
 
     def _SH_ModelChanged(self, parent_index, start, end):
         menu = self.account_button.menu()
