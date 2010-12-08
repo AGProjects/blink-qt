@@ -1045,7 +1045,11 @@ class ContactModel(QAbstractListModel):
     @ignore_contacts_db_updates
     def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
         neighbour = notification.data.neighbour
-        for contact in [c for c in self.items if type(c) is BonjourNeighbour and c.neighbour == neighbour]:
+        try:
+            contact = (contact for contact in self.items if type(contact) is BonjourNeighbour and contact.neighbour == neighbour).next()
+        except StopIteration:
+            pass
+        else:
             self.removeContact(contact)
 
     def _NH_SIPAccountDidActivate(self, notification):
