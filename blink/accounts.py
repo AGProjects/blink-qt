@@ -30,7 +30,7 @@ from sipsimple.util import user_info
 
 from blink.resources import Resources
 from blink.widgets.labels import Status
-from blink.util import QSingleton, call_in_auxiliary_thread, call_in_gui_thread, run_in_auxiliary_thread, run_in_gui_thread
+from blink.util import QSingleton, call_in_gui_thread, run_in_auxiliary_thread, run_in_gui_thread
 
 
 class AccountInfo(object):
@@ -352,7 +352,7 @@ class AddAccountDialog(base_class, ui_class):
             account.enabled = True
             account.display_name = self.display_name
             account.auth.password = self.password
-            call_in_auxiliary_thread(account.save)
+            account.save()
             account_manager = AccountManager()
             account_manager.default_account = account
             self.accept()

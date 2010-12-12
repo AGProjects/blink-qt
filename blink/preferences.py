@@ -29,7 +29,7 @@ from sipsimple.util import limit
 from blink.accounts import AddAccountDialog
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
-from blink.util import QSingleton, call_in_auxiliary_thread, call_in_gui_thread, run_in_auxiliary_thread, run_in_gui_thread
+from blink.util import QSingleton, call_in_gui_thread, run_in_auxiliary_thread, run_in_gui_thread
 
 
 
@@ -994,24 +994,24 @@ class PreferencesWindow(base_class, ui_class):
         device = self.audio_alert_device_button.itemData(index).toPyObject()
         settings = SIPSimpleSettings()
         settings.audio.alert_device = device
-        call_in_auxiliary_thread(settings.save) # temp until done in middleware -Dan
+        settings.save()
 
     def _SH_AudioInputDeviceButtonActivated(self, index):
         device = self.audio_input_device_button.itemData(index).toPyObject()
         settings = SIPSimpleSettings()
         settings.audio.input_device = device
-        call_in_auxiliary_thread(settings.save) # temp until done in middleware -Dan
+        settings.save()
 
     def _SH_AudioOutputDeviceButtonActivated(self, index):
         device = self.audio_output_device_button.itemData(index).toPyObject()
         settings = SIPSimpleSettings()
         settings.audio.output_device = device
-        call_in_auxiliary_thread(settings.save) # temp until done in middleware -Dan
+        settings.save()
 
     def _SH_AudioSampleRateButtonActivated(self, text):
         settings = SIPSimpleSettings()
         settings.audio.sample_rate = str(text)
-        call_in_auxiliary_thread(settings.save) # temp until done in middleware -Dan
+        settings.save()
 
     def _SH_EnableEchoCancellingButtonClicked(self, checked):
         settings = SIPSimpleSettings()

@@ -28,7 +28,7 @@ from blink.preferences import PreferencesWindow
 from blink.sessions import SessionManager, SessionModel
 from blink.configuration.datatypes import InvalidToken
 from blink.resources import Resources
-from blink.util import call_in_auxiliary_thread, run_in_gui_thread
+from blink.util import run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 
 
@@ -296,17 +296,17 @@ class MainWindow(base_class, ui_class):
     def _AH_AudioAlertDeviceChanged(self, action):
         settings = SIPSimpleSettings()
         settings.audio.alert_device = action.data().toPyObject()
-        call_in_auxiliary_thread(settings.save)
+        settings.save()
 
     def _AH_AudioInputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
         settings.audio.input_device = action.data().toPyObject()
-        call_in_auxiliary_thread(settings.save)
+        settings.save()
 
     def _AH_AudioOutputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
         settings.audio.output_device = action.data().toPyObject()
-        call_in_auxiliary_thread(settings.save)
+        settings.save()
 
     def _AH_AutoAcceptChatTriggered(self, checked):
         settings = SIPSimpleSettings()
