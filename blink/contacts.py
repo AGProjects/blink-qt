@@ -32,7 +32,9 @@ from zope.interface import implements
 
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
-from sipsimple.util import makedirs, run_in_green_thread, run_in_twisted_thread
+from sipsimple.threading import run_in_twisted_thread
+from sipsimple.threading.green import run_in_green_thread
+from sipsimple.util import makedirs
 
 from blink.configuration.datatypes import AuthorizationToken, InvalidToken
 from blink.resources import ApplicationData, Resources, IconCache
