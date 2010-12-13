@@ -17,7 +17,8 @@ from PyQt4.QtGui import QApplication
 from application import log
 from application.notification import IObserver, NotificationCenter
 from application.python.util import Null
-from application.system import unlink
+from application.system import host, unlink
+from eventlet import api
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
@@ -26,7 +27,9 @@ from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.backend.file import FileBackend
 from sipsimple.configuration.settings import SIPSimpleSettings
-from sipsimple.util import makedirs
+from sipsimple.threading import run_in_twisted_thread
+from sipsimple.threading.green import run_in_green_thread
+from sipsimple.util import TimestampedNotificationData, makedirs
 
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.datatypes import InvalidToken
@@ -39,6 +42,43 @@ from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
 
 
+class IPAddressMonitor(object):
+    """
+    An object which monitors the IP address used for the default route of the
+    host and posts a SystemIPAddressDidChange notification when a change is
+    detected.
+    """
+
+    def __init__(self):
+        self.greenlet = None
+
+    @run_in_green_thread
+    def start(self):
+        notification_center = NotificationCenter()
+
+        if self.greenlet is not None:
+            return
+        self.greenlet = api.getcurrent()
+
+        current_address = host.default_ip
+        while True:
+            new_address = host.default_ip
+            # make sure the address stabilized
+            api.sleep(5)
+            if new_address != host.default_ip:
+                continue
+            if new_address != current_address:
+                notification_center.post_notification(name='SystemIPAddressDidChange', sender=self, data=TimestampedNotificationData(old_ip_address=current_address, new_ip_address=new_address))
+                current_address = new_address
+            api.sleep(5)
+
+    @run_in_twisted_thread
+    def stop(self):
+        if self.greenlet is not None:
+            api.kill(self.greenlet, api.GreenletExit())
+            self.greenlet = None
+
+
 class Blink(QApplication):
     __metaclass__ = QSingleton
 
@@ -49,6 +89,7 @@ class Blink(QApplication):
         self.application = SIPApplication()
         self.first_run = False
         self.main_window = MainWindow()
+        self.ip_address_monitor = IPAddressMonitor()
 
         self.update_manager = UpdateManager()
         self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
@@ -166,6 +207,7 @@ class Blink(QApplication):
 
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):
+        self.ip_address_monitor.start()
         self.fetch_account()
         self.main_window.show()
         settings = SIPSimpleSettings()
@@ -175,6 +217,9 @@ class Blink(QApplication):
         if settings.google_contacts.authorization_token is InvalidToken:
             self.main_window.google_contacts_dialog.open_for_incorrect_password()
         self.update_manager.initialize()
+
+    def _NH_SIPApplicationWillEnd(self, notification):
+        self.ip_address_monitor.stop()
 
     def _initialize_sipsimple(self):
         if not os.path.exists(ApplicationData.get('config')):
