@@ -1300,10 +1300,10 @@ class ContactModel(QAbstractListModel):
             file = None
             icon_cache = IconCache()
             group = ContactGroup('Test')
-            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', image=icon_cache.store(Resources.get('icons/3333@sip2sip.info.png'))),
-                        Contact(group, 'Echo Test', '4444@sip2sip.info', image=icon_cache.store(Resources.get('icons/4444@sip2sip.info.png'))),
-                        Contact(group, 'Audio Conference', 'test@conference.sip2sip.info', image=icon_cache.store(Resources.get('icons/conference@sip2sip.info.png'))),
-                        Contact(group, 'VUC Conference http://vuc.me', '200901@login.zipdx.com', image=icon_cache.store(Resources.get('icons/200901@login.zipdx.com.png')))]
+            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', image=icon_cache.store(Resources.get('icons/call-test-icon.png'))),
+                        Contact(group, 'Echo Test', '4444@sip2sip.info', image=icon_cache.store(Resources.get('icons/echo-test-icon.png'))),
+                        Contact(group, 'Audio Conference', 'test@conference.sip2sip.info', image=icon_cache.store(Resources.get('icons/audio-conference-icon.png'))),
+                        Contact(group, 'VUC Conference http://vuc.me', '200901@login.zipdx.com', image=icon_cache.store(Resources.get('icons/vuc-conference-icon.png')))]
             contacts.sort(key=attrgetter('name'))
             items = [group] + contacts
         self.beginResetModel()
