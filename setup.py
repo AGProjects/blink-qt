@@ -10,7 +10,7 @@ def get_version():
     return re.search(r"""__version__\s+=\s+(?P<quote>['"])(?P<version>.+?)(?P=quote)""", open('blink/__init__.py').read()).group('version')
 
 def find_packages(toplevel):
-    return [directory.replace('/', '.') for directory, subdirs, files in os.walk(toplevel) if '__init__.py' in files]
+    return [directory.replace(os.path.sep, '.') for directory, subdirs, files in os.walk(toplevel) if '__init__.py' in files]
 
 setup(name         = "blink",
       version      = get_version(),
