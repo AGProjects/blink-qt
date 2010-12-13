@@ -32,14 +32,14 @@ from zope.interface import implements
 
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
-from sipsimple.threading import run_in_twisted_thread
+from sipsimple.threading import run_in_thread, run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
 from sipsimple.util import makedirs
 
 from blink.configuration.datatypes import AuthorizationToken, InvalidToken
 from blink.resources import ApplicationData, Resources, IconCache
 from blink.sessions import SessionManager
-from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_auxiliary_thread, run_in_gui_thread
+from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.labels import Status
 
@@ -1188,7 +1188,7 @@ class ContactModel(QAbstractListModel):
             self.endRemoveRows()
         return items
 
-    @run_in_auxiliary_thread
+    @run_in_thread('file-io')
     def _store_contacts(self, data):
         makedirs(ApplicationData.directory)
         filename = ApplicationData.get('contacts')

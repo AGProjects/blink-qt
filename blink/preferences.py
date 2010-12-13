@@ -24,12 +24,13 @@ from sipsimple.application import SIPApplication
 from sipsimple.configuration import DefaultValue
 from sipsimple.configuration.datatypes import MSRPRelayAddress, PortRange, SIPProxyAddress
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.threading import run_in_thread
 from sipsimple.util import limit
 
 from blink.accounts import AddAccountDialog
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
-from blink.util import QSingleton, call_in_gui_thread, run_in_auxiliary_thread, run_in_gui_thread
+from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
 
 
@@ -1148,7 +1149,7 @@ class PreferencesWindow(base_class, ui_class):
             settings.logs.pjsip_level = value
             settings.save()
 
-    @run_in_auxiliary_thread
+    @run_in_thread('file-io')
     def _SH_ClearLogFilesButtonClicked(self):
         log_manager = LogManager()
         log_manager.stop()

@@ -26,11 +26,12 @@ from zope.interface import implements
 
 from sipsimple.account import Account, AccountExists, AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.threading import run_in_thread
 from sipsimple.util import user_info
 
 from blink.resources import Resources
 from blink.widgets.labels import Status
-from blink.util import QSingleton, call_in_gui_thread, run_in_auxiliary_thread, run_in_gui_thread
+from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
 
 class AccountInfo(object):
@@ -415,7 +416,7 @@ class AddAccountDialog(base_class, ui_class):
         self.verify_password = u''
         self.email_address = u''
 
-    @run_in_auxiliary_thread
+    @run_in_thread('network-io')
     def _create_sip_account(self, username, password, email_address, display_name, timezone=None):
         red = '#cc0000'
         if timezone is None and sys.platform != 'win32':

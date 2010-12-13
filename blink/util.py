@@ -1,7 +1,7 @@
 # Copyright (C) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread', 'call_in_auxiliary_thread', 'run_in_auxiliary_thread']
+__all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread']
 
 from PyQt4.QtCore import QObject, QTimer
 from PyQt4.QtGui import QApplication
@@ -31,19 +31,6 @@ def run_in_gui_thread(func):
     def wrapper(*args, **kw):
         application = QApplication.instance()
         application.postEvent(application, CallFunctionEvent(func, args, kw))
-    return wrapper
-
-
-def call_in_auxiliary_thread(function, *args, **kw):
-    application = QApplication.instance()
-    application.postEvent(application.auxiliary_thread, CallFunctionEvent(function, args, kw))
-
-
-def run_in_auxiliary_thread(func):
-    @preserve_signature(func)
-    def wrapper(*args, **kw):
-        application = QApplication.instance()
-        application.postEvent(application.auxiliary_thread, CallFunctionEvent(func, args, kw))
     return wrapper
 
 
