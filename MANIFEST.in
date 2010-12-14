@@ -1,6 +1,6 @@
 include MANIFEST.in TODO run
 include bin/blink
-recursive-include resources *.ui *.png *.svg *.wav
+recursive-include resources *.ui *.png *.svg *.wav *.ico *.mng
 recursive-include debian  changelog compat control copyright rules
 recursive-include debian  pycompat pyversions
 recursive-include debian  blink.*
