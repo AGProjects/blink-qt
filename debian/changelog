@@ -1,3 +1,15 @@
+blink (0.2.3) unstable; urgency=low
+
+  * Detect change of IP address
+  * Added web server tools activity indicator
+  * Fixed compatibility with older python-qt
+  * Made changes to Preferences thread safe (SIP Simple)
+  * Fixed TLS transport initialization (SIP Simple)
+  * Added DNS resolver autodetection capabilities (SIP Simple)
+  * Fixed matching of media codecs on incoming calls (SIP Simple)
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 14 Dec 2010 15:25:55 +0100
+
 blink (0.2.2) unstable; urgency=low
 
   * Fixed detection of audio codecs without a rtpmap line in SDP
