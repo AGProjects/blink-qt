@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
+from itertools import chain
+import glob
 import os
 import re
-import glob
 
 
 def get_version():
@@ -29,7 +30,7 @@ setup(name         = "blink",
       ],
       packages     = find_packages('blink'),
       data_files   = [('share/blink', glob.glob('resources/*.ui')),
-                      ('share/blink/icons', glob.glob('resources/icons/*.png') + glob.glob('resources/icons/*.svg') + glob.glob('resources/icons/*.ico') + glob.glob('resources/icons/*.mng')),
+                      ('share/blink/icons', list(chain(*(glob.glob('resources/icons/*.%s' % ext) for ext in ('png', 'svg', 'mng', 'ico'))))),
                       ('share/blink/sounds', glob.glob('resources/sounds/*.wav'))
       ],
       scripts      = ['bin/blink']
