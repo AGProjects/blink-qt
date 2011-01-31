@@ -66,7 +66,7 @@ class XCAPSettingsExtension(XCAPSettings):
 
 
 class AccountExtension(SettingsObjectExtension):
-    display_name = Setting(type=str, default=user_info.fullname, nillable=True)
+    display_name = Setting(type=unicode, default=user_info.fullname, nillable=True)
     message_summary = MessageSummarySettingsExtension
     msrp = MSRPSettingsExtension
     nat_traversal = NATTraversalSettingsExtension
