@@ -936,14 +936,6 @@ padding: 2px;</string>
     <property name="title">
      <string>&amp;History</string>
     </property>
-    <widget class="QMenu" name="voicemail_menu">
-     <property name="enabled">
-      <bool>true</bool>
-     </property>
-     <property name="title">
-      <string>&amp;Voicemail</string>
-     </property>
-    </widget>
     <widget class="QMenu" name="missed_calls_menu">
      <property name="enabled">
       <bool>false</bool>
@@ -980,17 +972,15 @@ padding: 2px;</string>
        <normaloff>icons/received-calls.png</normaloff>icons/received-calls.png</iconset>
      </property>
     </widget>
-    <addaction name="redial_action"/>
     <addaction name="history_action"/>
     <addaction name="separator"/>
-    <addaction name="voicemail_menu"/>
     <addaction name="missed_calls_menu"/>
     <addaction name="placed_calls_menu"/>
     <addaction name="received_calls_menu"/>
    </widget>
-   <widget class="QMenu" name="audio_menu">
+   <widget class="QMenu" name="devices_menu">
     <property name="title">
-     <string>&amp;Audio</string>
+     <string>&amp;Devices</string>
     </property>
     <widget class="QMenu" name="output_device_menu">
      <property name="title">
@@ -1019,9 +1009,6 @@ padding: 2px;</string>
        <normaloff>icons/bell.png</normaloff>icons/bell.png</iconset>
      </property>
     </widget>
-    <addaction name="mute_action"/>
-    <addaction name="silent_action"/>
-    <addaction name="separator"/>
     <addaction name="output_device_menu"/>
     <addaction name="input_device_menu"/>
     <addaction name="alert_device_menu"/>
@@ -1041,8 +1028,24 @@ padding: 2px;</string>
     <addaction name="file_transfers_action"/>
     <addaction name="logs_action"/>
    </widget>
+   <widget class="QMenu" name="call_menu">
+    <property name="title">
+     <string>&amp;Call</string>
+    </property>
+    <widget class="QMenu" name="voicemail_menu">
+     <property name="title">
+      <string>&amp;Voicemail</string>
+     </property>
+    </widget>
+    <addaction name="redial_action"/>
+    <addaction name="voicemail_menu"/>
+    <addaction name="separator"/>
+    <addaction name="mute_action"/>
+    <addaction name="silent_action"/>
+   </widget>
    <addaction name="blink_menu"/>
-   <addaction name="audio_menu"/>
+   <addaction name="call_menu"/>
+   <addaction name="devices_menu"/>
    <addaction name="history_menu"/>
    <addaction name="tools_menu"/>
   </widget>
@@ -1145,7 +1148,7 @@ padding: 2px;</string>
   </action>
   <action name="redial_action">
    <property name="text">
-    <string>Re&amp;dial</string>
+    <string>&amp;Redial</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
@@ -1173,7 +1176,7 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>&amp;Silent</string>
+    <string>&amp;Silence alerts</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+S</string>

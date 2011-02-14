@@ -145,15 +145,17 @@ class MainWindow(base_class, ui_class):
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
         self.quit_action.triggered.connect(self.close)
 
-        # Audio menu actions
+        # Call menu actions
+        self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
+
+        # Devices menu actions
         self.output_devices_group.triggered.connect(self._AH_AudioOutputDeviceChanged)
         self.input_devices_group.triggered.connect(self._AH_AudioInputDeviceChanged)
         self.alert_devices_group.triggered.connect(self._AH_AudioAlertDeviceChanged)
 
         # History menu actions
-        self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
 
         # Tools menu actions
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
