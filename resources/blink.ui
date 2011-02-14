@@ -1038,6 +1038,7 @@ padding: 2px;</string>
      </property>
     </widget>
     <addaction name="redial_action"/>
+    <addaction name="join_conference_action"/>
     <addaction name="voicemail_menu"/>
     <addaction name="separator"/>
     <addaction name="mute_action"/>
@@ -1264,6 +1265,14 @@ padding: 2px;</string>
   <action name="buy_pstn_access_action">
    <property name="text">
     <string>Buy prepaid credit...</string>
+   </property>
+  </action>
+  <action name="join_conference_action">
+   <property name="text">
+    <string>Join &amp;Conference...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+J</string>
    </property>
   </action>
  </widget>

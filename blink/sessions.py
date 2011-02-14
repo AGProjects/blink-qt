@@ -3,7 +3,7 @@
 
 from __future__ import with_statement
 
-__all__ = ['Conference', 'SessionItem', 'SessionModel', 'SessionListView', 'SessionManager']
+__all__ = ['Conference', 'ConferenceDialog', 'SessionItem', 'SessionModel', 'SessionListView', 'SessionManager']
 
 import bisect
 import cPickle as pickle
@@ -22,7 +22,7 @@ from application.notification import IObserver, NotificationCenter
 from application.python.util import Null, Singleton
 from zope.interface import implements
 
-from sipsimple.account import Account, AccountManager
+from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.audio import WavePlayer
 from sipsimple.conference import AudioConference
@@ -1694,6 +1694,45 @@ class IncomingSession(QObject):
 
     def _SH_DialogRejected(self):
         self.rejected.emit(self.dialog.reject_mode)
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
+
+class ConferenceDialog(base_class, ui_class):
+    def __init__(self, parent=None):
+        super(ConferenceDialog, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        self.audio_button.clicked.connect(self._SH_MediaButtonClicked)
+        self.chat_button.clicked.connect(self._SH_MediaButtonClicked)
+        self.room_button.editTextChanged.connect(self._SH_RoomButtonEditTextChanged)
+        self.accepted.connect(self.join_conference)
+
+    def _SH_MediaButtonClicked(self, checked):
+        self.accept_button.setEnabled(self.room_button.currentText() != u'' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+
+    def _SH_RoomButtonEditTextChanged(self, text):
+        self.accept_button.setEnabled(text != u'' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+
+    def show(self):
+        self.room_button.setCurrentIndex(-1)
+        self.audio_button.setChecked(True)
+        self.chat_button.setChecked(False)
+        self.accept_button.setEnabled(False)
+        super(ConferenceDialog, self).show()
+
+    def join_conference(self):
+        account_manager = AccountManager()
+        session_manager = SessionManager()
+        account = account_manager.default_account
+        if account is not BonjourAccount():
+            conference_server = account.server.conference_server
+        else:
+            conference_server = None
+        uri = u'%s@%s' % (self.room_button.currentText(), conference_server or 'conference.sip2sip.info')
+        session_manager.start_call(None, uri, account=account)
+
+del ui_class, base_class
 
 
 class SessionManager(object):

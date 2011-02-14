@@ -56,6 +56,11 @@ class PrefixValidator(QRegExpValidator):
         return super(PrefixValidator, self).fixup(input)
 
 
+class HostnameValidator(QRegExpValidator):
+    def __init__(self, parent=None):
+        super(HostnameValidator, self).__init__(QRegExp(u'^([\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
+
+
 class SIPAddressValidator(QRegExpValidator):
     def __init__(self, parent=None):
         super(SIPAddressValidator, self).__init__(QRegExp(u'^([\w\-_+%]+@[\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
@@ -212,6 +217,7 @@ class PreferencesWindow(base_class, ui_class):
         self.voicemail_uri_editor.editingFinished.connect(self._SH_VoicemailURIEditorEditingFinished)
         self.xcap_root_editor.editingFinished.connect(self._SH_XCAPRootEditorEditingFinished)
         self.server_tools_url_editor.editingFinished.connect(self._SH_ServerToolsURLEditorEditingFinished)
+        self.conference_server_editor.editingFinished.connect(self._SH_ConferenceServerEditorEditingFinished)
 
         # Account network settings
         self.use_ice_button.clicked.connect(self._SH_UseICEButtonClicked)
@@ -312,6 +318,7 @@ class PreferencesWindow(base_class, ui_class):
         self.voicemail_uri_editor.setValidator(SIPAddressValidator(self))
         self.xcap_root_editor.setValidator(XCAPRootValidator(self))
         self.server_tools_url_editor.setValidator(WebURLValidator(self))
+        self.conference_server_editor.setValidator(HostnameValidator(self))
         self.idd_prefix_button.setValidator(IDDPrefixValidator(self))
         self.prefix_button.setValidator(PrefixValidator(self))
 
@@ -336,7 +343,7 @@ class PreferencesWindow(base_class, ui_class):
         font_metrics = self.outbound_proxy_label.fontMetrics() # we assume all labels have the same font
         labels = (self.outbound_proxy_label, self.auth_username_label, self.msrp_relay_label,
                   self.voicemail_uri_label, self.xcap_root_label, self.server_tools_url_label,
-                  self.msrp_transport_label)
+                  self.conference_server_label, self.msrp_transport_label)
         text_width = max(font_metrics.width(label.text()) for label in labels) + 15
         self.outbound_proxy_label.setMinimumWidth(text_width)
         self.msrp_transport_label.setMinimumWidth(text_width)
@@ -600,6 +607,7 @@ class PreferencesWindow(base_class, ui_class):
             self.voicemail_uri_editor.setText(account.message_summary.voicemail_uri or u'')
             self.xcap_root_editor.setText(account.xcap.xcap_root or u'')
             self.server_tools_url_editor.setText(account.server.settings_url or u'')
+            self.conference_server_editor.setText(account.server.conference_server or u'')
 
             # Network tab
             self.use_ice_button.setChecked(account.nat_traversal.use_ice)
@@ -907,6 +915,13 @@ class PreferencesWindow(base_class, ui_class):
         url = unicode(self.server_tools_url_editor.text()) or None
         if account.server.settings_url != url:
             account.server.settings_url = url
+            account.save()
+
+    def _SH_ConferenceServerEditorEditingFinished(self):
+        account = self.selected_account
+        server = unicode(self.conference_server_editor.text()) or None
+        if account.server.conference_server != server:
+            account.server.conference_server = server
             account.save()
 
     # Account network settings

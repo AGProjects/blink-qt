@@ -7,7 +7,7 @@ __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
 from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, NATTraversalSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
-from sipsimple.configuration.datatypes import AudioCodecList, MSRPConnectionModel, MSRPTransport, SIPTransportList
+from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, SIPTransportList
 from sipsimple.util import user_info
 
 from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL
@@ -50,6 +50,7 @@ class SIPSettingsExtension(SIPSettings):
 
 
 class ServerSettings(SettingsGroup):
+    conference_server = Setting(type=Hostname, default=None, nillable=True)
     settings_url = Setting(type=HTTPURL, default=None, nillable=True)
 
 

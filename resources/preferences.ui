@@ -140,7 +140,7 @@
         <item row="0" column="1">
          <widget class="QTabWidget" name="account_tab_widget">
           <property name="currentIndex">
-           <number>4</number>
+           <number>2</number>
           </property>
           <widget class="QWidget" name="account_information_tab">
            <attribute name="title">
@@ -546,7 +546,7 @@
              <widget class="QLabel" name="outbound_proxy_label">
               <property name="minimumSize">
                <size>
-                <width>100</width>
+                <width>105</width>
                 <height>0</height>
                </size>
               </property>
@@ -828,7 +828,7 @@
             <item row="15" column="1" colspan="5">
              <widget class="QLineEdit" name="server_tools_url_editor"/>
             </item>
-            <item row="16" column="0" colspan="6">
+            <item row="17" column="0" colspan="6">
              <spacer name="server_settings_spacer">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -840,6 +840,19 @@
                </size>
               </property>
              </spacer>
+            </item>
+            <item row="16" column="0">
+             <widget class="QLabel" name="conference_server_label">
+              <property name="text">
+               <string>Conference Server:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="16" column="1" colspan="5">
+             <widget class="QLineEdit" name="conference_server_editor"/>
             </item>
            </layout>
           </widget>
@@ -862,7 +875,7 @@
              <widget class="QLabel" name="msrp_transport_label">
               <property name="minimumSize">
                <size>
-                <width>100</width>
+                <width>105</width>
                 <height>0</height>
                </size>
               </property>
@@ -2654,17 +2667,17 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>LineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>blink.widgets.lineedit</header>
+  </customwidget>
+  <customwidget>
    <class>SIPPortEditor</class>
    <extends>QSpinBox</extends>
    <header>blink.preferences</header>
   </customwidget>
   <customwidget>
    <class>LocationBar</class>
-   <extends>QLineEdit</extends>
-   <header>blink.widgets.lineedit</header>
-  </customwidget>
-  <customwidget>
-   <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
   </customwidget>

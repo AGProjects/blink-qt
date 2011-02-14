@@ -25,7 +25,7 @@ from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
 from blink.preferences import PreferencesWindow
-from blink.sessions import SessionManager, SessionModel
+from blink.sessions import ConferenceDialog, SessionManager, SessionModel
 from blink.configuration.datatypes import InvalidToken
 from blink.resources import Resources
 from blink.util import run_in_gui_thread
@@ -89,6 +89,7 @@ class MainWindow(base_class, ui_class):
 
         # Windows, dialogs and panels
         self.about_panel = AboutPanel(self)
+        self.conference_dialog = ConferenceDialog(self)
         self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
         self.google_contacts_dialog = GoogleContactsDialog(self)
         self.preferences_window = PreferencesWindow(self.account_model, None)
@@ -147,6 +148,7 @@ class MainWindow(base_class, ui_class):
 
         # Call menu actions
         self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
+        self.join_conference_action.triggered.connect(self.conference_dialog.show)
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
 
@@ -212,6 +214,7 @@ class MainWindow(base_class, ui_class):
     def closeEvent(self, event):
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
+        self.conference_dialog.close()
         self.contact_editor_dialog.close()
         self.google_contacts_dialog.close()
         self.preferences_window.close()
