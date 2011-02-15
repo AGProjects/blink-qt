@@ -4,12 +4,11 @@ Main tasks
 
 + XCAP storage
 + Presence
-+ Video
-- Call history
++ Call history
+- Call transfer
 - File transfer
 - SMS and Chat
-- Desktop sharing
-- Logs window
++ Video
 
 
 Side tasks
@@ -27,8 +26,6 @@ Nice to have
 
 - Dial SIP URIs from the system
 - Minimize to Windows system tray
-- Call transfer
 - Desktop notifications
-- Fedora packaging
-- MeeGo Packaging
-
+- Desktop sharing
+- Logs window
