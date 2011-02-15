@@ -2,7 +2,7 @@
 Blink Qt Installation on Debian and Ubuntu Linux
 ------------------------------------------------
 
-Copyright (c) 2010 AG Projects
+Copyright (c) 2010-2011 AG Projects
 http://ag-projects.com
 
 Home page: http://icanblink.com
@@ -37,22 +37,17 @@ deb     http://ag-projects.com/ubuntu karmic main
 deb-src http://ag-projects.com/ubuntu karmic main
 
 
-Ubuntu Lucid (10.04)
---------------------
+Ubuntu Lucid (10.04) and Maverick (10.10)
+-----------------------------------------
 
 deb     http://ag-projects.com/ubuntu lucid main
 deb-src http://ag-projects.com/ubuntu lucid main
 
 
-Ubuntu Maverick (10.10)
------------------------
-
-deb     http://ag-projects.com/ubuntu maverick main
-deb-src http://ag-projects.com/ubuntu maverick main
-
 Update the list of available packages:
 
 sudo apt-get update
+
 
 Install Blink
 -------------
@@ -68,13 +63,13 @@ http://download.ag-projects.com/Blink/Linux/
 
 Install the runtime dependencies:
 
- * python (>=2.5)
+ * python (2.5 or 2.6)
  * python-application (>= 1.2.5)
  * python-cjson 
  * python-eventlet-0.8 (>= 0.8.11.4)
  * python-qt4 (>= 4.7)
  * python-twisted-core (>= 8.1.0)
- * python-sipsimple (>= 0.16.3)
+ * python-sipsimple (>= 0.17.0)
  * python-zope.interface
 
 After installing the above dependencies, install Blink system wide using:
