@@ -258,7 +258,7 @@ class MainWindow(base_class, ui_class):
         self.output_device_menu.addAction(action)
         for action in self.output_devices_group.actions():
             action.setCheckable(True)
-            if settings.audio.output_device == action.data().toPyObject():
+            if settings.audio.output_device == unicode(action.data().toPyObject()):
                 action.setChecked(True)
 
         action = QAction(u'System default', self.input_devices_group)
@@ -274,7 +274,7 @@ class MainWindow(base_class, ui_class):
         self.input_device_menu.addAction(action)
         for action in self.input_devices_group.actions():
             action.setCheckable(True)
-            if settings.audio.input_device == action.data().toPyObject():
+            if settings.audio.input_device == unicode(action.data().toPyObject()):
                 action.setChecked(True)
 
         action = QAction(u'System default', self.alert_devices_group)
@@ -290,7 +290,7 @@ class MainWindow(base_class, ui_class):
         self.alert_device_menu.addAction(action)
         for action in self.alert_devices_group.actions():
             action.setCheckable(True)
-            if settings.audio.alert_device == action.data().toPyObject():
+            if settings.audio.alert_device == unicode(action.data().toPyObject()):
                 action.setChecked(True)
 
     def _AH_AccountActionTriggered(self, action, enabled):
@@ -300,17 +300,17 @@ class MainWindow(base_class, ui_class):
 
     def _AH_AudioAlertDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.alert_device = action.data().toPyObject()
+        settings.audio.alert_device = unicode(action.data().toPyObject())
         settings.save()
 
     def _AH_AudioInputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.input_device = action.data().toPyObject()
+        settings.audio.input_device = unicode(action.data().toPyObject())
         settings.save()
 
     def _AH_AudioOutputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.output_device = action.data().toPyObject()
+        settings.audio.output_device = unicode(action.data().toPyObject())
         settings.save()
 
     def _AH_AutoAcceptChatTriggered(self, checked):
@@ -596,13 +596,13 @@ class MainWindow(base_class, ui_class):
                 self.silent_action.setChecked(settings.audio.silent)
                 self.silent_button.setChecked(settings.audio.silent)
             if 'audio.output_device' in notification.data.modified:
-                action = (action for action in self.output_devices_group.actions() if action.data().toPyObject() == settings.audio.output_device).next()
+                action = (action for action in self.output_devices_group.actions() if unicode(action.data().toPyObject()) == settings.audio.output_device).next()
                 action.setChecked(True)
             if 'audio.input_device' in notification.data.modified:
-                action = (action for action in self.input_devices_group.actions() if action.data().toPyObject() == settings.audio.input_device).next()
+                action = (action for action in self.input_devices_group.actions() if unicode(action.data().toPyObject()) == settings.audio.input_device).next()
                 action.setChecked(True)
             if 'audio.alert_device' in notification.data.modified:
-                action = (action for action in self.alert_devices_group.actions() if action.data().toPyObject() == settings.audio.alert_device).next()
+                action = (action for action in self.alert_devices_group.actions() if unicode(action.data().toPyObject()) == settings.audio.alert_device).next()
                 action.setChecked(True)
             if 'answering_machine.enabled' in notification.data.modified:
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)

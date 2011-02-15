@@ -1007,19 +1007,19 @@ class PreferencesWindow(base_class, ui_class):
 
     # Audio devices signal handlers
     def _SH_AudioAlertDeviceButtonActivated(self, index):
-        device = self.audio_alert_device_button.itemData(index).toPyObject()
+        device = unicode(self.audio_alert_device_button.itemData(index).toPyObject())
         settings = SIPSimpleSettings()
         settings.audio.alert_device = device
         settings.save()
 
     def _SH_AudioInputDeviceButtonActivated(self, index):
-        device = self.audio_input_device_button.itemData(index).toPyObject()
+        device = unicode(self.audio_input_device_button.itemData(index).toPyObject())
         settings = SIPSimpleSettings()
         settings.audio.input_device = device
         settings.save()
 
     def _SH_AudioOutputDeviceButtonActivated(self, index):
-        device = self.audio_output_device_button.itemData(index).toPyObject()
+        device = unicode(self.audio_output_device_button.itemData(index).toPyObject())
         settings = SIPSimpleSettings()
         settings.audio.output_device = device
         settings.save()
