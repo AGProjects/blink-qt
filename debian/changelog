@@ -1,3 +1,16 @@
+blink (0.2.4) unstable; urgency=low
+
+  * Added support for unicode device names
+  * Added menu entry and dialog for joining a conference
+  * Restructured main menu
+  * Improved DNS resolver capabilities (SIP Simple)
+  * Only handle records in the local. domain for bonjour (SIP Simple)
+  * Send 500 response if we fail to create incoming invitation (SIP Simple)
+  * Fixed race conditions in subscription handlers (SIP Simple)
+  * Fixed exception when the session is ended on error conditions (SIP Simple)
+
+ -- Saul Ibarra <saul@ag-projects.com>  Tue, 15 Feb 2011 17:12:40 +0100
+
 blink (0.2.3) unstable; urgency=low
 
   * Detect change of IP address
