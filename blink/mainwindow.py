@@ -300,17 +300,17 @@ class MainWindow(base_class, ui_class):
 
     def _AH_AudioAlertDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.alert_device = unicode(action.data().toPyObject())
+        settings.audio.alert_device = action.data().toPyObject()
         settings.save()
 
     def _AH_AudioInputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.input_device = unicode(action.data().toPyObject())
+        settings.audio.input_device = action.data().toPyObject()
         settings.save()
 
     def _AH_AudioOutputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.output_device = unicode(action.data().toPyObject())
+        settings.audio.output_device = action.data().toPyObject()
         settings.save()
 
     def _AH_AutoAcceptChatTriggered(self, checked):
