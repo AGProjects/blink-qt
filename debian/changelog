@@ -1,3 +1,15 @@
+blink (0.2.6) unstable; urgency=low
+
+  * Fixed exception when NAT type detection is attempted without
+    connectivity (SIP Client)
+  * Fixed exceptions when contact URI can't be built for the desired route
+    (SIP Client)
+  * Fixed crashes and increased resilience when connectivity is lost
+    (SIP Client)
+  * Relax check on SDP origin to increase interoperability (SIP Client)
+
+ -- Saul Ibarra <saul@ag-projects.com>  Tue, 22 Mar 2011 10:05:07 +0100
+
 blink (0.2.5) unstable; urgency=low
 
   * Fixed saving TLS options (SIP Simple)
