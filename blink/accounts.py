@@ -24,7 +24,8 @@ from application.python.util import Null
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
-from sipsimple.account import Account, AccountExists, AccountManager, BonjourAccount
+from sipsimple.account import Account, AccountManager, BonjourAccount
+from sipsimple.configuration import DuplicateIDError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 from sipsimple.util import user_info
@@ -449,7 +450,7 @@ class AddAccountDialog(base_class, ui_class):
                 account_manager = AccountManager()
                 try:
                     account = Account(response_data['sip_address'])
-                except AccountExists:
+                except DuplicateIDError:
                     account = account_manager.get_account(response_data['sip_address'])
                 account.enabled = True
                 account.display_name = display_name
