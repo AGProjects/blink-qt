@@ -135,7 +135,7 @@ class Blink(QApplication):
             account = account_manager.get_account(account_id)
         except KeyError:
             account = Account(account_id)
-            account.display_name = data['display_name'].decode('utf-8')
+            account.display_name = data['display_name'] or None
             default_account = account
         else:
             default_account = account_manager.default_account
