@@ -352,7 +352,7 @@ class AddAccountDialog(base_class, ui_class):
         if self.panel_view.currentWidget() is self.add_account_panel:
             account = Account(self.sip_address)
             account.enabled = True
-            account.display_name = self.display_name
+            account.display_name = self.display_name or None
             account.auth.password = self.password
             account.save()
             account_manager = AccountManager()
@@ -453,7 +453,7 @@ class AddAccountDialog(base_class, ui_class):
                 except DuplicateIDError:
                     account = account_manager.get_account(response_data['sip_address'])
                 account.enabled = True
-                account.display_name = display_name
+                account.display_name = display_name or None
                 account.auth.password = password
                 account.sip.outbound_proxy = response_data['outbound_proxy']
                 account.nat_traversal.msrp_relay = response_data['msrp_relay']
