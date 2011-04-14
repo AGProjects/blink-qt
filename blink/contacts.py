@@ -300,7 +300,7 @@ class GoogleContactsManager(object):
         self._load_timer = None
 
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings())
         notification_center.add_observer(self, name='SIPApplicationWillStart')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
 
