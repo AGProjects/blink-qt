@@ -342,6 +342,12 @@ class GoogleContactsManager(object):
         elif authorization_token is None:
             self.remove_group()
 
+    def _NH_SIPApplicationWillEnd(self, notification):
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self, name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings())
+        if self.greenlet is not None:
+            api.kill(self.greenlet, api.GreenletExit())
+
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if 'google_contacts.authorization_token' in notification.data.modified:
             if self._load_timer is not None and self._load_timer.active():
@@ -358,12 +364,6 @@ class GoogleContactsManager(object):
                     self.greenlet = None
                 self.stop_adding_contacts = False
                 self.remove_group()
-
-    def _NH_SIPApplicationWillEnd(self, notification):
-        notification_center = NotificationCenter()
-        notification_center.remove_observer(self, name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings())
-        if self.greenlet is not None:
-            api.kill(self.greenlet, api.GreenletExit())
 
     @run_in_green_thread
     def load_contacts(self):
