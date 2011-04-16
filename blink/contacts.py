@@ -300,7 +300,6 @@ class GoogleContactsManager(object):
         self._load_timer = None
 
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings())
         notification_center.add_observer(self, name='SIPApplicationWillStart')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
 
@@ -334,6 +333,8 @@ class GoogleContactsManager(object):
 
     def _NH_SIPApplicationWillStart(self, notification):
         settings = SIPSimpleSettings()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=settings)
         authorization_token = settings.google_contacts.authorization_token
         if authorization_token:
             call_in_gui_thread(self.contact_model.addGroup, self.contact_model.google_contacts_group)
@@ -359,6 +360,8 @@ class GoogleContactsManager(object):
                 self.remove_group()
 
     def _NH_SIPApplicationWillEnd(self, notification):
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self, name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings())
         if self.greenlet is not None:
             api.kill(self.greenlet, api.GreenletExit())
 
