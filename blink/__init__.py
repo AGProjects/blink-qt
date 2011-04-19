@@ -25,8 +25,8 @@ from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
-from sipsimple.configuration.backend.file import FileBackend
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.storage import FileStorage
 from sipsimple.threading import run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
 from sipsimple.util import TimestampedNotificationData, makedirs
@@ -226,6 +226,6 @@ class Blink(QApplication):
             self.first_run = True
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.application)
-        self.application.start(FileBackend(ApplicationData.get('config')))
+        self.application.start(FileStorage(ApplicationData.directory))
 
 

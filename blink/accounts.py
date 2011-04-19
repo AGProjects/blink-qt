@@ -568,7 +568,7 @@ class ServerToolsWebView(QWebView):
         handler(notification)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
-        if 'id' in notification.data.modified or 'auth.password' in notification.data.modified:
+        if '__id__' in notification.data.modified or 'auth.password' in notification.data.modified:
             self.authenticated = False
             self.reload()
 
