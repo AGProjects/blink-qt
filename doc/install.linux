@@ -69,7 +69,7 @@ Install the runtime dependencies:
  * python-eventlet-0.8 (>= 0.8.11.4)
  * python-qt4 (>= 4.7)
  * python-twisted-core (>= 8.1.0)
- * python-sipsimple (>= 0.17.0)
+ * python-sipsimple (>= 0.18.1)
  * python-zope.interface
 
 After installing the above dependencies, install Blink system wide using:
