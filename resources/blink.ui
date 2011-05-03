@@ -74,7 +74,7 @@
        </size>
       </property>
       <property name="inactiveText" stdset="0">
-       <string>Search Contacts or Enter Address</string>
+       <string>Enter Address or Phone Number</string>
       </property>
      </widget>
     </item>
