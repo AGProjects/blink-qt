@@ -5,7 +5,7 @@
 
 __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
-from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, NATTraversalSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
+from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
 from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, SIPTransportList
 from sipsimple.util import user_info
@@ -27,10 +27,6 @@ class MessageSummarySettingsExtension(MessageSummarySettings):
 
 class MSRPSettingsExtension(MSRPSettings):
     connection_model = Setting(type=MSRPConnectionModel, default='relay')
-
-
-class NATTraversalSettingsExtension(NATTraversalSettings):
-    use_msrp_relay_for_inbound = Setting(type=bool, default=True)
 
 
 class PSTNSettings(SettingsGroup):
@@ -70,7 +66,6 @@ class AccountExtension(SettingsObjectExtension):
     display_name = Setting(type=unicode, default=user_info.fullname, nillable=True)
     message_summary = MessageSummarySettingsExtension
     msrp = MSRPSettingsExtension
-    nat_traversal = NATTraversalSettingsExtension
     pstn = PSTNSettings
     rtp = RTPSettingsExtension
     server = ServerSettings
