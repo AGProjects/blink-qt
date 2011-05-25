@@ -148,7 +148,7 @@ blink (0.1.1) unstable; urgency=low
   * Reject calls with 486 Busy or 603 Decline
   * SIP, DNS, MSRP protocol trace to file
 
- -- Adrian Georgescu <adigeo@ubuntu>  Thu, 12 Aug 2010 21:18:52 +0200
+ -- Adrian Georgescu <ag@ag-projects.com>  Thu, 12 Aug 2010 21:18:52 +0200
 
 blink (0.1.0) unstable; urgency=low
 
