@@ -13,11 +13,11 @@ import sys
 from PyQt4.QtCore import Qt
 from PyQt4.QtGui  import QPixmap
 from application import log
-from application.python.util import Singleton
-from application.system import unlink
+from application.python.descriptor import classproperty
+from application.python.types import Singleton
+from application.system import makedirs, unlink
 from collections import deque
 from hashlib import sha512
-from sipsimple.util import classproperty, makedirs
 
 
 class DirectoryContextManager(unicode):

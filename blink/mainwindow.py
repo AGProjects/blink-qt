@@ -13,7 +13,7 @@ from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
 from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QIcon, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
-from application.python.util import Null
+from application.python import Null
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount

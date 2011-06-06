@@ -14,7 +14,7 @@ from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QListView, QLi
 
 from application import log
 from application.notification import IObserver, NotificationCenter
-from application.python.util import Null
+from application.python import Null
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements

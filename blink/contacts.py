@@ -19,8 +19,8 @@ from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QReg
 
 from application.notification import IObserver, NotificationCenter
 from application.python.decorator import decorator, preserve_signature
-from application.python.util import Null
-from application.system import unlink
+from application.python import Null
+from application.system import makedirs, unlink
 from collections import deque
 from eventlet import api
 from eventlet.green import httplib, urllib2
@@ -34,7 +34,6 @@ from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
-from sipsimple.util import makedirs
 
 from blink.configuration.datatypes import AuthorizationToken, InvalidToken
 from blink.resources import ApplicationData, Resources, IconCache

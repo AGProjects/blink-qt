@@ -6,7 +6,7 @@ __all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread'
 from PyQt4.QtCore import QObject, QTimer
 from PyQt4.QtGui import QApplication
 from application.python.decorator import decorator, preserve_signature
-from application.python.util import Singleton
+from application.python.types import Singleton
 
 from blink.event import CallFunctionEvent
 

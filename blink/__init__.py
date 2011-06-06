@@ -16,8 +16,8 @@ import cjson
 from PyQt4.QtGui import QApplication
 from application import log
 from application.notification import IObserver, NotificationCenter
-from application.python.util import Null
-from application.system import host, unlink
+from application.python import Null
+from application.system import host, makedirs, unlink
 from eventlet import api
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
@@ -29,7 +29,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.storage import FileStorage
 from sipsimple.threading import run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
-from sipsimple.util import TimestampedNotificationData, makedirs
+from sipsimple.util import TimestampedNotificationData
 
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.datatypes import InvalidToken

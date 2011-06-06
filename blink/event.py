@@ -5,7 +5,7 @@ __all__ = ['CallFunctionEvent']
 
 from PyQt4.QtCore import QEvent
 
-from sipsimple.util import classproperty
+from application.python.descriptor import classproperty
 
 
 class EventMeta(type(QEvent)):

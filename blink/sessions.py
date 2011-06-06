@@ -19,7 +19,8 @@ from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, 
 from PyQt4.QtGui  import QAction, QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter
-from application.python.util import Null, Singleton
+from application.python import Null
+from application.python.types import Singleton
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
