@@ -14,7 +14,7 @@ from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QListView, QLi
 
 from application import log
 from application.notification import IObserver, NotificationCenter
-from application.python import Null
+from application.python import Null, limit
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
@@ -25,7 +25,6 @@ from sipsimple.configuration import DefaultValue
 from sipsimple.configuration.datatypes import MSRPRelayAddress, PortRange, SIPProxyAddress
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
-from sipsimple.util import limit
 
 from blink.accounts import AddAccountDialog
 from blink.resources import ApplicationData, Resources

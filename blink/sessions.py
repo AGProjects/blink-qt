@@ -19,7 +19,7 @@ from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, 
 from PyQt4.QtGui  import QAction, QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter
-from application.python import Null
+from application.python import Null, limit
 from application.python.types import Singleton
 from zope.interface import implements
 
@@ -32,7 +32,6 @@ from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
 from sipsimple.session import Session
 from sipsimple.streams import MediaStreamRegistry
-from sipsimple.util import limit
 
 from blink.configuration.datatypes import DefaultPath
 from blink.resources import Resources
