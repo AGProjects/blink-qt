@@ -1,3 +1,10 @@
+blink (0.2.8) unstable; urgency=low
+
+  * Adapted to changes in python-application
+  * Use debhelper and dh_python2 instead of pysupport
+
+ -- Saul Ibarra <saul@ag-projects.com>  Mon, 06 Jun 2011 11:20:27 +0200
+
 blink (0.2.7) unstable; urgency=low
 
   * Fixed duplicate account detection
