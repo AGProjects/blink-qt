@@ -453,8 +453,10 @@ class SessionItem(QObject):
                 self.audio_stream.bridge.add(self.outbound_ringtone)
         if self.video_stream:
             streams.append(self.video_stream)
+        routes = notification.data.result
+        self.tls = routes[0].transport=='tls' if routes else False
         self.status = Status('Connecting...')
-        self.session.connect(ToHeader(self.uri), notification.data.result, streams)
+        self.session.connect(ToHeader(self.uri), routes, streams)
 
     def _NH_DNSLookupDidFail(self, notification):
         notification_center = NotificationCenter()
@@ -500,6 +502,8 @@ class SessionItem(QObject):
                 codecs.append('%s %dkHz' % (self.audio_stream.codec, self.audio_stream.sample_rate/1000))
             self.codec_info = ', '.join(codecs)
             self.status = Status('Connected')
+            self.srtp = all(stream.srtp_active for stream in (self.audio_stream, self.video_stream) if stream is not None)
+            self.tls = self.session.transport == 'tls'
             call_later(1, self._reset_status)
         else:
             self.status = Status('%s refused' % self.type, color='#900000')
