@@ -16,7 +16,7 @@ from itertools import chain, izip, repeat
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QObject, QSize, QStringList, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPen, QPixmap, QShortcut, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QPainter, QPen, QPixmap, QShortcut, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
