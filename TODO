@@ -2,14 +2,16 @@
 Main tasks
 ----------
 
-+ XCAP storage
-+ Call history
-+ Chat
++ Addressbook
 + Presence
+- Last calls history menu
+- LDAP
+- Chat
 - Call transfer
+- Answering machine
 - File transfer
-- SMS
-- Video
+- History browser
+- Logs window
 
 
 Side tasks
@@ -17,7 +19,6 @@ Side tasks
 
 - Dial SIP URI from server web page
 - Show register status
-- Answering Machine
 - Device switching window when detected at runtime
 - Alert panel for redirect 30X
 
@@ -29,4 +30,3 @@ Nice to have
 - Minimize to Windows system tray
 - Desktop notifications
 - Desktop sharing
-- Logs window
