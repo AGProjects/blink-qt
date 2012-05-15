@@ -1,32 +1,28 @@
 
-Main tasks
-----------
+Roadmap
+-------
 
-+ Addressbook
++ Address Book refactoring
 + Presence
-- Last calls history menu
-- LDAP
-- Chat
-- Call transfer
-- Answering machine
-- File transfer
-- History browser
-- Logs window
-
-
-Side tasks
-----------
-
-- Dial SIP URI from server web page
-- Show register status
-- Device switching window when detected at runtime
-- Alert panel for redirect 30X
++ Call History menu
++ Call transfer
++ Answering machine
 
 
 Nice to have
 ------------
 
+- LDAP
+- Chat
+- File transfer
+- History browser
+- Logs window
+- Dial SIP URI from server web page
+- Show register status
+- Device switching window when detected at runtime
+- Alert panel for redirect 30X
 - Dial SIP URIs from the system
 - Minimize to Windows system tray
 - Desktop notifications
 - Desktop sharing
+- Accesibility features for blind users
