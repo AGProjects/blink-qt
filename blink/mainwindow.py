@@ -43,7 +43,7 @@ class MainWindow(base_class, ui_class):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
-        notification_center.add_observer(self, name='SIPAccountMWIDidGetSummary')
+        notification_center.add_observer(self, name='SIPAccountGotMessageSummary')
         notification_center.add_observer(self, sender=AccountManager())
 
         self.mwi_icons = [QIcon(Resources.get('icons/mwi-%d.png' % i)) for i in xrange(0, 11)]
@@ -660,7 +660,7 @@ class MainWindow(base_class, ui_class):
             selected_items = self.contact_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(len(selected_items)==1 and isinstance(self.contact_model.data(selected_items[0]), Contact))
 
-    def _NH_SIPAccountMWIDidGetSummary(self, notification):
+    def _NH_SIPAccountGotMessageSummary(self, notification):
         account = notification.sender
         summary = notification.data.message_summary
         action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
