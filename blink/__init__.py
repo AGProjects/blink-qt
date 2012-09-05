@@ -18,7 +18,7 @@ from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from application.system import host, makedirs, unlink
-from eventlet import api
+from eventlib import api
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements

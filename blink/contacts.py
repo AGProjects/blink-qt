@@ -22,8 +22,8 @@ from application.python.decorator import decorator, preserve_signature
 from application.python import Null
 from application.system import makedirs, unlink
 from collections import deque
-from eventlet import api
-from eventlet.green import httplib, urllib2
+from eventlib import api
+from eventlib.green import httplib, urllib2
 from functools import partial
 from operator import attrgetter
 from twisted.internet import reactor

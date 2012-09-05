@@ -39,7 +39,7 @@ import os
 
 from blink.google.atom import http_core as atom_http_core, http_interface as atom_http_interface, url as atom_url
 
-from eventlet.green import httplib, socket
+from eventlib.green import httplib, socket
 
 ssl_imported = False
 ssl = None

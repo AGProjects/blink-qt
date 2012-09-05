@@ -25,7 +25,7 @@ import StringIO
 import urlparse
 import urllib
 
-from eventlet.green import httplib, socket
+from eventlib.green import httplib, socket
 
 ssl = None
 try:

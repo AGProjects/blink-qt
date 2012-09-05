@@ -35,7 +35,7 @@ import warnings
 
 from blink.google.atom import v1_deprecated, http as atom_http, http_interface as atom_http_interface, token_store as atom_token_store, url as atom_url
 
-from eventlet.green import httplib, socket
+from eventlib.green import httplib, socket
 from xml.etree import ElementTree
 
 
