@@ -1,3 +1,12 @@
+blink (0.2.9) unstable; urgency=low
+
+  * Enable TLS and SRTP labels when appropriate
+  * Adapted to changes in middleware API
+  * Adapted to change in eventlet package name
+  * Bumped debian standards version to 3.9.3
+
+ -- Saul Ibarra <saul@ag-projects.com>  Thu, 06 Sep 2012 21:49:22 +0200
+
 blink (0.2.8) unstable; urgency=low
 
   * Adapted to changes in python-application
