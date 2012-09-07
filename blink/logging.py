@@ -147,13 +147,13 @@ class LogManager(object):
             direction = "RECEIVED"
         else:
             direction = "SENDING"
-        buf = ["%s: Packet %d, +%s" % (direction, self._siptrace_packet_count, (notification.data.timestamp - self._siptrace_start_time))]
+        buf = ["%s: Packet %d, +%s" % (direction, self._siptrace_packet_count, (notification.datetime - self._siptrace_start_time))]
         buf.append("%(source_ip)s:%(source_port)d -(SIP over %(transport)s)-> %(destination_ip)s:%(destination_port)d" % notification.data.__dict__)
         buf.append(notification.data.data)
         buf.append('--')
         message = '\n'.join(buf)
         try:
-            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
+            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
             self.siptrace_file.flush()
         except Exception:
             pass
@@ -164,7 +164,7 @@ class LogManager(object):
             return
         message = "(%(level)d) %(sender)14s: %(message)s" % notification.data.__dict__
         try:
-            self.pjsiptrace_file.write('%s [%s %d] %s\n' % (notification.data.timestamp, self.name, self.pid, message))
+            self.pjsiptrace_file.write('%s [%s %d] %s\n' % (notification.datetime, self.name, self.pid, message))
             self.pjsiptrace_file.flush()
         except Exception:
             pass
@@ -190,7 +190,7 @@ class LogManager(object):
                            dns.resolver.Timeout: 'no DNS response received, the query has timed out'}
             message += ' failed: %s' % message_map.get(notification.data.error.__class__, '')
         try:
-            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
+            self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
             self.siptrace_file.flush()
         except Exception:
             pass
@@ -206,7 +206,7 @@ class LogManager(object):
         remote_address = '%s:%d' % (remote_address.host, remote_address.port)
         message = '%s %s %s\n' % (local_address, arrow, remote_address) + notification.data.data
         try:
-            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
+            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
             self.msrptrace_file.flush()
         except Exception:
             pass
@@ -219,7 +219,7 @@ class LogManager(object):
             return
         message = '%s%s' % (notification.data.level.prefix, notification.data.message)
         try:
-            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.data.timestamp, self.name, self.pid, message))
+            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
             self.msrptrace_file.flush()
         except Exception:
             pass
