@@ -116,7 +116,6 @@ class MainWindow(base_class, ui_class):
         self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
 
         self.search_box.textChanged.connect(self._SH_SearchBoxTextChanged)
-        self.search_box.textChanged.connect(self.contact_search_model.setFilterFixedString)
         self.search_box.returnPressed.connect(self._SH_SearchBoxReturnPressed)
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
@@ -466,6 +465,7 @@ class MainWindow(base_class, ui_class):
             session_manager.start_call(None, address)
 
     def _SH_SearchBoxTextChanged(self, text):
+        self.contact_search_model.setFilterFixedString(text)
         account_manager = AccountManager()
         if text:
             self.switch_view_button.view = SwitchViewButton.ContactView
