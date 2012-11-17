@@ -295,44 +295,44 @@ class AddAccountDialog(base_class, ui_class):
 
     def _get_display_name(self):
         if self.panel_view.currentWidget() is self.add_account_panel:
-            return unicode(self.display_name_editor.text())
+            return self.display_name_editor.text()
         else:
-            return unicode(self.name_editor.text())
+            return self.name_editor.text()
 
     def _set_display_name(self, value):
         self.display_name_editor.setText(value)
         self.name_editor.setText(value)
 
     def _get_username(self):
-        return unicode(self.username_editor.text())
+        return self.username_editor.text()
 
     def _set_username(self, value):
         self.username_editor.setText(value)
 
     def _get_sip_address(self):
-        return unicode(self.sip_address_editor.text())
+        return self.sip_address_editor.text()
 
     def _set_sip_address(self, value):
         self.sip_address_editor.setText(value)
 
     def _get_password(self):
         if self.panel_view.currentWidget() is self.add_account_panel:
-            return unicode(self.password_editor.text())
+            return self.password_editor.text()
         else:
-            return unicode(self.new_password_editor.text())
+            return self.new_password_editor.text()
 
     def _set_password(self, value):
         self.password_editor.setText(value)
         self.new_password_editor.setText(value)
 
     def _get_verify_password(self):
-        return unicode(self.verify_password_editor.text())
+        return self.verify_password_editor.text()
 
     def _set_verify_password(self, value):
         self.verify_password_editor.setText(value)
 
     def _get_email_address(self):
-        return unicode(self.email_address_editor.text())
+        return self.email_address_editor.text()
 
     def _set_email_address(self, value):
         self.email_address_editor.setText(value)
@@ -372,7 +372,7 @@ class AddAccountDialog(base_class, ui_class):
         self.accept_button.setEnabled(all(input.text_valid for input in inputs))
 
     def _SH_PasswordTextChanged(self, text):
-        self.verify_password_editor.regexp = re.compile(u'^%s$' % re.escape(unicode(text)))
+        self.verify_password_editor.regexp = re.compile(u'^%s$' % re.escape(text))
 
     def _SH_ValidityStatusChanged(self):
         red = '#cc0000'
@@ -590,7 +590,7 @@ class ServerToolsWebView(QWebView):
             self.last_error = None
 
     def _SH_URLChanged(self, url):
-        query_items = dict((unicode(name), unicode(value)) for name, value in url.queryItems())
+        query_items = dict(url.queryItems())
         self.tab = query_items.get('tab') or self.tab
         self.task = query_items.get('task') or self.task
 

@@ -15,7 +15,7 @@ from functools import partial
 from itertools import chain, izip, repeat
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QObject, QSize, QStringList, QTimer, pyqtSignal
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QObject, QSize, QTimer, pyqtSignal
 from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QPainter, QPen, QPixmap, QShortcut, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter
@@ -999,7 +999,7 @@ class SessionModel(QAbstractListModel):
         return Qt.CopyAction | Qt.MoveAction
 
     def mimeTypes(self):
-        return QStringList(['application/x-blink-session-list'])
+        return ['application/x-blink-session-list']
 
     def mimeData(self, indexes):
         mime_data = QMimeData()

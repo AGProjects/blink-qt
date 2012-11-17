@@ -10,14 +10,17 @@ __date__    = 'October 26th, 2012'
 
 import os
 import sys
-from collections import defaultdict
-
+import sip
 import cjson
+
+sip.setapi('QString', 2)
+
 from PyQt4.QtGui import QApplication
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from application.system import host, makedirs, unlink
+from collections import defaultdict
 from eventlib import api
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError

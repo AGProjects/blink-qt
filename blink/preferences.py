@@ -40,9 +40,7 @@ class IDDPrefixValidator(QRegExpValidator):
         super(IDDPrefixValidator, self).__init__(QRegExp(u'[0-9+*#]+'), parent)
 
     def fixup(self, input):
-        if input.isEmpty():
-            input.append(u'+')
-        return super(IDDPrefixValidator, self).fixup(input)
+        return super(IDDPrefixValidator, self).fixup(input or u'+')
 
 
 class PrefixValidator(QRegExpValidator):
@@ -50,9 +48,7 @@ class PrefixValidator(QRegExpValidator):
         super(PrefixValidator, self).__init__(QRegExp(u'(None|[0-9+*#]+)'), parent)
 
     def fixup(self, input):
-        if input.isEmpty():
-            input.append(u'None')
-        return super(PrefixValidator, self).fixup(input)
+        return super(PrefixValidator, self).fixup(input or u'None')
 
 
 class HostnameValidator(QRegExpValidator):
@@ -67,7 +63,7 @@ class SIPAddressValidator(QRegExpValidator):
     def fixup(self, input):
         if input and '@' not in input:
             preferences_window = self.parent()
-            input.append(u'@%s' % preferences_window.selected_account.id.domain)
+            input += u'@%s' % preferences_window.selected_account.id.domain
         return super(SIPAddressValidator, self).fixup(input)
 
 
@@ -78,25 +74,25 @@ class WebURLValidator(QRegExpValidator):
 
 class XCAPRootValidator(WebURLValidator):
     def fixup(self, input):
-        url = urlparse.urlparse(unicode(input))
+        url = urlparse.urlparse(input)
         if not (url.scheme and url.netloc):
-            input.clear()
+            input = u''
         return super(XCAPRootValidator, self).fixup(input)
 
     def validate(self, input, pos):
-        state, pos = super(XCAPRootValidator, self).validate(input, pos)
+        state, input, pos = super(XCAPRootValidator, self).validate(input, pos)
         if state == QValidator.Acceptable:
-            if input and input[-1] in ('?', ';', '&'):
+            if input.endswith(('?', ';', '&')):
                 state = QValidator.Invalid
             else:
-                url = urlparse.urlparse(unicode(input))
+                url = urlparse.urlparse(input)
                 if url.params or url.query or url.fragment:
                     state = QValidator.Invalid
                 elif url.port is not None:
                     port = int(url.port)
                     if not (0 < port <= 65535):
                         state = QValidator.Invalid
-        return state, pos
+        return state, input, pos
 
 
 # Custom widgets used in preferences.ui
@@ -122,14 +118,14 @@ class SIPPortEditor(QSpinBox):
         return super(SIPPortEditor, self).stepBy(steps)
 
     def validate(self, input, pos):
-        state, pos = super(SIPPortEditor, self).validate(input, pos)
+        state, input, pos = super(SIPPortEditor, self).validate(input, pos)
         if state == QValidator.Acceptable:
             value = int(input)
             if 0 < value < 1024:
                 state = QValidator.Intermediate
             elif value == self.sibling.value() != 0:
                 state = QValidator.Intermediate
-        return state, pos
+        return state, input, pos
 
 
 class AccountListView(QListView):
@@ -308,10 +304,10 @@ class PreferencesWindow(base_class, ui_class):
             self.section_group.addAction(action)
 
         for index in xrange(self.idd_prefix_button.count()):
-            text = unicode(self.idd_prefix_button.itemText(index))
+            text = self.idd_prefix_button.itemText(index)
             self.idd_prefix_button.setItemData(index, QVariant(None if text == "+" else text))
         for index in xrange(self.prefix_button.count()):
-            text = unicode(self.prefix_button.itemText(index))
+            text = self.prefix_button.itemText(index)
             self.prefix_button.setItemData(index, QVariant(None if text == "None" else text))
 
         self.voicemail_uri_editor.setValidator(SIPAddressValidator(self))
@@ -392,14 +388,14 @@ class PreferencesWindow(base_class, ui_class):
     def account_msrp_relay(self):
         host = self.msrp_relay_host_editor.text()
         port = self.msrp_relay_port.value()
-        transport = str(self.msrp_relay_transport_button.currentText()).lower()
+        transport = self.msrp_relay_transport_button.currentText().lower()
         return MSRPRelayAddress(host, port, transport) if host else None
 
     @property
     def account_outbound_proxy(self):
         host = self.outbound_proxy_host_editor.text()
         port = self.outbound_proxy_port.value()
-        transport = str(self.outbound_proxy_transport_button.currentText()).lower()
+        transport = self.outbound_proxy_transport_button.currentText().lower()
         return SIPProxyAddress(host, port, transport) if host else None
 
     @property
@@ -768,14 +764,14 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_DisplayNameEditorEditingFinished(self):
         account = self.selected_account
-        display_name = unicode(self.display_name_editor.text()) or None
+        display_name = self.display_name_editor.text() or None
         if account.display_name != display_name:
             account.display_name = display_name
             account.save()
 
     def _SH_PasswordEditorEditingFinished(self):
         account = self.selected_account
-        password = unicode(self.password_editor.text())
+        password = self.password_editor.text()
         if account.auth.password != password:
             account.auth.password = password
             account.save()
@@ -785,23 +781,23 @@ class PreferencesWindow(base_class, ui_class):
         if not self.load_in_progress:
             account = self.selected_account
             items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-            account.rtp.audio_codec_list = [str(item.text()) for item in items if item.checkState()==Qt.Checked]
-            account.rtp.audio_codec_order = [str(item.text()) for item in items]
+            account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+            account.rtp.audio_codec_order = [item.text() for item in items]
             account.save()
 
     def _SH_AccountAudioCodecsListModelRowsInserted(self, parent, start, end):
         if not self.load_in_progress:
             account = self.selected_account
             items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-            account.rtp.audio_codec_order = [str(item.text()) for item in items]
-            account.rtp.audio_codec_list = [str(item.text()) for item in items if item.checkState()==Qt.Checked]
+            account.rtp.audio_codec_order = [item.text() for item in items]
+            account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
             account.save()
 
     def _SH_AccountAudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
         items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-        account.rtp.audio_codec_order = [str(item.text()) for item in items]
-        account.rtp.audio_codec_list = [str(item.text()) for item in items if item.checkState()==Qt.Checked]
+        account.rtp.audio_codec_order = [item.text() for item in items]
+        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
         account.save()
 
     def _SH_ResetAudioCodecsButtonClicked(self, checked):
@@ -830,7 +826,7 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_SRTPEncryptionButtonActivated(self, text):
         account = self.selected_account
-        account.rtp.srtp_encryption = str(text)
+        account.rtp.srtp_encryption = text
         account.save()
 
     # Account server settings
@@ -863,7 +859,7 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_AuthUsernameEditorEditingFinished(self):
         account = self.selected_account
-        auth_username = unicode(self.auth_username_editor.text()) or None
+        auth_username = self.auth_username_editor.text() or None
         if account.auth.username != auth_username:
             account.auth.username = auth_username
             account.save()
@@ -897,28 +893,28 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_VoicemailURIEditorEditingFinished(self):
         account = self.selected_account
-        voicemail_uri = unicode(self.voicemail_uri_editor.text()) or None
+        voicemail_uri = self.voicemail_uri_editor.text() or None
         if account.message_summary.voicemail_uri != voicemail_uri:
             account.message_summary.voicemail_uri = voicemail_uri
             account.save()
 
     def _SH_XCAPRootEditorEditingFinished(self):
         account = self.selected_account
-        xcap_root = unicode(self.xcap_root_editor.text()) or None
+        xcap_root = self.xcap_root_editor.text() or None
         if account.xcap.xcap_root != xcap_root:
             account.xcap.xcap_root = xcap_root
             account.save()
 
     def _SH_ServerToolsURLEditorEditingFinished(self):
         account = self.selected_account
-        url = unicode(self.server_tools_url_editor.text()) or None
+        url = self.server_tools_url_editor.text() or None
         if account.server.settings_url != url:
             account.server.settings_url = url
             account.save()
 
     def _SH_ConferenceServerEditorEditingFinished(self):
         account = self.selected_account
-        server = unicode(self.conference_server_editor.text()) or None
+        server = self.conference_server_editor.text() or None
         if account.server.conference_server != server:
             account.server.conference_server = server
             account.save()
@@ -931,7 +927,7 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_MSRPTransportButtonActivated(self, text):
         account = self.selected_account
-        account.msrp.transport = str(text).lower()
+        account.msrp.transport = text.lower()
         account.save()
 
     # Account advanced settings
@@ -960,7 +956,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_IDDPrefixButtonActivated(self, text):
         self._update_pstn_example_label()
         account = self.selected_account
-        idd_prefix = None if text=='+' else str(text)
+        idd_prefix = None if text=='+' else text
         if account.pstn.idd_prefix != idd_prefix:
             account.pstn.idd_prefix = idd_prefix
             account.save()
@@ -968,7 +964,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_PrefixButtonActivated(self, text):
         self._update_pstn_example_label()
         account = self.selected_account
-        prefix = None if text=='None' else str(text)
+        prefix = None if text=='None' else text
         if account.pstn.prefix != prefix:
             account.pstn.prefix = prefix
             account.save()
@@ -982,7 +978,7 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         account = self.selected_account
         directory = os.path.dirname(account.tls.certificate.normalized) if account.tls.certificate else os.path.expanduser('~')
-        cert_path = unicode(QFileDialog.getOpenFileName(self, u'Select Certificate File', directory, u"TLS certificates (*.crt *.pem)")) or None
+        cert_path = QFileDialog.getOpenFileName(self, u'Select Certificate File', directory, u"TLS certificates (*.crt *.pem)") or None
         if cert_path is not None:
             cert_path = os.path.normpath(cert_path)
             if cert_path != account.tls.certificate:
@@ -1025,7 +1021,7 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_AudioSampleRateButtonActivated(self, text):
         settings = SIPSimpleSettings()
-        settings.audio.sample_rate = str(text)
+        settings.audio.sample_rate = text
         settings.save()
 
     def _SH_EnableEchoCancellingButtonClicked(self, checked):
@@ -1038,22 +1034,22 @@ class PreferencesWindow(base_class, ui_class):
         if not self.load_in_progress:
             settings = SIPSimpleSettings()
             item_iterator = (self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count()))
-            settings.rtp.audio_codec_list = [str(item.text()) for item in item_iterator if item.checkState()==Qt.Checked]
+            settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState()==Qt.Checked]
             settings.save()
 
     def _SH_AudioCodecsListModelRowsInserted(self, parent, start, end):
         if not self.load_in_progress:
             settings = SIPSimpleSettings()
             items = [self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count())]
-            settings.rtp.audio_codec_order = [str(item.text()) for item in items]
-            settings.rtp.audio_codec_list = [str(item.text()) for item in items if item.checkState()==Qt.Checked]
+            settings.rtp.audio_codec_order = [item.text() for item in items]
+            settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
             settings.save()
 
     def _SH_AudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
         items = [self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count())]
-        settings.rtp.audio_codec_order = [str(item.text()) for item in items]
-        settings.rtp.audio_codec_list = [str(item.text()) for item in items if item.checkState()==Qt.Checked]
+        settings.rtp.audio_codec_order = [item.text() for item in items]
+        settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
         settings.save()
 
     # Answering machine signal handlers
@@ -1107,7 +1103,7 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = SIPSimpleSettings()
         directory = settings.file_transfer.directory or os.path.expanduser('~')
-        directory = unicode(QFileDialog.getExistingDirectory(self, u'Select Download Directory', directory)) or None
+        directory = QFileDialog.getExistingDirectory(self, u'Select Download Directory', directory) or None
         if directory is not None:
             directory = os.path.normpath(directory)
             if directory != settings.file_transfer.directory:
@@ -1249,7 +1245,7 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         settings = SIPSimpleSettings()
         directory = os.path.dirname(settings.tls.ca_list.normalized) if settings.tls.ca_list else os.path.expanduser('~')
-        ca_path = unicode(QFileDialog.getOpenFileName(self, u'Select Certificate Authority File', directory, u"TLS certificates (*.crt *.pem)")) or None
+        ca_path = QFileDialog.getOpenFileName(self, u'Select Certificate Authority File', directory, u"TLS certificates (*.crt *.pem)") or None
         if ca_path is not None:
             ca_path = os.path.normpath(ca_path)
             if ca_path != settings.tls.ca_list:

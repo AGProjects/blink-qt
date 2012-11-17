@@ -40,7 +40,7 @@ class IconSelector(QLabel):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.rect().contains(event.pos()):
-            filename = unicode(QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)"))
+            filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")
             if filename:
                 self.last_icon_directory = os.path.dirname(filename)
                 self.filename = filename if os.path.realpath(filename) != os.path.realpath(Resources.get(self.default_icon)) else None

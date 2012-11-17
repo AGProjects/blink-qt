@@ -100,7 +100,7 @@ class LineEdit(QLineEdit):
 
     def paintEvent(self, event):
         QLineEdit.paintEvent(self, event)
-        if not self.hasFocus() and self.text().isEmpty() and self.inactiveText:
+        if not self.hasFocus() and not self.text() and self.inactiveText:
             options = QStyleOptionFrameV2()
             self.initStyleOption(options)
             text_rect = self.style().subElementRect(QStyle.SE_LineEditContents, options, self)
@@ -168,7 +168,7 @@ class ValidatingLineEdit(LineEdit):
         self._validate()
 
     def _validate(self):
-        text = unicode(self.text())
+        text = self.text()
         text_correct = self.regexp.search(text) is not None
         text_allowed = text not in self.exceptions
         if self.text_correct != text_correct or self.text_allowed != text_allowed:
@@ -277,7 +277,7 @@ class SearchBox(LineEdit):
         self.inactiveText = u"Search"
 
     def _SH_TextChanged(self, text):
-        self.clear_button.setVisible(not text.isEmpty())
+        self.clear_button.setVisible(bool(text))
 
 
 class LocationBar(LineEdit):
@@ -301,6 +301,6 @@ class LocationBar(LineEdit):
         self.locationCleared.emit()
 
     def _SH_TextChanged(self, text):
-        self.clear_button.setVisible(not text.isEmpty())
+        self.clear_button.setVisible(bool(text))
 
 

@@ -13,7 +13,7 @@ import socket
 import sys
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QRegExp, QSize, QStringList, pyqtSignal
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QRegExp, QSize, pyqtSignal
 from PyQt4.QtGui  import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
 from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QRegExpValidator, QSortFilterProxyModel, QStyledItemDelegate
 
@@ -108,7 +108,7 @@ class ContactGroup(object):
 
     @updates_contacts_db
     def _name_changed(self):
-        self.name = unicode(self.widget.name_editor.text())
+        self.name = self.widget.name_editor.text()
 
     def _get_widget(self):
         return self.__dict__['widget']
@@ -533,9 +533,9 @@ class GoogleContactsDialog(base_class, ui_class):
     @run_in_green_thread
     def _authorize_google_account(self):
         red = '#cc0000'
-        captcha_response = unicode(self.captcha_editor.text()) if self.captcha_token else None
-        username = unicode(self.username_editor.text())
-        password = unicode(self.password_editor.text())
+        captcha_response = self.captcha_editor.text() if self.captcha_token else None
+        username = self.username_editor.text()
+        password = self.password_editor.text()
         client = ContactsClient()
         try:
             client.client_login(email=username, password=password, source='Blink', captcha_token=self.captcha_token, captcha_response=captcha_response)
@@ -640,7 +640,7 @@ class ContactGroupWidget(base_class, ui_class):
         return self.name_view.currentWidget() is self.editor_widget
 
     def _get_name(self):
-        return unicode(self.name_label.text())
+        return self.name_label.text()
 
     def _set_name(self, value):
         self.name_label.setText(value)
@@ -935,7 +935,7 @@ class ContactModel(QAbstractListModel):
         return Qt.CopyAction | Qt.MoveAction
 
     def mimeTypes(self):
-        return QStringList(['application/x-blink-contact-list'])
+        return ['application/x-blink-contact-list']
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
@@ -1369,7 +1369,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         item = source_model.data(source_index, Qt.DisplayRole)
         if isinstance(item, ContactGroup):
             return False
-        search_tokens = unicode(self.filterRegExp().pattern()).lower().split()
+        search_tokens = self.filterRegExp().pattern().lower().split()
         searched_item = unicode(item).lower()
         return all(token in searched_item for token in search_tokens)
 
@@ -1382,7 +1382,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         return Qt.CopyAction
 
     def mimeTypes(self):
-        return QStringList(['application/x-blink-contact-list'])
+        return ['application/x-blink-contact-list']
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
@@ -2067,11 +2067,11 @@ class ContactEditorDialog(base_class, ui_class):
     @updates_contacts_db
     def process_contact(self):
         contact_model = self.parent().contact_model
-        uri = unicode(self.sip_address_editor.text())
-        name = unicode(self.display_name_editor.text())
+        uri = self.sip_address_editor.text()
+        name = self.display_name_editor.text()
         image = IconCache().store(self.icon_selector.filename)
-        preferred_media = unicode(self.preferred_media.currentText())
-        sip_aliases = [alias.strip() for alias in unicode(self.sip_aliases_editor.text()).split(u';')]
+        preferred_media = self.preferred_media.currentText()
+        sip_aliases = [alias.strip() for alias in self.sip_aliases_editor.text().split(u';')]
         group_index = self.group.currentIndex()
         group_name = self.group.currentText()
         if group_name != self.group.itemText(group_index):
@@ -2080,7 +2080,7 @@ class ContactEditorDialog(base_class, ui_class):
             if index >= 0:
                 group = self.group.itemData(index).toPyObject()
             else:
-                group = ContactGroup(unicode(group_name))
+                group = ContactGroup(group_name)
         else:
             group = self.group.itemData(group_index).toPyObject()
         if self.edited_contact is None:

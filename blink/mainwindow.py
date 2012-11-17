@@ -381,7 +381,7 @@ class MainWindow(base_class, ui_class):
         list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
         selected_indexes = list_view.selectionModel().selectedIndexes()
         contact = list_view.model().data(selected_indexes[0]) if selected_indexes else Null
-        address = contact.uri or unicode(self.search_box.text())
+        address = contact.uri or self.search_box.text()
         name = contact.name or None
         session_manager = SessionManager()
         session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
@@ -403,13 +403,13 @@ class MainWindow(base_class, ui_class):
         self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and isinstance(self.contact_model.data(selected_items[0]), Contact))
 
     def _SH_ContactModelAddedItems(self, items):
-        if self.search_box.text().isEmpty():
+        if not self.search_box.text():
             return
         active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
         self.search_view.setCurrentWidget(active_widget)
 
     def _SH_ContactModelRemovedItems(self, items):
-        if self.search_box.text().isEmpty():
+        if not self.search_box.text():
             return
         if any(type(item) is Contact for item in items) and self.contact_search_model.rowCount() == 0:
             self.search_box.clear()
@@ -421,7 +421,7 @@ class MainWindow(base_class, ui_class):
         self.display_name.clearFocus()
         index = self.identity.currentIndex()
         if index != -1:
-            name = unicode(self.display_name.text())
+            name = self.display_name.text()
             account = self.identity.itemData(index).toPyObject().account
             account.display_name = name if name else None
             account.save()
@@ -459,7 +459,7 @@ class MainWindow(base_class, ui_class):
         SIPApplication.voice_audio_bridge.mixer.muted = muted
 
     def _SH_SearchBoxReturnPressed(self):
-        address = unicode(self.search_box.text())
+        address = self.search_box.text()
         if address:
             session_manager = SessionManager()
             session_manager.start_call(None, address)
@@ -469,17 +469,16 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         if text:
             self.switch_view_button.view = SwitchViewButton.ContactView
+            if self.contacts_view.currentWidget() is not self.search_panel:
+                self.search_list.selectionModel().clearSelection()
+            self.contacts_view.setCurrentWidget(self.search_panel)
+            self.search_view.setCurrentWidget(self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel)
             selected_items = self.search_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)<=1)
         else:
+            self.contacts_view.setCurrentWidget(self.contact_list_panel)
             selected_items = self.contact_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and type(self.contact_model.data(selected_items[0])) is Contact)
-        active_widget = self.contact_list_panel if text.isEmpty() else self.search_panel
-        if active_widget is self.search_panel and self.contacts_view.currentWidget() is not self.search_panel:
-            self.search_list.selectionModel().clearSelection()
-        self.contacts_view.setCurrentWidget(active_widget)
-        active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
-        self.search_view.setCurrentWidget(active_widget)
 
     def _SH_SearchListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
