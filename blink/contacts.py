@@ -1359,10 +1359,6 @@ class ContactSearchModel(QSortFilterProxyModel):
         else:
             return QSortFilterProxyModel.flags(self, index) | Qt.ItemIsDropEnabled
 
-    def data(self, index, role=Qt.DisplayRole):
-        data = super(ContactSearchModel, self).data(index, role)
-        return data.toPyObject() if role==Qt.DisplayRole else data
-
     def filterAcceptsRow(self, source_row, source_parent):
         source_model = self.sourceModel()
         source_index = source_model.index(source_row, 0, source_parent)
@@ -1998,9 +1994,9 @@ class ContactEditorGroupModel(QSortFilterProxyModel):
 
     def data(self, index, role=Qt.DisplayRole):
         if role in (Qt.DisplayRole, Qt.EditRole):
-            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole).toPyObject().name
+            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole).name
         elif role == Qt.UserRole:
-            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole).toPyObject()
+            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole)
         else:
             return super(ContactEditorGroupModel, self).data(index, role)
 
@@ -2030,7 +2026,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.display_name_editor.setText(u'')
         self.sip_aliases_editor.setText(u'')
         for index in xrange(self.group.count()):
-            if self.group.itemData(index).toPyObject() is target_group:
+            if self.group.itemData(index) is target_group:
                 break
         else:
             index = 0
@@ -2047,7 +2043,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.display_name_editor.setText(contact.name)
         self.sip_aliases_editor.setText(u'; '.join(contact.sip_aliases))
         for index in xrange(self.group.count()):
-            if self.group.itemData(index).toPyObject() is contact.group:
+            if self.group.itemData(index) is contact.group:
                 break
         else:
             index = 0
@@ -2078,11 +2074,11 @@ class ContactEditorDialog(base_class, ui_class):
             # user edited the group name. first look if we already have a group with that name
             index = self.group.findText(group_name)
             if index >= 0:
-                group = self.group.itemData(index).toPyObject()
+                group = self.group.itemData(index)
             else:
                 group = ContactGroup(group_name)
         else:
-            group = self.group.itemData(group_index).toPyObject()
+            group = self.group.itemData(group_index)
         if self.edited_contact is None:
             contact = Contact(group, name, uri, image=image)
             contact.preferred_media = preferred_media

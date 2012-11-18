@@ -13,7 +13,7 @@ import urllib2
 from collections import defaultdict
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QUrl, QVariant
+from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QUrl
 from PyQt4.QtGui  import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QMovie, QPalette, QPixmap, QSortFilterProxyModel, QStyledItemDelegate
 from PyQt4.QtNetwork import QNetworkAccessManager
 from PyQt4.QtWebKit  import QWebView
@@ -173,7 +173,7 @@ class ActiveAccountModel(QSortFilterProxyModel):
 
 class AccountDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
-        account_info = index.data(Qt.UserRole).toPyObject()
+        account_info = index.data(Qt.UserRole)
         if account_info.registration_state == 'succeeded':
             option.palette.setColor(QPalette.Text, Qt.black)
         else:
@@ -202,7 +202,7 @@ class AccountSelector(QComboBox):
     def _SH_DataChanged(self, topLeft, bottomRight):
         index = self.currentIndex()
         if topLeft.row() <= index <= bottomRight.row():
-            account_info = self.itemData(index).toPyObject()
+            account_info = self.itemData(index)
             palette = self.palette()
             if account_info.registration_state == 'succeeded':
                 palette.setColor(QPalette.Text, Qt.black)
@@ -213,7 +213,7 @@ class AccountSelector(QComboBox):
     def _SH_SelectionChanged(self, index):
         if index == -1:
             return
-        account_info = self.itemData(index).toPyObject()
+        account_info = self.itemData(index)
         palette = self.palette()
         if account_info.registration_state == 'succeeded':
             palette.setColor(QPalette.Text, Qt.black)
@@ -639,7 +639,7 @@ class ServerToolsWindow(base_class, ui_class):
 
     def _SH_AccountButtonMenuTriggered(self, action):
         view = self.tab_widget.currentWidget()
-        account = action.data().toPyObject()
+        account = action.data()
         self.account_label.setText(account.id)
         self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
         view.load_account_page(account, tab=view.tab, task=view.task)
@@ -686,16 +686,16 @@ class ServerToolsWindow(base_class, ui_class):
         menu = self.account_button.menu()
         menu.clear()
         for row in xrange(self.model.rowCount()):
-            account_info = self.model.data(self.model.index(row, 0), Qt.UserRole).toPyObject()
+            account_info = self.model.data(self.model.index(row, 0), Qt.UserRole)
             action = QAction(account_info.name, self)
-            action.setData(QVariant(account_info.account))
+            action.setData(account_info.account)
             menu.addAction(action)
 
     def open_settings_page(self, account):
         view = self.tab_widget.currentWidget()
         account = account or view.account
         if account is None or account.server.settings_url is None:
-            account = self.account_button.menu().actions()[0].data().toPyObject()
+            account = self.account_button.menu().actions()[0].data()
         self.account_label.setText(account.id)
         self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
         view.load_account_page(account, tab='settings')
@@ -705,7 +705,7 @@ class ServerToolsWindow(base_class, ui_class):
         view = self.tab_widget.currentWidget()
         account = account or view.account
         if account is None or account.server.settings_url is None:
-            account = self.account_button.menu().actions()[0].data().toPyObject()
+            account = self.account_button.menu().actions()[0].data()
         self.account_label.setText(account.id)
         self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
         view.load_account_page(account, tab='contacts', task='directory')
@@ -715,7 +715,7 @@ class ServerToolsWindow(base_class, ui_class):
         view = self.tab_widget.currentWidget()
         account = account or view.account
         if account is None or account.server.settings_url is None:
-            account = self.account_button.menu().actions()[0].data().toPyObject()
+            account = self.account_button.menu().actions()[0].data()
         self.account_label.setText(account.id)
         self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
         view.load_account_page(account, tab='calls')
@@ -725,7 +725,7 @@ class ServerToolsWindow(base_class, ui_class):
         view = self.tab_widget.currentWidget()
         account = account or view.account
         if account is None or account.server.settings_url is None:
-            account = self.account_button.menu().actions()[0].data().toPyObject()
+            account = self.account_button.menu().actions()[0].data()
         self.account_label.setText(account.id)
         self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
         view.load_account_page(account, tab='payments')

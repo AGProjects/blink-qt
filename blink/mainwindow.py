@@ -8,7 +8,7 @@ __all__ = ['MainWindow']
 from functools import partial
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QUrl, QVariant
+from PyQt4.QtCore import Qt, QUrl
 from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
 from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QIcon, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
@@ -244,71 +244,71 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
 
         action = QAction(u'System default', self.output_devices_group)
-        action.setData(QVariant(u'system_default'))
+        action.setData(u'system_default')
         self.output_device_menu.addAction(action)
         self.output_device_menu.addSeparator()
         for device in SIPApplication.engine.output_devices:
             action = QAction(device, self.output_devices_group)
-            action.setData(QVariant(device))
+            action.setData(device)
             self.output_device_menu.addAction(action)
         action = QAction(u'None', self.output_devices_group)
-        action.setData(QVariant(None))
+        action.setData(None)
         self.output_device_menu.addAction(action)
         for action in self.output_devices_group.actions():
             action.setCheckable(True)
-            if settings.audio.output_device == unicode(action.data().toPyObject()):
+            if settings.audio.output_device == action.data():
                 action.setChecked(True)
 
         action = QAction(u'System default', self.input_devices_group)
-        action.setData(QVariant(u'system_default'))
+        action.setData(u'system_default')
         self.input_device_menu.addAction(action)
         self.input_device_menu.addSeparator()
         for device in SIPApplication.engine.input_devices:
             action = QAction(device, self.input_devices_group)
-            action.setData(QVariant(device))
+            action.setData(device)
             self.input_device_menu.addAction(action)
         action = QAction(u'None', self.input_devices_group)
-        action.setData(QVariant(None))
+        action.setData(None)
         self.input_device_menu.addAction(action)
         for action in self.input_devices_group.actions():
             action.setCheckable(True)
-            if settings.audio.input_device == unicode(action.data().toPyObject()):
+            if settings.audio.input_device == action.data():
                 action.setChecked(True)
 
         action = QAction(u'System default', self.alert_devices_group)
-        action.setData(QVariant(u'system_default'))
+        action.setData(u'system_default')
         self.alert_device_menu.addAction(action)
         self.alert_device_menu.addSeparator()
         for device in SIPApplication.engine.output_devices:
             action = QAction(device, self.alert_devices_group)
-            action.setData(QVariant(device))
+            action.setData(device)
             self.alert_device_menu.addAction(action)
         action = QAction(u'None', self.alert_devices_group)
-        action.setData(QVariant(None))
+        action.setData(None)
         self.alert_device_menu.addAction(action)
         for action in self.alert_devices_group.actions():
             action.setCheckable(True)
-            if settings.audio.alert_device == unicode(action.data().toPyObject()):
+            if settings.audio.alert_device == action.data():
                 action.setChecked(True)
 
     def _AH_AccountActionTriggered(self, action, enabled):
-        account = action.data().toPyObject()
+        account = action.data()
         account.enabled = enabled
         account.save()
 
     def _AH_AudioAlertDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.alert_device = action.data().toPyObject()
+        settings.audio.alert_device = action.data()
         settings.save()
 
     def _AH_AudioInputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.input_device = action.data().toPyObject()
+        settings.audio.input_device = action.data()
         settings.save()
 
     def _AH_AudioOutputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
-        settings.audio.output_device = action.data().toPyObject()
+        settings.audio.output_device = action.data()
         settings.save()
 
     def _AH_AutoAcceptChatTriggered(self, checked):
@@ -341,27 +341,27 @@ class MainWindow(base_class, ui_class):
             session_manager.start_call(None, unicode(session_manager.last_dialed_uri))
 
     def _AH_SIPServerSettings(self, checked):
-        account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
+        account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_settings_page(account)
 
     def _AH_SearchForPeople(self, checked):
-        account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
+        account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_search_for_people_page(account)
 
     def _AH_HistoryOnServer(self, checked):
-        account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
+        account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_history_page(account)
 
     def _AH_PurchasePstnAccess(self, checked):
-        account = self.identity.itemData(self.identity.currentIndex()).toPyObject().account
+        account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_buy_pstn_access_page(account)
 
     def _AH_VoicemailActionTriggered(self, action, checked):
-        account = action.data().toPyObject()
+        account = action.data()
         SessionManager().start_call("Voicemail", account.voicemail_uri, account=account)
 
     def _SH_AddContactButtonClicked(self, clicked):
@@ -422,7 +422,7 @@ class MainWindow(base_class, ui_class):
         index = self.identity.currentIndex()
         if index != -1:
             name = self.display_name.text()
-            account = self.identity.itemData(index).toPyObject().account
+            account = self.identity.itemData(index).account
             account.display_name = name if name else None
             account.save()
 
@@ -432,11 +432,11 @@ class MainWindow(base_class, ui_class):
 
     def _SH_IdentityChanged(self, index):
         account_manager = AccountManager()
-        account_manager.default_account = self.identity.itemData(index).toPyObject().account
+        account_manager.default_account = self.identity.itemData(index).account
 
     def _SH_IdentityCurrentIndexChanged(self, index):
         if index != -1:
-            account = self.identity.itemData(index).toPyObject().account
+            account = self.identity.itemData(index).account
             self.display_name.setText(account.display_name or u'')
             self.display_name.setEnabled(True)
             self.activity_note.setEnabled(True)
@@ -594,13 +594,13 @@ class MainWindow(base_class, ui_class):
                 self.silent_action.setChecked(settings.audio.silent)
                 self.silent_button.setChecked(settings.audio.silent)
             if 'audio.output_device' in notification.data.modified:
-                action = (action for action in self.output_devices_group.actions() if unicode(action.data().toPyObject()) == settings.audio.output_device).next()
+                action = (action for action in self.output_devices_group.actions() if action.data() == settings.audio.output_device).next()
                 action.setChecked(True)
             if 'audio.input_device' in notification.data.modified:
-                action = (action for action in self.input_devices_group.actions() if unicode(action.data().toPyObject()) == settings.audio.input_device).next()
+                action = (action for action in self.input_devices_group.actions() if action.data() == settings.audio.input_device).next()
                 action.setChecked(True)
             if 'audio.alert_device' in notification.data.modified:
-                action = (action for action in self.alert_devices_group.actions() if unicode(action.data().toPyObject()) == settings.audio.alert_device).next()
+                action = (action for action in self.alert_devices_group.actions() if action.data() == settings.audio.alert_device).next()
                 action.setChecked(True)
             if 'answering_machine.enabled' in notification.data.modified:
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)
@@ -620,12 +620,12 @@ class MainWindow(base_class, ui_class):
             account_manager = AccountManager()
             account = notification.sender
             if 'enabled' in notification.data.modified:
-                action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
+                action = (action for action in self.accounts_menu.actions() if action.data() is account).next()
                 action.setChecked(account.enabled)
             if 'display_name' in notification.data.modified and account is account_manager.default_account:
                 self.display_name.setText(account.display_name or u'')
             if set(['enabled', 'message_summary.enabled', 'message_summary.voicemail_uri']).intersection(notification.data.modified):
-                action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
+                action = (action for action in self.voicemail_menu.actions() if action.data() is account).next()
                 action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
                 action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
 
@@ -635,21 +635,21 @@ class MainWindow(base_class, ui_class):
         action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
         action.setCheckable(True)
         action.setChecked(account.enabled)
-        action.setData(QVariant(account))
+        action.setData(account)
         action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
         self.accounts_menu.addAction(action)
         action = QAction(self.mwi_icons[0], account.id, None)
         action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
         action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
-        action.setData(QVariant(account))
+        action.setData(account)
         action.triggered.connect(partial(self._AH_VoicemailActionTriggered, action))
         self.voicemail_menu.addAction(action)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account
-        action = (action for action in self.accounts_menu.actions() if action.data().toPyObject() is account).next()
+        action = (action for action in self.accounts_menu.actions() if action.data() is account).next()
         self.accounts_menu.removeAction(action)
-        action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
+        action = (action for action in self.voicemail_menu.actions() if action.data() is account).next()
         self.voicemail_menu.removeAction(action)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
@@ -662,7 +662,7 @@ class MainWindow(base_class, ui_class):
     def _NH_SIPAccountGotMessageSummary(self, notification):
         account = notification.sender
         summary = notification.data.message_summary
-        action = (action for action in self.voicemail_menu.actions() if action.data().toPyObject() is account).next()
+        action = (action for action in self.voicemail_menu.actions() if action.data() is account).next()
         action.setEnabled(account.voicemail_uri is not None)
         if summary.messages_waiting:
             try:

@@ -1284,9 +1284,9 @@ class SessionListView(QListView):
             current_index = selection_model.currentIndex()
             if current_index.isValid():
                 step = 1 if event.key() == Qt.Key_Down else -1
-                conference = current_index.data().toPyObject().conference
+                conference = current_index.data().conference
                 new_index = current_index.sibling(current_index.row()+step, current_index.column())
-                while conference is not None and new_index.isValid() and new_index.data().toPyObject().conference is conference:
+                while conference is not None and new_index.isValid() and new_index.data().conference is conference:
                     new_index = new_index.sibling(new_index.row()+step, new_index.column())
                 if new_index.isValid():
                     selection_model.select(new_index, selection_model.ClearAndSelect)

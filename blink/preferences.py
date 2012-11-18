@@ -9,7 +9,7 @@ import os
 import urlparse
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QRegExp, QVariant
+from PyQt4.QtCore import Qt, QRegExp
 from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QRegExpValidator, QSpinBox, QStyle, QStyleOptionComboBox, QValidator
 
 from application import log
@@ -305,10 +305,10 @@ class PreferencesWindow(base_class, ui_class):
 
         for index in xrange(self.idd_prefix_button.count()):
             text = self.idd_prefix_button.itemText(index)
-            self.idd_prefix_button.setItemData(index, QVariant(None if text == "+" else text))
+            self.idd_prefix_button.setItemData(index, None if text == "+" else text)
         for index in xrange(self.prefix_button.count()):
             text = self.prefix_button.itemText(index)
-            self.prefix_button.setItemData(index, QVariant(None if text == "None" else text))
+            self.prefix_button.setItemData(index, None if text == "None" else text)
 
         self.voicemail_uri_editor.setValidator(SIPAddressValidator(self))
         self.xcap_root_editor.setValidator(XCAPRootValidator(self))
@@ -455,31 +455,31 @@ class PreferencesWindow(base_class, ui_class):
         class Separator: pass
 
         self.audio_input_device_button.clear()
-        self.audio_input_device_button.addItem(u'System Default', QVariant('system_default'))
+        self.audio_input_device_button.addItem(u'System Default', 'system_default')
         self.audio_input_device_button.insertSeparator(1)
-        self.audio_input_device_button.setItemData(1, QVariant(Separator)) # prevent the separator from being selectable
+        self.audio_input_device_button.setItemData(1, Separator) # prevent the separator from being selectable
         for device in SIPApplication.engine.input_devices:
-            self.audio_input_device_button.addItem(device, QVariant(device))
-        self.audio_input_device_button.addItem(u'None', QVariant(None))
-        self.audio_input_device_button.setCurrentIndex(self.audio_input_device_button.findData(QVariant(settings.audio.input_device)))
+            self.audio_input_device_button.addItem(device, device)
+        self.audio_input_device_button.addItem(u'None', None)
+        self.audio_input_device_button.setCurrentIndex(self.audio_input_device_button.findData(settings.audio.input_device))
 
         self.audio_output_device_button.clear()
-        self.audio_output_device_button.addItem(u'System Default', QVariant('system_default'))
+        self.audio_output_device_button.addItem(u'System Default', 'system_default')
         self.audio_output_device_button.insertSeparator(1)
-        self.audio_output_device_button.setItemData(1, QVariant(Separator)) # prevent the separator from being selectable
+        self.audio_output_device_button.setItemData(1, Separator) # prevent the separator from being selectable
         for device in SIPApplication.engine.output_devices:
-            self.audio_output_device_button.addItem(device, QVariant(device))
-        self.audio_output_device_button.addItem(u'None', QVariant(None))
-        self.audio_output_device_button.setCurrentIndex(self.audio_output_device_button.findData(QVariant(settings.audio.output_device)))
+            self.audio_output_device_button.addItem(device, device)
+        self.audio_output_device_button.addItem(u'None', None)
+        self.audio_output_device_button.setCurrentIndex(self.audio_output_device_button.findData(settings.audio.output_device))
 
         self.audio_alert_device_button.clear()
-        self.audio_alert_device_button.addItem(u'System Default', QVariant('system_default'))
+        self.audio_alert_device_button.addItem(u'System Default', 'system_default')
         self.audio_alert_device_button.insertSeparator(1)
-        self.audio_alert_device_button.setItemData(1, QVariant(Separator)) # prevent the separator from being selectable
+        self.audio_alert_device_button.setItemData(1, Separator) # prevent the separator from being selectable
         for device in SIPApplication.engine.output_devices:
-            self.audio_alert_device_button.addItem(device, QVariant(device))
-        self.audio_alert_device_button.addItem(u'None', QVariant(None))
-        self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(QVariant(settings.audio.alert_device)))
+            self.audio_alert_device_button.addItem(device, device)
+        self.audio_alert_device_button.addItem(u'None', None)
+        self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
 
     def load_settings(self):
         """Load settings from configuration into the UI controls"""
@@ -492,7 +492,7 @@ class PreferencesWindow(base_class, ui_class):
         self.enable_echo_cancelling_button.setChecked(settings.audio.tail_length != 0)
         self.audio_sample_rate_button.clear()
         for rate in SIPSimpleSettings.audio.sample_rate.type.valid_values:
-            self.audio_sample_rate_button.addItem(str(rate), QVariant(rate))
+            self.audio_sample_rate_button.addItem(str(rate), rate)
         self.audio_sample_rate_button.setCurrentIndex(self.audio_sample_rate_button.findText(str(settings.audio.sample_rate)))
 
         # Audio codecs
@@ -1002,19 +1002,19 @@ class PreferencesWindow(base_class, ui_class):
 
     # Audio devices signal handlers
     def _SH_AudioAlertDeviceButtonActivated(self, index):
-        device = self.audio_alert_device_button.itemData(index).toPyObject()
+        device = self.audio_alert_device_button.itemData(index)
         settings = SIPSimpleSettings()
         settings.audio.alert_device = device
         settings.save()
 
     def _SH_AudioInputDeviceButtonActivated(self, index):
-        device = self.audio_input_device_button.itemData(index).toPyObject()
+        device = self.audio_input_device_button.itemData(index)
         settings = SIPSimpleSettings()
         settings.audio.input_device = device
         settings.save()
 
     def _SH_AudioOutputDeviceButtonActivated(self, index):
-        device = self.audio_output_device_button.itemData(index).toPyObject()
+        device = self.audio_output_device_button.itemData(index)
         settings = SIPSimpleSettings()
         settings.audio.output_device = device
         settings.save()
@@ -1289,11 +1289,11 @@ class PreferencesWindow(base_class, ui_class):
             if 'audio.silent' in notification.data.modified:
                 self.silence_alerts_button.setChecked(settings.audio.silent)
             if 'audio.alert_device' in notification.data.modified:
-                self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(QVariant(settings.audio.alert_device)))
+                self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
             if 'audio.input_device' in notification.data.modified:
-                self.audio_input_device_button.setCurrentIndex(self.audio_input_device_button.findData(QVariant(settings.audio.input_device)))
+                self.audio_input_device_button.setCurrentIndex(self.audio_input_device_button.findData(settings.audio.input_device))
             if 'audio.output_device' in notification.data.modified:
-                self.audio_output_device_button.setCurrentIndex(self.audio_output_device_button.findData(QVariant(settings.audio.output_device)))
+                self.audio_output_device_button.setCurrentIndex(self.audio_output_device_button.findData(settings.audio.output_device))
             if 'answering_machine.enabled' in notification.data.modified:
                 self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
             if 'chat.auto_accept' in notification.data.modified:
