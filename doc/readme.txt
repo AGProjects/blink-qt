@@ -57,5 +57,6 @@ Credits
  * AG Projects: http://ag-projects.com
  * NLnet foundation: http://nlnet.nl
  * IETF Community: http://www.ietf.org
- * SIP SIMPLE client: http://sipsimpleclient.com
+ * SIP SIMPLE client SDK: http://sipsimpleclient.org
+
 
