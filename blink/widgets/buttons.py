@@ -1,10 +1,16 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'RecordButton', 'SwitchViewButton']
+__all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'RecordButton', 'SwitchViewButton',
+           'StateButton', 'AccountState']
 
-from PyQt4.QtCore import QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QIcon, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
+from PyQt4.QtCore import Qt, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, pyqtSignature
+from PyQt4.QtGui  import QAction, QBrush, QColor, QCommonStyle, QLinearGradient, QIcon, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap
+from PyQt4.QtGui  import QPolygonF, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
+
+from application.python.decorator import decorator, preserve_signature
+from blink.resources import Resources
+from blink.widgets.color import ColorScheme, ColorUtils
 
 
 class ToolButton(QToolButton):
@@ -365,5 +371,440 @@ class SwitchViewButton(QPushButton):
            self.dnd_timer.phase = 0
            self.setStyleSheet(self.dnd_style_sheet1)
         event.ignore()
+
+
+def color_key(instance, color):
+    return color.rgba()
+
+def color_ratio_key(instance, color, ratio):
+    return color.rgba() << 32 | int(ratio*512)
+
+def background_color_key(instance, background, color):
+    return background.rgba() << 32 | color.rgba()
+
+
+@decorator
+def cache_result(key_func):
+    def cache_results(function):
+        @preserve_signature(function)
+        def wrapper(*args, **kw):
+            key = key_func(*args, **kw)
+            try:
+                return wrapper.__cache__[key]
+            except KeyError:
+                return wrapper.__cache__.setdefault(key, function(*args, **kw))
+        wrapper.__cache__ = {}
+        return wrapper
+    return cache_results
+
+
+class StateButtonStyle(QCommonStyle):
+    _contrast = 0.3
+    _bgcontrast = min(1.0, 0.9*_contrast/0.7)
+
+    _pixel_metrics = {QStyle.PM_MenuButtonIndicator: 11, QStyle.PM_DefaultFrameWidth: 3, QStyle.PM_ButtonMargin: 1, QStyle.PM_ButtonShiftHorizontal: 0, QStyle.PM_ButtonShiftVertical: 0,
+                      QStyle.PM_ButtonIconSize: 32}
+
+    @pyqtSignature("polish(QWidget*)")
+    def polish(self, widget):
+        widget.setAttribute(Qt.WA_Hover)
+        super(StateButtonStyle, self).polish(widget)
+
+    def pixelMetric(self, metric, option=None, widget=None):
+        return self._pixel_metrics[metric]
+
+    def sizeFromContents(self, element, option, size, widget=None):
+        if element == QStyle.CT_ToolButton:
+            return self.toolButtonSizeFromContents(option, size, widget)
+        else:
+            return super(StateButtonStyle, self).sizeFromContents(element, option, size, widget)
+
+    def toolButtonSizeFromContents(self, option, size, widget):
+        # Make width >= height to avoid super-skiny buttons
+        margin = 2 * (self._pixel_metrics[QStyle.PM_DefaultFrameWidth] + self._pixel_metrics[QStyle.PM_ButtonMargin])
+        if option.features & QStyleOptionToolButton.MenuButtonPopup:
+            margin_size = QSize(margin+1, margin)
+            menu_width = self._pixel_metrics[QStyle.PM_MenuButtonIndicator]
+        else:
+            margin_size = QSize(margin, margin)
+            menu_width = 0
+        if size.width() - menu_width < size.height():
+            size.setWidth(size.height() + menu_width)
+        return size + margin_size
+
+    def drawComplexControl(self, control, option, painter, widget=None):
+        if control == QStyle.CC_ToolButton:
+            painter.save()
+            self.drawToolButtonComplexControl(option, painter, widget)
+            painter.restore()
+        else:
+            super(StateButtonStyle, self).drawComplexControl(control, option, painter, widget)
+
+    def drawToolButtonComplexControl(self, option, painter, widget):
+        button_color = option.palette.color(QPalette.Button)
+
+        if option.state & (QStyle.State_On|QStyle.State_Sunken):
+            self.drawToolButtonSunkenBezel(painter, QRectF(option.rect).adjusted(1, 1, -1, -1), button_color)
+        else:
+            enabled = bool(option.state & QStyle.State_Enabled)
+            hoover = enabled and bool(option.state & QStyle.State_MouseOver)
+            has_focus = enabled and bool(option.state & QStyle.State_HasFocus)
+            self.drawToolButtonBezel(painter, QRectF(option.rect), button_color, hoover=hoover, has_focus=has_focus)
+        if option.features & QStyleOptionToolButton.MenuButtonPopup:
+            self.drawToolButtonMenuIndicator(option, painter, widget)
+        self.drawToolButtonContent(option, painter, widget)
+
+    def drawToolButtonBezel(self, painter, rect, color, hoover=False, has_focus=False):
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(Qt.NoPen)
+
+        glow_rect = rect
+        shadow_rect  = rect.adjusted(1, 1, -1, -1)
+        border_rect  = rect.adjusted(2, 2, -2, -2)
+        content_rect = rect.adjusted(3, 3, -3, -3)
+
+        focus_color = QColor('#3aa7dd')
+        hoover_color = QColor('#6ed6ff')
+        shadow_color = ColorScheme.shade(self.background_bottom_color(color), ColorScheme.ShadowShade, 0.0)
+        border_color_top = ColorScheme.shade(self.background_top_color(color), ColorScheme.LightShade, 0.0)
+        border_color_bottom = ColorScheme.shade(self.background_bottom_color(color), ColorScheme.MidlightShade, 0.5)
+
+        # glow
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        blend = QLinearGradient(glow_rect.topLeft(), glow_rect.bottomLeft())
+        if hoover:
+            blend.setColorAt(0.0, self.color_with_alpha(hoover_color, 0x45))
+            blend.setColorAt(0.9, self.color_with_alpha(hoover_color, 0x45))
+            blend.setColorAt(1.0, self.color_with_alpha(ColorUtils.mix(hoover_color, shadow_color, 0.4), 0x55))
+        elif has_focus:
+            blend.setColorAt(0.0, self.color_with_alpha(focus_color, 0x45))
+            blend.setColorAt(0.9, self.color_with_alpha(focus_color, 0x45))
+            blend.setColorAt(1.0, self.color_with_alpha(ColorUtils.mix(focus_color, shadow_color, 0.4), 0x55))
+        else:
+            blend.setColorAt(0.0, Qt.transparent) # or @0.5
+            blend.setColorAt(0.9, self.color_with_alpha(shadow_color, 0x10))
+            #blend.setColorAt(1-4.0/glow_rect.height(), self.color_with_alpha(shadow_color, 0x10)) # this is for exactly 4 pixels from bottom
+            blend.setColorAt(1.0, self.color_with_alpha(shadow_color, 0x30)) # 0x25, 0x30 or 0x35
+        painter.setBrush(blend)
+        painter.drawRoundedRect(glow_rect, 5, 5) # 5 or 6
+
+        # shadow
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        if hoover:
+            painter.setBrush(hoover_color)
+        elif has_focus:
+            painter.setBrush(focus_color)
+        else:
+            blend = QLinearGradient(shadow_rect.topLeft(), shadow_rect.bottomLeft())
+            blend.setColorAt(0.00, self.color_with_alpha(shadow_color, 0x10))
+            blend.setColorAt(1.00, self.color_with_alpha(shadow_color, 0x80))
+            painter.setBrush(blend)
+        painter.drawRoundedRect(shadow_rect, 4, 4) # 4 or 5
+
+        # border
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        blend = QLinearGradient(border_rect.topLeft(), border_rect.bottomLeft())
+        blend.setColorAt(0.0, border_color_top)
+        blend.setColorAt(1.0, border_color_bottom)
+        painter.setBrush(blend)
+        painter.drawRoundedRect(border_rect, 4, 4)
+
+        # content
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        grad = QLinearGradient(content_rect.topLeft(), content_rect.bottomLeft())
+        grad.setColorAt(0.0, self.background_top_color(color))
+        grad.setColorAt(1.0, self.background_bottom_color(color))
+        painter.setBrush(QBrush(grad))
+        painter.drawRoundedRect(content_rect, 4, 4)
+
+    def drawToolButtonSunkenBezel(self, painter, rect, color):
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(Qt.NoPen)
+
+        hole_rect    = rect.adjusted(1, 1, -1, -1)
+        shadow_rect  = rect.adjusted(2, 2, -2, -2)
+        content_rect = rect.adjusted(3, 3, -3, -3)
+
+        shade_color  = ColorScheme.shade(self.background_bottom_color(color), ColorScheme.MidlightShade, 0.5)
+        shadow_color = ColorScheme.shade(self.background_bottom_color(color), ColorScheme.ShadowShade, 0.0)
+
+        if self.calc_shadow_color(color).value() > color.value():
+            content_grad = QLinearGradient(0, content_rect.top(), 0, content_rect.bottom()+content_rect.height()*0.2)
+            content_grad.setColorAt(0.0, self.background_bottom_color(color))
+            content_grad.setColorAt(1.0, self.background_top_color(color))
+        else:
+            content_grad = QLinearGradient(0, content_rect.top()-content_rect.height()*0.2, 0, content_rect.bottom())
+            content_grad.setColorAt(0.0, self.background_top_color(color))
+            content_grad.setColorAt(1.0, self.background_bottom_color(color))
+
+        # hole edge
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        blend = QLinearGradient(hole_rect.topLeft(), hole_rect.bottomLeft())
+        blend.setColorAt(0.0, self.color_with_alpha(shadow_color, 0x80))
+        blend.setColorAt(1.0, self.color_with_alpha(shadow_color, 0x20))
+        painter.setBrush(blend)
+        painter.drawRoundedRect(hole_rect, 4, 4) # 4 or 5
+
+        # shadow
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.setBrush(content_grad)
+        painter.drawRoundedRect(shadow_rect, 4, 4) # 5 or 6
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        blend = QLinearGradient(shadow_rect.topLeft(), shadow_rect.bottomLeft())
+        blend.setColorAt(0.0, self.color_with_alpha(shadow_color, 0x40))
+        blend.setColorAt(0.1, self.color_with_alpha(shadow_color, 0x07))
+        blend.setColorAt(0.9, self.color_with_alpha(shadow_color, 0x07))
+        blend.setColorAt(1.0, shade_color)
+        painter.setBrush(blend)
+        painter.drawRoundedRect(shadow_rect, 4, 4) # 5 or 6
+
+        # content
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.setBrush(content_grad)
+        painter.drawRoundedRect(content_rect, 4, 4)
+
+    def drawToolButtonMenuIndicator(self, option, painter, widget=None):
+        arrow_rect = self.proxy().subControlRect(QStyle.CC_ToolButton, option, QStyle.SC_ToolButtonMenu, widget)
+
+        text_color = option.palette.color(QPalette.WindowText if option.state & QStyle.State_AutoRaise else QPalette.ButtonText)
+        button_color = option.palette.color(QPalette.Button)
+        background_color = self.background_color(button_color, 0.5)
+
+        painter.save()
+
+        # draw separating vertical line
+        if option.state & (QStyle.State_On|QStyle.State_Sunken):
+            top_offset, bottom_offset = 4, 3
+        else:
+            top_offset, bottom_offset = 2, 2
+
+        if option.direction == Qt.LeftToRight:
+            separator_line = QLineF(arrow_rect.x()-3, arrow_rect.top()+top_offset, arrow_rect.x()-3, arrow_rect.bottom()-bottom_offset)
+        else:
+            separator_line = QLineF(arrow_rect.right()+3, arrow_rect.top()+top_offset, arrow_rect.right()+3, arrow_rect.bottom()-bottom_offset)
+
+        light_gradient = QLinearGradient(separator_line.p1(), separator_line.p2())
+        light_gradient.setColorAt(0.0, ColorScheme.shade(self.background_top_color(button_color), ColorScheme.LightShade, 0.0))
+        light_gradient.setColorAt(1.0, ColorScheme.shade(self.background_bottom_color(button_color), ColorScheme.MidlightShade, 0.5))
+        separator_color = ColorScheme.shade(self.background_bottom_color(button_color), ColorScheme.MidShade, 0.0)
+
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setPen(QPen(light_gradient, 1))
+        painter.drawLine(separator_line.translated(-1, 0))
+        painter.drawLine(separator_line.translated(+1, 0))
+        painter.setPen(QPen(separator_color, 1))
+        painter.drawLine(separator_line)
+
+        # draw arrow
+        arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
+        if option.direction == Qt.LeftToRight:
+            arrow.translate(-2, 1)
+        else:
+            arrow.translate(+2, 1)
+        pen_thickness = 1.6
+
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.translate(arrow_rect.center())
+
+        painter.translate(0, +1)
+        painter.setPen(QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPolyline(arrow)
+        painter.translate(0, -1)
+        painter.setPen(QPen(self.deco_color(background_color, text_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPolyline(arrow)
+
+        painter.restore()
+
+    def drawToolButtonContent(self, option, painter, widget):
+        if option.state & QStyle.State_Enabled:
+            pixmap = widget.pixmap(QIcon.Normal)
+        else:
+            pixmap = widget.pixmap(QIcon.Disabled)
+        if not pixmap.isNull():
+            margin = self._pixel_metrics[QStyle.PM_DefaultFrameWidth] + self._pixel_metrics[QStyle.PM_ButtonMargin]
+            if option.features & QStyleOptionToolButton.MenuButtonPopup and option.direction == Qt.LeftToRight:
+                right_offset = 1
+            else:
+                right_offset = 0
+            content_rect = QRectF(self.proxy().subControlRect(QStyle.CC_ToolButton, option, QStyle.SC_ToolButton, widget)).adjusted(margin, margin, -margin-right_offset, -margin)
+            pixmap_rect  = QRectF(pixmap.rect())
+            pixmap_rect.moveCenter(content_rect.center())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+            painter.drawPixmap(pixmap_rect.topLeft(), pixmap)
+
+    # Color helpers
+
+    @cache_result(color_key)
+    def low_threshold(self, color):
+        darker = ColorScheme.shade(color, ColorScheme.MidShade, 0.5)
+        return ColorUtils.luma(darker) > ColorUtils.luma(color)
+
+    @cache_result(color_key)
+    def high_threshold(self, color):
+        lighter = ColorScheme.shade(color, ColorScheme.LightShade, 0.5)
+        return ColorUtils.luma(lighter) < ColorUtils.luma(color)
+
+    @cache_result(color_key)
+    def background_top_color(self, color):
+        if self.low_threshold(color):
+            return ColorScheme.shade(color, ColorScheme.MidlightShade, 0.0)
+        else:
+            other_luma = ColorUtils.luma(ColorScheme.shade(color, ColorScheme.LightShade, 0.0))
+            color_luma = ColorUtils.luma(color)
+            return ColorUtils.shade(color, (other_luma - color_luma) * self._bgcontrast)
+
+    @cache_result(color_key)
+    def background_bottom_color(self, color):
+        if self.low_threshold(color):
+            return ColorScheme.shade(color, ColorScheme.MidShade, 0.0)
+        else:
+            other_luma = ColorUtils.luma(ColorScheme.shade(color, ColorScheme.MidShade, 0.0))
+            color_luma = ColorUtils.luma(color)
+            return ColorUtils.shade(color, (other_luma - color_luma) * self._bgcontrast)
+
+    @cache_result(color_key)
+    def calc_light_color(self, color):
+        if self.high_threshold(color):
+            return color
+        else:
+            return ColorScheme.shade(color, ColorScheme.LightShade, self._contrast)
+
+    @cache_result(color_key)
+    def calc_dark_color(self, color):
+        if self.low_threshold(color):
+            return ColorUtils.mix(self.calc_light_color(color), color, 0.3 + 0.7 * self._contrast)
+        else:
+            return ColorScheme.shade(color, ColorScheme.MidShade, self._contrast)
+
+    @cache_result(color_key)
+    def calc_shadow_color(self, color):
+        if self.low_threshold(color):
+            shadow_color = ColorUtils.mix(Qt.black, color, color.alphaF())
+        else:
+            shadow_color = ColorScheme.shade(ColorUtils.mix(Qt.black, color, color.alphaF()), ColorScheme.ShadowShade, self._contrast)
+        shadow_color.setAlpha(color.alpha()) # make sure shadow color has the same alpha channel as the input
+        return shadow_color
+
+    @cache_result(color_ratio_key)
+    def background_color(self, color, ratio):
+        if ratio < 0.5:
+            return ColorUtils.mix(self.background_top_color(color), color, 2.0*ratio)
+        else:
+            return ColorUtils.mix(color, self.background_bottom_color(color), 2.0*ratio-1)
+
+    @cache_result(background_color_key)
+    def deco_color(self, background, color):
+        return ColorUtils.mix(background, color, 0.4 + 0.8*self._contrast)
+
+    def color_with_alpha(self, color, alpha):
+        color = QColor(color)
+        color.setAlpha(alpha)
+        return color
+
+    def alpha_color(self, color, alpha):
+        if 0.0 <= alpha < 1.0:
+            color.setAlphaF(alpha * color.alphaF())
+        return color
+
+
+class StateButton(QToolButton):
+    default_color = QColor('#efedeb')
+
+    def __init__(self, parent=None):
+        super(StateButton, self).__init__(parent)
+        self.setPopupMode(QToolButton.MenuButtonPopup)
+        self.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        palette = self.palette()
+        palette.setColor(QPalette.Button, self.default_color)
+        self.setPalette(palette)
+        self.setStyle(StateButtonStyle())
+
+    def pixmap(self, mode=QIcon.Normal, state=QIcon.Off):
+        pixmap = self.icon().pixmap(self.iconSize(), mode, state)
+        if pixmap.isNull():
+            return pixmap
+
+        size = max(pixmap.width(), pixmap.height())
+        offset_x = (size - pixmap.width())/2
+        offset_y = (size - pixmap.height())/2
+
+        new_pixmap = QPixmap(size, size)
+        new_pixmap.fill(Qt.transparent)
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, size, size, 3.7, 3.7)
+        painter = QPainter(new_pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setClipPath(path)
+        painter.drawPixmap(offset_x, offset_y, pixmap)
+        painter.end()
+
+        return new_pixmap
+
+
+class PresenceState(object):
+    def __init__(self, name, color, icon):
+        self.name = name
+        self.color = color
+        self.icon = icon
+
+    def __repr__(self):
+        return self.name
+
+
+class AccountState(StateButton):
+    Invisible = PresenceState('Invisible', '#efedeb', Resources.get('icons/state-invisible.svg'))
+    Available = PresenceState('Available', '#00ff00', Resources.get('icons/state-available.svg'))
+    Away = PresenceState('Away', '#ffff00', Resources.get('icons/state-away.svg'))
+    Busy = PresenceState('Busy', '#ff0000', Resources.get('icons/state-busy.svg'))
+
+    stateChanged = pyqtSignal(QAction)
+
+    history_size = 7
+
+    def __init__(self, parent=None):
+        super(AccountState, self).__init__(parent)
+        menu = QMenu(self)
+        for state in (self.Available, self.Away, self.Busy, self.Invisible):
+            action = menu.addAction(QIcon(state.icon), state.name)
+            action.state = state
+            action.note = None
+        menu.addSeparator()
+        menu.triggered.connect(self._SH_MenuTriggered)
+        self.setMenu(menu)
+        self.state = self.Invisible
+
+    def _SH_MenuTriggered(self, action):
+        if hasattr(action, 'state'):
+            self.setState(action.state, action.note)
+            self.stateChanged.emit(action)
+
+    def setState(self, state, note=None):
+        self.state = state
+        palette = self.palette()
+        palette.setColor(QPalette.Button, QColor(state.color))
+        self.setPalette(palette)
+        if not note:
+            return
+        menu = self.menu()
+        actions = menu.actions()[5:]
+        try:
+            action = next(action for action in actions if action.state is state and action.note == note)
+        except StopIteration:
+            action = QAction(QIcon(state.icon), note, menu)
+            if len(actions) == 0:
+                menu.addAction(action)
+            else:
+                if len(actions) >= self.history_size:
+                    menu.removeAction(actions[-1])
+                menu.insertAction(actions[0], action)
+            action.state = state
+            action.note = note
+        else:
+            if action is not actions[0]:
+                menu.removeAction(action)
+                menu.insertAction(actions[0], action)
+
 
 
