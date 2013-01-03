@@ -8,9 +8,9 @@ __all__ = ['MainWindow']
 from functools import partial
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QUrl
+from PyQt4.QtCore import QUrl
 from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
-from PyQt4.QtGui  import QBrush, QColor, QFontMetrics, QIcon, QPainter, QPen, QPixmap, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
+from PyQt4.QtGui  import QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -28,7 +28,7 @@ from blink.sessions import ConferenceDialog, SessionManager, SessionModel
 from blink.configuration.datatypes import InvalidToken
 from blink.resources import Resources
 from blink.util import run_in_gui_thread
-from blink.widgets.buttons import SwitchViewButton
+from blink.widgets.buttons import AccountState, SwitchViewButton
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
@@ -38,7 +38,7 @@ class MainWindow(base_class, ui_class):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        self.idle_status_index = 0
+        self.saved_account_state = None
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
@@ -54,7 +54,7 @@ class MainWindow(base_class, ui_class):
 
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
-        self.set_user_icon(Resources.get("icons/default-avatar.png")) # ":/resources/icons/default-avatar.png"
+        self.set_user_icon(Resources.get("icons/avatar.jpg")) # ":/resources/icons/avatar.png"
 
         self.active_sessions_label.hide()
         self.enable_call_buttons(False)
@@ -95,6 +95,8 @@ class MainWindow(base_class, ui_class):
         self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
 
         # Signals
+        self.account_state.stateChanged.connect(self._SH_AccountStateChanged)
+        self.activity_note.editingFinished.connect(self._SH_ActivityNoteEditingFinished)
         self.add_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
@@ -129,7 +131,6 @@ class MainWindow(base_class, ui_class):
         self.session_model.structureChanged.connect(self._SH_SessionModelChangedStructure)
 
         self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
-        self.status.activated[int].connect(self._SH_StatusChanged)
         self.switch_view_button.viewChanged.connect(self._SH_SwitchViewButtonChangedView)
 
         # Blink menu actions
@@ -184,29 +185,10 @@ class MainWindow(base_class, ui_class):
         if frame_width < 4:
             search_box.setMinimumHeight(20 + 2*frame_width)
 
-        # adjust status combo-box font size to fit the combo-box
-        option = QStyleOptionComboBox()
-        self.status.initStyleOption(option)
-        frame_width = self.status.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self.status)
-        font = self.status.font()
-        font.setFamily('Sans Serif')
-        font.setPointSize(font.pointSize() - 1) # make it 1 point smaller then the default font size
-        font_metrics = QFontMetrics(font)
-        if font_metrics.height() > self.status.maximumHeight() - 2*frame_width:
-            pixel_size = 11 - (frame_width - 2) # subtract 1 pixel for every frame pixel over 2 pixels
-            font.setPixelSize(pixel_size)
-        self.status.setFont(font)
-
         # adjust the combo boxes for themes with too much padding (like the default theme on Ubuntu 10.04)
         option = QStyleOptionComboBox()
-        self.status.initStyleOption(option)
-        font_metrics = self.status.fontMetrics()
-        text_width = max(font_metrics.width(self.status.itemText(index)) for index in xrange(self.status.count()))
-        frame_width = self.status.style().pixelMetric(QStyle.PM_ComboBoxFrameWidth, option, self.status)
-        arrow_width = self.status.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxArrow, self.status).width()
-        wide_padding = self.status.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, self.status).height() < 10
-        self.status.setFixedWidth(text_width + arrow_width + 2*frame_width + 30) # 30? Don't ask.
-        self.status.setStyleSheet("""QComboBox { padding: 0px 3px 0px 3px; }""" if wide_padding else "")
+        self.identity.initStyleOption(option)
+        wide_padding = self.identity.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, self.identity).height() < 10
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
     def closeEvent(self, event):
@@ -219,21 +201,7 @@ class MainWindow(base_class, ui_class):
         self.server_tools_window.close()
 
     def set_user_icon(self, image_file_name):
-        pixmap = QPixmap(32, 32)
-        pixmap.fill(QColor(Qt.transparent))
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setBrush(QBrush(Qt.white))
-        painter.setPen(QPen(painter.brush(), 0, Qt.NoPen))
-        #painter.drawRoundedRect(0, 0, 32, 32, 6, 6)
-        painter.drawRoundedRect(0, 0, 32, 32, 0, 0)
-        icon = QPixmap()
-        if icon.load(image_file_name):
-            icon = icon.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
-            painter.drawPixmap(0, 0, icon)
-        painter.end()
-        self.image.setPixmap(pixmap)
+        self.account_state.setIcon(QIcon(image_file_name))
 
     def enable_call_buttons(self, enabled):
         self.audio_call_button.setEnabled(enabled)
@@ -364,6 +332,15 @@ class MainWindow(base_class, ui_class):
         account = action.data()
         SessionManager().start_call("Voicemail", account.voicemail_uri, account=account)
 
+    def _SH_AccountStateChanged(self, action):
+        self.activity_note.setText(action.note)
+        self.saved_account_state = None
+
+    def _SH_ActivityNoteEditingFinished(self):
+        self.activity_note.clearFocus()
+        self.account_state.setState(self.account_state.state, self.activity_note.text())
+        self.saved_account_state = None
+
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
         selected_items = ((index.row(), model.data(index)) for index in self.contact_list.selectionModel().selectedIndexes())
@@ -440,15 +417,14 @@ class MainWindow(base_class, ui_class):
             self.display_name.setText(account.display_name or u'')
             self.display_name.setEnabled(True)
             self.activity_note.setEnabled(True)
-            self.status.setEnabled(True)
-            if not self.session_model.active_sessions:
-                self.status.setCurrentIndex(self.idle_status_index)
+            self.account_state.setEnabled(True)
         else:
             self.display_name.clear()
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
-            self.status.setEnabled(False)
-            self.status.setCurrentIndex(self.status.findText(u'Offline'))
+            self.account_state.setEnabled(False)
+            self.account_state.setState(AccountState.Invisible)
+            self.saved_account_state = None
 
     def _SH_MakeConference(self):
         self.session_model.conferenceSessions([session for session in self.session_model.active_sessions if session.conference is None])
@@ -519,18 +495,22 @@ class MainWindow(base_class, ui_class):
         else:
             self.conference_button.setEnabled(len([session for session in active_sessions if session.conference is None]) > 1)
             self.conference_button.setChecked(False)
-        if active_sessions and self.status.currentText() != u'Offline':
-            self.status.setCurrentIndex(self.status.findText(u'On the phone'))
-        else:
-            self.status.setCurrentIndex(self.idle_status_index)
+        if active_sessions:
+            if self.account_state.state is not AccountState.Invisible:
+                if self.saved_account_state is None:
+                    self.saved_account_state = self.account_state.state, self.activity_note.text()
+                self.account_state.setState(AccountState.Busy)
+                self.activity_note.setText(u'On the phone')
+        elif self.saved_account_state is not None:
+            state, note = self.saved_account_state
+            self.saved_account_state = None
+            self.activity_note.setText(note)
+            self.account_state.setState(state, note)
 
     def _SH_SilentButtonClicked(self, silent):
         settings = SIPSimpleSettings()
         settings.audio.silent = silent
         settings.save()
-
-    def _SH_StatusChanged(self, index):
-        self.idle_status_index = index
 
     def _SH_SwitchViewButtonChangedView(self, view):
         self.main_view.setCurrentWidget(self.contacts_panel if view is SwitchViewButton.ContactView else self.sessions_panel)
@@ -556,8 +536,9 @@ class MainWindow(base_class, ui_class):
         if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
-            self.status.setEnabled(False)
-            self.status.setCurrentIndex(self.status.findText(u'Offline'))
+            self.account_state.setEnabled(False)
+        else:
+            self.account_state.setState(AccountState.Available)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()

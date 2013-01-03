@@ -42,12 +42,6 @@
     </property>
     <item>
      <widget class="AccountSelector" name="identity">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>20</height>
-       </size>
-      </property>
       <property name="maximumSize">
        <size>
         <width>16777215</width>
@@ -90,33 +84,19 @@
        <number>1</number>
       </property>
       <item>
-       <widget class="QLabel" name="image">
-        <property name="minimumSize">
+       <widget class="AccountState" name="account_state">
+        <property name="icon">
+         <iconset>
+          <normaloff>icons/avatar.jpg</normaloff>icons/avatar.jpg</iconset>
+        </property>
+        <property name="iconSize">
          <size>
-          <width>36</width>
-          <height>36</height>
+          <width>32</width>
+          <height>32</height>
          </size>
         </property>
-        <property name="maximumSize">
-         <size>
-          <width>36</width>
-          <height>36</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>Click to change your picture</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::StyledPanel</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Sunken</enum>
-        </property>
-        <property name="pixmap">
-         <pixmap>icons/default-avatar.png</pixmap>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
+        <property name="popupMode">
+         <enum>QToolButton::MenuButtonPopup</enum>
         </property>
        </widget>
       </item>
@@ -126,106 +106,32 @@
          <number>0</number>
         </property>
         <item>
-         <layout class="QHBoxLayout" name="name_status_layout">
-          <property name="spacing">
-           <number>4</number>
+         <widget class="LineEdit" name="display_name">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>18</height>
+           </size>
           </property>
-          <item>
-           <widget class="LineEdit" name="display_name">
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>18</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>Click to change your display name</string>
-            </property>
-            <property name="styleSheet">
-             <string>QLineEdit {
+          <property name="toolTip">
+           <string>Click to change your display name</string>
+          </property>
+          <property name="styleSheet">
+           <string>QLineEdit {
 	background-color: transparent;
 }
 </string>
-            </property>
-            <property name="frame">
-             <bool>false</bool>
-            </property>
-            <property name="inactiveText" stdset="0">
-             <string>Type your name here</string>
-            </property>
-            <property name="widgetSpacing" stdset="0">
-             <number>0</number>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QComboBox" name="status">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>18</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>16777215</width>
-              <height>18</height>
-             </size>
-            </property>
-            <property name="iconSize">
-             <size>
-              <width>10</width>
-              <height>10</height>
-             </size>
-            </property>
-            <item>
-             <property name="text">
-              <string>Available</string>
-             </property>
-             <property name="icon">
-              <iconset>
-               <normaloff>icons/green-dot.svg</normaloff>icons/green-dot.svg</iconset>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Away</string>
-             </property>
-             <property name="icon">
-              <iconset>
-               <normaloff>icons/yellow-dot.svg</normaloff>icons/yellow-dot.svg</iconset>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Busy</string>
-             </property>
-             <property name="icon">
-              <iconset>
-               <normaloff>icons/red-dot.svg</normaloff>icons/red-dot.svg</iconset>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>On the phone</string>
-             </property>
-             <property name="icon">
-              <iconset>
-               <normaloff>icons/red-dot.svg</normaloff>icons/red-dot.svg</iconset>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Offline</string>
-             </property>
-             <property name="icon">
-              <iconset>
-               <normaloff>icons/grey-dot.svg</normaloff>icons/grey-dot.svg</iconset>
-             </property>
-            </item>
-           </widget>
-          </item>
-         </layout>
+          </property>
+          <property name="frame">
+           <bool>false</bool>
+          </property>
+          <property name="inactiveText" stdset="0">
+           <string>Type your name here</string>
+          </property>
+          <property name="widgetSpacing" stdset="0">
+           <number>0</number>
+          </property>
+         </widget>
         </item>
         <item>
          <widget class="LineEdit" name="activity_note">
@@ -234,6 +140,124 @@
             <width>16777215</width>
             <height>18</height>
            </size>
+          </property>
+          <property name="palette">
+           <palette>
+            <active>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Text">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>70</red>
+                <green>70</green>
+                <blue>70</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </active>
+            <inactive>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Text">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>70</red>
+                <green>70</green>
+                <blue>70</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </inactive>
+            <disabled>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Text">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>166</red>
+                <green>165</green>
+                <blue>165</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="0">
+                <red>0</red>
+                <green>0</green>
+                <blue>0</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </disabled>
+           </palette>
           </property>
           <property name="styleSheet">
            <string>QLineEdit {
@@ -889,7 +913,7 @@ padding: 2px;</string>
      <x>0</x>
      <y>0</y>
      <width>285</width>
-     <height>22</height>
+     <height>20</height>
     </rect>
    </property>
    <widget class="QMenu" name="blink_menu">
@@ -1322,23 +1346,28 @@ padding: 2px;</string>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
   </customwidget>
+  <customwidget>
+   <class>AccountState</class>
+   <extends>QToolButton</extends>
+   <header>blink.widgets.buttons</header>
+  </customwidget>
  </customwidgets>
  <tabstops>
   <tabstop>search_box</tabstop>
-  <tabstop>search_list</tabstop>
-  <tabstop>activity_note</tabstop>
-  <tabstop>status</tabstop>
+  <tabstop>account_state</tabstop>
   <tabstop>display_name</tabstop>
+  <tabstop>activity_note</tabstop>
   <tabstop>switch_view_button</tabstop>
   <tabstop>contact_list</tabstop>
-  <tabstop>back_to_contacts_button</tabstop>
-  <tabstop>add_search_contact_button</tabstop>
-  <tabstop>identity</tabstop>
   <tabstop>add_contact_button</tabstop>
   <tabstop>audio_call_button</tabstop>
   <tabstop>im_session_button</tabstop>
   <tabstop>ds_session_button</tabstop>
   <tabstop>silent_button</tabstop>
+  <tabstop>identity</tabstop>
+  <tabstop>add_search_contact_button</tabstop>
+  <tabstop>back_to_contacts_button</tabstop>
+  <tabstop>search_list</tabstop>
   <tabstop>session_list</tabstop>
   <tabstop>hangup_all_button</tabstop>
   <tabstop>conference_button</tabstop>
