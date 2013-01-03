@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Komodo Project File - DO NOT EDIT -->
+<project id="834a471f-56c2-45a1-acdd-d11d9cce1238" kpf_version="5" name="blink-qt.komodoproject">
+<preference-set idref="834a471f-56c2-45a1-acdd-d11d9cce1238">
+  <string relative="path" id="import_dirname"></string>
+  <string id="import_exclude_matches">*.*~;*.bak;*.tmp;CVS;.#*;*.pyo;*.pyc;.svn;*%*;.DS_Store;_darcs;build;dist;MANIFEST</string>
+  <string id="import_include_matches"></string>
+</preference-set>
+</project>
