@@ -93,6 +93,7 @@ class Blink(QApplication):
         self.first_run = False
         self.main_window = MainWindow()
         self.ip_address_monitor = IPAddressMonitor()
+        self.log_manager = LogManager()
 
         self.update_manager = UpdateManager()
         self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
@@ -205,8 +206,7 @@ class Blink(QApplication):
         handler(notification)
 
     def _NH_SIPApplicationWillStart(self, notification):
-        log_manager = LogManager()
-        log_manager.start()
+        self.log_manager.start()
 
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):

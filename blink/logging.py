@@ -7,11 +7,12 @@ __all__ = ['LogManager']
 import os
 import sys
 
+from collections import deque
 from datetime import datetime
 from pprint import pformat
 
 from application import log
-from application.notification import IObserver, NotificationCenter
+from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy
 from application.python.queue import EventQueue
 from application.python import Null
 from application.python.types import Singleton
@@ -21,6 +22,17 @@ from zope.interface import implements
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.resources import ApplicationData
+
+
+class NotificationQueue(object):
+    implements(IObserver)
+
+    def __init__(self):
+        self.notifications = deque()
+        NotificationCenter().add_observer(ObserverWeakrefProxy(self))
+
+    def handle_notification(self, notification):
+        self.notifications.append(notification)
 
 
 class LogFile(object):
@@ -74,6 +86,7 @@ class LogManager(object):
         self.pjsiptrace_file = Null
         self.notifications_file = Null
         self.event_queue = Null
+        self.notification_queue = NotificationQueue()
         self._siptrace_start_time = None
         self._siptrace_packet_count = None
 
@@ -93,6 +106,10 @@ class LogManager(object):
         self._siptrace_packet_count = 0
         self.event_queue = EventQueue(handler=self._process_notification, name='Log handling')
         self.event_queue.start()
+        while settings.logs.trace_notifications and self.notification_queue.notifications:
+            notification = self.notification_queue.notifications.popleft()
+            self.handle_notification(notification)
+        self.notification_queue = None
 
     def stop(self):
         notification_center = NotificationCenter()
