@@ -1276,9 +1276,8 @@ class PreferencesWindow(base_class, ui_class):
     def _NH_SIPApplicationDidStart(self, notification):
         self._sync_defaults()
         self.load_settings()
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='AudioDevicesDidChange')
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification.center.add_observer(self, name='AudioDevicesDidChange')
+        notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
 
     def _NH_AudioDevicesDidChange(self, notification):
         self.load_audio_devices()

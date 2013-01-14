@@ -427,8 +427,7 @@ class SessionItem(QObject):
         digit_map = {'*': 'star'}
         filename = 'sounds/dtmf_%s_tone.wav' % digit_map.get(notification.data.digit, notification.data.digit)
         player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get(filename))
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=player)
+        notification.center.add_observer(self, sender=player)
         SIPApplication.voice_audio_bridge.add(player)
         player.start()
 
@@ -440,8 +439,7 @@ class SessionItem(QObject):
 
     def _NH_DNSLookupDidSucceed(self, notification):
         settings = SIPSimpleSettings()
-        notification_center = NotificationCenter()
-        notification_center.remove_observer(self, sender=notification.sender)
+        notification.center.remove_observer(self, sender=notification.sender)
         if self.pending_removal:
             return
         streams = []
@@ -459,8 +457,7 @@ class SessionItem(QObject):
         self.session.connect(ToHeader(self.uri), routes, streams)
 
     def _NH_DNSLookupDidFail(self, notification):
-        notification_center = NotificationCenter()
-        notification_center.remove_observer(self, sender=notification.sender)
+        notification.center.remove_observer(self, sender=notification.sender)
         if self.pending_removal:
             return
         self.audio_stream = None
@@ -632,12 +629,10 @@ class SessionItem(QObject):
             self._cleanup()
 
     def _NH_WavePlayerDidFail(self, notification):
-        notification_center = NotificationCenter()
-        notification_center.remove_observer(self, sender=notification.sender)
+        notification.center.remove_observer(self, sender=notification.sender)
 
     def _NH_WavePlayerDidEnd(self, notification):
-        notification_center = NotificationCenter()
-        notification_center.remove_observer(self, sender=notification.sender)
+        notification.center.remove_observer(self, sender=notification.sender)
 
 
 class Conference(object):

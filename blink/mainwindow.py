@@ -542,9 +542,8 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
-        notification_center.add_observer(self, name='AudioDevicesDidChange')
+        notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification.center.add_observer(self, name='AudioDevicesDidChange')
 
     def _NH_AudioDevicesDidChange(self, notification):
         for action in self.output_device_menu.actions():
