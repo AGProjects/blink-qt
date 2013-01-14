@@ -1,8 +1,6 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-from __future__ import with_statement
-
 __all__ = ['BackgroundFrame']
 
 from PyQt4.QtCore import Qt, QEvent, QPoint, QRect, QSize

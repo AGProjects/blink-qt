@@ -1,8 +1,6 @@
 # Copyright (C) 2010 AG Projects. See LICENSE for details.
 #
 
-from __future__ import with_statement
-
 __all__ = ['AboutPanel']
 
 from PyQt4 import uic
