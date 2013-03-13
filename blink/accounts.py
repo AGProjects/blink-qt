@@ -478,7 +478,6 @@ class AddAccountDialog(base_class, ui_class):
         handler(notification)
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
-        account = notification.data.account
         self.sip_address_editor.addException(notification.data.account.id)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
