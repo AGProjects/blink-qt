@@ -25,7 +25,7 @@ credits_text = """
  <tr><td class="name" align="right">AG Projects</td><td align="left"><a href="http://ag-projects.com/">http://ag-projects.com/</a></td></tr>
  <tr><td class="name" align="right">NLnet Foundation</td><td align="left"><a href="http://nlnet.nl/">http://nlnet.nl/</a></td></tr>
  <tr><td class="name" align="right">IETF Community</td><td align="left"><a href="http://ietf.org/">http://ietf.org/</a></td></tr>
- <tr><td class="name" align="right">SIP Simple Client</td><td align="left"><a href="http://sipsimpleclient.com/">http://sipsimpleclient.com/</a></td></tr>
+ <tr><td class="name" align="right">SIP Simple Client</td><td align="left"><a href="http://sipsimpleclient.org/">http://sipsimpleclient.org/</a></td></tr>
 </table>
 </body>
 </html>
@@ -45,7 +45,7 @@ class AboutPanel(base_class, ui_class):
 
         self.version.setText(u'Version %s\n%s' % (__version__, __date__))
 
-        credits_width = self.credits_text.fontMetrics().width("NLNET Foundation" + "http://sipsimpleclient.com") + 40
+        credits_width = self.credits_text.fontMetrics().width("NLNET Foundation" + "http://sipsimpleclient.org") + 40
         self.credits_text.setFixedWidth(credits_width)
         self.credits_text.document().documentLayout().documentSizeChanged.connect(self._credits_size_changed)
         self.credits_text.setHtml(credits_text)
