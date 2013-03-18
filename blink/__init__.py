@@ -28,6 +28,7 @@ from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
+from sipsimple.addressbook import Contact, Group
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.storage import FileStorage
@@ -35,6 +36,7 @@ from sipsimple.threading import run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
 
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
+from blink.configuration.addressbook import ContactExtension, GroupExtension
 from blink.configuration.datatypes import InvalidToken
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.logging import LogManager
@@ -101,6 +103,8 @@ class Blink(QApplication):
 
         Account.register_extension(AccountExtension)
         BonjourAccount.register_extension(BonjourAccountExtension)
+        Contact.register_extension(ContactExtension)
+        Group.register_extension(GroupExtension)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
         session_manager = SessionManager()
         session_manager.initialize(self.main_window, self.main_window.session_model)

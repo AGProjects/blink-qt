@@ -32,7 +32,46 @@
    <property name="bottomMargin">
     <number>10</number>
    </property>
-   <item row="0" column="0">
+   <item row="6" column="1" colspan="2">
+    <widget class="QCheckBox" name="subscribe_presence">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="text">
+      <string>Subscribe To Presence</string>
+     </property>
+    </widget>
+   </item>
+   <item row="8" column="0" colspan="3">
+    <spacer name="grid_spacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>412</width>
+       <height>20</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item row="3" column="0" colspan="3">
+    <spacer name="section_spacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::Fixed</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>412</width>
+       <height>20</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item row="1" column="0">
     <widget class="QLabel" name="sip_address_label">
      <property name="text">
       <string>SIP Address:</string>
@@ -42,13 +81,118 @@
      </property>
     </widget>
    </item>
-   <item row="0" column="1">
+   <item row="4" column="1" colspan="2">
+    <widget class="QComboBox" name="preferred_media">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <item>
+      <property name="text">
+       <string>Audio</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Chat</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="display_name_label">
+     <property name="text">
+      <string>Display Name:</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
     <widget class="LineEdit" name="sip_address_editor">
      <property name="inactiveText" stdset="0">
       <string>user@domain</string>
      </property>
      <property name="widgetSpacing" stdset="0">
       <number>0</number>
+     </property>
+    </widget>
+   </item>
+   <item row="9" column="0" colspan="3">
+    <layout class="QHBoxLayout" name="button_box_layout">
+     <property name="spacing">
+      <number>6</number>
+     </property>
+     <item>
+      <spacer name="button_box_spacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="reject_button">
+       <property name="minimumSize">
+        <size>
+         <width>85</width>
+         <height>25</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Cancel</string>
+       </property>
+       <property name="autoDefault">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="accept_button">
+       <property name="minimumSize">
+        <size>
+         <width>85</width>
+         <height>25</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Add</string>
+       </property>
+       <property name="autoDefault">
+        <bool>false</bool>
+       </property>
+       <property name="default">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item row="7" column="1" colspan="2">
+    <widget class="QCheckBox" name="subscribe_dialogs">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="text">
+      <string>Subscribe To Dialogs</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0">
+    <widget class="QLabel" name="preferred_media_label">
+     <property name="text">
+      <string>Preferred Media:</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>
@@ -115,241 +259,13 @@
      </item>
     </layout>
    </item>
-   <item row="1" column="0">
-    <widget class="QLabel" name="display_name_label">
-     <property name="text">
-      <string>Display Name:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="1">
+   <item row="0" column="1">
     <widget class="LineEdit" name="display_name_editor">
      <property name="inactiveText" stdset="0">
       <string>Contact Name</string>
      </property>
      <property name="widgetSpacing" stdset="0">
       <number>0</number>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="0">
-    <widget class="QLabel" name="group_label">
-     <property name="text">
-      <string>Group:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="1">
-    <widget class="QComboBox" name="group">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="editable">
-      <bool>true</bool>
-     </property>
-     <property name="insertPolicy">
-      <enum>QComboBox::NoInsert</enum>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="0" colspan="3">
-    <spacer name="section_spacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeType">
-      <enum>QSizePolicy::Fixed</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>412</width>
-       <height>20</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item row="5" column="0">
-    <widget class="QLabel" name="sip_aliases_label">
-     <property name="text">
-      <string>SIP Aliases:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="5" column="1" colspan="2">
-    <widget class="LineEdit" name="sip_aliases_editor">
-     <property name="inactiveText" stdset="0">
-      <string>List of SIP addresses separated by ;</string>
-     </property>
-     <property name="widgetSpacing" stdset="0">
-      <number>0</number>
-     </property>
-    </widget>
-   </item>
-   <item row="6" column="0">
-    <widget class="QLabel" name="storage_place_label">
-     <property name="text">
-      <string>Storage Place:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="6" column="1" colspan="2">
-    <widget class="QComboBox" name="storage_place">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <item>
-      <property name="text">
-       <string>Local</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>XCAP</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item row="8" column="1" colspan="2">
-    <widget class="QCheckBox" name="subscribe_presence">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
-     <property name="text">
-      <string>Subscribe To Presence</string>
-     </property>
-    </widget>
-   </item>
-   <item row="9" column="1" colspan="2">
-    <widget class="QCheckBox" name="subscribe_dialogs">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
-     <property name="text">
-      <string>Subscribe To Dialogs</string>
-     </property>
-    </widget>
-   </item>
-   <item row="10" column="0" colspan="3">
-    <spacer name="grid_spacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>412</width>
-       <height>20</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item row="11" column="0" colspan="3">
-    <layout class="QHBoxLayout" name="button_box_layout">
-     <property name="spacing">
-      <number>6</number>
-     </property>
-     <item>
-      <spacer name="button_box_spacer">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="reject_button">
-       <property name="minimumSize">
-        <size>
-         <width>85</width>
-         <height>25</height>
-        </size>
-       </property>
-       <property name="text">
-        <string>Cancel</string>
-       </property>
-       <property name="autoDefault">
-        <bool>false</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="accept_button">
-       <property name="minimumSize">
-        <size>
-         <width>85</width>
-         <height>25</height>
-        </size>
-       </property>
-       <property name="text">
-        <string>Add</string>
-       </property>
-       <property name="autoDefault">
-        <bool>false</bool>
-       </property>
-       <property name="default">
-        <bool>false</bool>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item row="4" column="1" colspan="2">
-    <widget class="QComboBox" name="preferred_media">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <item>
-      <property name="text">
-       <string>Audio</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Chat</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>SMS</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item row="4" column="0">
-    <widget class="QLabel" name="preferred_media_label">
-     <property name="text">
-      <string>Preferred Media:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>
@@ -368,13 +284,10 @@
   </customwidget>
  </customwidgets>
  <tabstops>
-  <tabstop>sip_address_editor</tabstop>
   <tabstop>display_name_editor</tabstop>
-  <tabstop>group</tabstop>
+  <tabstop>sip_address_editor</tabstop>
   <tabstop>clear_button</tabstop>
   <tabstop>preferred_media</tabstop>
-  <tabstop>sip_aliases_editor</tabstop>
-  <tabstop>storage_place</tabstop>
   <tabstop>subscribe_presence</tabstop>
   <tabstop>subscribe_dialogs</tabstop>
   <tabstop>reject_button</tabstop>

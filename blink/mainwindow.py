@@ -20,7 +20,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import BonjourNeighbour, Contact, ContactGroup, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
+from blink.contacts import BonjourNeighbour, Contact, Group, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, SessionModel
 from blink.configuration.datatypes import InvalidToken
@@ -87,7 +87,7 @@ class MainWindow(base_class, ui_class):
         # Windows, dialogs and panels
         self.about_panel = AboutPanel(self)
         self.conference_dialog = ConferenceDialog(self)
-        self.contact_editor_dialog = ContactEditorDialog(self.contact_model, self)
+        self.contact_editor_dialog = ContactEditorDialog(self)
         self.google_contacts_dialog = GoogleContactsDialog(self)
         self.preferences_window = PreferencesWindow(self.account_model, None)
         self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
@@ -162,8 +162,6 @@ class MainWindow(base_class, ui_class):
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.buy_pstn_access_action.triggered.connect(self._AH_PurchasePstnAccess)
-
-        self.contact_model.load()
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
@@ -341,15 +339,14 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
-        selected_items = ((index.row(), model.data(index)) for index in self.contact_list.selectionModel().selectedIndexes())
-        try:
-            item = (item for row, item in sorted(selected_items) if type(item) in (Contact, ContactGroup)).next()
-            preferred_group = item if type(item) is ContactGroup else item.group
-        except StopIteration:
-            try:
-                preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
-            except StopIteration:
-                preferred_group = None
+        groups = set()
+        for index in self.contact_list.selectionModel().selectedIndexes():
+            item = model.data(index)
+            if isinstance(item, Group) and not item.virtual:
+                groups.add(item)
+            elif isinstance(item, Contact) and not item.group.virtual:
+                groups.add(item.group)
+        preferred_group = groups.pop() if len(groups)==1 else None
         self.contact_editor_dialog.open_for_add(self.search_box.text(), preferred_group)
 
     def _SH_AudioCallButtonClicked(self):
@@ -359,7 +356,7 @@ class MainWindow(base_class, ui_class):
         address = contact.uri or self.search_box.text()
         name = contact.name or None
         session_manager = SessionManager()
-        session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
 
     def _SH_BreakConference(self):
         active_session = self.session_model.data(self.session_list.selectionModel().selectedIndexes()[0])
@@ -370,7 +367,7 @@ class MainWindow(base_class, ui_class):
         if not isinstance(contact, Contact):
             return
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
 
     def _SH_ContactListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()

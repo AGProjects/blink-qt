@@ -3,7 +3,7 @@
 
 """Definitions of datatypes for use in settings extensions."""
 
-__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL', 'AuthorizationToken', 'InvalidToken']
+__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL', 'AuthorizationToken', 'InvalidToken', 'IconDescriptor']
 
 import os
 import re
@@ -134,5 +134,58 @@ class AuthorizationToken(str):
             return '%s(%s)' % (self.__class__.__name__, str.__repr__(self))
 
 InvalidToken = AuthorizationToken() # a valid token is never empty
+
+
+class IconDescriptor(object):
+    def __init__(self, url, etag=None):
+        self.url = url
+        self.etag = etag
+
+    def __getstate__(self):
+        if self.etag is None:
+            return unicode(self.url)
+        else:
+            return u'%s,%s' % (self.__dict__['url'], self.etag)
+
+    def __setstate__(self, state):
+        try:
+            url, etag = state.rsplit(u',', 1)
+        except ValueError:
+            self.__init__(state)
+        else:
+            self.__init__(url, etag)
+
+    def __eq__(self, other):
+        if isinstance(other, IconDescriptor):
+            return self.url==other.url and self.etag==other.etag
+        return NotImplemented
+
+    def __ne__(self, other):
+        equal = self.__eq__(other)
+        return NotImplemented if equal is NotImplemented else not equal
+
+    def __repr__(self):
+        return '%s(%r, %r)' % (self.__class__.__name__, self.url, self.etag)
+
+    def _get_url(self):
+        url = self.__dict__['url']
+        file_scheme = 'file://'
+        if url.startswith(file_scheme):
+            url = file_scheme + ApplicationData.get(url[len(file_scheme):])
+        return url
+    def _set_url(self, url):
+        file_scheme = 'file://'
+        if url.startswith(file_scheme):
+            filename = os.path.normpath(url[len(file_scheme):])
+            if filename.startswith(ApplicationData.directory+os.path.sep):
+                filename = filename[len(ApplicationData.directory+os.path.sep):]
+            url = file_scheme + filename
+        self.__dict__['url'] = url
+    url = property(_get_url, _set_url)
+    del _get_url, _set_url
+
+    @property
+    def is_local(self):
+        return self.__dict__['url'].startswith('file://')
 
 

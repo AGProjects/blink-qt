@@ -1588,7 +1588,7 @@ class IncomingSession(QObject):
         self.dialog.uri_label.setText(address)
         if self.contact:
             self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
-            self.dialog.user_icon.setPixmap(contact.icon)
+            self.dialog.user_icon.setPixmap(contact.pixmap)
         else:
             self.dialog.username_label.setText(session.remote_identity.display_name or address)
         if self.audio_stream:
@@ -1774,7 +1774,7 @@ class SessionManager(object):
             session = Session(account)
             if contact is None:
                 for contact in self.main_window.contact_model.iter_contacts():
-                    if remote_uri.matches(self.normalize_number(account, contact.uri)) or any(remote_uri.matches(self.normalize_number(account, alias)) for alias in contact.sip_aliases):
+                    if any(remote_uri.matches(self.normalize_number(account, uri.uri)) for uri in contact.uris):
                         break
                 else:
                     contact = None
@@ -1986,18 +1986,16 @@ class SessionManager(object):
             session.reject(488)
             return
         session.send_ring_indication()
-        uri = session.remote_identity.uri
+        remote_uri = session.remote_identity.uri
         for contact in self.main_window.contact_model.iter_contacts():
-            if uri.matches(self.normalize_number(session.account, contact.uri)) or any(uri.matches(self.normalize_number(session.account, alias)) for alias in contact.sip_aliases):
+            if any(remote_uri.matches(self.normalize_number(session.account, uri.uri)) for uri in contact.uris):
                 break
         else:
             matched_contacts = []
-            number = uri.user.strip('0') if self.number_re.match(uri.user) else Null
+            number = remote_uri.user.strip('0') if self.number_re.match(remote_uri.user) else Null
             if len(number) > 7:
                 for contact in self.main_window.contact_model.iter_contacts():
-                    if self.number_re.match(contact.uri) and self.normalize_number(session.account, contact.uri).endswith(number):
-                        matched_contacts.append(contact)
-                    elif any(self.number_re.match(alias) and self.normalize_number(session.account, alias).endswith(number) for alias in contact.sip_aliases):
+                    if any(self.number_re.match(uri.uri) and self.normalize_number(session.account, uri.uri).endswith(number) for uri in contact.uris):
                         matched_contacts.append(contact)
             contact = matched_contacts[0] if len(matched_contacts)==1 else None
         if filetransfer_streams:
@@ -2033,9 +2031,9 @@ class SessionManager(object):
             session.reject_proposal(488)
             return
         session.send_ring_indication()
-        uri = session.remote_identity.uri
+        remote_uri = session.remote_identity.uri
         for contact in self.main_window.contact_model.iter_contacts():
-            if uri.matches(self.normalize_number(session.account, contact.uri)) or any(uri.matches(self.normalize_number(session.account, alias)) for alias in contact.sip_aliases):
+            if any(remote_uri.matches(self.normalize_number(session.account, uri.uri)) for uri in contact.uris):
                 break
         else:
             contact = None

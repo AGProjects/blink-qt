@@ -13,7 +13,7 @@
   <property name="palette">
    <palette>
     <active>
-     <colorrole role="Base">
+     <colorrole role="Window">
       <brush brushstyle="SolidPattern">
        <color alpha="255">
         <red>255</red>
@@ -22,18 +22,18 @@
        </color>
       </brush>
      </colorrole>
-     <colorrole role="Window">
+     <colorrole role="AlternateBase">
       <brush brushstyle="SolidPattern">
        <color alpha="255">
-        <red>255</red>
-        <green>255</green>
+        <red>240</red>
+        <green>244</green>
         <blue>255</blue>
        </color>
       </brush>
      </colorrole>
     </active>
     <inactive>
-     <colorrole role="Base">
+     <colorrole role="Window">
       <brush brushstyle="SolidPattern">
        <color alpha="255">
         <red>255</red>
@@ -42,18 +42,18 @@
        </color>
       </brush>
      </colorrole>
-     <colorrole role="Window">
+     <colorrole role="AlternateBase">
       <brush brushstyle="SolidPattern">
        <color alpha="255">
-        <red>255</red>
-        <green>255</green>
+        <red>240</red>
+        <green>244</green>
         <blue>255</blue>
        </color>
       </brush>
      </colorrole>
     </inactive>
     <disabled>
-     <colorrole role="Base">
+     <colorrole role="Window">
       <brush brushstyle="SolidPattern">
        <color alpha="255">
         <red>255</red>
@@ -62,11 +62,11 @@
        </color>
       </brush>
      </colorrole>
-     <colorrole role="Window">
+     <colorrole role="AlternateBase">
       <brush brushstyle="SolidPattern">
        <color alpha="255">
-        <red>255</red>
-        <green>255</green>
+        <red>240</red>
+        <green>244</green>
         <blue>255</blue>
        </color>
       </brush>
@@ -94,7 +94,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QLabel" name="icon">
+    <widget class="QLabel" name="icon_label">
      <property name="minimumSize">
       <size>
        <width>36</width>
@@ -113,12 +113,12 @@
     </widget>
    </item>
    <item>
-    <layout class="QVBoxLayout" name="name_uri_layout">
+    <layout class="QVBoxLayout" name="name_info_layout">
      <property name="spacing">
       <number>0</number>
      </property>
      <item>
-      <widget class="QLabel" name="name">
+      <widget class="QLabel" name="name_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
          <horstretch>0</horstretch>
@@ -131,10 +131,7 @@
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="uri">
-       <property name="enabled">
-        <bool>false</bool>
-       </property>
+      <widget class="QLabel" name="info_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
          <horstretch>0</horstretch>

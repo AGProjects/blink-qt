@@ -1,10 +1,9 @@
-# Copyright (C) 2010 AG Projects. See LICENSE for details.
+# Copyright (C) 2010-2013 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['BonjourGroup', 'BonjourNeighbour', 'Contact', 'ContactGroup', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'GoogleContactsDialog']
+__all__ = ['Group', 'Contact', 'BonjourNeighbour', 'GoogleContact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'GoogleContactsDialog']
 
 import cPickle as pickle
-import errno
 import os
 import re
 import socket
@@ -12,15 +11,19 @@ import sys
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QRegExp, QSize, pyqtSignal
-from PyQt4.QtGui  import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
+from PyQt4.QtGui  import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
 from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QRegExpValidator, QSortFilterProxyModel, QStyledItemDelegate
 
-from application.notification import IObserver, NotificationCenter
-from application.python.decorator import decorator, preserve_signature
+from application import log
+from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
+from application.python.decorator import execute_once
+from application.python.descriptor import WriteOnceAttribute
+from application.python.types import MarkerType, Singleton
 from application.python import Null
-from application.system import makedirs, unlink
+from application.system import unlink
 from collections import deque
-from eventlib import api
+from datetime import datetime
+from eventlib import coros, proc
 from eventlib.green import httplib, urllib2
 from functools import partial
 from operator import attrgetter
@@ -28,13 +31,15 @@ from twisted.internet import reactor
 from twisted.internet.error import ConnectionLost
 from zope.interface import implements
 
+from sipsimple import addressbook
 from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.configuration import ConfigurationManager, DefaultValue, Setting, SettingsState, SettingsObjectMeta, ObjectNotFoundError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
-from sipsimple.threading.green import run_in_green_thread
+from sipsimple.threading.green import Command, call_in_green_thread, run_in_green_thread
 
-from blink.configuration.datatypes import AuthorizationToken, InvalidToken
-from blink.resources import ApplicationData, Resources, IconCache
+from blink.configuration.datatypes import AuthorizationToken, InvalidToken, IconDescriptor
+from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager
 from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
@@ -47,66 +52,631 @@ from blink.google.gdata.contacts.service import ContactsQuery
 from blink.google.gdata.gauth import ClientLoginToken
 
 
-# Functions decorated with updates_contacts_db or ignore_contacts_db_updates must
-# only be called from the GUI thread.
-#
-@decorator
-def updates_contacts_db(func):
-    @preserve_signature(func)
-    def wrapper(*args, **kw):
-        updates_contacts_db.counter += 1
+class VirtualGroupManager(object):
+    __metaclass__ = Singleton
+    implements(IObserver)
+
+    __groups__ = []
+
+    def __init__(self):
+        self.groups = {}
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationWillStart')
+        notification_center.add_observer(self, name='VirtualGroupWasActivated')
+        notification_center.add_observer(self, name='VirtualGroupWasDeleted')
+
+    def has_group(self, id):
+        return id in self.groups
+
+    def get_group(self, id):
+        return self.groups[id]
+
+    def get_groups(self):
+        return self.groups.values()
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPApplicationWillStart(self, notification):
+        [cls() for cls in self.__groups__]
+
+    def _NH_VirtualGroupWasActivated(self, notification):
+        group = notification.sender
+        self.groups[group.id] = group
+        notification.center.post_notification('VirtualGroupManagerDidAddGroup', sender=self, data=NotificationData(group=group))
+
+    def _NH_VirtualGroupWasDeleted(self, notification):
+        group = notification.sender
+        del self.groups[group.id]
+        notification.center.post_notification('VirtualGroupManagerDidRemoveGroup', sender=self, data=NotificationData(group=group))
+
+
+class VirtualGroupMeta(SettingsObjectMeta):
+    def __init__(cls, name, bases, dic):
+        if not (cls.__id__ is None or isinstance(cls.__id__, basestring)):
+            raise TypeError("%s.__id__ must be None or a string" % name)
+        super(VirtualGroupMeta, cls).__init__(name, bases, dic)
+        if cls.__id__ is not None:
+            VirtualGroupManager.__groups__.append(cls)
+
+
+class VirtualGroup(SettingsState):
+    __metaclass__ = VirtualGroupMeta
+    __id__ = None
+
+    name = Setting(type=unicode, default='')
+    position = Setting(type=int, default=None, nillable=True)
+    collapsed = Setting(type=bool, default=False)
+
+    def __new__(cls):
+        if cls.__id__ is None:
+            raise ValueError("%s.__id__ must be defined in order to instantiate" % cls.__name__)
+        instance = SettingsState.__new__(cls)
+        configuration = ConfigurationManager()
         try:
-            result = func(*args, **kw)
-        finally:
-            updates_contacts_db.counter -= 1
-        if updates_contacts_db.counter == 0:
-            from blink import Blink
-            blink = Blink()
-            blink.main_window.contact_model.save()
-        return result
-    return wrapper
-updates_contacts_db.counter = 0
-
-@decorator
-def ignore_contacts_db_updates(func):
-    @preserve_signature(func)
-    def wrapper(*args, **kw):
-        updates_contacts_db.counter += 1
-        try:
-            return func(*args, **kw)
-        finally:
-            updates_contacts_db.counter -= 1
-    return wrapper
-
-
-class ContactGroup(object):
-    savable = True
-    movable = True
-    editable = True
-    deletable = True
-
-    def __init__(self, name, collapsed=False):
-        self.user_collapsed = collapsed
-        self.name = name
-        self.widget = Null
-        self.saved_state = Null
-
-    def __reduce__(self):
-        return (self.__class__, (self.name, self.user_collapsed), None)
+            data = configuration.get(instance.__key__)
+        except ObjectNotFoundError:
+            pass
+        else:
+            instance.__setstate__(data)
+        return instance
 
     def __repr__(self):
-        return "%s(%r)" % (self.__class__.__name__, self.name)
+        return "%s()" % self.__class__.__name__
+
+    @property
+    def __key__(self):
+        return ['Addressbook', 'VirtualGroups', self.__id__]
+
+    @property
+    def id(self):
+        return self.__id__
+
+    @run_in_thread('file-io')
+    def save(self):
+        """
+        Store the virtual group into persistent storage.
+
+        This method will post the VirtualGroupDidChange notification on save,
+        regardless of whether the contact has been saved to persistent storage
+        or not. A CFGManagerSaveFailed notification is posted if saving to the
+        persistent configuration storage fails.
+        """
+
+        modified_settings = self.get_modified()
+
+        if not modified_settings:
+            return
+
+        configuration = ConfigurationManager()
+        notification_center = NotificationCenter()
+
+        configuration.update(self.__key__, self.__getstate__())
+        notification_center.post_notification('VirtualGroupDidChange', sender=self, data=NotificationData(modified=modified_settings))
+        modified_data = modified_settings
+
+        try:
+            configuration.save()
+        except Exception, e:
+            log.err()
+            notification_center.post_notification('CFGManagerSaveFailed', sender=configuration, data=NotificationData(object=self, operation='save', modified=modified_data, exception=e))
+
+
+class AllContactsList(object):
+    def __init__(self):
+        self.manager = addressbook.AddressbookManager()
+    def __iter__(self):
+        return iter(self.manager.get_contacts())
+    def __getitem__(self, id):
+        return self.manager.get_contact(id)
+    def __contains__(self, id):
+        return self.manager.has_contact(id)
+    def __len__(self):
+        return len(self.manager.get_contacts())
+    __hash__ = None
+
+
+class AllContactsGroup(VirtualGroup):
+    implements(IObserver)
+
+    __id__ = 'all_contacts'
+
+    name = Setting(type=unicode, default='All Contacts')
+    contacts = WriteOnceAttribute()
+
+    def __init__(self):
+        self.contacts = AllContactsList()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='AddressbookContactWasActivated')
+        notification_center.add_observer(self, name='AddressbookContactWasDeleted')
+
+    def __establish__(self):
+        notification_center = NotificationCenter()
+        notification_center.post_notification('VirtualGroupWasActivated', sender=self)
+        for contact in self.contacts:
+            notification_center.post_notification('VirtualGroupDidAddContact', sender=self, data=NotificationData(contact=contact))
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_AddressbookContactWasActivated(self, notification):
+        contact = notification.sender
+        notification.center.post_notification('VirtualGroupDidAddContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_AddressbookContactWasDeleted(self, notification):
+        contact = notification.sender
+        notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+
+
+class BonjourNeighbourURI(object):
+    def __init__(self, uri, type=None):
+        self.uri = uri
+        self.type = type
+
+    def __repr__(self):
+        return "%s(%r, %r)" % (self.__class__.__name__, self.uri, self.type)
+
+
+class BonjourNeighbour(object):
+    def __init__(self, name, uri, hostname, neighbour):
+        self.name = name
+        self.uris = [BonjourNeighbourURI(uri)]
+        self.hostname = hostname
+        self.neighbour = neighbour
+
+    @property
+    def id(self):
+        return self.neighbour
+
+
+class BonjourNeighboursList(object):
+    def __init__(self):
+        self.contacts = {}
+    def __getitem__(self, id):
+        return self.contacts[id]
+    def __contains__(self, id):
+        return id in self.contacts
+    def __iter__(self):
+        return iter(self.contacts.values())
+    def __len__(self):
+        return len(self.contacts)
+    __hash__ = None
+    def add(self, contact):
+        self.contacts[contact.id] = contact
+    def pop(self, id, *args):
+        return self.contacts.pop(id, *args)
+
+
+class BonjourNeighboursGroup(VirtualGroup):
+    implements(IObserver)
+
+    __id__ = 'bonjour_neighbours'
+
+    name = Setting(type=unicode, default='Bonjour Neighbours')
+    contacts = WriteOnceAttribute()
+
+    def __init__(self):
+        self.contacts = BonjourNeighboursList()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=BonjourAccount())
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPAccountWillActivate(self, notification):
+        notification.center.post_notification('VirtualGroupWasActivated', sender=self)
+
+    def _NH_SIPAccountDidDeactivate(self, notification):
+        notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
+
+    def _NH_BonjourAccountDidAddNeighbour(self, notification):
+        contact = BonjourNeighbour(notification.data.display_name, unicode(notification.data.uri), notification.data.host, notification.data.neighbour)
+        self.contacts.add(contact)
+        notification.center.post_notification('VirtualGroupDidAddContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
+        contact = self.contacts.pop(notification.data.neighbour)
+        notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_BonjourAccountDidUpdateNeighbour(self, notification):
+        contact = self.contacts[notification.data.neighbour]
+        contact.display_name = notification.data.display_name
+        contact.host = notification.data.host
+        contact.uri = unicode(notification.data.uri)
+        notification.center.post_notification('VirtualContactDidChange', sender=contact)
+
+
+class GoogleContactURI(object):
+    def __init__(self, uri, type):
+        self.uri = uri
+        self.type = type
+
+    def __repr__(self):
+        return "%s(%r, %r)" % (self.__class__.__name__, self.uri, self.type)
+
+    @classmethod
+    def from_number(cls, number):
+        return cls(number.text, cls._get_label(number))
+
+    @classmethod
+    def from_email(cls, email):
+        return cls(re.sub('^sips?:', '', email.address), cls._get_label(email))
+
+    @staticmethod
+    def _get_label(entry):
+        if entry.label:
+            return entry.label.strip()
+        else:
+            return entry.rel.rpartition('#')[2].replace('_', ' ').strip().title()
+
+
+class GoogleContactIcon(object):
+    def __init__(self, data, etag):
+        self.data = data
+        self.etag = etag
+
+
+class GoogleContact(object):
+    id = WriteOnceAttribute()
+
+    def __init__(self, id, name, company, icon, uris):
+        self.id = id
+        self.name = name
+        self.company = company
+        self.icon = icon
+        self.uris = uris
+
+    def __reduce__(self):
+        return (self.__class__, (self.id, self.name, self.company, self.icon, self.uris))
+
+
+class GoogleContactsList(object):
+    def __init__(self):
+        self.contacts = {}
+        self.timestamp = None
+    def __getitem__(self, id):
+        return self.contacts[id]
+    def __contains__(self, id):
+        return id in self.contacts
+    def __iter__(self):
+        return iter(self.contacts.values())
+    def __len__(self):
+        return len(self.contacts)
+    __hash__ = None
+    def add(self, contact):
+        self.contacts[contact.id] = contact
+    def pop(self, id, *args):
+        return self.contacts.pop(id, *args)
+
+
+class GoogleContactsManager(object):
+    implements(IObserver)
+
+    contacts = WriteOnceAttribute()
+
+    def __init__(self):
+        self.client = ContactsClient()
+        self.command_proc = None
+        self.command_channel = coros.queue()
+        self.last_fetch_time = datetime.fromtimestamp(0)
+        self.not_executed_fetch = None
+        self.active = False
+        self.state = 'stopped'
+        self.timer = None
+        self.need_sync = True
+        try:
+            self.contacts = pickle.load(open(ApplicationData.get('google_contacts')))
+        except (OSError, IOError, pickle.UnpicklingError):
+            self.contacts = GoogleContactsList()
+        self._initialize()
+
+    def _get_state(self):
+        return self.__dict__['state']
+
+    def _set_state(self, value):
+        old_value = self.__dict__.get('state', Null)
+        self.__dict__['state'] = value
+        if old_value != value and old_value is not Null:
+            notification_center = NotificationCenter()
+            notification_center.post_notification('GoogleContactsManagerDidChangeState', sender=self, data=NotificationData(prev_state=old_value, state=value))
+
+    state = property(_get_state, _set_state)
+    del _get_state, _set_state
+
+    @execute_once
+    @run_in_green_thread
+    def _initialize(self):
+        self.command_proc = proc.spawn(self._run)
+
+    def _run(self):
+        while True:
+            command = self.command_channel.wait()
+            try:
+                handler = getattr(self, '_CH_%s' % command.name)
+                handler(command)
+            except:
+                self.command_proc = None
+                raise
+
+    def start(self):
+        """
+        Starts the Google contacts manager. This method needs to be called in
+        a green thread.
+        """
+        command = Command('start')
+        self.command_channel.send(command)
+        command.wait()
+
+    def stop(self):
+        """
+        Stops the Google contacts manager. This method blocks until all the
+        operations are stopped and needs to be called in a green thread.
+        """
+        command = Command('stop')
+        self.command_channel.send(command)
+        command.wait()
+
+    # Command handlers
+    #
+
+    def _CH_start(self, command):
+        if self.state != 'stopped':
+            command.signal()
+            return
+        self.state = 'initializing'
+        settings = SIPSimpleSettings()
+        notification_center = NotificationCenter()
+        notification_center.post_notification('GoogleContactsManagerWillStart', sender=self)
+        notification_center.add_observer(self, sender=settings, name='CFGSettingsObjectDidChange')
+        if settings.google_contacts.authorization_token is not None:
+            self.active = True
+            notification_center.post_notification('GoogleContactsManagerDidActivate', sender=self)
+            for contact in self.contacts:
+                notification_center.post_notification('GoogleContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
+            self.command_channel.send(Command('initialize'))
+        notification_center.post_notification('GoogleContactsManagerDidStart', sender=self)
+        command.signal()
+
+    def _CH_stop(self, command):
+        if self.state == 'stopped':
+            command.signal()
+            return
+        notification_center = NotificationCenter()
+        notification_center.post_notification('GoogleContactsManagerWillEnd', sender=self)
+        notification_center.remove_observer(self, sender=SIPSimpleSettings(), name='CFGSettingsObjectDidChange')
+        if self.active:
+            self.active = False
+            notification_center.post_notification('GoogleContactsManagerDidDeactivate', sender=self)
+        if self.timer is not None and self.timer.active():
+            self.timer.cancel()
+        self.timer = None
+        self.client = None
+        self.state = 'stopped'
+        self._save_contacts()
+        notification_center.post_notification('GoogleContactsManagerDidEnd', sender=self)
+        command.signal()
+
+    def _CH_initialize(self, command):
+        self.state = 'initializing'
+        if self.timer is not None and self.timer.active():
+            self.timer.cancel()
+        self.timer = None
+        self.state = 'fetching'
+        self.command_channel.send(Command('fetch'))
+
+    def _CH_fetch(self, command):
+        if self.state not in ('insync', 'fetching'):
+            self.not_executed_fetch = command
+            return
+        self.not_executed_fetch = None
+        self.state = 'fetching'
+        if self.timer is not None and self.timer.active():
+            self.timer.cancel()
+        self.timer = None
+
+        settings = SIPSimpleSettings()
+        self.client.auth_token = ClientLoginToken(settings.google_contacts.authorization_token)
+
+        try:
+            group_id = next(entry.id.text for entry in self.client.get_groups().entry if entry.title.text=='System Group: My Contacts')
+            if self.need_sync:
+                query = ContactsQuery(feed=self.client.get_feed_uri(kind='contacts'), group=group_id, params={})
+                feed = self.client.get_feed(query.ToUri(), desired_class=ContactsFeed)
+                all_contact_ids = set()
+                while feed:
+                    all_contact_ids.update(entry.id.text for entry in feed.entry)
+                    feed = self.client.get_next(feed) if feed.find_next_link() is not None else None
+                deleted_contacts = [contact for contact in self.contacts if contact.id not in all_contact_ids]
+                self.need_sync = False
+            else:
+                deleted_contacts = []
+            query = ContactsQuery(feed=self.client.get_feed_uri(kind='contacts'), group=group_id, params={'showdeleted': 'true'})
+            if self.contacts.timestamp is not None:
+                query.updated_min = self.contacts.timestamp
+            feed = self.client.get_feed(query.ToUri(), desired_class=ContactsFeed)
+            update_timestamp = feed.updated.text if feed else None
+
+            added_contacts = []
+            updated_contacts = []
+
+            while feed:
+                deleted_contacts.extend(self.contacts[entry.id.text] for entry in feed.entry if entry.deleted and entry.id.text in self.contacts)
+                for entry in (entry for entry in feed.entry if not entry.deleted):
+                    name = entry.title.text
+                    try:
+                        company = entry.organization.name.text
+                    except AttributeError:
+                        company = None
+                    uris = [GoogleContactURI.from_number(number) for number in entry.phone_number]
+                    uris.extend(GoogleContactURI.from_email(email) for email in entry.email)
+                    icon_url, icon_etag = entry.get_entry_photo_data()
+                    try:
+                        contact = self.contacts[entry.id.text]
+                    except KeyError:
+                        if icon_url:
+                            try:
+                                icon_data = self.client.Get(icon_url).read()
+                            except Exception:
+                                icon_data = icon_etag = None
+                        else:
+                            icon_data = icon_etag = None
+                        icon = GoogleContactIcon(icon_data, icon_etag)
+                        contact = GoogleContact(entry.id.text, name, company, icon, uris)
+                        added_contacts.append(contact)
+                    else:
+                        contact.name = name
+                        contact.company = company
+                        contact.uris = uris
+                        if icon_url and contact.icon.etag != icon_etag != None:
+                            try:
+                                contact.icon.data = self.client.Get(icon_url).read()
+                            except Exception:
+                                contact.icon.data = None
+                                contact.icon.etag = None
+                            else:
+                                contact.icon.etag = icon_etag
+                        updated_contacts.append(contact)
+                feed = self.client.get_next(feed) if feed.find_next_link() is not None else None
+        except Unauthorized:
+            settings.google_contacts.authorization_token = InvalidToken
+            settings.save()
+        except (ConnectionLost, RequestError, httplib.HTTPException, socket.error):
+            self.timer = self._schedule_command(60, Command('fetch', command.event))
+        else:
+            notification_center = NotificationCenter()
+            for contact in deleted_contacts:
+                self.contacts.pop(contact.id, None)
+                notification_center.post_notification('GoogleContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+            for contact in added_contacts:
+                self.contacts.add(contact)
+                notification_center.post_notification('GoogleContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
+            for contact in updated_contacts:
+                notification_center.post_notification('GoogleContactsManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
+            if update_timestamp is not None:
+                self.contacts.timestamp = update_timestamp
+            if added_contacts or updated_contacts or deleted_contacts:
+                self._save_contacts()
+            self.last_fetch_time = datetime.utcnow()
+            self.state = 'insync'
+            self.timer = self._schedule_command(60, Command('fetch'))
+            command.signal()
+
+    # Notification handlers
+    #
+
+    @run_in_twisted_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if 'google_contacts.authorization_token' in notification.data.modified:
+            if self.timer is not None and self.timer.active():
+                self.timer.cancel()
+            self.timer = None
+            authorization_token = notification.sender.google_contacts.authorization_token
+            if authorization_token is not None:
+                if not self.active:
+                    self.active = True
+                    notification.center.post_notification('GoogleContactsManagerDidActivate', sender=self)
+                    for contact in self.contacts:
+                        notification.center.post_notification('GoogleContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
+                self.need_sync = True
+                self.command_channel.send(Command('initialize'))
+            else:
+                if self.active:
+                    self.active = False
+                    for contact in self.contacts:
+                        notification.center.post_notification('GoogleContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+                    notification.center.post_notification('GoogleContactsManagerDidDeactivate', sender=self)
+
+    def _save_contacts(self):
+        contacts_filename = ApplicationData.get('google_contacts')
+        contacts_tempname = contacts_filename + '.tmp'
+        try:
+            file = open(contacts_tempname, 'wb')
+            pickle.dump(self.contacts, file)
+            file.close()
+            if sys.platform == 'win32':
+                unlink(contacts_filename)
+            os.rename(contacts_tempname, contacts_filename)
+        except Exception, e:
+            log.error("could not save google contacts: %s" % e)
+
+    def _schedule_command(self, timeout, command):
+        timer = reactor.callLater(timeout, self.command_channel.send, command)
+        timer.command = command
+        return timer
+
+
+class GoogleContactsGroup(VirtualGroup):
+    implements(IObserver)
+
+    __id__ = 'google_contacts'
+
+    name = Setting(type=unicode, default='Google Contacts')
+    contacts = WriteOnceAttribute()
+
+    def __init__(self):
+        self.__manager__ = GoogleContactsManager()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationWillEnd')
+        notification_center.add_observer(self, sender=self.__manager__)
+        call_in_green_thread(self.__manager__.start)
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPApplicationWillEnd(self, notification):
+        call_in_green_thread(self.__manager__.stop)
+
+    def _NH_GoogleContactsManagerDidActivate(self, notification):
+        notification.center.post_notification('VirtualGroupWasActivated', sender=self)
+
+    def _NH_GoogleContactsManagerDidDeactivate(self, notification):
+        notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
+
+    def _NH_GoogleContactsManagerDidAddContact(self, notification):
+        notification.center.post_notification('VirtualGroupDidAddContact', sender=self, data=notification.data)
+
+    def _NH_GoogleContactsManagerDidRemoveContact(self, notification):
+        notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=notification.data)
+
+    def _NH_GoogleContactsManagerDidUpdateContact(self, notification):
+        notification.center.post_notification('VirtualContactDidChange', sender=notification.data.contact)
+
+
+class Group(object):
+    implements(IObserver)
+
+    size_hint = QSize(200, 18)
+
+    virtual = property(lambda self: isinstance(self.settings, VirtualGroup))
+
+    movable = True
+    editable = True
+    deletable = property(lambda self: not self.virtual)
+
+    def __init__(self, group):
+        self.settings = group
+        self.widget = Null
+        self.saved_state = None
+        self.reference_group = None
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=group)
+
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.settings)
+
+    def __reduce__(self):
+        return (self.__class__, (self.settings,), None)
 
     def __unicode__(self):
-        return self.name
-
-    @updates_contacts_db
-    def _collapsed_changed(self, state):
-        self.user_collapsed = state
-
-    @updates_contacts_db
-    def _name_changed(self):
-        self.name = self.widget.name_editor.text()
+        return self.settings.name
 
     def _get_widget(self):
         return self.__dict__['widget']
@@ -117,15 +687,24 @@ class ContactGroup(object):
         old_widget.name_editor.editingFinished.disconnect(self._name_changed)
         widget.collapse_button.clicked.connect(self._collapsed_changed)
         widget.name_editor.editingFinished.connect(self._name_changed)
-        widget.collapse_button.setChecked(old_widget.collapse_button.isChecked() if old_widget is not Null else self.user_collapsed)
+        widget.collapse_button.setChecked(old_widget.collapse_button.isChecked() if old_widget is not Null else self.settings.collapsed)
+        widget.name = self.name
         self.__dict__['widget'] = widget
 
     widget = property(_get_widget, _set_widget)
     del _get_widget, _set_widget
 
     @property
+    def name(self):
+        return self.settings.name
+
+    @property
+    def position(self):
+        return self.settings.position
+
+    @property
     def collapsed(self):
-        return bool(self.widget.collapse_button.isChecked())
+        return self.widget.collapse_button.isChecked()
 
     def collapse(self):
         self.widget.collapse_button.setChecked(True)
@@ -141,6 +720,32 @@ class ContactGroup(object):
         """Restores the last saved state of the group (collapsed or not)"""
         self.widget.collapse_button.setChecked(self.saved_state)
 
+    def reset_state(self):
+        """Resets the collapsed state of the group to the one saved in the configuration"""
+        if self.collapsed and not self.settings.collapsed:
+            self.expand()
+        elif not self.collapsed and self.settings.collapsed:
+            self.collapse()
+
+    def _collapsed_changed(self, state):
+        self.settings.collapsed = state
+        self.settings.save()
+
+    def _name_changed(self):
+        if self.settings.save is Null:
+            del self.settings.save # re-enable saving after the name was provided
+        self.settings.name = self.widget.name_editor.text()
+        self.settings.save()
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_AddressbookGroupDidChange(self, notification):
+        if 'name' in notification.data.modified:
+            self.widget.name = notification.sender.name
+
 
 class ContactIconDescriptor(object):
     def __init__(self, filename):
@@ -148,11 +753,7 @@ class ContactIconDescriptor(object):
         self.icon = None
     def __get__(self, obj, objtype):
         if self.icon is None:
-            pixmap = QPixmap()
-            if pixmap.load(ApplicationData.get(self.filename)):
-                self.icon = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            else:
-                self.icon = pixmap
+            self.icon = QIcon(ApplicationData.get(self.filename))
         return self.icon
     def __set__(self, obj, value):
         raise AttributeError("attribute cannot be set")
@@ -161,320 +762,126 @@ class ContactIconDescriptor(object):
 
 
 class Contact(object):
-    savable = True
-    movable = True
-    editable = True
-    deletable = True
+    implements(IObserver)
+
+    size_hint = QSize(200, 36)
+
+    native = property(lambda self: isinstance(self.settings, addressbook.Contact))
+
+    movable = property(lambda self: isinstance(self.settings, addressbook.Contact))
+    editable = property(lambda self: isinstance(self.settings, addressbook.Contact))
+    deletable = property(lambda self: isinstance(self.settings, addressbook.Contact))
 
     default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
 
-    def __init__(self, group, name, uri, image=None):
+    def __init__(self, contact, group):
+        self.settings = contact
         self.group = group
-        self.name = name
-        self.uri = uri
-        self.image = image
-        self.sip_aliases = []
-        self.preferred_media = 'Audio'
         self.status = 'unknown'
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
+
+    def __gt__(self, other):
+        if isinstance(other, Contact):
+            return self.name > other.name
+        return NotImplemented
+
+    def __ge__(self, other):
+        if isinstance(other, Contact):
+            return self.name >= other.name
+        return NotImplemented
+
+    def __lt__(self, other):
+        if isinstance(other, Contact):
+            return self.name < other.name
+        return NotImplemented
+
+    def __le__(self, other):
+        if isinstance(other, Contact):
+            return self.name <= other.name
+        return NotImplemented
 
     def __repr__(self):
-        return '%s(%r, %r, %r, %r)' % (self.__class__.__name__, self.group, self.name, self.uri, self.image)
+        return '%s(%r, %r)' % (self.__class__.__name__, self.settings, self.group)
+
+    def __reduce__(self):
+        return (self.__class__, (self.settings, self.group), None)
 
     def __unicode__(self):
         return u'%s <%s>' % (self.name, self.uri) if self.name else self.uri
 
-    def __reduce__(self):
-        return (self.__class__, (self.group, self.name, self.uri, self.image), dict(preferred_media=self.preferred_media, sip_aliases=self.sip_aliases))
+    @property
+    def name(self):
+        if isinstance(self.settings, BonjourNeighbour):
+            return '%s (%s)' % (self.settings.name, self.settings.hostname)
+        elif isinstance(self.settings, GoogleContact):
+            return self.settings.name or self.settings.company
+        else:
+            return self.settings.name
 
-    def _get_image(self):
-        return self.__dict__['image']
+    @property
+    def uris(self):
+        return self.settings.uris
 
-    def _set_image(self, image):
-        self.__dict__['image'] = image
-        self.__dict__['icon'] = self.default_user_icon if image is None else ContactIconDescriptor(image).__get__(self, self.__class__)
+    @property
+    def info(self):
+        return self.uri
 
-    image = property(_get_image, _set_image)
-    del _get_image, _set_image
+    @property
+    def uri(self):
+        try:
+            return next(uri.uri for uri in self.settings.uris)
+        except StopIteration:
+            return u''
 
     @property
     def icon(self):
-        return self.__dict__['icon']
-
-    @property
-    def name_detail(self):
-        return self.name
-
-    @property
-    def uri_detail(self):
-        return self.uri
-
-
-class NoGroup(object):
-    pass
-
-class BonjourGroup(ContactGroup):
-    savable = True
-    movable = True
-    editable = True
-    deletable = False
-
-    def __init__(self, name, collapsed=False):
-        super(BonjourGroup, self).__init__(name, collapsed)
-        self.reference_group = NoGroup
-
-
-class BonjourNeighbour(Contact):
-    savable = False
-    movable = False
-    editable = False
-    deletable = False
-
-    def __init__(self, group, name, uri, hostname, neighbour, image=None):
-        super(BonjourNeighbour, self).__init__(group, name, uri, image)
-        self.hostname = hostname
-        self.neighbour = neighbour
-
-    @property
-    def name_detail(self):
-        return "%s (%s)" % (self.name, self.hostname)
-
-
-class GoogleContactsGroup(ContactGroup):
-    savable = True
-    movable = True
-    editable = True
-    deletable = False
-
-    def __init__(self, name, collapsed=False):
-        super(GoogleContactsGroup, self).__init__(name, collapsed)
-        self.id = None
-        self.update_timestamp = None
-
-    def __reduce__(self):
-        return (self.__class__, (self.name, self.user_collapsed), dict(id=self.id, update_timestamp=self.update_timestamp))
-
-
-class GoogleContact(Contact):
-    savable = True
-    movable = False
-    editable = False
-    deletable = False
-
-    def __init__(self, id, group, name, uri, company=None, uri_type=None, image=None, image_etag=None):
-        super(GoogleContact, self).__init__(group, name, uri, image)
-        self.id = id
-        self.company = company
-        self.uri_type = uri_type
-        self.image_etag = image_etag
-
-    def __reduce__(self):
-        return (self.__class__, (self.id, self.group, self.name, self.uri, self.company, self.uri_type, self.image, self.image_etag), dict(preferred_media=self.preferred_media, sip_aliases=self.sip_aliases))
-
-    def __unicode__(self):
-        return u'%s <%s>' % (self.name_detail, self.uri_detail)
-
-    @property
-    def name_detail(self):
-        if self.company:
-            return '%s (%s)' % (self.name, self.company) if self.name else self.company
-        else:
-            return self.name or self.uri
-
-    @property
-    def uri_detail(self):
-        return "%s (%s)" % (self.uri, self.uri_type) if self.uri_type else self.uri
-
-
-class GoogleContactsManager(object):
-    implements(IObserver)
-
-    def __init__(self, model):
-        self.client = ContactsClient()
-        self.contact_model = model
-        self.entries_map = dict()
-        self.greenlet = None
-        self.stop_adding_contacts = False
-        self._load_timer = None
-
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='SIPApplicationWillStart')
-        notification_center.add_observer(self, name='SIPApplicationWillEnd')
-
-    @property
-    def group(self):
-        return self.contact_model.google_contacts_group
-
-    def initialize(self):
-        self.entries_map.clear()
-        for contact in (item for item in self.contact_model.items if type(item) is GoogleContact):
-            self.entries_map.setdefault(contact.id, []).append(contact)
-
-    @staticmethod
-    def normalize_uri_label(label):
         try:
-            label = label.lower()
-            label = label.split('#')[1]
-            label = re.sub('_', ' ', label)
-        except AttributeError:
-            label = ''
-        except IndexError:
-            label = re.sub('\/', '', label)
-        finally:
-            label = re.sub('generic', '', label)
-            return label.strip()
+            return self.__dict__['icon']
+        except KeyError:
+            if isinstance(self.settings, addressbook.Contact):
+                icon_manager = IconManager()
+                icon = icon_manager.get(self.settings.id) or self.default_user_icon
+            elif isinstance(self.settings, GoogleContact):
+                pixmap = QPixmap()
+                if pixmap.loadFromData(self.settings.icon.data):
+                    icon = QIcon(pixmap)
+                else:
+                    icon = self.default_user_icon
+            else:
+                icon = self.default_user_icon
+            return self.__dict__.setdefault('icon', icon)
 
-    @run_in_twisted_thread
+    @property
+    def pixmap(self):
+        try:
+            return self.__dict__['pixmap']
+        except KeyError:
+            return self.__dict__.setdefault('pixmap', self.icon.pixmap(32))
+
+    def _get_state(self):
+        return self.__dict__['state']
+
+    def _set_state(self, value):
+        old_value = self.__dict__.get('state', Null)
+        self.__dict__['state'] = value
+        if old_value != value and old_value is not Null:
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkContactDidChange', sender=self, data=NotificationData(prev_state=old_value, state=value))
+
+    state = property(_get_state, _set_state)
+    del _get_state, _set_state
+
+    @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_SIPApplicationWillStart(self, notification):
-        settings = SIPSimpleSettings()
-        notification.center.add_observer(self, name='CFGSettingsObjectDidChange', sender=settings)
-        authorization_token = settings.google_contacts.authorization_token
-        if authorization_token:
-            call_in_gui_thread(self.contact_model.addGroup, self.contact_model.google_contacts_group)
-            self.load_contacts()
-        elif authorization_token is None:
-            self.remove_group()
-
-    def _NH_SIPApplicationWillEnd(self, notification):
-        notification.center.remove_observer(self, name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings())
-        if self.greenlet is not None:
-            api.kill(self.greenlet, api.GreenletExit())
-
-    def _NH_CFGSettingsObjectDidChange(self, notification):
-        if 'google_contacts.authorization_token' in notification.data.modified:
-            if self._load_timer is not None and self._load_timer.active():
-                self._load_timer.cancel()
-            self._load_timer = None
-            authorization_token = notification.sender.google_contacts.authorization_token
-            if authorization_token:
-                call_in_gui_thread(self.contact_model.addGroup, self.contact_model.google_contacts_group)
-                self.stop_adding_contacts = False
-                self.load_contacts()
-            elif authorization_token is None:
-                if self.greenlet is not None:
-                    api.kill(self.greenlet, api.GreenletExit())
-                    self.greenlet = None
-                self.stop_adding_contacts = False
-                self.remove_group()
-
-    @run_in_green_thread
-    def load_contacts(self):
-        if self.greenlet is not None:
-            api.kill(self.greenlet, api.GreenletExit())
-        self.greenlet = api.getcurrent()
-        if self._load_timer is not None and self._load_timer.active():
-            self._load_timer.cancel()
-        self._load_timer = None
-
-        settings = SIPSimpleSettings()
-        self.client.auth_token = ClientLoginToken(settings.google_contacts.authorization_token)
-
-        try:
-            if self.group.id is None:
-                self.group.id = (entry.id.text for entry in self.client.get_groups().entry if entry.title.text=='System Group: My Contacts').next()
-
-            query_params = dict(showdeleted='true')
-            query = ContactsQuery(feed=self.client.get_feed_uri(kind='contacts'), group=self.group.id, params=query_params)
-            previous_update = self.contact_model.google_contacts_group.update_timestamp
-            if previous_update:
-                query.updated_min = previous_update
-            feed = self.client.get_feed(query.ToUri(), desired_class=ContactsFeed)
-            update_timestamp = feed.updated.text if feed else None
-
-            while feed:
-                updated_contacts = []
-                deleted_contacts = set(entry.id.text for entry in feed.entry if getattr(entry, 'deleted', False))
-                self.remove_contacts(deleted_contacts)
-                for entry in (entry for entry in feed.entry if entry.id.text not in deleted_contacts):
-                    name =  (getattr(entry, 'title', None) or Null).text or None
-                    company = ((getattr(entry, 'organization', None) or Null).name or Null).text or None
-                    numbers = set((re.sub(r'^00', '+', number.text), number.label or number.rel) for number in getattr(entry, 'phone_number', ()))
-                    numbers.update(set((re.sub('^(sip:|sips:)', '', email.address), email.label or email.rel) for email in getattr(entry, 'email', ()) if re.search('^(sip:|sips:)', email.address)))
-                    numbers.update(set((re.sub('^(sip:|sips:)', '', web.href), web.label or web.rel) for web in getattr(entry, 'website', ()) if re.search('^(sip:|sips:)', web.href)))
-                    numbers.difference_update(set((number, label) for number, label in numbers if label.lower().find('fax') != -1))
-                    if not numbers:
-                        continue
-                    image_data = None
-                    image_url, image_etag = entry.get_entry_photo_data()
-                    if image_url and image_etag and self.entries_map.get(entry.id.text, Null)[0].image_etag != image_etag:
-                        try:
-                            image_data = self.client.Get(image_url).read()
-                        except Exception:
-                            pass
-                    updated_contacts.append((entry.id.text, name, company, numbers, image_data, image_etag))
-                self.update_contacts(updated_contacts)
-                feed = self.client.get_next(feed) if feed.find_next_link() is not None else None
-        except Unauthorized:
-            settings.google_contacts.authorization_token = InvalidToken
-            settings.save()
-        except (ConnectionLost, RequestError, httplib.HTTPException, socket.error):
-            self._load_timer = reactor.callLater(60, self.load_contacts)
-        else:
-            if update_timestamp:
-                self.update_group_timestamp(update_timestamp)
-            self._load_timer = reactor.callLater(60, self.load_contacts)
-
-    @run_in_gui_thread
-    @updates_contacts_db
-    def update_contacts(self, contacts):
-        if self.stop_adding_contacts:
-            return
-        icon_cache = IconCache()
-        for id, name, company, numbers, image_data, image_etag in contacts:
-            entries = self.entries_map.setdefault(id, [])
-            existing_numbers = dict((entry.uri, entry) for entry in entries)
-            # Save GoogleContact instances that can be reused to hold new contact information
-            reusable_entries = deque(entry for entry in entries if entry.uri not in (number for number, label in numbers))
-            image = icon_cache.store_image(image_data)
-            if image_etag and not image_data:
-                try:
-                    image = entries[0].image
-                    image_etag = entries[0].image_etag
-                except IndexError:
-                    image, image_etag = None, None
-            for number, label in numbers:
-                if number in existing_numbers:
-                    entry = existing_numbers[number]
-                    self.contact_model.updateContact(entry, dict(name=name, company=company, group=self.group, uri_type=self.normalize_uri_label(label), image=image, image_etag=image_etag))
-                elif reusable_entries:
-                    entry = reusable_entries.popleft()
-                    self.contact_model.updateContact(entry, dict(name=name, company=company, group=self.group, uri=number, uri_type=self.normalize_uri_label(label), image=image, image_etag=image_etag))
-                else:
-                    try:
-                        image = entries[0].image
-                    except IndexError:
-                        pass
-                    entry = GoogleContact(id, self.group, name, number, company=company, uri_type=self.normalize_uri_label(label), image=image, image_etag=image_etag)
-                    entries.append(entry)
-                    self.contact_model.addContact(entry)
-            for entry in reusable_entries:
-                entries.remove(entry)
-                self.contact_model.removeContact(entry)
-
-    @run_in_gui_thread
-    @updates_contacts_db
-    def remove_contacts(self, contact_ids):
-        deleted_contacts = []
-        for id in contact_ids:
-            deleted_contacts.extend(self.entries_map.pop(id, ()))
-        for contact in deleted_contacts:
-            self.contact_model.removeContact(contact)
-
-    @run_in_gui_thread
-    @updates_contacts_db
-    def remove_group(self):
-        self.contact_model.removeGroup(self.contact_model.google_contacts_group)
-        self.group.id = None
-        self.group.update_timestamp = None
-        self.entries_map.clear()
-
-    @run_in_gui_thread
-    def update_group_timestamp(self, timestamp):
-        if not self.stop_adding_contacts:
-            self.group.update_timestamp = timestamp
+    def _NH_AddressbookContactDidChange(self, notification):
+        if 'icon' in notification.data.modified:
+            self.__dict__.pop('icon', None)
+            self.__dict__.pop('pixmap', None)
+        notification.center.post_notification('BlinkContactDidChange', sender=self)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('google_contacts_dialog.ui'))
@@ -606,23 +1013,51 @@ class ContactWidget(base_class, ui_class):
         super(ContactWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        self.info_label.setForegroundRole(QPalette.Dark)
+        # AlternateBase set to #f0f4ff or #e0e9ff
 
-    def set_contact(self, contact):
-        self.name.setText(contact.name_detail or contact.uri)
-        self.uri.setText(contact.uri_detail)
-        self.icon.setPixmap(contact.icon)
+    def _get_name(self):
+        return self.name_label.text()
+
+    def _set_name(self, value):
+        self.name_label.setText(value)
+
+    #name = property(_get_name, _set_name)
+    del _get_name, _set_name
+
+    def _get_info(self):
+        return self.info_label.text()
+
+    def _set_info(self, value):
+        self.info_label.setText(value)
+
+    #info = property(_get_info, _set_info)
+    del _get_info, _set_info
+
+    def _get_icon(self):
+        return self.icon_label.pixmap()
+
+    def _set_icon(self, icon):
+        self.icon_label.setPixmap(icon.pixmap(32))
+
+    #icon = property(_get_icon, _set_icon)
+    del _get_icon, _set_icon
+
+    def init_from_contact(self, contact):
+        self.name_label.setText(contact.name)
+        self.info_label.setText(contact.info)
+        self.icon_label.setPixmap(contact.icon.pixmap(32))
 
 del ui_class, base_class
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact_group.ui'))
 
-class ContactGroupWidget(base_class, ui_class):
-    def __init__(self, name, parent=None):
-        super(ContactGroupWidget, self).__init__(parent)
+class GroupWidget(base_class, ui_class):
+    def __init__(self, parent=None):
+        super(GroupWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.name = name
         self.selected = False
         self.drop_indicator = None
         self._disable_dnd = False
@@ -689,12 +1124,12 @@ class ContactGroupWidget(base_class, ui_class):
 
     def mousePressEvent(self, event):
         self._disable_dnd = False
-        super(ContactGroupWidget, self).mousePressEvent(event)
+        super(GroupWidget, self).mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self._disable_dnd:
             return
-        super(ContactGroupWidget, self).mouseMoveEvent(event)
+        super(GroupWidget, self).mouseMoveEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -759,76 +1194,81 @@ class ContactGroupWidget(base_class, ui_class):
             return True # do not propagate keyboard events while editing
         elif type(event) is QMouseEvent and event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
             self._start_editing()
-        return super(ContactGroupWidget, self).event(event)
+        return super(GroupWidget, self).event(event)
 
 del ui_class, base_class
 
 
 class ContactDelegate(QStyledItemDelegate):
-    item_size_hints = {Contact: QSize(200, 36), ContactGroup: QSize(200, 18), BonjourNeighbour: QSize(200, 36), BonjourGroup: QSize(200, 18), GoogleContact: QSize(200, 36), GoogleContactsGroup: QSize(200, 18)}
-
     def __init__(self, parent=None):
         super(ContactDelegate, self).__init__(parent)
 
-        self.oddline_widget = ContactWidget(None)
-        self.evenline_widget = ContactWidget(None)
-        self.selected_widget = ContactWidget(None)
+        self.contact_oddline_widget  = ContactWidget(None)
+        self.contact_evenline_widget = ContactWidget(None)
+        self.contact_selected_widget = ContactWidget(None)
 
-        palette = self.oddline_widget.palette()
-        palette.setColor(QPalette.Window, QColor("#ffffff"))
-        self.oddline_widget.setPalette(palette)
+        self.contact_oddline_widget.setBackgroundRole(QPalette.Base)
+        self.contact_evenline_widget.setBackgroundRole(QPalette.AlternateBase)
+        self.contact_selected_widget.setBackgroundRole(QPalette.Highlight)
+        self.contact_selected_widget.name_label.setForegroundRole(QPalette.HighlightedText)
+        self.contact_selected_widget.info_label.setForegroundRole(QPalette.HighlightedText)
 
-        palette = self.evenline_widget.palette()
-        palette.setColor(QPalette.Window, QColor("#f0f4ff"))
-        self.evenline_widget.setPalette(palette)
+        # No theme except Oxygen honors the BackgroundRole
+        palette = self.contact_oddline_widget.palette()
+        palette.setColor(QPalette.Window, palette.color(QPalette.Base))
+        self.contact_oddline_widget.setPalette(palette)
 
-        palette = self.selected_widget.palette()
-        palette.setBrush(QPalette.Window, palette.highlight())
-        palette.setBrush(QPalette.WindowText, palette.highlightedText())
-        self.selected_widget.setPalette(palette)
+        palette = self.contact_evenline_widget.palette()
+        palette.setColor(QPalette.Window, palette.color(QPalette.AlternateBase))
+        self.contact_evenline_widget.setPalette(palette)
+
+        palette = self.contact_selected_widget.palette()
+        palette.setColor(QPalette.Window, palette.color(QPalette.Highlight))
+        self.contact_selected_widget.setPalette(palette)
 
     def _update_list_view(self, group, collapsed):
         list_view = self.parent()
         list_items = list_view.model().items
         for position in xrange(list_items.index(group)+1, len(list_items)):
-            if isinstance(list_items[position], ContactGroup):
+            if isinstance(list_items[position], Group):
                 break
             list_view.setRowHidden(position, collapsed)
 
     def createEditor(self, parent, options, index):
         item = index.model().data(index, Qt.DisplayRole)
-        if isinstance(item, ContactGroup):
-            item.widget = ContactGroupWidget(item.name, parent)
+        if isinstance(item, Group):
+            item.widget = GroupWidget(parent)
             item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
             return item.widget
         else:
             return None
+
+    def editorEvent_no(self, event, model, option, index):
+        print "editor event", event, model, option, index, event.type(), event.pos(), option.rect, option.rect.adjusted(option.rect.width()-18, 0, 0, -18), option.rect.adjusted(option.rect.width()-18, 0, 0, -18).contains(event.pos())
+        return super(ContactDelegate, self).editorEvent(event, model, option, index)
 
     def updateEditorGeometry(self, editor, option, index):
         editor.setGeometry(option.rect)
 
     def paintContact(self, contact, painter, option, index):
         if option.state & QStyle.State_Selected:
-            widget = self.selected_widget
+            widget = self.contact_selected_widget
         elif index.row() % 2 == 1:
-            widget = self.evenline_widget
+            widget = self.contact_evenline_widget
         else:
-            widget = self.oddline_widget
-
-        widget.set_contact(contact)
-
+            widget = self.contact_oddline_widget
         item_size = option.rect.size()
         if widget.size() != item_size:
             widget.resize(item_size)
+        widget.init_from_contact(contact)
 
         painter.save()
-
         pixmap = QPixmap(item_size)
         widget.render(pixmap)
         painter.drawPixmap(option.rect, pixmap)
 
         if contact.status not in ('offline', 'unknown'):
-            status_colors = dict(online='#00ff00', away='#ffff00', busy='#ff0000')
+            status_colors = dict(available='#00ff00', away='#ffff00', busy='#ff0000')
             color = QColor(status_colors[contact.status])
             painter.setRenderHint(QPainter.Antialiasing, True)
             painter.setBrush(color)
@@ -846,7 +1286,36 @@ class ContactDelegate(QStyledItemDelegate):
 
         painter.restore()
 
-    def paintContactGroup(self, group, painter, option, index):
+    def drawExpansionIndicator(self, option, painter):
+        arrow_rect = QRectF(0, 0, 18, 18)
+        arrow_rect.moveTopRight(option.rect.topRight())
+
+        text_color = option.palette.color(QPalette.WindowText if option.state & QStyle.State_AutoRaise else QPalette.ButtonText)
+        button_color = option.palette.color(QPalette.Button)
+        background_color = self.background_color(button_color, 0.5)
+
+        painter.save()
+
+        arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
+        if option.direction == Qt.LeftToRight:
+            arrow.translate(-2, 1)
+        else:
+            arrow.translate(+2, 1)
+        pen_thickness = 1.6
+
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.translate(arrow_rect.center())
+
+        painter.translate(0, +1)
+        painter.setPen(QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPolyline(arrow)
+        painter.translate(0, -1)
+        painter.setPen(QPen(self.deco_color(background_color, text_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPolyline(arrow)
+
+        painter.restore()
+
+    def paintGroup(self, group, painter, option, index):
         if group.widget.size() != option.rect.size():
             # For some reason updateEditorGeometry only receives the peak value
             # of the size that the widget ever had, so it will never shrink it.
@@ -862,18 +1331,149 @@ class ContactDelegate(QStyledItemDelegate):
             painter.drawPixmap(option.rect, pixmap)
             painter.restore()
 
-    paintBonjourNeighbour = paintContact
-    paintBonjourGroup = paintContactGroup
-    paintGoogleContact = paintContact
-    paintGoogleContactsGroup = paintContactGroup
-
     def paint(self, painter, option, index):
         item = index.model().data(index, Qt.DisplayRole)
         handler = getattr(self, 'paint%s' % item.__class__.__name__, Null)
         handler(item, painter, option, index)
 
     def sizeHint(self, option, index):
-        return self.item_size_hints[type(index.model().data(index, Qt.DisplayRole))]
+        return index.model().data(index, Qt.DisplayRole).size_hint
+
+
+class Operation(object):
+    __params__ = ()
+    __priority__ = None
+    def __init__(self, **params):
+        for name, value in params.iteritems():
+            setattr(self, name, value)
+        for param in set(self.__params__).difference(params):
+            raise ValueError("missing operation parameter: '%s'" % param)
+        self.timestamp = datetime.utcnow()
+
+class AddContactOperation(Operation):
+    __params__ = ('contact', 'group_ids') # store icon data as well? -Dan
+    __priority__ = 0
+
+class AddGroupOperation(Operation):
+    __params__ = ('group',)
+    __priority__ = 1
+
+class AddGroupMemberOperation(Operation):
+    __params__ = ('group_id', 'contact_id')
+    __priority__ = 2
+
+
+class RecallState(object):
+    def __init__(self, obj):
+        self.id = obj.id
+        self.state = self._normalize_state(obj.__getstate__())
+
+    def __repr__(self):
+        return "%s(%r, %r)" % (self.__class__.__name__, self.id, self.state)
+
+    def _normalize_state(self, state):
+        normalized_state = {}
+        for key, value in state.iteritems():
+            if isinstance(value, dict):
+                normalized_state[key] = self._normalize_state(value)
+            elif value is not DefaultValue:
+                normalized_state[key] = value
+        return normalized_state
+
+
+class GroupList:     __metaclass__ = MarkerType
+class GroupElement:  __metaclass__ = MarkerType
+class GroupContacts: __metaclass__ = MarkerType
+
+
+class GroupContactList(tuple):
+    def __new__(cls, *args):
+        instance = tuple.__new__(cls, *args)
+        instance.__contactmap__ = dict((item.settings, item) for item in instance)
+        return instance
+
+    def __contains__(self, item):
+        return item in self.__contactmap__ or tuple.__contains__(self, item)
+
+    def __getitem__(self, index):
+        if isinstance(index, (int, long, slice)):
+            return tuple.__getitem__(self, index)
+        else:
+            return self.__contactmap__[index]
+
+
+class ItemList(list):
+    def __init__(self, *args):
+        list.__init__(self, *args)
+        self.__groupmap__ = dict((item.settings, item) for item in self if isinstance(item, Group))
+
+    def __add__(self, other):
+        return self.__class__(list.__add__(self, other))
+
+    def __contains__(self, item):
+        return item in self.__groupmap__ or list.__contains__(self, item)
+
+    def __delitem__(self, index):
+        list.__delitem__(self, index)
+        self.__groupmap__ = dict((item.settings, item) for item in self if isinstance(item, Group))
+
+    def __delslice__(self, i, j):
+        list.__delslice__(self, i, j)
+        self.__groupmap__ = dict((item.settings, item) for item in self if isinstance(item, Group))
+
+    def __getitem__(self, index):
+        if index is GroupList:
+            return [item for item in self if isinstance(item, Group)]
+        elif isinstance(index, tuple):
+            try:
+                operation, key = index
+            except ValueError:
+                raise KeyError(key)
+            if operation is GroupElement:
+                return self.__groupmap__[key]
+            elif operation is GroupContacts:
+                group = key if isinstance(key, Group) else self.__groupmap__[key]
+                return GroupContactList(item for item in self if isinstance(item, Contact) and item.group is group)
+            else:
+                raise KeyError(key)
+        return list.__getitem__(self, index)
+
+    def __iadd__(self, other):
+        list.__iadd__(self, other)
+        self.__groupmap__.update((item.settings, item) for item in other if isinstance(item, Group))
+
+    def __imul__(self, factor):
+        raise NotImplementedError
+
+    def __setitem__(self, index, item):
+        list.__setitem__(self, index, item)
+        self.__groupmap__ = dict((item.settings, item) for item in self if isinstance(item, Group))
+
+    def __setslice__(self, i, j, value):
+        list.__setslice__(self, i, j, value)
+        self.__groupmap__ = dict((item.settings, item) for item in self if isinstance(item, Group))
+
+    def append(self, item):
+        list.append(self, item)
+        if isinstance(item, Group):
+            self.__groupmap__[item.settings] = item
+
+    def extend(self, iterable):
+        list.extend(self, iterable)
+        self.__groupmap__ = dict((item.settings, item) for item in self if isinstance(item, Group))
+
+    def insert(self, index, item):
+        list.insert(self, index, item)
+        if isinstance(item, Group):
+            self.__groupmap__[item.settings] = item
+
+    def pop(self, *args):
+        item = list.pop(self, *args)
+        self.__groupmap__.pop(item.settings, None)
+
+    def remove(self, item):
+        list.remove(self, item)
+        self.__groupmap__.pop(item.settings, None)
 
 
 class ContactModel(QAbstractListModel):
@@ -883,35 +1483,45 @@ class ContactModel(QAbstractListModel):
     itemsRemoved = pyqtSignal(list)
 
     # The MIME types we accept in drop operations, in the order they should be handled
-    accepted_mime_types = ['application/x-blink-contact-group-list', 'application/x-blink-contact-list', 'text/uri-list']
+    accepted_mime_types = ['application/x-blink-group-list', 'application/x-blink-contact-list', 'text/uri-list']
 
     def __init__(self, parent=None):
         super(ContactModel, self).__init__(parent)
-        self.items = []
+        self.state = 'stopped'
+        self.items = ItemList()
         self.deleted_items = []
         self.main_window = parent
         self.contact_list = parent.contact_list
-        if not hasattr(self, 'beginResetModel'):
-            # emulate beginResetModel/endResetModel for QT < 4.6
-            self.beginResetModel = Null # or use self.modelAboutToBeReset.emit (it'll be emited twice though in that case)
-            self.endResetModel = self.reset
-        self.bonjour_group = None
-
-        self.google_contacts_group = None
-        self.google_contacts_manager = GoogleContactsManager(self)
+        self.virtual_group_manager = VirtualGroupManager()
 
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='BonjourAccountDidAddNeighbour')
-        notification_center.add_observer(self, name='BonjourAccountDidUpdateNeighbour')
-        notification_center.add_observer(self, name='BonjourAccountDidRemoveNeighbour')
-        notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
+        notification_center.add_observer(self, name='SIPApplicationWillStart')
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='SIPApplicationWillEnd')
         notification_center.add_observer(self, name='SIPAccountManagerDidStart')
-        notification_center.add_observer(self, name='SIPAccountDidActivate')
-        notification_center.add_observer(self, name='SIPAccountDidDeactivate')
+        notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
+        notification_center.add_observer(self, name='AddressbookGroupWasActivated')
+        notification_center.add_observer(self, name='AddressbookGroupWasDeleted')
+        notification_center.add_observer(self, name='AddressbookGroupDidChange')
+        notification_center.add_observer(self, name='VirtualGroupWasActivated')
+        notification_center.add_observer(self, name='VirtualGroupWasDeactivated')
+        notification_center.add_observer(self, name='VirtualGroupDidAddContact')
+        notification_center.add_observer(self, name='VirtualGroupDidRemoveContact')
+        notification_center.add_observer(self, name='BlinkContactDidChange')
 
     @property
-    def contact_groups(self):
-        return [item for item in self.items if isinstance(item, ContactGroup)]
+    def bonjour_group(self):
+        try:
+            return self.items[GroupElement, BonjourNeighboursGroup()]
+        except KeyError:
+            return None
+
+    @property
+    def google_contacts_group(self):
+        try:
+            return self.items[GroupElement, GoogleContactsGroup()]
+        except KeyError:
+            return None
 
     def flags(self, index):
         if index.isValid():
@@ -936,11 +1546,11 @@ class ContactModel(QAbstractListModel):
     def mimeData(self, indexes):
         mime_data = QMimeData()
         contacts = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if isinstance(item, Contact)]
-        groups = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if isinstance(item, ContactGroup)]
+        groups = [item for item in (self.items[index.row()] for index in indexes if index.isValid()) if isinstance(item, Group)]
         if contacts:
             mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contacts)))
         if groups:
-            mime_data.setData('application/x-blink-contact-group-list', QByteArray(pickle.dumps(groups)))
+            mime_data.setData('application/x-blink-group-list', QByteArray(pickle.dumps(groups)))
         return mime_data
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
@@ -960,59 +1570,65 @@ class ContactModel(QAbstractListModel):
         else:
             return False
 
-    @updates_contacts_db
-    def _DH_ApplicationXBlinkContactGroupList(self, mime_data, action, index):
-        contact_groups = self.contact_groups
-        group = self.items[index.row()] if index.isValid() else contact_groups[-1]
+    def _DH_ApplicationXBlinkGroupList(self, mime_data, action, index):
+        groups = self.items[GroupList]
+        group = self.items[index.row()] if index.isValid() else groups[-1]
         drop_indicator = group.widget.drop_indicator
         if group.widget.drop_indicator is None:
             return False
         selected_indexes = self.contact_list.selectionModel().selectedIndexes()
         moved_groups = set(self.items[index.row()] for index in selected_indexes if index.isValid() and self.items[index.row()].movable)
-        if group is contact_groups[0] and group in moved_groups:
-            drop_group = (group for group in contact_groups if group not in moved_groups).next()
+        if group is groups[0] and group in moved_groups:
+            drop_group = next(group for group in groups if group not in moved_groups)
             drop_position = self.contact_list.AboveItem
-        elif group is contact_groups[-1] and group in moved_groups:
-            drop_group = (group for group in reversed(contact_groups) if group not in moved_groups).next()
+        elif group is groups[-1] and group in moved_groups:
+            drop_group = (group for group in reversed(groups) if group not in moved_groups).next()
             drop_position = self.contact_list.BelowItem
         elif group in moved_groups:
-            position = contact_groups.index(group)
+            position = groups.index(group)
             if drop_indicator is self.contact_list.AboveItem:
-                drop_group = (group for group in reversed(contact_groups[:position]) if group not in moved_groups).next()
+                drop_group = (group for group in reversed(groups[:position]) if group not in moved_groups).next()
                 drop_position = self.contact_list.BelowItem
             else:
-                drop_group = (group for group in contact_groups[position:] if group not in moved_groups).next()
+                drop_group = (group for group in groups[position:] if group not in moved_groups).next()
                 drop_position = self.contact_list.AboveItem
         else:
             drop_group = group
             drop_position = drop_indicator
         items = self._pop_items(selected_indexes)
-        contact_groups = self.contact_groups # they changed so refresh them
+        groups = self.items[GroupList] # get group list again as it changed
         if drop_position is self.contact_list.AboveItem:
             position = self.items.index(drop_group)
         else:
-            position = len(self.items) if drop_group is contact_groups[-1] else self.items.index(contact_groups[contact_groups.index(drop_group)+1])
+            position = len(self.items) if drop_group is groups[-1] else self.items.index(groups[groups.index(drop_group)+1])
         self.beginInsertRows(QModelIndex(), position, position+len(items)-1)
         self.items[position:position] = items
         self.endInsertRows()
         for index, item in enumerate(items):
-            if isinstance(item, ContactGroup):
+            if isinstance(item, Group):
                 self.contact_list.openPersistentEditor(self.index(position+index))
             else:
                 self.contact_list.setRowHidden(position+index, item.group.collapsed)
-        if self.bonjour_group in moved_groups:
-            self.bonjour_group.reference_group = NoGroup
+        bonjour_group = self.bonjour_group
+        if bonjour_group in moved_groups:
+            bonjour_group.reference_group = None
+        self._update_group_positions()
         return True
 
-    @updates_contacts_db
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
-        group = self.items[index.row()] if index.isValid() else self.contact_groups[-1]
+        group = self.items[index.row()] if index.isValid() else self.items[GroupList][-1]
         if group.widget.drop_indicator is None:
             return False
-        indexes = [index for index in self.contact_list.selectionModel().selectedIndexes() if self.items[index.row()].movable]
-        for contact in self._pop_items(indexes):
-            contact.group = group
-            self._add_contact(contact)
+        all_contacts_group = AllContactsGroup()
+        movable_contacts = [self.items[index.row()] for index in self.contact_list.selectionModel().selectedIndexes() if index.isValid() and self.items[index.row()].movable]
+        modified_settings = set()
+        for contact in movable_contacts:
+            if contact.group.settings is not all_contacts_group:
+                contact.group.settings.contacts.remove(contact.settings)
+                modified_settings.add(contact.group.settings)
+            group.settings.contacts.add(contact.settings)
+            modified_settings.add(group.settings)
+        self._atomic_update(save=modified_settings)
         return True
 
     def _DH_TextUriList(self, mime_data, action, index):
@@ -1023,83 +1639,112 @@ class ContactModel(QAbstractListModel):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    @ignore_contacts_db_updates
-    def _NH_BonjourAccountDidAddNeighbour(self, notification):
-        contact = BonjourNeighbour(self.bonjour_group, notification.data.display_name, unicode(notification.data.uri), notification.data.host, notification.data.neighbour)
-        self.addContact(contact)
+    def _NH_SIPApplicationWillStart(self, notification):
+        from blink import Blink
+        blink = Blink()
+        self.state = 'starting'
+        if blink.first_run:
+            icon_manager = IconManager()
+            def make_contact(id, name, preferred_media, uri, icon):
+                icon_manager.store_file(id, icon)
+                contact = addressbook.Contact(id)
+                contact.name = name
+                contact.preferred_media = preferred_media
+                contact.uris = [addressbook.ContactURI(uri=uri)]
+                contact.icon = IconDescriptor('file://' + icon)
+                return contact
+            test_contacts = [{'id': 'test_audio',      'name': 'Test Call',         'preferred_media': 'audio', 'uri': '3333@sip2sip.info',            'icon': Resources.get('icons/test-call.png')},
+                             {'id': 'test_microphone', 'name': 'Test Microphone',   'preferred_media': 'audio', 'uri': '4444@sip2sip.info',            'icon': Resources.get('icons/test-echo.png')},
+                             {'id': 'test_conference', 'name': 'Test Conference',   'preferred_media': 'chat',  'uri': 'test@conference.sip2sip.info', 'icon': Resources.get('icons/test-conference.png')},
+                             {'id': 'test_zipdx',      'name': 'VUC http://vuc.me', 'preferred_media': 'audio', 'uri': '200901@login.zipdx.com',       'icon': Resources.get('icons/vuc-conference.png')}]
+            test_group = addressbook.Group(id='test')
+            test_group.name = 'Test'
+            test_group.contacts = [make_contact(**entry) for entry in test_contacts]
+            modified_settings = list(test_group.contacts) + [test_group]
+            self._atomic_update(save=modified_settings)
 
-    @ignore_contacts_db_updates
-    def _NH_BonjourAccountDidUpdateNeighbour(self, notification):
-        neighbour = notification.data.neighbour
-        display_name = notification.data.display_name
-        host = notification.data.host
-        uri = unicode(notification.data.uri)
-        try:
-            contact = (contact for contact in self.items if type(contact) is BonjourNeighbour and contact.neighbour == neighbour).next()
-        except StopIteration:
-            contact = BonjourNeighbour(self.bonjour_group, display_name, uri, host, neighbour)
-            self.addContact(contact)
-        else:
-            self.updateContact(contact, dict(name=display_name, hostname=host, uri=uri))
+    def _NH_SIPApplicationDidStart(self, notification):
+        self.state = 'started'
 
-    @ignore_contacts_db_updates
-    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
-        neighbour = notification.data.neighbour
-        try:
-            contact = (contact for contact in self.items if type(contact) is BonjourNeighbour and contact.neighbour == neighbour).next()
-        except StopIteration:
-            pass
-        else:
-            self.removeContact(contact)
+    def _NH_SIPApplicationWillEnd(self, notification):
+        self.state = 'stopping'
 
-    def _NH_SIPAccountDidActivate(self, notification):
-        account = notification.sender
-        if account is BonjourAccount():
-            self.addGroup(self.bonjour_group)
+    def _NH_SIPApplicationDidEnd(self, notification):
+        self.state = 'stopped'
 
-    def _NH_SIPAccountDidDeactivate(self, notification):
-        account = notification.sender
-        if account is BonjourAccount():
-            self.removeGroup(self.bonjour_group)
+    def _NH_AddressbookGroupWasActivated(self, notification):
+        group = Group(notification.sender)
+        self.addGroup(group)
+        for contact in notification.sender.contacts:
+            self.addContact(Contact(contact, group))
 
-    @ignore_contacts_db_updates
+    def _NH_AddressbookGroupWasDeleted(self, notification):
+        group = self.items[GroupElement, notification.sender]
+        self.removeGroup(group)
+
+    def _NH_AddressbookGroupDidChange(self, notification):
+        if 'contacts' not in notification.data.modified:
+            return
+        group = self.items[GroupElement, notification.sender]
+        group_contacts = self.items[GroupContacts, notification.sender]
+        for contact in notification.data.modified['contacts'].removed:
+            self.removeContact(group_contacts[contact])
+        for contact in notification.data.modified['contacts'].added:
+            self.addContact(Contact(contact, group))
+
+    def _NH_VirtualGroupWasActivated(self, notification):
+        self.addGroup(Group(notification.sender))
+
+    def _NH_VirtualGroupWasDeactivated(self, notification):
+        group = self.items[GroupElement, notification.sender]
+        self.removeGroup(group)
+
+    def _NH_VirtualGroupDidAddContact(self, notification):
+        group = self.items[GroupElement, notification.sender]
+        self.addContact(Contact(notification.data.contact, group))
+
+    def _NH_VirtualGroupDidRemoveContact(self, notification):
+        contact = self.items[GroupContacts, notification.sender][notification.data.contact]
+        self.removeContact(contact)
+        if notification.sender is AllContactsGroup():
+            icon_manager = IconManager()
+            icon_manager.remove(contact.settings.id)
+
+    def _NH_BlinkContactDidChange(self, notification):
+        index = self.index(self.items.index(notification.sender))
+        self.dataChanged.emit(index, index)
+
     def _NH_SIPAccountManagerDidStart(self, notification):
-        if not BonjourAccount().enabled and self.bonjour_group in self.items:
-            self.removeGroup(self.bonjour_group)
         if notification.sender.default_account is BonjourAccount():
-            group = self.bonjour_group
-            contact_groups = self.contact_groups
+            groups = self.items[GroupList]
+            bonjour_group = self.bonjour_group
             try:
-                group.reference_group = contact_groups[contact_groups.index(group)+1]
+                bonjour_group.reference_group = groups[groups.index(bonjour_group)+1]
             except IndexError:
-                group.reference_group = Null
-            if group is not contact_groups[0]:
-                self.moveGroup(group, contact_groups[0])
-            group.expand()
+                bonjour_group.reference_group = None
+            if bonjour_group is not groups[0]:
+                self.moveGroup(bonjour_group, groups[0])
+            bonjour_group.expand()
 
-    @ignore_contacts_db_updates
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         account = notification.data.account
         old_account = notification.data.old_account
         if account is BonjourAccount():
-            group = self.bonjour_group
-            contact_groups = self.contact_groups
+            groups = self.items[GroupList]
+            bonjour_group = self.bonjour_group
             try:
-                group.reference_group = contact_groups[contact_groups.index(group)+1]
+                bonjour_group.reference_group = groups[groups.index(bonjour_group)+1]
             except IndexError:
-                group.reference_group = Null
-            if group is not contact_groups[0]:
-                self.moveGroup(group, contact_groups[0])
-            group.expand()
-        elif old_account is BonjourAccount():
-            group = self.bonjour_group
-            if group.reference_group is not NoGroup:
-                self.moveGroup(group, group.reference_group)
-                group.reference_group = NoGroup
-            if group.collapsed and not group.user_collapsed:
-                group.expand()
-            elif not group.collapsed and group.user_collapsed:
-                group.collapse()
+                bonjour_group.reference_group = None
+            if bonjour_group is not groups[0]:
+                self.moveGroup(bonjour_group, groups[0])
+            bonjour_group.expand()
+        elif old_account is BonjourAccount() and old_account.enabled:
+            bonjour_group = self.bonjour_group
+            if bonjour_group.reference_group is not None:
+                self.moveGroup(bonjour_group, bonjour_group.reference_group)
+                bonjour_group.reference_group = None
+            bonjour_group.reset_state()
 
     @staticmethod
     def range_iterator(indexes):
@@ -1131,32 +1776,43 @@ class ContactModel(QAbstractListModel):
             if indexes:
                 yield (last, end)
 
-    def _add_contact(self, contact):
-        if contact.group in self.items:
-            for position in xrange(self.items.index(contact.group)+1, len(self.items)):
-                item = self.items[position]
-                if isinstance(item, ContactGroup) or item.name_detail > contact.name_detail:
-                    break
-            else:
-                position = len(self.items)
-            self.beginInsertRows(QModelIndex(), position, position)
-            self.items.insert(position, contact)
-            self.endInsertRows()
-            self.contact_list.setRowHidden(position, contact.group.collapsed)
+    @run_in_thread('file-io')
+    def _atomic_update(self, save=(), delete=()):
+        with addressbook.AddressbookManager.transaction():
+            [item.save() for item in save]
+            [item.delete() for item in delete]
+
+    def _find_contact_insertion_point(self, contact):
+        for position in xrange(self.items.index(contact.group)+1, len(self.items)):
+            item = self.items[position]
+            if isinstance(item, Group) or item.name > contact.name:
+                break
         else:
             position = len(self.items)
-            self.beginInsertRows(QModelIndex(), position, position+1)
-            self.items.append(contact.group)
-            self.items.append(contact)
-            self.contact_list.openPersistentEditor(self.index(position))
-            self.endInsertRows()
+        return position
+
+    def _find_group_insertion_point(self, group):
+        for item in self.items[GroupList]:
+            if item.settings.position >= group.settings.position:
+                position = self.items.index(item)
+                break
+        else:
+            position = len(self.items)
+        return position
+
+    def _add_contact(self, contact):
+        position = self._find_contact_insertion_point(contact)
+        self.beginInsertRows(QModelIndex(), position, position)
+        self.items.insert(position, contact)
+        self.endInsertRows()
+        self.contact_list.setRowHidden(position, contact.group.collapsed)
 
     def _add_group(self, group):
-        position = len(self.items)
+        position = self._find_group_insertion_point(group)
         self.beginInsertRows(QModelIndex(), position, position)
-        self.items.append(group)
-        self.contact_list.openPersistentEditor(self.index(position))
+        self.items.insert(position, group)
         self.endInsertRows()
+        self.contact_list.openPersistentEditor(self.index(position))
 
     def _pop_contact(self, contact):
         position = self.items.index(contact)
@@ -1167,7 +1823,7 @@ class ContactModel(QAbstractListModel):
 
     def _pop_group(self, group):
         start = self.items.index(group)
-        end = start + len([item for item in self.items if isinstance(item, Contact) and item.group==group])
+        end = start + len(self.items[GroupContacts, group])
         self.beginRemoveRows(QModelIndex(), start, end)
         items = self.items[start:end+1]
         del self.items[start:end+1]
@@ -1177,7 +1833,7 @@ class ContactModel(QAbstractListModel):
     def _pop_items(self, indexes):
         items = []
         rows = set(index.row() for index in indexes if index.isValid())
-        removed_groups = set(self.items[row] for row in rows if isinstance(self.items[row], ContactGroup))
+        removed_groups = set(self.items[row] for row in rows if isinstance(self.items[row], Group))
         rows.update(row for row, item in enumerate(self.items) if isinstance(item, Contact) and item.group in removed_groups)
         for start, end in self.reversed_range_iterator(rows):
             self.beginRemoveRows(QModelIndex(), start, end)
@@ -1186,156 +1842,82 @@ class ContactModel(QAbstractListModel):
             self.endRemoveRows()
         return items
 
-    @run_in_thread('file-io')
-    def _store_contacts(self, data):
-        makedirs(ApplicationData.directory)
-        filename = ApplicationData.get('contacts')
-        tmp_filename = ApplicationData.get('contacts.tmp')
-        bak_filename = ApplicationData.get('contacts.bak')
-        file = open(tmp_filename, 'wb')
-        file.write(data)
-        file.close()
-        try:
-            if sys.platform == 'win32':
-                unlink(bak_filename)
-            os.rename(filename, bak_filename)
-        except OSError, e:
-            if e.errno != errno.ENOENT:
-                raise
-        if sys.platform == 'win32':
-            unlink(filename)
-        os.rename(tmp_filename, filename)
+    def _update_group_positions(self):
+        if self.state != 'started':
+            return
+        groups = self.items[GroupList]
+        bonjour_group = self.bonjour_group
+        if bonjour_group is groups[0] and bonjour_group.reference_group is not None:
+            groups.pop(0)
+            groups.insert(groups.index(bonjour_group.reference_group), bonjour_group)
+        for position, group in enumerate(groups):
+            group.settings.position = position
+            group.settings.save()
 
-    @updates_contacts_db
     def addContact(self, contact):
         if contact in self.items:
             return
-        added_items = [contact] if contact.group in self.items else [contact.group, contact]
         self._add_contact(contact)
-        self.itemsAdded.emit(added_items)
+        self.itemsAdded.emit([contact])
 
-    @updates_contacts_db
-    def updateContact(self, contact, attributes):
-        group = attributes.pop('group', contact.group)
-        name = attributes.pop('name', contact.name)
-        for attr, value in attributes.iteritems():
-            setattr(contact, attr, value)
-        if contact.name != name or contact.group != group:
-            new_group = group not in self.items
-            self._pop_contact(contact)
-            contact.group = group
-            contact.name = name
-            self._add_contact(contact)
-            if new_group:
-                self.itemsAdded.emit([group])
-        index = self.index(self.items.index(contact))
-        self.dataChanged.emit(index, index)
-
-    @updates_contacts_db
     def removeContact(self, contact):
         if contact not in self.items:
             return
         self._pop_contact(contact)
-        if type(contact) is Contact:
-            self.deleted_items.append([contact])
         self.itemsRemoved.emit([contact])
 
-    @updates_contacts_db
     def addGroup(self, group):
-        if group in self.items:
+        if group in self.items or group.settings in self.items:
             return
         self._add_group(group)
         self.itemsAdded.emit([group])
+        self._update_group_positions()
 
-    @updates_contacts_db
     def removeGroup(self, group):
         if group not in self.items:
             return
         items = self._pop_group(group)
         group.widget = Null
-        if type(group) is ContactGroup:
-            self.deleted_items.append(items)
         self.itemsRemoved.emit(items)
+        self._update_group_positions()
 
-    @updates_contacts_db
     def moveGroup(self, group, reference):
-        contact_groups = self.contact_groups
-        if group not in contact_groups or contact_groups.index(group)+1 == (contact_groups.index(reference) if reference in contact_groups else len(contact_groups)):
+        groups = self.items[GroupList]
+        if group not in groups or groups.index(group)+1 == (groups.index(reference) if reference in groups else len(groups)):
             return
         items = self._pop_group(group)
-        position = self.items.index(reference) if reference in contact_groups else len(self.items)
+        position = self.items.index(reference) if reference in groups else len(self.items)
         self.beginInsertRows(QModelIndex(), position, position+len(items)-1)
         self.items[position:position] = items
         self.endInsertRows()
         self.contact_list.openPersistentEditor(self.index(position))
+        self._update_group_positions()
 
-    @updates_contacts_db
     def removeItems(self, indexes):
-        items = self._pop_items(indexes)
-        for item in (item for item in items if isinstance(item, ContactGroup)):
-            item.widget = Null
-        self.deleted_items.append(items)
-        self.itemsRemoved.emit(items)
+        all_contacts_group = AllContactsGroup()
+        removed_items = deque()
+        removed_members = []
+        undo_operations = []
+        for item in (self.items[index.row()] for index in indexes if self.items[index.row()].deletable):
+            if isinstance(item, Group):
+                removed_items.appendleft(item.settings)
+                undo_operations.append(AddGroupOperation(group=RecallState(item.settings)))
+            elif item.group.settings is all_contacts_group:
+                removed_items.append(item.settings)
+                group_ids = [contact.group.settings.id for contact in self.iter_contacts() if contact.settings is item.settings and not contact.group.virtual]
+                undo_operations.append(AddContactOperation(contact=RecallState(item.settings), group_ids=group_ids))
+            elif item.group.settings not in removed_items:
+                item.group.settings.contacts.remove(item.settings)
+                removed_members.append(item.group.settings)
+                undo_operations.append(AddGroupMemberOperation(group_id=item.group.settings.id, contact_id=item.settings.id))
+        self.deleted_items.append(sorted(undo_operations, key=attrgetter('__priority__')))
+        self._atomic_update(save=removed_members, delete=removed_items)
 
     def iter_contacts(self):
         return (item for item in self.items if isinstance(item, Contact))
 
-    def iter_contact_groups(self):
-        return (item for item in self.items if isinstance(item, ContactGroup))
-
-    def load(self):
-        try:
-            try:
-                file = open(ApplicationData.get('contacts'))
-                items = pickle.load(file)
-            except Exception:
-                # remove the corrupted contacts file, so it won't be backed up to contacts.bak later
-                unlink(ApplicationData.get('contacts'))
-                file = open(ApplicationData.get('contacts.bak'))
-                items = pickle.load(file)
-                file = None # restore contacts from contacts.bak
-        except Exception:
-            file = None
-            icon_cache = IconCache()
-            group = ContactGroup('Test')
-            contacts = [Contact(group, 'Call Test', '3333@sip2sip.info', image=icon_cache.store(Resources.get('icons/call-test-icon.png'))),
-                        Contact(group, 'Echo Test', '4444@sip2sip.info', image=icon_cache.store(Resources.get('icons/echo-test-icon.png'))),
-                        Contact(group, 'Audio Conference', 'test@conference.sip2sip.info', image=icon_cache.store(Resources.get('icons/audio-conference-icon.png'))),
-                        Contact(group, 'VUC Conference http://vuc.me', '200901@login.zipdx.com', image=icon_cache.store(Resources.get('icons/vuc-conference-icon.png')))]
-            contacts.sort(key=attrgetter('name'))
-            items = [group] + contacts
-        self.beginResetModel()
-        self.items = items
-        self.endResetModel()
-        for position, item in enumerate(self.items):
-            if isinstance(item, ContactGroup):
-                self.contact_list.openPersistentEditor(self.index(position))
-            else:
-                self.contact_list.setRowHidden(position, item.group.collapsed)
-            if type(item) is BonjourGroup:
-                self.bonjour_group = item
-            if type(item) is GoogleContactsGroup:
-                self.google_contacts_group = item
-        if self.bonjour_group is None:
-            self.bonjour_group = BonjourGroup('Bonjour Neighbours')
-        if self.google_contacts_group is None:
-            self.google_contacts_group = GoogleContactsGroup('Google Contacts')
-        self.google_contacts_manager.initialize()
-        if file is None:
-            self.save()
-
-    def save(self):
-        items = [item for item in self.items if item.savable]
-        contact_groups = self.contact_groups
-        group = self.bonjour_group
-        reference = group.reference_group
-        if group in contact_groups and reference is not NoGroup and contact_groups.index(group)+1 != (contact_groups.index(reference) if reference in contact_groups else len(contact_groups)):
-            items.remove(self.bonjour_group)
-            position = items.index(reference) if reference in contact_groups else len(self.items)
-            items.insert(position, group)
-        if self.google_contacts_group not in contact_groups:
-            items.append(self.google_contacts_group)
-        self._store_contacts(pickle.dumps(items))
+    def iter_groups(self):
+        return (item for item in self.items if isinstance(item, Group))
 
 
 class ContactSearchModel(QSortFilterProxyModel):
@@ -1359,7 +1941,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         source_model = self.sourceModel()
         source_index = source_model.index(source_row, 0, source_parent)
         item = source_model.data(source_index, Qt.DisplayRole)
-        if isinstance(item, ContactGroup):
+        if isinstance(item, Group) or not item.group.virtual:
             return False
         search_tokens = self.filterRegExp().pattern().lower().split()
         searched_item = unicode(item).lower()
@@ -1447,7 +2029,7 @@ class ContactListView(QListView):
             painter.end()
         model = self.model()
         try:
-            last_group = model.contact_groups[-1]
+            last_group = model.items[GroupList][-1]
         except IndexError:
             last_group = Null
         if last_group.widget.drop_indicator is self.BelowItem:
@@ -1470,11 +2052,21 @@ class ContactListView(QListView):
         if not model.deleted_items:
             undo_delete_text = "Undo Delete"
         elif len(model.deleted_items[-1]) == 1:
-            item = model.deleted_items[-1][0]
-            if type(item) is Contact:
-                name = item.name or item.uri
+            operation = model.deleted_items[-1][0]
+            if type(operation) is AddContactOperation:
+                state = operation.contact.state
+                name = state.get('name', 'Contact')
+            elif type(operation) is AddGroupOperation:
+                state = operation.group.state
+                name = state.get('name', 'Group')
             else:
-                name = item.name
+                addressbook_manager = addressbook.AddressbookManager()
+                try:
+                    contact = addressbook_manager.get_contact(operation.contact_id)
+                except KeyError:
+                    name = 'Contact'
+                else:
+                    name = contact.name or 'Contact'
             undo_delete_text = 'Undo Delete "%s"' % name
         else:
             undo_delete_text = "Undo Delete (%d items)" % len(model.deleted_items[-1])
@@ -1493,7 +2085,7 @@ class ContactListView(QListView):
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        elif isinstance(selected_items[0], ContactGroup):
+        elif isinstance(selected_items[0], Group):
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
             menu.addAction(self.actions.edit_item)
@@ -1548,33 +2140,32 @@ class ContactListView(QListView):
             super(ContactListView, self).keyPressEvent(event)
 
     def _AH_AddGroup(self):
-        group = ContactGroup("")
+        group = Group(addressbook.Group())
+        group.settings.save = Null # disable saving until the user provides the name
         model = self.model()
         selection_model = self.selectionModel()
         model.addGroup(group)
-        self.scrollToBottom()
+        self.scrollToTop()
         group.widget.edit()
-        selection_model.select(model.index(model.rowCount()-1), selection_model.ClearAndSelect)
+        selection_model.select(model.index(model.items.index(group)), selection_model.ClearAndSelect)
 
     def _AH_AddContact(self):
         model = self.model()
-        main_window = model.main_window
-        selected_items = ((index.row(), model.data(index)) for index in self.selectionModel().selectedIndexes())
-        try:
-            item = (item for row, item in sorted(selected_items) if type(item) in (Contact, ContactGroup)).next()
-            preferred_group = item if type(item) is ContactGroup else item.group
-        except StopIteration:
-            try:
-                preferred_group = (group for group in model.contact_groups if type(group) is ContactGroup).next()
-            except StopIteration:
-                preferred_group = None
-        main_window.contact_editor_dialog.open_for_add(main_window.search_box.text(), preferred_group)
+        groups = set()
+        for index in self.selectionModel().selectedIndexes():
+            item = model.data(index)
+            if isinstance(item, Group) and not item.virtual:
+                groups.add(item)
+            elif isinstance(item, Contact) and not item.group.virtual:
+                groups.add(item.group)
+        preferred_group = groups.pop() if len(groups)==1 else None
+        model.main_window.contact_editor_dialog.open_for_add(model.main_window.search_box.text(), preferred_group)
 
     def _AH_EditItem(self):
         model = self.model()
         index = self.selectionModel().selectedIndexes()[0]
         item = model.data(index)
-        if isinstance(item, ContactGroup):
+        if isinstance(item, Group):
             self.scrollTo(index)
             item.widget.edit()
         else:
@@ -1582,16 +2173,44 @@ class ContactListView(QListView):
 
     def _AH_DeleteSelection(self):
         model = self.model()
-        indexes = [index for index in self.selectionModel().selectedIndexes() if model.items[index.row()].deletable]
-        model.removeItems(indexes)
+        model.removeItems(self.selectionModel().selectedIndexes())
         self.selectionModel().clearSelection()
 
-    @updates_contacts_db
     def _AH_UndoLastDelete(self):
         model = self.model()
-        for item in model.deleted_items.pop():
-            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
-            handler(item)
+        addressbook_manager = addressbook.AddressbookManager()
+        icon_manager = IconManager()
+        modified_settings = []
+        for operation in model.deleted_items.pop():
+            if type(operation) is AddContactOperation:
+                contact = addressbook.Contact(operation.contact.id)
+                contact.__setstate__(operation.contact.state)
+                modified_settings.append(contact)
+                for group_id in operation.group_ids:
+                    try:
+                        group = addressbook_manager.get_group(group_id)
+                    except KeyError:
+                        pass
+                    else:
+                        group.contacts.add(contact)
+                        modified_settings.append(group)
+                if contact.icon is not None and contact.icon.is_local:
+                    icon_file = contact.icon.url[len('file://'):]
+                    icon_manager.store_file(contact.id, icon_file)
+            elif type(operation) is AddGroupOperation:
+                group = addressbook.Group(operation.group.id)
+                group.__setstate__(operation.group.state)
+                modified_settings.append(group)
+            elif type(operation) is AddGroupMemberOperation:
+                try:
+                    group = addressbook_manager.get_group(operation.group_id)
+                    contact = addressbook_manager.get_contact(operation.contact_id)
+                except KeyError:
+                    pass
+                else:
+                    group.contacts.add(contact)
+                    modified_settings.append(group)
+        model._atomic_update(save=modified_settings)
 
     def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
@@ -1599,24 +2218,29 @@ class ContactListView(QListView):
         session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _AH_StartChatSession(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_SendSMS(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_SendFiles(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_RequestRemoteDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_ShareMyDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def startDrag(self, supported_actions):
         super(ContactListView, self).startDrag(supported_actions)
         if self.needs_restore:
-            for group in self.model().contact_groups:
+            for group in self.model().items[GroupList]:
                 group.restore_state()
             self.needs_restore = False
         main_window = self.model().main_window
@@ -1631,7 +2255,7 @@ class ContactListView(QListView):
         provided_mime_types = set(str(x) for x in event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         has_blink_contacts = 'application/x-blink-contact-list' in provided_mime_types
-        has_blink_groups = 'application/x-blink-contact-group-list' in provided_mime_types
+        has_blink_groups = 'application/x-blink-group-list' in provided_mime_types
         if not acceptable_mime_types:
             event.ignore() # no acceptable mime types found
         elif has_blink_contacts and has_blink_groups:
@@ -1643,7 +2267,7 @@ class ContactListView(QListView):
                 event.setDropAction(Qt.MoveAction)
             if has_blink_contacts or has_blink_groups:
                 if not self.needs_restore:
-                    for group in model.contact_groups:
+                    for group in model.items[GroupList]:
                         group.save_state()
                         group.collapse()
                     self.needs_restore = True
@@ -1656,7 +2280,7 @@ class ContactListView(QListView):
         super(ContactListView, self).dragLeaveEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
-        for group in self.model().contact_groups:
+        for group in self.model().items[GroupList]:
             group.widget.drop_indicator = None
 
     def dragMoveEvent(self, event):
@@ -1686,22 +2310,22 @@ class ContactListView(QListView):
             event.setDropAction(Qt.MoveAction)
         if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
             event.accept()
-        for group in model.contact_groups:
+        for group in model.items[GroupList]:
             group.widget.drop_indicator = None
         super(ContactListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
 
-    def _DH_ApplicationXBlinkContactGroupList(self, event, index, rect, item):
+    def _DH_ApplicationXBlinkGroupList(self, event, index, rect, item):
         model = self.model()
-        groups = model.contact_groups
+        groups = model.items[GroupList]
         for group in groups:
             group.widget.drop_indicator = None
         if not index.isValid():
             drop_groups = (groups[-1], Null)
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(model.items.index(groups[-1]))).bottom())
-        elif isinstance(item, ContactGroup):
+        elif isinstance(item, Group):
             index = groups.index(item)
             rect.setHeight(rect.height()/2)
             if rect.contains(event.pos()):
@@ -1728,7 +2352,7 @@ class ContactListView(QListView):
 
     def _DH_ApplicationXBlinkContactList(self, event, index, rect, item):
         model = self.model()
-        groups = model.contact_groups
+        groups = model.items[GroupList]
         for group in groups:
             group.widget.drop_indicator = None
         if not any(model.items[index.row()].movable for index in self.selectionModel().selectedIndexes()):
@@ -1738,10 +2362,10 @@ class ContactListView(QListView):
             group = groups[-1]
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(model.items.index(group))).bottom())
-        elif isinstance(item, ContactGroup):
+        elif isinstance(item, Group):
             group = item
-        selected_contact_groups = set(model.items[index.row()].group for index in self.selectionModel().selectedIndexes() if model.items[index.row()].movable)
-        if type(group) is ContactGroup and (event.source() is not self or len(selected_contact_groups) > 1 or group not in selected_contact_groups):
+        selected_groups = set(model.items[index.row()].group for index in self.selectionModel().selectedIndexes() if model.items[index.row()].movable)
+        if not group.virtual and (event.source() is not self or len(selected_groups) > 1 or group not in selected_groups):
             group.widget.drop_indicator = self.OnItem
         event.accept(rect)
 
@@ -1813,11 +2437,21 @@ class ContactSearchListView(QListView):
         if not source_model.deleted_items:
             undo_delete_text = "Undo Delete"
         elif len(source_model.deleted_items[-1]) == 1:
-            item = source_model.deleted_items[-1][0]
-            if type(item) is Contact:
-                name = item.name or item.uri
+            operation = source_model.deleted_items[-1][0]
+            if type(operation) is AddContactOperation:
+                state = operation.contact.state
+                name = state.get('name', 'Contact')
+            elif type(operation) is AddGroupOperation:
+                state = operation.group.state
+                name = state.get('name', 'Group')
             else:
-                name = item.name
+                addressbook_manager = addressbook.AddressbookManager()
+                try:
+                    contact = addressbook_manager.get_contact(operation.contact_id)
+                except KeyError:
+                    name = 'Contact'
+                else:
+                    name = contact.name or 'Contact'
             undo_delete_text = 'Undo Delete "%s"' % name
         else:
             undo_delete_text = "Undo Delete (%d items)" % len(source_model.deleted_items[-1])
@@ -1881,14 +2515,43 @@ class ContactSearchListView(QListView):
 
     def _AH_DeleteSelection(self):
         model = self.model()
-        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes() if model.data(index).deletable)
+        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes())
 
-    @updates_contacts_db
     def _AH_UndoLastDelete(self):
         model = self.model().sourceModel()
-        for item in model.deleted_items.pop():
-            handler = model.addGroup if isinstance(item, ContactGroup) else model.addContact
-            handler(item)
+        addressbook_manager = addressbook.AddressbookManager()
+        icon_manager = IconManager()
+        modified_settings = []
+        for operation in model.deleted_items.pop():
+            if type(operation) is AddContactOperation:
+                contact = addressbook.Contact(operation.contact.id)
+                contact.__setstate__(operation.contact.state)
+                modified_settings.append(contact)
+                for group_id in operation.group_ids:
+                    try:
+                        group = addressbook_manager.get_group(group_id)
+                    except KeyError:
+                        pass
+                    else:
+                        group.contacts.add(contact)
+                        modified_settings.append(group)
+                if contact.icon is not None and contact.icon.is_local:
+                    icon_file = contact.icon.url[len('file://'):]
+                    icon_manager.store_file(contact.id, icon_file)
+            elif type(operation) is AddGroupOperation:
+                group = addressbook.Group(operation.group.id)
+                group.__setstate__(operation.group.state)
+                modified_settings.append(group)
+            elif type(operation) is AddGroupMemberOperation:
+                try:
+                    group = addressbook_manager.get_group(operation.group_id)
+                    contact = addressbook_manager.get_contact(operation.contact_id)
+                except KeyError:
+                    pass
+                else:
+                    group.contacts.add(contact)
+                    modified_settings.append(group)
+        model._atomic_update(save=modified_settings)
 
     def _AH_StartAudioCall(self):
         contact = self.model().data(self.selectionModel().selectedIndexes()[0])
@@ -1896,19 +2559,24 @@ class ContactSearchListView(QListView):
         session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
 
     def _AH_StartChatSession(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_SendSMS(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_SendFiles(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_RequestRemoteDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def _AH_ShareMyDesktop(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
+        pass
 
     def startDrag(self, supported_actions):
         super(ContactSearchListView, self).startDrag(supported_actions)
@@ -1983,34 +2651,15 @@ class ContactSearchListView(QListView):
 # The contact editor dialog
 #
 
-class ContactEditorGroupModel(QSortFilterProxyModel):
-    def __init__(self, contact_model, parent=None):
-        super(ContactEditorGroupModel, self).__init__(parent)
-        self.setSourceModel(contact_model)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if role in (Qt.DisplayRole, Qt.EditRole):
-            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole).name
-        elif role == Qt.UserRole:
-            return super(ContactEditorGroupModel, self).data(index, Qt.DisplayRole)
-        else:
-            return super(ContactEditorGroupModel, self).data(index, role)
-
-    def filterAcceptsRow(self, source_row, source_parent):
-        source_model = self.sourceModel()
-        item = source_model.data(source_model.index(source_row, 0, source_parent), Qt.DisplayRole)
-        return True if type(item) is ContactGroup else False
-
-
 ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
 
 class ContactEditorDialog(base_class, ui_class):
-    def __init__(self, contact_model, parent=None):
+    def __init__(self, parent=None):
         super(ContactEditorDialog, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
         self.edited_contact = None
-        self.group.setModel(ContactEditorGroupModel(contact_model, parent))
+        self.target_group = None
         self.sip_address_editor.setValidator(QRegExpValidator(QRegExp("\S+"), self))
         self.sip_address_editor.textChanged.connect(self.enable_accept_button)
         self.clear_button.clicked.connect(self.reset_icon)
@@ -2018,15 +2667,9 @@ class ContactEditorDialog(base_class, ui_class):
 
     def open_for_add(self, sip_address=u'', target_group=None):
         self.edited_contact = None
+        self.target_group = target_group
         self.sip_address_editor.setText(sip_address)
         self.display_name_editor.setText(u'')
-        self.sip_aliases_editor.setText(u'')
-        for index in xrange(self.group.count()):
-            if self.group.itemData(index) is target_group:
-                break
-        else:
-            index = 0
-        self.group.setCurrentIndex(index)
         self.icon_selector.filename = None
         self.preferred_media.setCurrentIndex(0)
         self.accept_button.setText(u'Add')
@@ -2037,15 +2680,11 @@ class ContactEditorDialog(base_class, ui_class):
         self.edited_contact = contact
         self.sip_address_editor.setText(contact.uri)
         self.display_name_editor.setText(contact.name)
-        self.sip_aliases_editor.setText(u'; '.join(contact.sip_aliases))
-        for index in xrange(self.group.count()):
-            if self.group.itemData(index) is contact.group:
-                break
+        if contact.settings.icon is not None and contact.settings.icon.is_local:
+            self.icon_selector.filename = contact.settings.icon.url[len('file://'):]
         else:
-            index = 0
-        self.group.setCurrentIndex(index)
-        self.icon_selector.filename = contact.image
-        self.preferred_media.setCurrentIndex(self.preferred_media.findText(contact.preferred_media))
+            self.icon_selector.filename = None
+        self.preferred_media.setCurrentIndex(self.preferred_media.findText(contact.settings.preferred_media.title()))
         self.accept_button.setText(u'Ok')
         self.accept_button.setEnabled(True)
         self.show()
@@ -2056,34 +2695,39 @@ class ContactEditorDialog(base_class, ui_class):
     def enable_accept_button(self, text):
         self.accept_button.setEnabled(text != u'')
 
-    @updates_contacts_db
     def process_contact(self):
         contact_model = self.parent().contact_model
-        uri = self.sip_address_editor.text()
-        name = self.display_name_editor.text()
-        image = IconCache().store(self.icon_selector.filename)
-        preferred_media = self.preferred_media.currentText()
-        sip_aliases = [alias.strip() for alias in self.sip_aliases_editor.text().split(u';')]
-        group_index = self.group.currentIndex()
-        group_name = self.group.currentText()
-        if group_name != self.group.itemText(group_index):
-            # user edited the group name. first look if we already have a group with that name
-            index = self.group.findText(group_name)
-            if index >= 0:
-                group = self.group.itemData(index)
-            else:
-                group = ContactGroup(group_name)
-        else:
-            group = self.group.itemData(group_index)
+        icon_manager = IconManager()
         if self.edited_contact is None:
-            contact = Contact(group, name, uri, image=image)
-            contact.preferred_media = preferred_media
-            contact.sip_aliases = sip_aliases
-            contact_model.addContact(contact)
+            contact = addressbook.Contact()
         else:
-            attributes = dict(group=group, name=name, uri=uri, image=image, preferred_media=preferred_media, sip_aliases=sip_aliases)
-            contact_model.updateContact(self.edited_contact, attributes)
-            self.edited_contact = None
+            contact = self.edited_contact.settings
+        try:
+            uri = next(iter(contact.uris))
+        except StopIteration:
+            contact.uris.add(addressbook.ContactURI(uri=self.sip_address_editor.text()))
+        else:
+            uri.uri = self.sip_address_editor.text()
+        contact.name = self.display_name_editor.text()
+        contact.preferred_media = self.preferred_media.currentText().lower()
+        if self.icon_selector.filename is not None:
+            icon_file = ApplicationData.get(self.icon_selector.filename)
+            icon_descriptor = IconDescriptor('file://' + icon_file)
+        else:
+            icon_file = icon_descriptor = None
+        if contact.icon != icon_descriptor:
+            if icon_file is not None:
+                icon_manager.store_file(contact.id, icon_file)
+            else:
+                icon_manager.remove(contact.id)
+            contact.icon = icon_descriptor
+        modified_settings = [contact]
+        if self.target_group is not None:
+            self.target_group.settings.contacts.add(contact)
+            modified_settings.append(self.target_group.settings)
+        contact_model._atomic_update(save=modified_settings)
+        self.edited_contact = None
+        self.target_group = None
 
 del ui_class, base_class
 
