@@ -618,7 +618,7 @@ class GoogleContactsGroup(VirtualGroup):
     __id__ = 'google_contacts'
 
     name = Setting(type=unicode, default='Google Contacts')
-    contacts = WriteOnceAttribute()
+    contacts = property(lambda self: self.__manager__.contacts)
 
     def __init__(self):
         self.__manager__ = GoogleContactsManager()
