@@ -528,11 +528,12 @@ class ServerToolsWebView(QWebView):
         self.tab = None
         self.task = None
         self.last_error = None
+        self.realm = None
         self.urlChanged.connect(self._SH_URLChanged)
 
     @property
     def query_items(self):
-        all_items = ('user_agent', 'tab', 'task')
+        all_items = ('user_agent', 'tab', 'task', 'realm')
         return [(name, value) for name, value in self.__dict__.iteritems() if name in all_items and value is not None]
 
     def _get_account(self):
@@ -549,6 +550,9 @@ class ServerToolsWebView(QWebView):
             notification_center.remove_observer(self, sender=old_account)
         if account:
             notification_center.add_observer(self, sender=account)
+            self.realm = account.id.domain
+        else:
+            self.realm = None
         self.access_manager.authenticationRequired.disconnect(self._SH_AuthenticationRequired)
         self.access_manager.finished.disconnect(self._SH_Finished)
         self.access_manager = QNetworkAccessManager(self)
@@ -571,7 +575,7 @@ class ServerToolsWebView(QWebView):
 
     def _SH_AuthenticationRequired(self, reply, auth):
         if self.account and not self.authenticated:
-            auth.setUser(self.account.id)
+            auth.setUser(self.account.id.username)
             auth.setPassword(self.account.auth.password)
             self.authenticated = True
         else:
