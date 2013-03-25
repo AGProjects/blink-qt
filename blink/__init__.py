@@ -152,6 +152,7 @@ class Blink(QApplication):
         account.sip.outbound_proxy = data['outbound_proxy']
         account.xcap.xcap_root = data['xcap_root']
         account.nat_traversal.msrp_relay = data['msrp_relay']
+        account.server.conference_server = data['conference_server']
         account.server.settings_url = data['settings_url']
         if data['passport'] is not None:
             try:

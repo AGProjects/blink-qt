@@ -457,6 +457,7 @@ class AddAccountDialog(base_class, ui_class):
                 account.nat_traversal.msrp_relay = response_data['msrp_relay']
                 account.xcap.xcap_root = response_data['xcap_root']
                 account.tls.certificate = certificate_path
+                account.server.conference_server = response_data['conference_server']
                 account.server.settings_url = response_data['settings_url']
                 account.save()
                 account_manager.default_account = account
