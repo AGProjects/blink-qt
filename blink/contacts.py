@@ -369,7 +369,7 @@ class GoogleContactsManager(object):
         self.need_sync = True
         try:
             self.contacts = pickle.load(open(ApplicationData.get('google_contacts')))
-        except (OSError, IOError, pickle.UnpicklingError):
+        except Exception:
             self.contacts = GoogleContactsList()
         self._initialize()
 
