@@ -16,7 +16,6 @@ from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QReg
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
-from application.python.decorator import execute_once
 from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType, Singleton
 from application.python import Null
@@ -357,6 +356,7 @@ class GoogleContactsList(object):
 
 
 class GoogleContactsManager(object):
+    __metaclass__ = Singleton
     implements(IObserver)
 
     contacts = WriteOnceAttribute()
@@ -390,7 +390,6 @@ class GoogleContactsManager(object):
     state = property(_get_state, _set_state)
     del _get_state, _set_state
 
-    @execute_once
     @run_in_green_thread
     def _initialize(self):
         self.command_proc = proc.spawn(self._run)
