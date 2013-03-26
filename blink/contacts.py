@@ -289,6 +289,16 @@ class BonjourNeighboursGroup(VirtualGroup):
         notification.center.post_notification('VirtualContactDidChange', sender=contact)
 
 
+class GoogleContactID(unicode):
+    pass
+
+
+class GoogleContactIcon(object):
+    def __init__(self, data, etag):
+        self.data = data
+        self.etag = etag
+
+
 class GoogleContactURI(object):
     def __init__(self, uri, type):
         self.uri = uri
@@ -313,17 +323,11 @@ class GoogleContactURI(object):
             return entry.rel.rpartition('#')[2].replace('_', ' ').strip().title()
 
 
-class GoogleContactIcon(object):
-    def __init__(self, data, etag):
-        self.data = data
-        self.etag = etag
-
-
 class GoogleContact(object):
     id = WriteOnceAttribute()
 
     def __init__(self, id, name, company, icon, uris):
-        self.id = id
+        self.id = GoogleContactID(id)
         self.name = name
         self.company = company
         self.icon = icon
