@@ -32,6 +32,7 @@ from zope.interface import implements
 
 from sipsimple import addressbook
 from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.account.bonjour import BonjourServiceDescription
 from sipsimple.configuration import ConfigurationManager, DefaultValue, Setting, SettingsState, SettingsObjectMeta, ObjectNotFoundError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
@@ -675,8 +676,17 @@ class Group(object):
     def __repr__(self):
         return "%s(%r)" % (self.__class__.__name__, self.settings)
 
-    def __reduce__(self):
-        return (self.__class__, (self.settings,), None)
+    def __getstate__(self):
+        return (self.settings.id, dict(widget=Null, saved_state=self.saved_state, reference_group=self.reference_group))
+
+    def __setstate__(self, state):
+        group_id, state = state
+        if isinstance(group_id, addressbook.ID):
+            manager = addressbook.AddressbookManager()
+        else:
+            manager = VirtualGroupManager()
+        self.settings = manager.get_group(group_id)
+        self.__dict__.update(state)
 
     def __unicode__(self):
         return self.settings.name
@@ -807,8 +817,21 @@ class Contact(object):
     def __repr__(self):
         return '%s(%r, %r)' % (self.__class__.__name__, self.settings, self.group)
 
-    def __reduce__(self):
-        return (self.__class__, (self.settings, self.group), None)
+    def __getstate__(self):
+        return (self.settings.id, dict(group=self.group, status=self.status))
+
+    def __setstate__(self, state):
+        contact_id, state = state
+        if isinstance(contact_id, addressbook.ID):
+            group = AllContactsGroup()
+        elif isinstance(contact_id, GoogleContactID):
+            group = GoogleContactsGroup()
+        elif isinstance(contact_id, BonjourServiceDescription):
+            group = BonjourNeighboursGroup()
+        else:
+            group = None
+        self.settings = group.contacts[contact_id]
+        self.__dict__.update(state)
 
     def __unicode__(self):
         return u'%s <%s>' % (self.name, self.uri) if self.name else self.uri
