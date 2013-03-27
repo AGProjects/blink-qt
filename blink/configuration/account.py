@@ -7,7 +7,7 @@ __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
 from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
-from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, SIPTransportList
+from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, NonNegativeInteger, SIPTransportList
 from sipsimple.util import user_info
 
 from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL
@@ -43,6 +43,9 @@ class RTPSettingsExtension(RTPSettings):
 class SIPSettingsExtension(SIPSettings):
     always_use_my_proxy = Setting(type=bool, default=True)
     register = Setting(type=bool, default=True)
+    register_interval = Setting(type=NonNegativeInteger, default=600)
+    subscribe_interval = Setting(type=NonNegativeInteger, default=600)
+    publish_interval = Setting(type=NonNegativeInteger, default=600)
 
 
 class ServerSettings(SettingsGroup):
