@@ -144,7 +144,7 @@ p, li { white-space: pre-wrap; }
    <item>
     <widget class="QLabel" name="copyright">
      <property name="text">
-      <string>Copyright © 2010-2011 AG Projects
+      <string>Copyright © 2010-2013 AG Projects
 All rights reserved.</string>
      </property>
      <property name="alignment">
