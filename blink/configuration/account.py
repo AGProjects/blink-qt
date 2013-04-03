@@ -7,7 +7,7 @@ __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
 from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
-from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, NonNegativeInteger, SIPTransportList
+from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, NonNegativeInteger, SIPTransportList, SRTPEncryption
 from sipsimple.util import user_info
 
 from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL
@@ -37,6 +37,7 @@ class PSTNSettings(SettingsGroup):
 class RTPSettingsExtension(RTPSettings):
     audio_codec_order = Setting(type=AudioCodecList, default=None, nillable=True)
     inband_dtmf = Setting(type=bool, default=True)
+    srtp_encryption = Setting(type=SRTPEncryption, default='optional')
     use_srtp_without_tls = Setting(type=bool, default=True)
 
 
