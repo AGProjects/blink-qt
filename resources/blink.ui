@@ -961,9 +961,6 @@ padding: 2px;</string>
      <string>&amp;History</string>
     </property>
     <widget class="QMenu" name="missed_calls_menu">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
      <property name="title">
       <string>&amp;Missed calls</string>
      </property>
@@ -973,9 +970,6 @@ padding: 2px;</string>
      </property>
     </widget>
     <widget class="QMenu" name="placed_calls_menu">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
      <property name="title">
       <string>&amp;Placed calls</string>
      </property>
@@ -985,9 +979,6 @@ padding: 2px;</string>
      </property>
     </widget>
     <widget class="QMenu" name="received_calls_menu">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
      <property name="title">
       <string>&amp;Received calls</string>
      </property>
@@ -1264,6 +1255,9 @@ padding: 2px;</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
+   </property>
+   <property name="visible">
+    <bool>false</bool>
    </property>
   </action>
   <action name="manage_accounts_action">

@@ -21,6 +21,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import BonjourNeighbour, Contact, Group, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
+from blink.history import HistoryManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, SessionModel
 from blink.configuration.datatypes import InvalidToken
@@ -155,6 +156,13 @@ class MainWindow(base_class, ui_class):
         self.alert_devices_group.triggered.connect(self._AH_AudioAlertDeviceChanged)
 
         # History menu actions
+        self.history_manager = HistoryManager()
+        self.missed_calls_menu.aboutToShow.connect(self._SH_MissedCallsMenuShown)
+        self.missed_calls_menu.triggered.connect(self._AH_HistoryEntryClicked)
+        self.placed_calls_menu.aboutToShow.connect(self._SH_PlacedCallsMenuShown)
+        self.placed_calls_menu.triggered.connect(self._AH_HistoryEntryClicked)
+        self.received_calls_menu.aboutToShow.connect(self._SH_ReceivedCallsMenuShown)
+        self.received_calls_menu.triggered.connect(self._AH_HistoryEntryClicked)
 
         # Tools menu actions
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
@@ -327,6 +335,15 @@ class MainWindow(base_class, ui_class):
     def _AH_VoicemailActionTriggered(self, action, checked):
         account = action.data()
         SessionManager().start_call("Voicemail", account.voicemail_uri, account=account)
+
+    def _AH_HistoryEntryClicked(self, action):
+        account_manager = AccountManager()
+        session_manager = SessionManager()
+        try:
+            account = account_manager.get_account(action.entry.account_id)
+        except KeyError:
+            account = None
+        session_manager.start_call(None, action.entry.target_uri, account=account)
 
     def _SH_AccountStateChanged(self, action):
         self.activity_note.setText(action.note)
@@ -509,6 +526,24 @@ class MainWindow(base_class, ui_class):
 
     def _SH_SwitchViewButtonChangedView(self, view):
         self.main_view.setCurrentWidget(self.contacts_panel if view is SwitchViewButton.ContactView else self.sessions_panel)
+
+    def _SH_MissedCallsMenuShown(self):
+        self.missed_calls_menu.clear()
+        for entry in reversed(self.history_manager.missed_calls):
+            action = self.missed_calls_menu.addAction(unicode(entry))
+            action.entry = entry
+
+    def _SH_PlacedCallsMenuShown(self):
+        self.placed_calls_menu.clear()
+        for entry in reversed(self.history_manager.placed_calls):
+            action = self.placed_calls_menu.addAction(unicode(entry))
+            action.entry = entry
+
+    def _SH_ReceivedCallsMenuShown(self):
+        self.received_calls_menu.clear()
+        for entry in reversed(self.history_manager.received_calls):
+            action = self.received_calls_menu.addAction(unicode(entry))
+            action.entry = entry
 
     @run_in_gui_thread
     def handle_notification(self, notification):
