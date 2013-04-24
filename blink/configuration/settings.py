@@ -3,17 +3,17 @@
 
 """Blink settings extensions."""
 
-__all__ = ['SIPSimpleSettingsExtension']
+__all__ = ['BlinkSettings', 'SIPSimpleSettingsExtension']
 
 import platform
 import sys
 
-from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
+from sipsimple.configuration import Setting, SettingsGroup, SettingsObject, SettingsObjectExtension
 from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger, PositiveInteger, Path, SampleRate
 from sipsimple.configuration.settings import AudioSettings, ChatSettings, FileTransferSettings, LogsSettings, RTPSettings, TLSSettings
 
 from blink import __version__
-from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, HTTPURL, SoundFile
+from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
 from blink.resources import Resources
 
 
@@ -90,4 +90,15 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
 
     user_agent = Setting(type=str, default='Blink %s (%s)' % (__version__, platform.system() if sys.platform!='darwin' else 'MacOSX Qt'))
 
+
+class BlinkPresenceSettings(SettingsGroup):
+    current_state = Setting(type=PresenceState, default=PresenceState('Available'))
+    state_history = Setting(type=PresenceStateList, default=PresenceStateList())
+    icon = Setting(type=IconDescriptor, nillable=True)
+
+
+class BlinkSettings(SettingsObject):
+    __id__ = 'BlinkSettings'
+
+    presence = BlinkPresenceSettings
 

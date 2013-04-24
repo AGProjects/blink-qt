@@ -3,13 +3,18 @@
 
 """Definitions of datatypes for use in settings extensions."""
 
-__all__ = ['ApplicationDataPath', 'SoundFile', 'DefaultPath', 'CustomSoundFile', 'HTTPURL', 'AuthorizationToken', 'InvalidToken', 'IconDescriptor']
+__all__ = ['ApplicationDataPath', 'DefaultPath',
+           'SoundFile', 'CustomSoundFile',
+           'HTTPURL',
+           'AuthorizationToken', 'InvalidToken',
+           'IconDescriptor',
+           'PresenceState', 'PresenceStateList']
 
 import os
 import re
 from urlparse import urlparse
 
-from sipsimple.configuration.datatypes import Hostname
+from sipsimple.configuration.datatypes import Hostname, List
 
 from blink.resources import ApplicationData
 
@@ -187,5 +192,41 @@ class IconDescriptor(object):
     @property
     def is_local(self):
         return self.__dict__['url'].startswith('file://')
+
+
+class PresenceState(object):
+    def __init__(self, state, note=None):
+        self.state = unicode(state)
+        self.note = note
+
+    def __getstate__(self):
+        if not self.note:
+            return unicode(self.state)
+        else:
+            return u'%s,%s' % (self.state, self.note)
+
+    def __setstate__(self, data):
+        try:
+            state, note = data.split(u',', 1)
+        except ValueError:
+            self.__init__(data)
+        else:
+            self.__init__(state, note)
+
+    def __eq__(self, other):
+        if isinstance(other, PresenceState):
+            return self.state==other.state and self.note==other.note
+        return NotImplemented
+
+    def __ne__(self, other):
+        equal = self.__eq__(other)
+        return NotImplemented if equal is NotImplemented else not equal
+
+    def __repr__(self):
+        return '%s(%r, %r)' % (self.__class__.__name__, self.state, self.note)
+
+
+class PresenceStateList(List):
+    type = PresenceState
 
 

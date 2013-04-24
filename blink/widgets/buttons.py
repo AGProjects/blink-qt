@@ -744,13 +744,27 @@ class StateButton(QToolButton):
 
 
 class PresenceState(object):
-    def __init__(self, name, color, icon):
+    def __init__(self, name, color, icon, internal=False):
         self.name = name
         self.color = color
         self.icon = icon
+        self.internal = internal
+
+    def __eq__(self, other):
+        if isinstance(other, PresenceState):
+            return self.name == other.name
+        return NotImplemented
+
+    def __ne__(self, other):
+        equal = self.__eq__(other)
+        return NotImplemented if equal is NotImplemented else not equal
 
     def __repr__(self):
         return self.name
+
+    @property
+    def Internal(self):
+        return PresenceState(self.name, self.color, self.icon, True)
 
 
 class AccountState(StateButton):
@@ -759,7 +773,7 @@ class AccountState(StateButton):
     Away = PresenceState('Away', '#ffff00', Resources.get('icons/state-away.svg'))
     Busy = PresenceState('Busy', '#ff0000', Resources.get('icons/state-busy.svg'))
 
-    stateChanged = pyqtSignal(QAction)
+    stateChanged = pyqtSignal()
 
     history_size = 7
 
@@ -774,37 +788,56 @@ class AccountState(StateButton):
         menu.triggered.connect(self._SH_MenuTriggered)
         self.setMenu(menu)
         self.state = self.Invisible
+        self.note = None
+
+    def _get_history(self):
+        return [(action.state.name, action.note) for action in self.menu().actions()[5:]]
+    def _set_history(self, values):
+        menu = self.menu()
+        for action in menu.actions()[5:]:
+            menu.removeAction(action)
+        for state_name, note in values:
+            try:
+                state = getattr(self, state_name)
+            except AttributeError:
+                continue
+            action = QAction(QIcon(state.icon), note, menu)
+            action.state = state
+            action.note = note
+            menu.addAction(action)
+    history = property(_get_history, _set_history)
+    del _get_history, _set_history
 
     def _SH_MenuTriggered(self, action):
         if hasattr(action, 'state'):
             self.setState(action.state, action.note)
-            self.stateChanged.emit(action)
 
     def setState(self, state, note=None):
+        if state == self.state and note == self.note:
+            return
         self.state = state
+        self.note = note
         palette = self.palette()
         palette.setColor(QPalette.Button, QColor(state.color))
         self.setPalette(palette)
-        if not note:
-            return
-        menu = self.menu()
-        actions = menu.actions()[5:]
-        try:
-            action = next(action for action in actions if action.state is state and action.note == note)
-        except StopIteration:
-            action = QAction(QIcon(state.icon), note, menu)
-            if len(actions) == 0:
-                menu.addAction(action)
+        if note and not state.internal:
+            menu = self.menu()
+            actions = menu.actions()[5:]
+            try:
+                action = next(action for action in actions if action.state is state and action.note == note)
+            except StopIteration:
+                action = QAction(QIcon(state.icon), note, menu)
+                if len(actions) == 0:
+                    menu.addAction(action)
+                else:
+                    if len(actions) >= self.history_size:
+                        menu.removeAction(actions[-1])
+                    menu.insertAction(actions[0], action)
+                action.state = state
+                action.note = note
             else:
-                if len(actions) >= self.history_size:
-                    menu.removeAction(actions[-1])
-                menu.insertAction(actions[0], action)
-            action.state = state
-            action.note = note
-        else:
-            if action is not actions[0]:
-                menu.removeAction(action)
-                menu.insertAction(actions[0], action)
-
-
+                if action is not actions[0]:
+                    menu.removeAction(action)
+                    menu.insertAction(actions[0], action)
+        self.stateChanged.emit()
 

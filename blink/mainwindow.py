@@ -3,12 +3,15 @@
 
 __all__ = ['MainWindow']
 
+import hashlib
+import os
+
 from functools import partial
 
 from PyQt4 import uic
 from PyQt4.QtCore import QUrl
 from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
-from PyQt4.QtGui  import QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
+from PyQt4.QtGui  import QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -24,8 +27,9 @@ from blink.contacts import BonjourNeighbour, Contact, Group, ContactEditorDialog
 from blink.history import HistoryManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, SessionModel
-from blink.configuration.datatypes import InvalidToken
-from blink.resources import Resources
+from blink.configuration.datatypes import IconDescriptor, InvalidToken, PresenceState
+from blink.configuration.settings import BlinkSettings
+from blink.resources import IconManager, Resources
 from blink.util import run_in_gui_thread
 from blink.widgets.buttons import AccountState, SwitchViewButton
 
@@ -53,7 +57,11 @@ class MainWindow(base_class, ui_class):
 
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
-        self.set_user_icon(Resources.get("icons/avatar.jpg")) # ":/resources/icons/avatar.png"
+
+        self.default_icon_path = Resources.get('icons/avatar.jpg')
+        self.default_icon = QIcon(self.default_icon_path)
+        self.last_icon_directory = os.path.expanduser('~')
+        self.set_user_icon(IconManager().get('myicon'))
 
         self.active_sessions_label.hide()
         self.enable_call_buttons(False)
@@ -95,6 +103,7 @@ class MainWindow(base_class, ui_class):
 
         # Signals
         self.account_state.stateChanged.connect(self._SH_AccountStateChanged)
+        self.account_state.clicked.connect(self._SH_AccountStateClicked)
         self.activity_note.editingFinished.connect(self._SH_ActivityNoteEditingFinished)
         self.add_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
@@ -204,8 +213,8 @@ class MainWindow(base_class, ui_class):
         self.preferences_window.close()
         self.server_tools_window.close()
 
-    def set_user_icon(self, image_file_name):
-        self.account_state.setIcon(QIcon(image_file_name))
+    def set_user_icon(self, icon):
+        self.account_state.setIcon(icon or self.default_icon)
 
     def enable_call_buttons(self, enabled):
         self.audio_call_button.setEnabled(enabled)
@@ -345,14 +354,52 @@ class MainWindow(base_class, ui_class):
             account = None
         session_manager.start_call(None, action.entry.target_uri, account=account)
 
-    def _SH_AccountStateChanged(self, action):
-        self.activity_note.setText(action.note)
-        self.saved_account_state = None
+    def _SH_AccountStateChanged(self):
+        self.activity_note.setText(self.account_state.note)
+        if self.account_state.state is AccountState.Invisible:
+            self.activity_note.inactiveText = u'(invisible)'
+            self.activity_note.setEnabled(False)
+        else:
+            if not self.activity_note.isEnabled():
+                self.activity_note.inactiveText = u'Add an activity note here'
+                self.activity_note.setEnabled(True)
+        if not self.account_state.state.internal:
+            self.saved_account_state = None
+        settings = BlinkSettings()
+        if self.saved_account_state:
+            settings.presence.current_state = PresenceState(*self.saved_account_state)
+        else:
+            settings.presence.current_state = PresenceState(self.account_state.state, self.account_state.note)
+        settings.presence.state_history = [PresenceState(state, note) for state, note in self.account_state.history]
+        settings.save()
+
+    def _SH_AccountStateClicked(self, checked):
+        filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")
+        if filename:
+            self.last_icon_directory = os.path.dirname(filename)
+            filename = filename if os.path.realpath(filename) != os.path.realpath(self.default_icon_path) else None
+            settings = BlinkSettings()
+            icon_manager = IconManager()
+            if filename is not None:
+                icon = icon_manager.store_file('myicon', filename)
+                try:
+                    hash = hashlib.sha512(open(icon.filename, 'r').read()).hexdigest()
+                except Exception:
+                    settings.presence.icon = None
+                else:
+                    settings.presence.icon = IconDescriptor('file://'+icon.filename, hash)
+            else:
+                icon_manager.remove('myicon')
+                icon = None
+                settings.presence.icon = None
+            settings.save()
 
     def _SH_ActivityNoteEditingFinished(self):
         self.activity_note.clearFocus()
-        self.account_state.setState(self.account_state.state, self.activity_note.text())
-        self.saved_account_state = None
+        note = self.activity_note.text()
+        if note != self.account_state.note:
+            self.account_state.setState(self.account_state.state, note)
+            self.saved_account_state = None
 
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
@@ -511,12 +558,10 @@ class MainWindow(base_class, ui_class):
             if self.account_state.state is not AccountState.Invisible:
                 if self.saved_account_state is None:
                     self.saved_account_state = self.account_state.state, self.activity_note.text()
-                self.account_state.setState(AccountState.Busy)
-                self.activity_note.setText(u'On the phone')
+                self.account_state.setState(AccountState.Busy.Internal, note=u'On the phone')
         elif self.saved_account_state is not None:
             state, note = self.saved_account_state
             self.saved_account_state = None
-            self.activity_note.setText(note)
             self.account_state.setState(state, note)
 
     def _SH_SilentButtonClicked(self, silent):
@@ -567,13 +612,15 @@ class MainWindow(base_class, ui_class):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
             self.account_state.setEnabled(False)
-        else:
-            self.account_state.setState(AccountState.Available)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='AudioDevicesDidChange')
+        settings = BlinkSettings()
+        self.account_state.history = [(item.state, item.note) for item in settings.presence.state_history]
+        state = getattr(AccountState, settings.presence.current_state.state, AccountState.Available)
+        self.account_state.setState(state, settings.presence.current_state.note)
 
     def _NH_AudioDevicesDidChange(self, notification):
         for action in self.output_device_menu.actions():
