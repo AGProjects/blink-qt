@@ -1,0 +1,218 @@
+Code refactoring
+----------------
+
++ accounts.py line 648 remove redundant setMovie statement
++ adjust web view spacing and margins for widgets (relative to window borders)
++ check if QEvent.DynamicPropertyChange happens after the property changed
+
++ do not kill greenlets but interrupt commands instead (sipsimple)
+- refactor how models/dialogs/windows are created and where are they kept
+- blink/contacts.py GoogleContactsManager.stop_adding_contacts is always False
+- rename GoogleContactsManager to GoogleContactManager
+- rename GoogleContactsGroup to GoogleContactGroup
+- rename contact_model.google_contacts_group to google_contact_group
+- integrate GoogleContactManager into ContactModel?
+- GoogleContactsManager use defaultdict for entries_map (see update_contacts)
+- race condition in GoogleContactsManager with stop_adding_contacts
+- GoogleContactManager.enable_captcha should be decorated to run in the gui thread
+- GoogleContactManager._set_captcha_image should be decorated to run in the gui thread
+- _authorize_google_account from google dialog needs refactoring
+- saving settings should be probably done in an auxiliary thread not the green thread
+- rename main_window.google_contacts_dialog to something else
+
+Issues
+------
+
+Investigate this exception:
+
+sip:nwpsefvl@10.0.0.1:52067 52067
+sip:nwpsefvl@10.0.0.1:52067 52067
+sip:nwpsefvl@10.0.0.1;transport=tcp None
+Traceback (most recent call last):
+  File "/usr/lib/python2.5/site-packages/twisted/internet/base.py", line 778, in runUntilCurrent
+    call.func(*call.args, **call.kw)
+  File "/usr/lib/pymodules/python2.5/eventlet/hubs/twistedr.py", line 158, in call_if_greenlet_alive
+    return func(*args1, **kwargs1)
+  File "/usr/lib/pymodules/python2.5/eventlet/proc.py", line 571, in _run
+    result = function(*args, **kwargs)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/account.py", line 683, in _handle_commands
+    handler(command)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/account.py", line 720, in _CH_register
+    txtRecord=bonjour.TXTRecord(items=txtdata))
+  File "/home/dan/work/voip/blink-qt/sipsimple/bonjour.py", line 1125, in DNSServiceRegister
+TypeError: an integer is required
+
+
+2 different deadlocks that appear under linux:
+
+(gdb) bt
+#0  0xb7850424 in __kernel_vsyscall ()
+#1  0xb7825285 in sem_wait@@GLIBC_2.1 () at ../nptl/sysdeps/unix/sysv/linux/i386/i686/../i486/sem_wait.S:80
+#2  0x080f2668 in PyThread_acquire_lock ()
+#3  0x080c7adc in PyEval_RestoreThread ()
+#4  0x080e84f8 in PyGILState_Ensure ()
+#5  0xb759b8ab in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtCore.so
+#6  0xb6ceeb40 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#7  0xb4023128 in ?? () from /usr/lib/kde4/plugins/styles/oxygen.so
+#8  0xb4019299 in ?? () from /usr/lib/kde4/plugins/styles/oxygen.so
+#9  0xb738541a in QCoreApplicationPrivate::sendThroughObjectEventFilters(QObject*, QEvent*) () from /usr/lib/libQtCore.so.4
+#10 0xb6256a6c in QApplicationPrivate::notify_helper(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#11 0xb625ee58 in QApplication::notify(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#12 0xb6e567d7 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#13 0xb73861eb in QCoreApplication::notifyInternal(QObject*, QEvent*) () from /usr/lib/libQtCore.so.4
+#14 0xb6261a1e in QCoreApplication::sendEvent(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#15 0xb625c587 in QApplication::event(QEvent*) () from /usr/lib/libQtGui.so.4
+#16 0xb6e57518 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#17 0xb6256a94 in QApplicationPrivate::notify_helper(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#18 0xb625ebee in QApplication::notify(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#19 0xb6e567d7 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#20 0xb73861eb in QCoreApplication::notifyInternal(QObject*, QEvent*) () from /usr/lib/libQtCore.so.4
+#21 0xb73b4e21 in ?? () from /usr/lib/libQtCore.so.4
+#22 0xb73b1317 in ?? () from /usr/lib/libQtCore.so.4
+#23 0xb708a2e5 in g_main_context_dispatch () from /lib/libglib-2.0.so.0
+#24 0xb708e000 in ?? () from /lib/libglib-2.0.so.0
+#25 0xb708e198 in g_main_context_iteration () from /lib/libglib-2.0.so.0
+#26 0xb73b1041 in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQtCore.so.4
+#27 0xb62f6305 in ?? () from /usr/lib/libQtGui.so.4
+#28 0xb738483a in QEventLoop::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQtCore.so.4
+#29 0xb7384c82 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQtCore.so.4
+#30 0xb73870d9 in QCoreApplication::exec() () from /usr/lib/libQtCore.so.4
+#31 0xb6256917 in QApplication::exec() () from /usr/lib/libQtGui.so.4
+#32 0xb6e57370 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#33 0x080cc871 in PyEval_EvalFrameEx ()
+#34 0x080cd430 in PyEval_EvalFrameEx ()
+#35 0x080ce14c in PyEval_EvalCodeEx ()
+#36 0x080ce297 in PyEval_EvalCode ()
+#37 0x080eafd8 in PyRun_FileExFlags ()
+#38 0x080eb1c2 in PyRun_SimpleFileExFlags ()
+#39 0x08059405 in Py_Main ()
+#40 0x0805877b in main ()
+(gdb) 
+
+(gdb) bt
+#0  0xb7760424 in __kernel_vsyscall ()
+#1  0xb7674b27 in *__GI___poll (fds=0xbfd822b8, nfds=1, timeout=-1) at ../sysdeps/unix/sysv/linux/poll.c:87
+#2  0xb5d280c0 in ?? () from /usr/lib/libxcb.so.1
+#3  0xb5d2a421 in xcb_wait_for_reply () from /usr/lib/libxcb.so.1
+#4  0xb5df5796 in _XReply () from /usr/lib/libX11.so.6
+#5  0xb5dd25c9 in XGetImage () from /usr/lib/libX11.so.6
+#6  0xb624671e in QX11PixmapData::toImage() const () from /usr/lib/libQtGui.so.4
+#7  0xb624777e in QX11PixmapData::transformed(QTransform const&, Qt::TransformationMode) const () from /usr/lib/libQtGui.so.4
+#8  0xb623549d in QPixmap::transformed(QTransform const&, Qt::TransformationMode) const () from /usr/lib/libQtGui.so.4
+#9  0xb6235833 in QPixmap::scaled(QSize const&, Qt::AspectRatioMode, Qt::TransformationMode) const () from /usr/lib/libQtGui.so.4
+#10 0xb620b7d2 in ?? () from /usr/lib/libQtGui.so.4
+#11 0xb6208d36 in QIcon::pixmap(QSize const&, QIcon::Mode, QIcon::State) const () from /usr/lib/libQtGui.so.4
+#12 0xb3f1e836 in ?? () from /usr/lib/kde4/plugins/styles/oxygen.so
+#13 0xb652fad6 in QComboBox::paintEvent(QPaintEvent*) () from /usr/lib/libQtGui.so.4
+#14 0xb6d28784 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#15 0xb61bc7d6 in QWidget::event(QEvent*) () from /usr/lib/libQtGui.so.4
+#16 0xb65313af in QComboBox::event(QEvent*) () from /usr/lib/libQtGui.so.4
+#17 0xb6d0c44a in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#18 0xb6166a94 in QApplicationPrivate::notify_helper(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#19 0xb616ecc2 in QApplication::notify(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#20 0xb6d667d7 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#21 0xb72961eb in QCoreApplication::notifyInternal(QObject*, QEvent*) () from /usr/lib/libQtCore.so.4
+#22 0xb61719ce in QCoreApplication::sendSpontaneousEvent(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#23 0xb61c4479 in QWidgetPrivate::drawWidget(QPaintDevice*, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#24 0xb61c4c0e in QWidgetPrivate::paintSiblingsRecursive(QPaintDevice*, QList<QObject*> const&, int, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#25 0xb61c4b24 in QWidgetPrivate::paintSiblingsRecursive(QPaintDevice*, QList<QObject*> const&, int, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#26 0xb61c4b24 in QWidgetPrivate::paintSiblingsRecursive(QPaintDevice*, QList<QObject*> const&, int, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#27 0xb61c4b24 in QWidgetPrivate::paintSiblingsRecursive(QPaintDevice*, QList<QObject*> const&, int, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#28 0xb61c406a in QWidgetPrivate::drawWidget(QPaintDevice*, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#29 0xb61c4c0e in QWidgetPrivate::paintSiblingsRecursive(QPaintDevice*, QList<QObject*> const&, int, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#30 0xb61c406a in QWidgetPrivate::drawWidget(QPaintDevice*, QRegion const&, QPoint const&, int, QPainter*, QWidgetBackingStore*) () from /usr/lib/libQtGui.so.4
+#31 0xb634fbc5 in ?? () from /usr/lib/libQtGui.so.4
+#32 0xb61b4bf6 in QWidgetPrivate::syncBackingStore() () from /usr/lib/libQtGui.so.4
+#33 0xb61bcc3d in QWidget::event(QEvent*) () from /usr/lib/libQtGui.so.4
+#34 0xb657f8f7 in QMainWindow::event(QEvent*) () from /usr/lib/libQtGui.so.4
+#35 0xb6c243f4 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#36 0xb6166a94 in QApplicationPrivate::notify_helper(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#37 0xb616ecc2 in QApplication::notify(QObject*, QEvent*) () from /usr/lib/libQtGui.so.4
+#38 0xb6d667d7 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#39 0xb72961eb in QCoreApplication::notifyInternal(QObject*, QEvent*) () from /usr/lib/libQtCore.so.4
+#40 0xb7296e2e in QCoreApplicationPrivate::sendPostedEvents(QObject*, int, QThreadData*) () from /usr/lib/libQtCore.so.4
+#41 0xb729700d in QCoreApplication::sendPostedEvents(QObject*, int) () from /usr/lib/libQtCore.so.4
+#42 0xb72c14cf in ?? () from /usr/lib/libQtCore.so.4
+#43 0xb6f9a2e5 in g_main_context_dispatch () from /lib/libglib-2.0.so.0
+#44 0xb6f9e000 in ?? () from /lib/libglib-2.0.so.0
+#45 0xb6f9e198 in g_main_context_iteration () from /lib/libglib-2.0.so.0
+#46 0xb72c1041 in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQtCore.so.4
+#47 0xb6206305 in ?? () from /usr/lib/libQtGui.so.4
+#48 0xb729483a in QEventLoop::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQtCore.so.4
+#49 0xb7294c82 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQtCore.so.4
+#50 0xb72970d9 in QCoreApplication::exec() () from /usr/lib/libQtCore.so.4
+#51 0xb6166917 in QApplication::exec() () from /usr/lib/libQtGui.so.4
+#52 0xb6d67370 in ?? () from /usr/lib/pymodules/python2.5/PyQt4/QtGui.so
+#53 0x080cc871 in PyEval_EvalFrameEx ()
+#54 0x080cd430 in PyEval_EvalFrameEx ()
+#55 0x080ce14c in PyEval_EvalCodeEx ()
+#56 0x080ce297 in PyEval_EvalCode ()
+#57 0x080eafd8 in PyRun_FileExFlags ()
+#58 0x080eb1c2 in PyRun_SimpleFileExFlags ()
+#59 0x08059405 in Py_Main ()
+#60 0x0805877b in main ()
+(gdb) frame 15
+
+
+Shutdown timings:
+
+Sep 10 20:28:59 dawn blink[21116]: Close event
+Sep 10 20:28:59 dawn blink[21116]: Windows closed
+Sep 10 20:28:59 dawn blink[21116]: Stopping SIPApplication
+Sep 10 20:28:59 dawn blink[21116]: Joining SIPApplication thread
+Sep 10 20:29:01 dawn blink[21116]: Shutting down SIPApplication
+Sep 10 20:29:01 dawn blink[21116]: Shutting down managers
+Sep 10 20:29:03 dawn blink[21116]: Stopping AccountManager
+Sep 10 20:29:03 dawn blink[21116]: Stopping SessionManager
+Sep 10 20:29:03 dawn blink[21116]: Ending sessions
+Sep 10 20:29:03 dawn blink[21116]: Sessions ended
+Sep 10 20:29:03 dawn blink[21116]: SessionManager stopped
+Sep 10 20:29:03 dawn blink[21116]: Stopping Account 31208005167@ag-projects.com
+Sep 10 20:29:03 dawn blink[21116]: Stopping BonjourAccount
+Sep 10 20:29:03 dawn blink[21116]: Stopping Account dan@umts.ro
+Sep 10 20:29:03 dawn blink[21116]: Stopping Account 317105167@eurovoice.ro
+Sep 10 20:29:03 dawn blink[21116]: Did stop BonjourAccount
+Sep 10 20:29:03 dawn blink[21116]: Account 317105167@eurovoice.ro stopped
+Sep 10 20:29:03 dawn blink[21116]: Account 31208005167@ag-projects.com stopped
+Sep 10 20:29:03 dawn blink[21116]: Account dan@umts.ro stopped
+Sep 10 20:29:03 dawn blink[21116]: Did end stopping AccountManager
+Sep 10 20:29:03 dawn blink[21116]: Did shutdown managers
+Sep 10 20:29:03 dawn blink[21116]: Setting audio devices to None
+Sep 10 20:29:08 dawn blink[21116]: Did set audio devices to None
+Sep 10 20:29:08 dawn blink[21116]: Stopping engine
+Sep 10 20:29:08 dawn blink[21116]: Waiting for engine to stop
+Sep 10 20:29:08 dawn blink[21116]: Engine stopped
+Sep 10 20:29:08 dawn blink[21116]: Main loop terminated.
+Sep 10 20:29:08 dawn blink[21116]: Done
+
+
+Sep 10 20:30:21 dawn blink[21140]: Close event
+Sep 10 20:30:21 dawn blink[21140]: Windows closed
+Sep 10 20:30:21 dawn blink[21140]: Stopping SIPApplication
+Sep 10 20:30:21 dawn blink[21140]: Joining SIPApplication thread
+Sep 10 20:30:22 dawn blink[21140]: Shutting down SIPApplication
+Sep 10 20:30:22 dawn blink[21140]: Shutting down managers
+Sep 10 20:30:22 dawn blink[21140]: Stopping AccountManager
+Sep 10 20:30:22 dawn blink[21140]: Stopping SessionManager
+Sep 10 20:30:22 dawn blink[21140]: Ending sessions
+Sep 10 20:30:22 dawn blink[21140]: Sessions ended
+Sep 10 20:30:22 dawn blink[21140]: SessionManager stopped
+Sep 10 20:30:22 dawn blink[21140]: Stopping Account 31208005167@ag-projects.com
+Sep 10 20:30:22 dawn blink[21140]: Stopping BonjourAccount
+Sep 10 20:30:22 dawn blink[21140]: Stopping Account dan@umts.ro
+Sep 10 20:30:22 dawn blink[21140]: Stopping Account 317105167@eurovoice.ro
+Sep 10 20:30:30 dawn blink[21140]: Did stop BonjourAccount
+Sep 10 20:30:30 dawn blink[21140]: Account 317105167@eurovoice.ro stopped
+Sep 10 20:30:30 dawn blink[21140]: Account 31208005167@ag-projects.com stopped
+Sep 10 20:30:30 dawn blink[21140]: Account dan@umts.ro stopped
+Sep 10 20:30:30 dawn blink[21140]: Did end stopping AccountManager
+Sep 10 20:30:30 dawn blink[21140]: Did shutdown managers
+Sep 10 20:30:30 dawn blink[21140]: Setting audio devices to None
+Sep 10 20:30:34 dawn blink[21140]: Did set audio devices to None
+Sep 10 20:30:34 dawn blink[21140]: Stopping engine
+Sep 10 20:30:34 dawn blink[21140]: Waiting for engine to stop
+Sep 10 20:30:35 dawn blink[21140]: Engine stopped
+Sep 10 20:30:35 dawn blink[21140]: Main loop terminated.
+Sep 10 20:30:35 dawn blink[21140]: Done
+
+
