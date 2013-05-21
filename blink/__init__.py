@@ -41,6 +41,7 @@ from blink.configuration.datatypes import InvalidToken
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.logging import LogManager
 from blink.mainwindow import MainWindow
+from blink.presence import PresenceManager
 from blink.resources import ApplicationData
 from blink.sessions import SessionManager
 from blink.update import UpdateManager
@@ -96,6 +97,7 @@ class Blink(QApplication):
         self.main_window = MainWindow()
         self.ip_address_monitor = IPAddressMonitor()
         self.log_manager = LogManager()
+        self.presence_manager = PresenceManager()
 
         self.update_manager = UpdateManager()
         self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
@@ -212,6 +214,7 @@ class Blink(QApplication):
 
     def _NH_SIPApplicationWillStart(self, notification):
         self.log_manager.start()
+        self.presence_manager.start()
 
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):
@@ -228,6 +231,9 @@ class Blink(QApplication):
 
     def _NH_SIPApplicationWillEnd(self, notification):
         self.ip_address_monitor.stop()
+
+    def _NH_SIPApplicationDidEnd(self, notification):
+        self.presence_manager.stop()
 
     def _initialize_sipsimple(self):
         if not os.path.exists(ApplicationData.get('config')):

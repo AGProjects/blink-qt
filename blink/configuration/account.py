@@ -5,7 +5,7 @@
 
 __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
-from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
+from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, PresenceSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
 from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, NonNegativeInteger, SIPTransportList, SRTPEncryption
 from sipsimple.util import user_info
@@ -27,6 +27,10 @@ class MessageSummarySettingsExtension(MessageSummarySettings):
 
 class MSRPSettingsExtension(MSRPSettings):
     connection_model = Setting(type=MSRPConnectionModel, default='relay')
+
+
+class PresenceSettingsExtension(PresenceSettings):
+    enabled = Setting(type=bool, default=True)
 
 
 class PSTNSettings(SettingsGroup):
@@ -71,6 +75,7 @@ class AccountExtension(SettingsObjectExtension):
     message_summary = MessageSummarySettingsExtension
     msrp = MSRPSettingsExtension
     pstn = PSTNSettings
+    presence = PresenceSettingsExtension
     rtp = RTPSettingsExtension
     server = ServerSettings
     sip = SIPSettingsExtension

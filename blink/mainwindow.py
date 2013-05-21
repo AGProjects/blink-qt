@@ -29,6 +29,7 @@ from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, SessionModel
 from blink.configuration.datatypes import IconDescriptor, InvalidToken, PresenceState
 from blink.configuration.settings import BlinkSettings
+from blink.presence import PendingWatcherDialog
 from blink.resources import IconManager, Resources
 from blink.util import run_in_gui_thread
 from blink.widgets.buttons import AccountState, SwitchViewButton
@@ -47,7 +48,10 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='SIPApplicationWillStart')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='SIPAccountGotMessageSummary')
+        notification_center.add_observer(self, name='SIPAccountGotPendingWatcher')
         notification_center.add_observer(self, sender=AccountManager())
+
+        self.pending_watcher_dialogs = []
 
         self.mwi_icons = [QIcon(Resources.get('icons/mwi-%d.png' % i)) for i in xrange(0, 11)]
         self.mwi_icons.append(QIcon(Resources.get('icons/mwi-many.png')))
@@ -58,7 +62,7 @@ class MainWindow(base_class, ui_class):
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
 
-        self.default_icon_path = Resources.get('icons/avatar.jpg')
+        self.default_icon_path = Resources.get('icons/default-avatar.png')
         self.default_icon = QIcon(self.default_icon_path)
         self.last_icon_directory = os.path.expanduser('~')
         self.set_user_icon(IconManager().get('myicon'))
@@ -212,6 +216,8 @@ class MainWindow(base_class, ui_class):
         self.google_contacts_dialog.close()
         self.preferences_window.close()
         self.server_tools_window.close()
+        for dialog in self.pending_watcher_dialogs[:]:
+            dialog.close()
 
     def set_user_icon(self, icon):
         self.account_state.setIcon(icon or self.default_icon)
@@ -590,6 +596,9 @@ class MainWindow(base_class, ui_class):
             action = self.received_calls_menu.addAction(unicode(entry))
             action.entry = entry
 
+    def _SH_PendingWatcherDialogFinished(self, dialog, code):
+        self.pending_watcher_dialogs.remove(dialog)
+
     @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -646,6 +655,7 @@ class MainWindow(base_class, ui_class):
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
+        blink_settings = BlinkSettings()
         if notification.sender is settings:
             if 'audio.silent' in notification.data.modified:
                 self.silent_action.setChecked(settings.audio.silent)
@@ -673,6 +683,15 @@ class MainWindow(base_class, ui_class):
                     self.google_contacts_action.setText(u'Disable Google Contacts')
                 if authorization_token is InvalidToken:
                     self.google_contacts_dialog.open_for_incorrect_password()
+        elif notification.sender is blink_settings:
+            if 'presence.current_state' in notification.data.modified:
+                state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
+                self.account_state.setState(state, blink_settings.presence.current_state.note)
+            if 'presence.icon' in notification.data.modified:
+                self.set_user_icon(IconManager().get('myicon'))
+            if 'presence.offline_note' in notification.data.modified:
+                # TODO: set offline note -Saul
+                pass
         elif isinstance(notification.sender, (Account, BonjourAccount)):
             account_manager = AccountManager()
             account = notification.sender
@@ -729,6 +748,13 @@ class MainWindow(base_class, ui_class):
         else:
             new_messages = 0
         action.setIcon(self.mwi_icons[new_messages])
+
+    def _NH_SIPAccountGotPendingWatcher(self, notification):
+        dialog = PendingWatcherDialog(notification.sender, notification.data.uri, notification.data.display_name)
+        dialog.finished.connect(partial(self._SH_PendingWatcherDialogFinished, dialog))
+        self.pending_watcher_dialogs.append(dialog)
+        dialog.show()
+
 
 del ui_class, base_class
 

@@ -790,7 +790,8 @@ class Contact(object):
     def __init__(self, contact, group):
         self.settings = contact
         self.group = group
-        self.status = 'unknown'
+        self.state = 'unknown'
+        self.note = None
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
 
@@ -818,7 +819,7 @@ class Contact(object):
         return '%s(%r, %r)' % (self.__class__.__name__, self.settings, self.group)
 
     def __getstate__(self):
-        return (self.settings.id, dict(group=self.group, status=self.status))
+        return (self.settings.id, dict(group=self.group, state=self.state))
 
     def __setstate__(self, state):
         contact_id, state = state
@@ -851,7 +852,7 @@ class Contact(object):
 
     @property
     def info(self):
-        return self.uri
+        return self.note or self.uri
 
     @property
     def uri(self):
@@ -907,6 +908,19 @@ class Contact(object):
         if 'icon' in notification.data.modified:
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
+        notification.center.post_notification('BlinkContactDidChange', sender=self)
+
+    def _NH_AddressbookContactGotPresenceUpdate(self, notification):
+        if notification.data.state in ('available', 'away', 'busy', 'offline'):
+            self.__dict__['state'] = notification.data.state
+        else:
+            self.__dict__['state'] = 'unknown'
+        self.note = notification.data.note
+        if notification.data.icon_data:
+            icon = IconManager().store_data(self.settings.id, notification.data.icon_data)
+            if icon:
+                self.settings.icon = notification.data.icon_descriptor
+                self.settings.save()
         notification.center.post_notification('BlinkContactDidChange', sender=self)
 
 
@@ -1293,9 +1307,9 @@ class ContactDelegate(QStyledItemDelegate):
         widget.render(pixmap)
         painter.drawPixmap(option.rect, pixmap)
 
-        if contact.status not in ('offline', 'unknown'):
+        if contact.state not in ('offline', 'unknown'):
             status_colors = dict(available='#00ff00', away='#ffff00', busy='#ff0000')
-            color = QColor(status_colors[contact.status])
+            color = QColor(status_colors[contact.state])
             painter.setRenderHint(QPainter.Antialiasing, True)
             painter.setBrush(color)
             painter.setPen(color.darker(200))
@@ -2708,11 +2722,16 @@ class ContactEditorDialog(base_class, ui_class):
         self.display_name_editor.setText(contact.name)
         if contact.settings.icon is not None and contact.settings.icon.is_local:
             self.icon_selector.filename = contact.settings.icon.url[len('file://'):]
+        elif contact.settings.icon:
+            icon = IconManager().get(contact.settings.id)
+            if icon:
+                self.icon_selector.setPixmap(icon.pixmap(32))
         else:
             self.icon_selector.filename = None
         self.preferred_media.setCurrentIndex(self.preferred_media.findText(contact.settings.preferred_media.title()))
         self.accept_button.setText(u'Ok')
         self.accept_button.setEnabled(True)
+        self.subscribe_presence.setChecked(contact.settings.presence.subscribe)
         self.show()
 
     def reset_icon(self):
@@ -2736,6 +2755,12 @@ class ContactEditorDialog(base_class, ui_class):
             uri.uri = self.sip_address_editor.text()
         contact.name = self.display_name_editor.text()
         contact.preferred_media = self.preferred_media.currentText().lower()
+        if self.subscribe_presence.isChecked():
+            contact.presence.policy = 'allow'
+            contact.presence.subscribe = True
+        else:
+            contact.presence.policy = 'default'
+            contact.presence.subscribe = False
         if self.icon_selector.filename is not None:
             icon_file = ApplicationData.get(self.icon_selector.filename)
             icon_descriptor = IconDescriptor('file://' + icon_file)

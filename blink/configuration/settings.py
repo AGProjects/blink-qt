@@ -94,6 +94,7 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
 class BlinkPresenceSettings(SettingsGroup):
     current_state = Setting(type=PresenceState, default=PresenceState('Available'))
     state_history = Setting(type=PresenceStateList, default=PresenceStateList())
+    offline_note = Setting(type=unicode, nillable=True)
     icon = Setting(type=IconDescriptor, nillable=True)
 
 

@@ -42,4 +42,12 @@ Traceback (most recent call last):
   File "/home/dan/work/voip/blink-qt/sipsimple/bonjour.py", line 1125, in DNSServiceRegister
 TypeError: an integer is required
 
+Presence
+--------
+
+- Is picking the most recent timestamp a good winning method?
+- Calculate user idleness
+- Add a GUI element for the offline note
+- Delete own icon if we don't get anything back from XCAP?
+- Unify settings for inbound and outbound presence
 
