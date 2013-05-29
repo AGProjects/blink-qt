@@ -451,8 +451,10 @@ class PresenceSubscriptionHandler(object):
         account = notification.sender
         watcher_list = notification.data.watcher_list
 
+        self._winfo_map.setdefault(account.id, {})
         if notification.data.state == 'full':
-            self._winfo_map.setdefault(account.id, {}).clear()
+            self._winfo_map[account.id].clear()
+
         for watcher in watcher_list:
             uri = sip_prefix_re.sub('', watcher.sipuri)
             if uri != account.id:
