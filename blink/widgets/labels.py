@@ -1,13 +1,13 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['DurationLabel', 'IconSelector', 'LatencyLabel', 'PacketLossLabel', 'Status', 'StatusLabel', 'StreamInfoLabel']
+__all__ = ['DurationLabel', 'IconSelector', 'LatencyLabel', 'PacketLossLabel', 'Status', 'StatusLabel', 'StreamInfoLabel', 'ElidedLabel']
 
 import os
 from datetime import timedelta
 
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QColor, QFileDialog, QFontMetrics, QLabel, QPalette, QPixmap
+from PyQt4.QtGui import QBrush, QColor, QFileDialog, QFontMetrics, QLabel, QLinearGradient, QPalette, QPainter, QPen, QPixmap
 
 from blink.resources import ApplicationData, Resources
 from blink.widgets.util import QtDynamicProperty
@@ -181,5 +181,20 @@ class StatusLabel(QLabel):
 
     value = property(_get_value, _set_value)
     del _get_value, _set_value
+
+
+class ElidedLabel(QLabel):
+    """A label that elides the text using a fading gradient"""
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        font_metrics = QFontMetrics(self.font())
+        if font_metrics.width(self.text()) > self.contentsRect().width():
+            label_width = self.size().width()
+            gradient = QLinearGradient(0, 0, label_width, 0)
+            gradient.setColorAt(1-50.0/label_width, self.palette().color(self.foregroundRole()))
+            gradient.setColorAt(1.0, Qt.transparent)
+            painter.setPen(QPen(QBrush(gradient), 1.0))
+        painter.drawText(self.rect(), Qt.TextSingleLine | int(self.alignment()), self.text())
 
 

@@ -1298,8 +1298,7 @@ class ContactDelegate(QStyledItemDelegate):
         else:
             widget = self.contact_oddline_widget
         item_size = option.rect.size()
-        if widget.size() != item_size:
-            widget.resize(item_size)
+        widget.setFixedSize(item_size)
         widget.init_from_contact(contact)
 
         painter.save()

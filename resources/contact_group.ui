@@ -68,7 +68,7 @@ border-width: 0;
         <number>0</number>
        </property>
        <item>
-        <widget class="QLabel" name="name_label">
+        <widget class="ElidedLabel" name="name_label">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
            <horstretch>0</horstretch>
@@ -219,6 +219,11 @@ border-color: #3278c8;
    <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
+  </customwidget>
+  <customwidget>
+   <class>ElidedLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
   </customwidget>
  </customwidgets>
  <resources/>

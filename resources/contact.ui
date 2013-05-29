@@ -117,8 +117,11 @@
      <property name="spacing">
       <number>0</number>
      </property>
+     <property name="rightMargin">
+      <number>8</number>
+     </property>
      <item>
-      <widget class="QLabel" name="name_label">
+      <widget class="ElidedLabel" name="name_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
          <horstretch>0</horstretch>
@@ -131,7 +134,7 @@
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="info_label">
+      <widget class="ElidedLabel" name="info_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
          <horstretch>0</horstretch>
@@ -139,7 +142,7 @@
         </sizepolicy>
        </property>
        <property name="text">
-        <string>URI</string>
+        <string>Info</string>
        </property>
       </widget>
      </item>
@@ -147,6 +150,13 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ElidedLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
