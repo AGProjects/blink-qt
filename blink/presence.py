@@ -15,6 +15,7 @@ from PyQt4.QtCore import Qt, QTimer
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null, limit
 from datetime import datetime
+from dateutil.tz import tzutc
 from eventlib.green import urllib2
 from itertools import chain
 from twisted.internet import reactor
@@ -35,7 +36,7 @@ from blink.resources import IconManager, Resources
 from blink.util import run_in_gui_thread
 
 
-epoch = datetime.fromtimestamp(0)
+epoch = datetime.fromtimestamp(0, tzutc())
 sip_prefix_re = re.compile("^sips?:")
 unknown_icon = "blink://unknown"
 
