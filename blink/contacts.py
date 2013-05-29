@@ -1173,28 +1173,27 @@ class GroupWidget(base_class, ui_class):
 
     def paintEvent(self, event):
         painter = QPainter(self)
+        rect = self.rect()
 
         background = QLinearGradient(0, 0, self.width(), self.height())
         if self.selected:
-            background.setColorAt(0.0, QColor('#dadada'))
-            background.setColorAt(1.0, QColor('#c4c4c4'))
+            background.setColorAt(0.0, QColor('#cacaca'))
+            background.setColorAt(1.0, QColor('#b4b4b4'))
+            upper_color = QColor('#f0f0f0')
+            lower_color = QColor('#a4a4a4')
             foreground = QColor('#ffffff')
         else:
             background.setColorAt(0.0, QColor('#eeeeee'))
             background.setColorAt(1.0, QColor('#d8d8d8'))
+            upper_color = QColor('#f8f8f8')
+            lower_color = QColor('#c4c4c4')
             foreground = QColor('#888888')
 
-        rect = self.rect()
-
         painter.fillRect(rect, QBrush(background))
-
-        painter.setPen(QColor('#f8f8f8'))
+        painter.setPen(upper_color)
         painter.drawLine(rect.topLeft(), rect.topRight())
-        #painter.drawLine(option.rect.topLeft(), option.rect.bottomLeft())
-
-        painter.setPen(QColor('#b8b8b8'))
+        painter.setPen(lower_color)
         painter.drawLine(rect.bottomLeft(), rect.bottomRight())
-        #painter.drawLine(option.rect.topRight(), option.rect.bottomRight())
 
         painter.setRenderHint(QPainter.Antialiasing, True)
 
