@@ -1536,6 +1536,7 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='SIPApplicationWillStart')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
+        notification_center.add_observer(self, name='SIPApplicationDidEnd')
         notification_center.add_observer(self, name='SIPAccountManagerDidStart')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
         notification_center.add_observer(self, name='AddressbookGroupWasActivated')
