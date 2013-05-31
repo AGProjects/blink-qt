@@ -1750,7 +1750,15 @@ class ContactModel(QAbstractListModel):
             icon_manager.remove(contact.settings.id)
 
     def _NH_BlinkContactDidChange(self, notification):
-        index = self.index(self.items.index(notification.sender))
+        contact = notification.sender
+        position = self.items.index(contact)
+        move_point = self._find_contact_move_point(contact)
+        if move_point is not None:
+            self.beginMoveRows(QModelIndex(), position, position, QModelIndex(), move_point)
+            del self.items[position]
+            self.items.insert(self._find_contact_insertion_point(contact), contact)
+            self.endMoveRows()
+        index = self.index(self.items.index(contact))
         self.dataChanged.emit(index, index)
 
     def _NH_SIPAccountManagerDidStart(self, notification):
@@ -1820,6 +1828,22 @@ class ContactModel(QAbstractListModel):
         with addressbook.AddressbookManager.transaction():
             [item.save() for item in save]
             [item.delete() for item in delete]
+
+    def _find_contact_move_point(self, contact):
+        position = self.items.index(contact)
+        prev_item = self.items[position-1] if position>0 else None
+        next_item = self.items[position+1] if position+1<len(self.items) else None
+        prev_ok = prev_item is None or isinstance(prev_item, Group) or prev_item.name <= contact.name
+        next_ok = next_item is None or isinstance(next_item, Group) or next_item.name >= contact.name
+        if prev_ok and next_ok:
+            return None
+        for position in xrange(self.items.index(contact.group)+1, len(self.items)):
+            item = self.items[position]
+            if isinstance(item, Group) or item.name > contact.name:
+                break
+        else:
+            position = len(self.items)
+        return position
 
     def _find_contact_insertion_point(self, contact):
         for position in xrange(self.items.index(contact.group)+1, len(self.items)):
