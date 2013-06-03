@@ -14,7 +14,7 @@ from blink.widgets.util import QtDynamicProperty
 
 
 class IconSelector(QLabel):
-    default_icon = QtDynamicProperty('default_icon',  unicode)
+    default_icon = QtDynamicProperty('default_icon', unicode)
 
     def __init__(self, parent=None):
         super(IconSelector, self).__init__(parent)
