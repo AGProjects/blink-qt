@@ -1086,7 +1086,7 @@ class ContactWidget(base_class, ui_class):
     def init_from_contact(self, contact):
         self.name_label.setText(contact.name)
         self.info_label.setText(contact.info)
-        self.icon_label.setPixmap(contact.icon.pixmap(32))
+        self.icon_label.setPixmap(contact.pixmap)
 
 del ui_class, base_class
 
