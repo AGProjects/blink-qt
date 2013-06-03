@@ -912,9 +912,9 @@ class Contact(object):
 
     def _NH_AddressbookContactGotPresenceUpdate(self, notification):
         if notification.data.state in ('available', 'away', 'busy', 'offline'):
-            self.__dict__['state'] = notification.data.state
+            self.state = notification.data.state
         else:
-            self.__dict__['state'] = 'unknown'
+            self.state = 'unknown'
         self.note = notification.data.note
         if notification.data.icon_data:
             icon = IconManager().store_data(self.settings.id, notification.data.icon_data)
