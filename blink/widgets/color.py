@@ -1,10 +1,12 @@
 # Copyright (c) 2012 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['ColorScheme', 'ColorUtils']
+__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin']
 
-from PyQt4.QtGui import QColor
+from PyQt4.QtCore import Qt
+from PyQt4.QtGui  import QColor
 from application.python import limit
+from application.python.decorator import decorator, preserve_signature
 from math import fmod, isnan
 
 
@@ -197,5 +199,107 @@ class ColorUtils(object):
         b = mix_real(color1.blueF(),  color2.blueF(),  bias)
         a = mix_real(color1.alphaF(), color2.alphaF(), bias)
         return QColor.fromRgbF(r, g, b, a)
+
+
+def color_key(instance, color):
+    return color.rgba()
+
+def color_ratio_key(instance, color, ratio):
+    return color.rgba() << 32 | int(ratio*512)
+
+def background_color_key(instance, background, color):
+    return background.rgba() << 32 | color.rgba()
+
+
+@decorator
+def cache_result(key_func):
+    def cache_results(function):
+        @preserve_signature(function)
+        def wrapper(*args, **kw):
+            key = key_func(*args, **kw)
+            try:
+                return wrapper.__cache__[key]
+            except KeyError:
+                return wrapper.__cache__.setdefault(key, function(*args, **kw))
+        wrapper.__cache__ = {}
+        return wrapper
+    return cache_results
+
+
+class ColorHelperMixin(object):
+    _contrast = 0.3
+    _bgcontrast = min(1.0, 0.9*_contrast/0.7)
+
+    @cache_result(color_key)
+    def low_threshold(self, color):
+        darker = ColorScheme.shade(color, ColorScheme.MidShade, 0.5)
+        return ColorUtils.luma(darker) > ColorUtils.luma(color)
+
+    @cache_result(color_key)
+    def high_threshold(self, color):
+        lighter = ColorScheme.shade(color, ColorScheme.LightShade, 0.5)
+        return ColorUtils.luma(lighter) < ColorUtils.luma(color)
+
+    @cache_result(color_key)
+    def background_top_color(self, color):
+        if self.low_threshold(color):
+            return ColorScheme.shade(color, ColorScheme.MidlightShade, 0.0)
+        else:
+            other_luma = ColorUtils.luma(ColorScheme.shade(color, ColorScheme.LightShade, 0.0))
+            color_luma = ColorUtils.luma(color)
+            return ColorUtils.shade(color, (other_luma - color_luma) * self._bgcontrast)
+
+    @cache_result(color_key)
+    def background_bottom_color(self, color):
+        if self.low_threshold(color):
+            return ColorScheme.shade(color, ColorScheme.MidShade, 0.0)
+        else:
+            other_luma = ColorUtils.luma(ColorScheme.shade(color, ColorScheme.MidShade, 0.0))
+            color_luma = ColorUtils.luma(color)
+            return ColorUtils.shade(color, (other_luma - color_luma) * self._bgcontrast)
+
+    @cache_result(color_key)
+    def calc_light_color(self, color):
+        if self.high_threshold(color):
+            return color
+        else:
+            return ColorScheme.shade(color, ColorScheme.LightShade, self._contrast)
+
+    @cache_result(color_key)
+    def calc_dark_color(self, color):
+        if self.low_threshold(color):
+            return ColorUtils.mix(self.calc_light_color(color), color, 0.3 + 0.7 * self._contrast)
+        else:
+            return ColorScheme.shade(color, ColorScheme.MidShade, self._contrast)
+
+    @cache_result(color_key)
+    def calc_shadow_color(self, color):
+        if self.low_threshold(color):
+            shadow_color = ColorUtils.mix(Qt.black, color, color.alphaF())
+        else:
+            shadow_color = ColorScheme.shade(ColorUtils.mix(Qt.black, color, color.alphaF()), ColorScheme.ShadowShade, self._contrast)
+        shadow_color.setAlpha(color.alpha()) # make sure shadow color has the same alpha channel as the input
+        return shadow_color
+
+    @cache_result(color_ratio_key)
+    def background_color(self, color, ratio):
+        if ratio < 0.5:
+            return ColorUtils.mix(self.background_top_color(color), color, 2.0*ratio)
+        else:
+            return ColorUtils.mix(color, self.background_bottom_color(color), 2.0*ratio-1)
+
+    @cache_result(background_color_key)
+    def deco_color(self, background, color):
+        return ColorUtils.mix(background, color, 0.4 + 0.8*self._contrast)
+
+    def color_with_alpha(self, color, alpha):
+        color = QColor(color)
+        color.setAlpha(alpha)
+        return color
+
+    def alpha_color(self, color, alpha):
+        if 0.0 <= alpha < 1.0:
+            color.setAlphaF(alpha * color.alphaF())
+        return color
 
 
