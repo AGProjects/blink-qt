@@ -19,6 +19,7 @@ from dateutil.tz import tzutc
 from eventlib.green import urllib2
 from itertools import chain
 from twisted.internet import reactor
+from twisted.internet.error import ConnectionLost
 from zope.interface import implements
 
 from sipsimple import addressbook
@@ -346,7 +347,7 @@ class PresenceSubscriptionHandler(object):
             response = urllib2.urlopen(req)
             content = response.read()
             info = response.info()
-        except (urllib2.HTTPError, urllib2.URLError):
+        except (ConnectionLost, urllib2.HTTPError, urllib2.URLError):
             return None, None
         content_type = info.getheader('content-type')
         etag = info.getheader('etag')
