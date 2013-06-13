@@ -170,12 +170,12 @@ class MainWindow(base_class, ui_class):
 
         # History menu actions
         self.history_manager = HistoryManager()
-        self.missed_calls_menu.aboutToShow.connect(self._SH_MissedCallsMenuShown)
-        self.missed_calls_menu.triggered.connect(self._AH_HistoryEntryClicked)
-        self.placed_calls_menu.aboutToShow.connect(self._SH_PlacedCallsMenuShown)
-        self.placed_calls_menu.triggered.connect(self._AH_HistoryEntryClicked)
-        self.received_calls_menu.aboutToShow.connect(self._SH_ReceivedCallsMenuShown)
-        self.received_calls_menu.triggered.connect(self._AH_HistoryEntryClicked)
+        self.missed_calls_menu.aboutToShow.connect(self._SH_MissedCallsMenuAboutToShow)
+        self.missed_calls_menu.triggered.connect(self._AH_HistoryMenuTriggered)
+        self.placed_calls_menu.aboutToShow.connect(self._SH_PlacedCallsMenuAboutToShow)
+        self.placed_calls_menu.triggered.connect(self._AH_HistoryMenuTriggered)
+        self.received_calls_menu.aboutToShow.connect(self._SH_ReceivedCallsMenuAboutToShow)
+        self.received_calls_menu.triggered.connect(self._AH_HistoryMenuTriggered)
 
         # Tools menu actions
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
@@ -351,7 +351,7 @@ class MainWindow(base_class, ui_class):
         account = action.data()
         SessionManager().start_call("Voicemail", account.voicemail_uri, account=account)
 
-    def _AH_HistoryEntryClicked(self, action):
+    def _AH_HistoryMenuTriggered(self, action):
         account_manager = AccountManager()
         session_manager = SessionManager()
         try:
@@ -578,19 +578,19 @@ class MainWindow(base_class, ui_class):
     def _SH_SwitchViewButtonChangedView(self, view):
         self.main_view.setCurrentWidget(self.contacts_panel if view is SwitchViewButton.ContactView else self.sessions_panel)
 
-    def _SH_MissedCallsMenuShown(self):
+    def _SH_MissedCallsMenuAboutToShow(self):
         self.missed_calls_menu.clear()
         for entry in reversed(self.history_manager.missed_calls):
             action = self.missed_calls_menu.addAction(unicode(entry))
             action.entry = entry
 
-    def _SH_PlacedCallsMenuShown(self):
+    def _SH_PlacedCallsMenuAboutToShow(self):
         self.placed_calls_menu.clear()
         for entry in reversed(self.history_manager.placed_calls):
             action = self.placed_calls_menu.addAction(unicode(entry))
             action.entry = entry
 
-    def _SH_ReceivedCallsMenuShown(self):
+    def _SH_ReceivedCallsMenuAboutToShow(self):
         self.received_calls_menu.clear()
         for entry in reversed(self.history_manager.received_calls):
             action = self.received_calls_menu.addAction(unicode(entry))
