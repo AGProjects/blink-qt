@@ -77,11 +77,14 @@ class SessionItem(QObject):
         if self.audio_stream is None:
             self.hold_tone = Null
 
-        self.name = contact.name if contact else None
-        if not self.name:
+        if contact is not None and contact.name:
+            self.name = contact.name
+        elif name:
+            self.name = name
+        else:
             address = '%s@%s' % (uri.user, uri.host)
             match = re.match(r'^(?P<number>(\+|00)[1-9][0-9]\d{5,15})@(\d{1,3}\.){3}\d{1,3}$', address)
-            self.name = name or (match.group('number') if match else address)
+            self.name = match.group('number') if match else address
 
         self.timer.timeout.connect(self._SH_TimerFired)
         notification_center = NotificationCenter()
