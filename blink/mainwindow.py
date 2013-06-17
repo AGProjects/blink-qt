@@ -51,6 +51,8 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='SIPAccountGotPendingWatcher')
         notification_center.add_observer(self, sender=AccountManager())
 
+        icon_manager = IconManager()
+
         self.pending_watcher_dialogs = []
 
         self.mwi_icons = [QIcon(Resources.get('icons/mwi-%d.png' % i)) for i in xrange(0, 11)]
@@ -65,7 +67,7 @@ class MainWindow(base_class, ui_class):
         self.default_icon_path = Resources.get('icons/default-avatar.png')
         self.default_icon = QIcon(self.default_icon_path)
         self.last_icon_directory = os.path.expanduser('~')
-        self.set_user_icon(IconManager().get('avatar'))
+        self.set_user_icon(icon_manager.get('avatar'))
 
         self.active_sessions_label.hide()
         self.enable_call_buttons(False)
@@ -369,31 +371,31 @@ class MainWindow(base_class, ui_class):
                 self.activity_note.setEnabled(True)
         if not self.account_state.state.internal:
             self.saved_account_state = None
-        settings = BlinkSettings()
-        settings.presence.current_state = PresenceState(self.account_state.state, self.account_state.note)
-        settings.presence.state_history = [PresenceState(state, note) for state, note in self.account_state.history]
-        settings.save()
+        blink_settings = BlinkSettings()
+        blink_settings.presence.current_state = PresenceState(self.account_state.state, self.account_state.note)
+        blink_settings.presence.state_history = [PresenceState(state, note) for state, note in self.account_state.history]
+        blink_settings.save()
 
     def _SH_AccountStateClicked(self, checked):
         filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")
         if filename:
             self.last_icon_directory = os.path.dirname(filename)
             filename = filename if os.path.realpath(filename) != os.path.realpath(self.default_icon_path) else None
-            settings = BlinkSettings()
+            blink_settings = BlinkSettings()
             icon_manager = IconManager()
             if filename is not None:
                 icon = icon_manager.store_file('avatar', filename)
-                try:
-                    hash = hashlib.sha512(open(icon.filename).read()).hexdigest()
-                except Exception:
-                    settings.presence.icon = None
+                icon_contents = icon_manager.get_image('avatar')
+                if icon_contents is not None:
+                    hash = hashlib.sha512(icon_contents).hexdigest()
+                    blink_settings.presence.icon = IconDescriptor('file://' + icon.filename, hash)
                 else:
-                    settings.presence.icon = IconDescriptor('file://' + icon.filename, hash)
+                    icon_manager.remove('avatar')
+                    blink_settings.presence.icon = None
             else:
                 icon_manager.remove('avatar')
-                icon = None
-                settings.presence.icon = None
-            settings.save()
+                blink_settings.presence.icon = None
+            blink_settings.save()
 
     def _SH_ActivityNoteEditingFinished(self):
         self.activity_note.clearFocus()
@@ -610,10 +612,10 @@ class MainWindow(base_class, ui_class):
         self.load_audio_devices()
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='AudioDevicesDidChange')
-        settings = BlinkSettings()
-        self.account_state.history = [(item.state, item.note) for item in settings.presence.state_history]
-        state = getattr(AccountState, settings.presence.current_state.state, AccountState.Available)
-        self.account_state.setState(state, settings.presence.current_state.note)
+        blink_settings = BlinkSettings()
+        self.account_state.history = [(item.state, item.note) for item in blink_settings.presence.state_history]
+        state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
+        self.account_state.setState(state, blink_settings.presence.current_state.note)
 
     def _NH_AudioDevicesDidChange(self, notification):
         for action in self.output_device_menu.actions():
@@ -640,6 +642,7 @@ class MainWindow(base_class, ui_class):
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
         blink_settings = BlinkSettings()
+        icon_manager = IconManager()
         if notification.sender is settings:
             if 'audio.silent' in notification.data.modified:
                 self.silent_action.setChecked(settings.audio.silent)
@@ -672,7 +675,7 @@ class MainWindow(base_class, ui_class):
                 state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
                 self.account_state.setState(state, blink_settings.presence.current_state.note)
             if 'presence.icon' in notification.data.modified:
-                self.set_user_icon(IconManager().get('avatar'))
+                self.set_user_icon(icon_manager.get('avatar'))
             if 'presence.offline_note' in notification.data.modified:
                 # TODO: set offline note -Saul
                 pass

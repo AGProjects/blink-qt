@@ -158,29 +158,29 @@ class PresencePublicationHandler(object):
         return doc
 
     def set_xcap_offline_note(self, account=None):
-        settings = BlinkSettings()
+        blink_settings = BlinkSettings()
         if not account:
             account_manager = AccountManager()
             accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.discovered]
         else:
             accounts = [account]
         for account in accounts:
-            if settings.presence.offline_note:
-                account.xcap_manager.set_offline_status(OfflineStatus(self.build_offline_pidf(account, settings.presence.offline_note)))
+            if blink_settings.presence.offline_note:
+                account.xcap_manager.set_offline_status(OfflineStatus(self.build_offline_pidf(account, blink_settings.presence.offline_note)))
             else:
                 account.xcap_manager.set_offline_status(None)
 
     def set_xcap_icon(self, account=None):
-        settings = BlinkSettings()
+        blink_settings = BlinkSettings()
         if not account:
             account_manager = AccountManager()
             accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.discovered]
         else:
             accounts = [account]
         icon = None
-        if settings.presence.icon:
+        if blink_settings.presence.icon:
             try:
-                data = open(settings.presence.icon.url.path).read()
+                data = open(blink_settings.presence.icon.url.path).read()
             except Exception:
                 pass
             else:
@@ -190,14 +190,14 @@ class PresencePublicationHandler(object):
 
     @run_in_gui_thread
     def _save_icon(self, icon_data, icon_hash):
-        settings = BlinkSettings()
-        if None not in (icon_data, icon_hash):
-            icon = IconManager().store_data('avatar', icon_data)
-            if icon:
-                settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash)
+        blink_settings = BlinkSettings()
+        if icon_data is not None is not icon_hash:
+            icon_manager = IconManager()
+            icon = icon_manager.store_data('avatar', icon_data)
+            blink_settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash) if icon is not None else None
         else:
-            settings.presence.icon = None
-        settings.save()
+            blink_settings.presence.icon = None
+        blink_settings.save()
 
     @run_in_twisted_thread
     def handle_notification(self, notification):
@@ -205,8 +205,7 @@ class PresencePublicationHandler(object):
         handler(notification)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
-        settings = BlinkSettings()
-        if notification.sender is settings:
+        if notification.sender is BlinkSettings():
             if 'presence.offline_note' in notification.data.modified:
                 self.set_xcap_offline_note()
             if 'presence.icon' in notification.data.modified:
@@ -248,7 +247,7 @@ class PresencePublicationHandler(object):
         services = [service for service in pidf_doc.services if service.status.extended is not None]
         if not services:
             return
-        settings = BlinkSettings()
+        blink_settings = BlinkSettings()
         services.sort(key=lambda obj: obj.timestamp.value if obj.timestamp else epoch, reverse=True)
         service = services[0]
         if service.id in ('SID-%s' % uuid.UUID(SIPSimpleSettings().instance_id), 'SID-%s' % hashlib.md5(notification.sender.id).hexdigest()):
@@ -260,15 +259,15 @@ class PresencePublicationHandler(object):
             status = 'Invisible'
             note = None
         new_state = PresenceState(status, note)
-        settings.presence.current_state = new_state
+        blink_settings.presence.current_state = new_state
         if new_state.note:
             try:
-                state = next(state for state in settings.presence.state_history if state==new_state)
+                state = next(state for state in blink_settings.presence.state_history if state==new_state)
             except StopIteration:
-                settings.presence.state_history = [new_state] + settings.presence.state_history
+                blink_settings.presence.state_history = [new_state] + blink_settings.presence.state_history
             else:
-                settings.presence.state_history = [new_state] + [state for state in settings.presence.state_history if state!=new_state]
-        settings.save()
+                blink_settings.presence.state_history = [new_state] + [state for state in blink_settings.presence.state_history if state!=new_state]
+        blink_settings.save()
 
     def _NH_XCAPManagerDidDiscoverServerCapabilities(self, notification):
         account = notification.sender.account
@@ -277,7 +276,7 @@ class PresencePublicationHandler(object):
 
     def _NH_XCAPManagerDidReloadData(self, notification):
         account = notification.sender.account
-        settings = BlinkSettings()
+        blink_settings = BlinkSettings()
 
         offline_status = notification.data.offline_status
         status_icon = notification.data.status_icon
@@ -293,13 +292,13 @@ class PresencePublicationHandler(object):
             else:
                 offline_note = unicode(note)
 
-        settings.presence.offline_note = offline_note
-        settings.save()
+        blink_settings.presence.offline_note = offline_note
+        blink_settings.save()
 
         if status_icon:
             icon_desc = IconDescriptor(notification.sender.status_icon.uri, notification.sender.status_icon.etag)
             icon_hash = hashlib.sha512(status_icon.data).hexdigest()
-            if settings.presence.icon and settings.presence.icon.etag == icon_hash:
+            if blink_settings.presence.icon and blink_settings.presence.icon.etag == icon_hash:
                 # Icon didn't change
                 pass
             else:
@@ -509,8 +508,9 @@ class PendingWatcherDialog(base_class, ui_class):
             self.contact = None
         else:
             display_name = self.contact.name
-            icon = IconManager().get(self.contact.id)
-            if icon:
+            icon_manager = IconManager()
+            icon = icon_manager.get(self.contact.id)
+            if icon is not None:
                 self.user_icon.setPixmap(icon.pixmap(32))
         self.account_label.setText(u'For account %s' % account.id)
         self.name_label.setText(display_name or uri)
