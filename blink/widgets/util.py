@@ -1,7 +1,9 @@
-# Copyright (c) 2010 AG Projects. See LICENSE for details.
+# Copyright (c) 2010-2013 AG Projects. See LICENSE for details.
 #
 
 __all__ = ['QtDynamicProperty']
+
+from PyQt4.QtCore import QPyNullVariant
 
 
 class QtDynamicProperty(object):
@@ -11,7 +13,10 @@ class QtDynamicProperty(object):
     def __get__(self, obj, objtype):
         if obj is None:
             return self
-        return obj.property(self.name)
+        value = obj.property(self.name)
+        if isinstance(value, QPyNullVariant):
+            value = self.type()
+        return value
     def __set__(self, obj, value):
         if value is not None and not isinstance(value, self.type):
             value = self.type(value)
