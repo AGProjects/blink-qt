@@ -65,7 +65,7 @@ class MainWindow(base_class, ui_class):
         self.default_icon_path = Resources.get('icons/default-avatar.png')
         self.default_icon = QIcon(self.default_icon_path)
         self.last_icon_directory = os.path.expanduser('~')
-        self.set_user_icon(IconManager().get('myicon'))
+        self.set_user_icon(IconManager().get('avatar'))
 
         self.active_sessions_label.hide()
         self.enable_call_buttons(False)
@@ -382,7 +382,7 @@ class MainWindow(base_class, ui_class):
             settings = BlinkSettings()
             icon_manager = IconManager()
             if filename is not None:
-                icon = icon_manager.store_file('myicon', filename)
+                icon = icon_manager.store_file('avatar', filename)
                 try:
                     hash = hashlib.sha512(open(icon.filename).read()).hexdigest()
                 except Exception:
@@ -390,7 +390,7 @@ class MainWindow(base_class, ui_class):
                 else:
                     settings.presence.icon = IconDescriptor('file://' + icon.filename, hash)
             else:
-                icon_manager.remove('myicon')
+                icon_manager.remove('avatar')
                 icon = None
                 settings.presence.icon = None
             settings.save()
@@ -672,7 +672,7 @@ class MainWindow(base_class, ui_class):
                 state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
                 self.account_state.setState(state, blink_settings.presence.current_state.note)
             if 'presence.icon' in notification.data.modified:
-                self.set_user_icon(IconManager().get('myicon'))
+                self.set_user_icon(IconManager().get('avatar'))
             if 'presence.offline_note' in notification.data.modified:
                 # TODO: set offline note -Saul
                 pass

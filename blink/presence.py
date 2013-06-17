@@ -192,7 +192,7 @@ class PresencePublicationHandler(object):
     def _save_icon(self, icon_data, icon_hash):
         settings = BlinkSettings()
         if None not in (icon_data, icon_hash):
-            icon = IconManager().store_data('myicon', icon_data)
+            icon = IconManager().store_data('avatar', icon_data)
             if icon:
                 settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash)
         else:
