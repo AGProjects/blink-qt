@@ -401,8 +401,8 @@ class MainWindow(base_class, ui_class):
         self.activity_note.clearFocus()
         note = self.activity_note.text()
         if note != self.account_state.note:
+            self.account_state.state.internal = False
             self.account_state.setState(self.account_state.state, note)
-            self.saved_account_state = None
 
     def _SH_AddContactButtonClicked(self, clicked):
         model = self.contact_model
