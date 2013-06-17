@@ -95,6 +95,15 @@ class IconManager(object):
                 icon = None
             return self.iconmap.setdefault(id, icon)
 
+    def get_image(self, id):
+        icon = self.get(id)
+        if icon is None:
+            return None
+        try:
+            return file(icon.filename).read()
+        except Exception:
+            return None
+
     def store_data(self, id, data):
         directory = ApplicationData.get('images')
         filename = os.path.join(directory, id + '.png')
