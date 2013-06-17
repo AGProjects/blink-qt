@@ -180,7 +180,7 @@ class PresencePublicationHandler(object):
         icon = None
         if settings.presence.icon:
             try:
-                data = open(settings.presence.icon.url[7:], 'r').read()  # strip 'file://'
+                data = open(settings.presence.icon.url.path).read()
             except Exception:
                 pass
             else:
@@ -194,7 +194,7 @@ class PresencePublicationHandler(object):
         if None not in (icon_data, icon_hash):
             icon = IconManager().store_data('myicon', icon_data)
             if icon:
-                settings.presence.icon = IconDescriptor('file://'+icon.filename, icon_hash)
+                settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash)
         else:
             settings.presence.icon = None
         settings.save()

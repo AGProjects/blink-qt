@@ -276,6 +276,12 @@ class SearchBox(LineEdit):
         self.textChanged.connect(self._SH_TextChanged)
         self.inactiveText = u"Search"
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.clear()
+        else:
+            super(SearchBox, self).keyPressEvent(event)
+
     def _SH_TextChanged(self, text):
         self.clear_button.setVisible(bool(text))
 

@@ -348,9 +348,7 @@ class SwitchViewButton(QPushButton):
             self.setStyleSheet(style_sheet)
 
     def dragEnterEvent(self, event):
-        if not self.dnd_active:
-            event.ignore()
-        elif event.mimeData().formats() == ['application/x-blink-contact-list']:
+        if self.dnd_active:
             event.accept()
             self._update_dnd()
             self.dnd_timer.start()
@@ -737,4 +735,5 @@ class AccountState(StateButton):
                     menu.removeAction(action)
                     menu.insertAction(actions[0], action)
         self.stateChanged.emit()
+
 

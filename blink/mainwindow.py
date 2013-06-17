@@ -9,7 +9,7 @@ import os
 from functools import partial
 
 from PyQt4 import uic
-from PyQt4.QtCore import QUrl
+from PyQt4.QtCore import Qt, QUrl
 from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
 from PyQt4.QtGui  import QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
@@ -23,7 +23,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import BonjourNeighbour, Contact, Group, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
+from blink.contacts import BonjourNeighbour, Contact, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
 from blink.history import HistoryManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, SessionModel
@@ -116,7 +116,6 @@ class MainWindow(base_class, ui_class):
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
 
-        self.contact_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
         self.contact_list.selectionModel().selectionChanged.connect(self._SH_ContactListSelectionChanged)
         self.contact_model.itemsAdded.connect(self._SH_ContactModelAddedItems)
         self.contact_model.itemsRemoved.connect(self._SH_ContactModelRemovedItems)
@@ -134,7 +133,6 @@ class MainWindow(base_class, ui_class):
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
 
         self.search_list.selectionModel().selectionChanged.connect(self._SH_SearchListSelectionChanged)
-        self.search_list.doubleClicked.connect(self._SH_ContactDoubleClicked) # activated is emitted on single click
 
         self.server_tools_account_model.rowsInserted.connect(self._SH_ServerToolsAccountModelChanged)
         self.server_tools_account_model.rowsRemoved.connect(self._SH_ServerToolsAccountModelChanged)
@@ -386,11 +384,11 @@ class MainWindow(base_class, ui_class):
             if filename is not None:
                 icon = icon_manager.store_file('myicon', filename)
                 try:
-                    hash = hashlib.sha512(open(icon.filename, 'r').read()).hexdigest()
+                    hash = hashlib.sha512(open(icon.filename).read()).hexdigest()
                 except Exception:
                     settings.presence.icon = None
                 else:
-                    settings.presence.icon = IconDescriptor('file://'+icon.filename, hash)
+                    settings.presence.icon = IconDescriptor('file://' + icon.filename, hash)
             else:
                 icon_manager.remove('myicon')
                 icon = None
@@ -405,41 +403,28 @@ class MainWindow(base_class, ui_class):
             self.account_state.setState(self.account_state.state, note)
 
     def _SH_AddContactButtonClicked(self, clicked):
-        model = self.contact_model
-        groups = set()
-        for index in self.contact_list.selectionModel().selectedIndexes():
-            item = model.data(index)
-            if isinstance(item, Group) and not item.virtual:
-                groups.add(item)
-            elif isinstance(item, Contact) and not item.group.virtual:
-                groups.add(item.group)
-        preferred_group = groups.pop() if len(groups)==1 else None
-        self.contact_editor_dialog.open_for_add(self.search_box.text(), preferred_group)
+        self.contact_editor_dialog.open_for_add(self.search_box.text(), None)
 
     def _SH_AudioCallButtonClicked(self):
         list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
-        selected_indexes = list_view.selectionModel().selectedIndexes()
-        contact = list_view.model().data(selected_indexes[0]) if selected_indexes else Null
-        address = contact.uri or self.search_box.text()
-        name = contact.name or None
-        session_manager = SessionManager()
-        session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+        if list_view.detail_view.isVisible():
+            list_view.detail_view._AH_StartAudioCall()
+        else:
+            selected_indexes = list_view.selectionModel().selectedIndexes()
+            contact = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
+            address = contact.uri or self.search_box.text()
+            name = contact.name or None
+            session_manager = SessionManager()
+            session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
 
     def _SH_BreakConference(self):
-        active_session = self.session_model.data(self.session_list.selectionModel().selectedIndexes()[0])
+        active_session = self.session_list.selectionModel().selectedIndexes()[0].data()
         self.session_model.breakConference(active_session.conference)
-
-    def _SH_ContactDoubleClicked(self, index):
-        contact = index.model().data(index)
-        if not isinstance(contact, Contact):
-            return
-        session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
 
     def _SH_ContactListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
         selected_items = self.contact_list.selectionModel().selectedIndexes()
-        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and isinstance(self.contact_model.data(selected_items[0]), Contact))
+        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
 
     def _SH_ContactModelAddedItems(self, items):
         if not self.search_box.text():
@@ -516,7 +501,9 @@ class MainWindow(base_class, ui_class):
         else:
             self.contacts_view.setCurrentWidget(self.contact_list_panel)
             selected_items = self.contact_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and type(self.contact_model.data(selected_items[0])) is Contact)
+            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and type(selected_items[0].data(Qt.UserRole)) is Contact)
+        self.search_list.detail_model.contact = None
+        self.search_list.detail_view.hide()
 
     def _SH_SearchListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
@@ -532,7 +519,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         selected_indexes = selected.indexes()
-        active_session = self.session_model.data(selected_indexes[0]) if selected_indexes else Null
+        active_session = selected_indexes[0].data() if selected_indexes else Null
         if active_session.conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
@@ -550,7 +537,7 @@ class MainWindow(base_class, ui_class):
         self.active_sessions_label.setVisible(any(active_sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
-        active_session = self.session_model.data(selected_indexes[0]) if selected_indexes else Null
+        active_session = selected_indexes[0].data() if selected_indexes else Null
         if active_session.conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
@@ -730,7 +717,7 @@ class MainWindow(base_class, ui_class):
             self.enable_call_buttons(False)
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(len(selected_items)==1 and isinstance(self.contact_model.data(selected_items[0]), Contact))
+            self.enable_call_buttons(len(selected_items)==1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
 
     def _NH_SIPAccountGotMessageSummary(self, notification):
         account = notification.sender

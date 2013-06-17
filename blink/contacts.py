@@ -10,9 +10,9 @@ import socket
 import sys
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QPointF, QRectF, QRegExp, QSize, pyqtSignal
+from PyQt4.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QPointF, QPropertyAnimation, QRectF, QRect, QSize, pyqtSignal
 from PyQt4.QtGui  import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
-from PyQt4.QtGui  import QAction, QKeyEvent, QListView, QMenu, QMouseEvent, QRegExpValidator, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QMenu, QKeyEvent, QMouseEvent, QSortFilterProxyModel, QItemDelegate, QStyledItemDelegate, QListView, QTableView, QComboBox, QRadioButton, QButtonGroup, QWidget, QHBoxLayout
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -43,6 +43,7 @@ from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager
 from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
+from blink.widgets.color import ColorHelperMixin
 from blink.widgets.labels import Status
 
 from blink.google.gdata.client import CaptchaChallenge, RequestError, Unauthorized
@@ -787,10 +788,12 @@ class Contact(object):
 
     default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
 
+    stylish_icons = True
+
     def __init__(self, contact, group):
         self.settings = contact
         self.group = group
-        self.state = 'unknown'
+        self.state = None
         self.note = None
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
@@ -819,7 +822,7 @@ class Contact(object):
         return '%s(%r, %r)' % (self.__class__.__name__, self.settings, self.group)
 
     def __getstate__(self):
-        return (self.settings.id, dict(group=self.group, state=self.state))
+        return (self.settings.id, dict(group=self.group, state=self.state, note=self.note))
 
     def __setstate__(self, state):
         contact_id, state = state
@@ -835,7 +838,7 @@ class Contact(object):
         self.__dict__.update(state)
 
     def __unicode__(self):
-        return u'%s <%s>' % (self.name, self.uri) if self.name else self.uri
+        return self.name or u''
 
     @property
     def name(self):
@@ -856,6 +859,8 @@ class Contact(object):
 
     @property
     def uri(self):
+        if isinstance(self.settings, addressbook.Contact) and self.settings.uris.default is not None:
+            return self.settings.uris.default.uri
         try:
             return next(uri.uri for uri in self.settings.uris)
         except StopIteration:
@@ -868,7 +873,7 @@ class Contact(object):
         except KeyError:
             if isinstance(self.settings, addressbook.Contact):
                 icon_manager = IconManager()
-                icon = icon_manager.get(self.settings.id) or self.default_user_icon
+                icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
             elif isinstance(self.settings, GoogleContact):
                 pixmap = QPixmap()
                 if pixmap.loadFromData(self.settings.icon.data):
@@ -884,20 +889,21 @@ class Contact(object):
         try:
             return self.__dict__['pixmap']
         except KeyError:
-            return self.__dict__.setdefault('pixmap', self.icon.pixmap(32))
-
-    def _get_state(self):
-        return self.__dict__['state']
-
-    def _set_state(self, value):
-        old_value = self.__dict__.get('state', Null)
-        self.__dict__['state'] = value
-        if old_value != value and old_value is not Null:
-            notification_center = NotificationCenter()
-            notification_center.post_notification('BlinkContactDidChange', sender=self, data=NotificationData(prev_state=old_value, state=value))
-
-    state = property(_get_state, _set_state)
-    del _get_state, _set_state
+            size = 32
+            if self.stylish_icons:
+                pixmap = QPixmap(size, size)
+                pixmap.fill(Qt.transparent)
+                path = QPainterPath()
+                path.addRoundedRect(0, 0, size, size, 3.7, 3.7)
+                painter = QPainter(pixmap)
+                painter.setRenderHint(QPainter.Antialiasing, True)
+                painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+                painter.setClipPath(path)
+                painter.drawPixmap(0, 0, self.icon.pixmap(size))
+                painter.end()
+            else:
+                pixmap = self.icon.pixmap(size)
+            return self.__dict__.setdefault('pixmap', pixmap)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -905,16 +911,13 @@ class Contact(object):
         handler(notification)
 
     def _NH_AddressbookContactDidChange(self, notification):
-        if 'icon' in notification.data.modified:
+        if set(['icon', 'alternate_icon']).intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDidChange', sender=self)
 
     def _NH_AddressbookContactGotPresenceUpdate(self, notification):
-        if notification.data.state in ('available', 'away', 'busy', 'offline'):
-            self.state = notification.data.state
-        else:
-            self.state = 'unknown'
+        self.state = notification.data.state
         self.note = notification.data.note
         if notification.data.icon_data:
             icon = IconManager().store_data(self.settings.id, notification.data.icon_data)
@@ -922,6 +925,192 @@ class Contact(object):
                 self.settings.icon = notification.data.icon_descriptor
                 self.settings.save()
         notification.center.post_notification('BlinkContactDidChange', sender=self)
+
+
+class ContactDetail(object):
+    implements(IObserver)
+
+    size_hint = QSize(200, 36)
+
+    native = property(lambda self: isinstance(self.settings, addressbook.Contact))
+
+    editable = property(lambda self: isinstance(self.settings, addressbook.Contact))
+    deletable = property(lambda self: isinstance(self.settings, addressbook.Contact))
+
+    default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
+
+    stylish_icons = True
+
+    def __init__(self, contact):
+        self.settings = contact
+        self.state = None
+        self.note = None
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, self.settings)
+
+    def __getstate__(self):
+        return (self.settings.id, dict(state=self.state, note=self.note))
+
+    def __setstate__(self, state):
+        contact_id, state = state
+        if isinstance(contact_id, addressbook.ID):
+            group = AllContactsGroup()
+        elif isinstance(contact_id, GoogleContactID):
+            group = GoogleContactsGroup()
+        elif isinstance(contact_id, BonjourServiceDescription):
+            group = BonjourNeighboursGroup()
+        else:
+            group = None
+        self.settings = group.contacts[contact_id]
+        self.__dict__.update(state)
+
+    def __unicode__(self):
+        return self.name or u''
+
+    @property
+    def name(self):
+        if isinstance(self.settings, BonjourNeighbour):
+            return '%s (%s)' % (self.settings.name, self.settings.hostname)
+        elif isinstance(self.settings, GoogleContact):
+            return self.settings.name or self.settings.company
+        else:
+            return self.settings.name
+
+    @property
+    def uris(self):
+        return self.settings.uris
+
+    @property
+    def info(self):
+        return self.note or self.uri
+
+    @property
+    def uri(self):
+        if isinstance(self.settings, addressbook.Contact) and self.settings.uris.default is not None:
+            return self.settings.uris.default.uri
+        try:
+            return next(uri.uri for uri in self.settings.uris)
+        except StopIteration:
+            return u''
+
+    @property
+    def icon(self):
+        try:
+            return self.__dict__['icon']
+        except KeyError:
+            if isinstance(self.settings, addressbook.Contact):
+                icon_manager = IconManager()
+                icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
+            elif isinstance(self.settings, GoogleContact):
+                pixmap = QPixmap()
+                if pixmap.loadFromData(self.settings.icon.data):
+                    icon = QIcon(pixmap)
+                else:
+                    icon = self.default_user_icon
+            else:
+                icon = self.default_user_icon
+            return self.__dict__.setdefault('icon', icon)
+
+    @property
+    def pixmap(self):
+        try:
+            return self.__dict__['pixmap']
+        except KeyError:
+            size = 32
+            if self.stylish_icons:
+                pixmap = QPixmap(size, size)
+                pixmap.fill(Qt.transparent)
+                path = QPainterPath()
+                path.addRoundedRect(0, 0, size, size, 3.7, 3.7)
+                painter = QPainter(pixmap)
+                painter.setRenderHint(QPainter.Antialiasing, True)
+                painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+                painter.setClipPath(path)
+                painter.drawPixmap(0, 0, self.icon.pixmap(size))
+                painter.end()
+            else:
+                pixmap = self.icon.pixmap(size)
+            return self.__dict__.setdefault('pixmap', pixmap)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_AddressbookContactDidChange(self, notification):
+        if set(['icon', 'alternate_icon']).intersection(notification.data.modified):
+            self.__dict__.pop('icon', None)
+            self.__dict__.pop('pixmap', None)
+        notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
+
+    def _NH_AddressbookContactGotPresenceUpdate(self, notification):
+        self.state = notification.data.state
+        self.note = notification.data.note
+        notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
+
+
+class ContactURI(object):
+    implements(IObserver)
+
+    size_hint = QSize(200, 24)
+
+    native = property(lambda self: isinstance(self.contact, addressbook.Contact))
+
+    editable = property(lambda self: isinstance(self.contact, addressbook.Contact))
+    deletable = property(lambda self: isinstance(self.contact, addressbook.Contact))
+
+    def __init__(self, contact, uri, default=False):
+        self.contact = contact
+        self.uri = uri
+        self.default = default
+        self.state = None
+        self.note = None
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
+
+    def __repr__(self):
+        return '%s(%r, %r)' % (self.__class__.__name__, self.contact, self.uri)
+
+    def __getstate__(self):
+        state_dict = dict(default=self.default, state=self.state, note=self.note)
+        if isinstance(self.contact, addressbook.Contact):
+            uri_id = self.uri.id
+        else:
+            uri_id = None
+            state_dict['uri'] = self.uri
+        return (self.contact.id, uri_id, state_dict)
+
+    def __setstate__(self, state):
+        contact_id, uri_id, state = state
+        if isinstance(contact_id, addressbook.ID):
+            group = AllContactsGroup()
+        elif isinstance(contact_id, GoogleContactID):
+            group = GoogleContactsGroup()
+        elif isinstance(contact_id, BonjourServiceDescription):
+            group = BonjourNeighboursGroup()
+        else:
+            group = None
+        self.contact = group.contacts[contact_id]
+        if uri_id is not None:
+            self.uri = self.contact.uris[uri_id]
+        self.__dict__.update(state)
+
+    def __unicode__(self):
+        return u'%s (%s)' % (self.uri.uri, self.uri.type) if self.uri.type else unicode(self.uri.uri)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_AddressbookContactDidChange(self, notification):
+        modified_uris    = notification.data.modified.get('uris', Null)
+        modified_default = notification.data.modified.get('uris.default', Null)
+        if self.uri.id in modified_uris.modified or self.uri in (modified_default.old, modified_default.new) and self.uri not in modified_uris.removed:
+            notification.center.post_notification('BlinkContactURIDidChange', sender=self)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('google_contacts_dialog.ui'))
@@ -1056,37 +1245,11 @@ class ContactWidget(base_class, ui_class):
         self.info_label.setForegroundRole(QPalette.Dark)
         # AlternateBase set to #f0f4ff or #e0e9ff
 
-    def _get_name(self):
-        return self.name_label.text()
-
-    def _set_name(self, value):
-        self.name_label.setText(value)
-
-    #name = property(_get_name, _set_name)
-    del _get_name, _set_name
-
-    def _get_info(self):
-        return self.info_label.text()
-
-    def _set_info(self, value):
-        self.info_label.setText(value)
-
-    #info = property(_get_info, _set_info)
-    del _get_info, _set_info
-
-    def _get_icon(self):
-        return self.icon_label.pixmap()
-
-    def _set_icon(self, icon):
-        self.icon_label.setPixmap(icon.pixmap(32))
-
-    #icon = property(_get_icon, _set_icon)
-    del _get_icon, _set_icon
-
     def init_from_contact(self, contact):
         self.name_label.setText(contact.name)
         self.info_label.setText(contact.info)
         self.icon_label.setPixmap(contact.pixmap)
+        self.state_label.state = contact.state
 
 del ui_class, base_class
 
@@ -1238,7 +1401,7 @@ class GroupWidget(base_class, ui_class):
 del ui_class, base_class
 
 
-class ContactDelegate(QStyledItemDelegate):
+class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
     def __init__(self, parent=None):
         super(ContactDelegate, self).__init__(parent)
 
@@ -1274,7 +1437,7 @@ class ContactDelegate(QStyledItemDelegate):
             list_view.setRowHidden(position, collapsed)
 
     def createEditor(self, parent, options, index):
-        item = index.model().data(index, Qt.DisplayRole)
+        item = index.data(Qt.UserRole)
         if isinstance(item, Group):
             item.widget = GroupWidget(parent)
             item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
@@ -1282,8 +1445,19 @@ class ContactDelegate(QStyledItemDelegate):
         else:
             return None
 
-    def editorEvent_no(self, event, model, option, index):
-        print "editor event", event, model, option, index, event.type(), event.pos(), option.rect, option.rect.adjusted(option.rect.width()-18, 0, 0, -18), option.rect.adjusted(option.rect.width()-18, 0, 0, -18).contains(event.pos())
+    def editorEvent(self, event, model, option, index):
+        arrow_rect = QRect(0, 0, 14, option.rect.height())
+        arrow_rect.moveTopRight(option.rect.topRight())
+        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier and arrow_rect.contains(event.pos()):
+            model.contact_list.detail_model.contact = index.data(Qt.UserRole).settings
+            detail_view = model.contact_list.detail_view
+            detail_view.animation.setDirection(QPropertyAnimation.Forward)
+            detail_view.animation.setStartValue(option.rect)
+            detail_view.animation.setEndValue(model.contact_list.geometry())
+            detail_view.raise_()
+            detail_view.show()
+            detail_view.animation.start()
+            return True
         return super(ContactDelegate, self).editorEvent(event, model, option, index)
 
     def updateEditorGeometry(self, editor, option, index):
@@ -1305,14 +1479,8 @@ class ContactDelegate(QStyledItemDelegate):
         widget.render(pixmap)
         painter.drawPixmap(option.rect, pixmap)
 
-        if contact.state not in ('offline', 'unknown'):
-            status_colors = dict(available='#00ff00', away='#ffff00', busy='#ff0000')
-            color = QColor(status_colors[contact.state])
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setBrush(color)
-            painter.setPen(color.darker(200))
-            width, border, radius = 4, 2, 2
-            painter.drawRoundedRect(option.rect.topRight().x()-width-border, option.rect.y()+border, width, option.rect.height()-2*border, radius, radius)
+        if option.state & QStyle.State_MouseOver:
+            self.drawExpansionIndicator(contact, option, painter, widget)
 
         if 0 and (option.state & QStyle.State_MouseOver):
             painter.setRenderHint(QPainter.Antialiasing, True)
@@ -1324,33 +1492,33 @@ class ContactDelegate(QStyledItemDelegate):
 
         painter.restore()
 
-    def drawExpansionIndicator(self, option, painter):
-        arrow_rect = QRectF(0, 0, 18, 18)
-        arrow_rect.moveTopRight(option.rect.topRight())
+    def drawExpansionIndicator(self, contact, option, painter, widget):
+        # this fits best with a state_label of width 14
+        arrow_rect = QRect(0, 0, 14, 14)
+        arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
+        arrow_rect.translate(option.rect.topLeft())
 
-        text_color = option.palette.color(QPalette.WindowText if option.state & QStyle.State_AutoRaise else QPalette.ButtonText)
-        button_color = option.palette.color(QPalette.Button)
-        background_color = self.background_color(button_color, 0.5)
-
-        painter.save()
+        text_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+        if contact.state in ('available', 'away', 'busy'):
+            window_color = widget.state_label.state_colors[contact.state]
+        else:
+            window_color = option.palette.color(QPalette.Window)
+        background_color = self.background_color(window_color, 0.5)
 
         arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
-        if option.direction == Qt.LeftToRight:
-            arrow.translate(-2, 1)
-        else:
-            arrow.translate(+2, 1)
+        arrow.translate(1, 1)
         pen_thickness = 1.6
 
+        painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
         painter.translate(arrow_rect.center())
-
         painter.translate(0, +1)
         painter.setPen(QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         painter.drawPolyline(arrow)
         painter.translate(0, -1)
         painter.setPen(QPen(self.deco_color(background_color, text_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         painter.drawPolyline(arrow)
-
         painter.restore()
 
     def paintGroup(self, group, painter, option, index):
@@ -1370,12 +1538,167 @@ class ContactDelegate(QStyledItemDelegate):
             painter.restore()
 
     def paint(self, painter, option, index):
-        item = index.model().data(index, Qt.DisplayRole)
+        item = index.data(Qt.UserRole)
         handler = getattr(self, 'paint%s' % item.__class__.__name__, Null)
         handler(item, painter, option, index)
 
     def sizeHint(self, option, index):
-        return index.model().data(index, Qt.DisplayRole).size_hint
+        return index.data(Qt.SizeHintRole)
+
+
+class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
+    def __init__(self, parent=None):
+        super(ContactDetailDelegate, self).__init__(parent)
+        self.widget = ContactWidget(None)
+        self.widget.setBackgroundRole(QPalette.Base)
+        # No theme except Oxygen honors the BackgroundRole
+        palette = self.widget.palette()
+        palette.setColor(QPalette.Window, palette.color(QPalette.Base))
+        self.widget.setPalette(palette)
+
+    def editorEvent(self, event, model, option, index):
+        arrow_rect = QRect(0, 0, 14, option.rect.height())
+        arrow_rect.moveTopRight(option.rect.topRight())
+        if index.row()==0 and event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier and arrow_rect.contains(event.pos()):
+            detail_view = self.parent()
+            detail_view.animation.setDirection(QPropertyAnimation.Backward)
+            detail_view.animation.start()
+            return True
+        return super(ContactDetailDelegate, self).editorEvent(event, model, option, index)
+
+    def paintContactDetail(self, contact, painter, option, index):
+        widget = self.widget
+        item_size = option.rect.size()
+        widget.setFixedSize(item_size)
+        widget.init_from_contact(contact)
+
+        painter.save()
+        pixmap = QPixmap(item_size)
+        widget.render(pixmap)
+        painter.drawPixmap(option.rect, pixmap)
+
+        self.drawCollapseIndicator(contact, option, painter, widget)
+
+        painter.restore()
+
+    def paintContactURI(self, contact_uri, painter, option, index):
+        widget = option.widget
+        style = widget.style()
+
+        painter.save()
+        painter.setClipRect(option.rect)
+
+        # draw the background
+        style.proxy().drawPrimitive(QStyle.PE_PanelItemViewItem, option, painter, widget)
+
+        # draw the check mark
+        if option.features & option.HasCheckIndicator:
+            self.drawCheckMark(option, painter, widget)
+
+        # draw the icon
+        mode = QIcon.Disabled if not option.state & QStyle.State_Enabled else QIcon.Selected if option.state & QStyle.State_Selected else QIcon.Normal
+        state = QIcon.On if option.state & QStyle.State_Open else QIcon.Off
+        icon_rect = style.subElementRect(QStyle.SE_ItemViewItemDecoration, option, widget)
+        option.icon.paint(painter, icon_rect, option.decorationAlignment, mode, state)
+
+        # draw the text
+        if contact_uri.uri.uri:
+            color_group = QPalette.Disabled if not option.state & QStyle.State_Enabled else QPalette.Normal if option.state & QStyle.State_Active else QPalette.Inactive
+            text_rect = style.subElementRect(QStyle.SE_ItemViewItemText, option, widget)
+            text_rect.setRight(option.rect.right() - 5)
+            if contact_uri.uri.type:
+                painter.setPen(option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Dark))
+                painter.drawText(text_rect, Qt.TextSingleLine | Qt.AlignRight | Qt.AlignVCenter, contact_uri.uri.type)
+                text_rect.adjust(0, 0, -option.fontMetrics.width(contact_uri.uri.type) - 5, 0)
+            text_color = option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text)
+            if option.fontMetrics.width(contact_uri.uri.uri) > text_rect.width():
+                gradient = QLinearGradient(text_rect.x(), 0, text_rect.right(), 0)
+                gradient.setColorAt(1-50.0/text_rect.width(), text_color)
+                gradient.setColorAt(1.0, Qt.transparent)
+                painter.setClipRect(text_rect)
+                painter.setPen(QPen(QBrush(gradient), 1.0))
+            else:
+                painter.setPen(text_color)
+            painter.drawText(text_rect, Qt.TextSingleLine | Qt.AlignLeft | Qt.AlignVCenter, contact_uri.uri.uri)
+
+        painter.restore()
+
+    def drawCollapseIndicator(self, contact, option, painter, widget):
+        # this fits best with a state_label of width 14
+        arrow_rect = QRect(0, 0, 14, 14)
+        arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
+        arrow_rect.translate(option.rect.topLeft())
+
+        text_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+        if contact.state in ('available', 'away', 'busy'):
+            window_color = widget.state_label.state_colors[contact.state]
+        else:
+            window_color = option.palette.color(QPalette.Window)
+        background_color = self.background_color(window_color, 0.5)
+
+        arrow = QPolygonF([QPointF(3, 1.5), QPointF(-0.5, -2.5), QPointF(-4, 1.5)])
+        arrow.translate(2, 1)
+        pen_thickness = 1.6
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.translate(arrow_rect.center())
+        painter.translate(0, +1)
+        painter.setPen(QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPolyline(arrow)
+        painter.translate(0, -1)
+        painter.setPen(QPen(self.deco_color(background_color, text_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPolyline(arrow)
+        painter.restore()
+
+    def drawCheckMark(self, option, painter, widget):
+        if option.checkState == Qt.Unchecked:
+            return
+
+        palette = option.palette
+        rect = widget.style().subElementRect(QStyle.SE_ItemViewItemCheckIndicator, option, widget)
+
+        x = rect.center().x() - 3.5
+        y = rect.center().y() - 2.5
+
+        pen_thickness = 2.0
+        color = palette.color(QPalette.WindowText)
+        background = palette.color(QPalette.Highlight if option.state & QStyle.State_Selected else QPalette.Window)
+        pen = QPen(self.deco_color(background, color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(self.calc_light_color(background), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+
+        if option.checkState == Qt.PartiallyChecked:
+            dashes = [1.0, 2.0]
+            pen_thickness = 1.3
+            pen.setWidthF(pen_thickness)
+            contrast_pen.setWidthF(pen_thickness)
+            pen.setDashPattern(dashes)
+            contrast_pen.setDashPattern(dashes)
+
+        offset = min(pen_thickness, 1.0)
+
+        painter.save()
+        painter.translate(0, -1)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(contrast_pen)
+        painter.translate(0, offset)
+        painter.drawLine(x+9, y, x+3, y+7)
+        painter.drawLine(x, y+4, x+3, y+7)
+        painter.setPen(pen)
+        painter.translate(0, -offset)
+        painter.drawLine(x+9, y, x+3, y+7)
+        painter.drawLine(x, y+4, x+3, y+7)
+        painter.restore()
+
+    def paint(self, painter, option, index):
+        self.initStyleOption(option, index)
+        item = index.data(Qt.UserRole)
+        handler = getattr(self, 'paint%s' % item.__class__.__name__, Null)
+        handler(item, painter, option, index)
+
+    def sizeHint(self, option, index):
+        return index.data(Qt.SizeHintRole)
 
 
 class Operation(object):
@@ -1389,7 +1712,7 @@ class Operation(object):
         self.timestamp = datetime.utcnow()
 
 class AddContactOperation(Operation):
-    __params__ = ('contact', 'group_ids') # store icon data as well? -Dan
+    __params__ = ('contact', 'group_ids', 'icon', 'alternate_icon')
     __priority__ = 0
 
 class AddGroupOperation(Operation):
@@ -1539,6 +1862,7 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='SIPApplicationDidEnd')
         notification_center.add_observer(self, name='SIPAccountManagerDidStart')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
+        notification_center.add_observer(self, name='AddressbookContactDidChange')
         notification_center.add_observer(self, name='AddressbookGroupWasActivated')
         notification_center.add_observer(self, name='AddressbookGroupWasDeleted')
         notification_center.add_observer(self, name='AddressbookGroupDidChange')
@@ -1572,9 +1896,16 @@ class ContactModel(QAbstractListModel):
         return len(self.items)
 
     def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid() or role != Qt.DisplayRole:
+        if not index.isValid():
             return None
-        return self.items[index.row()]
+        item = self.items[index.row()]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.SizeHintRole:
+            return item.size_hint
+        elif role == Qt.DisplayRole:
+            return unicode(item)
+        return None
 
     def supportedDropActions(self):
         return Qt.CopyAction | Qt.MoveAction
@@ -1748,6 +2079,7 @@ class ContactModel(QAbstractListModel):
         if notification.sender is AllContactsGroup():
             icon_manager = IconManager()
             icon_manager.remove(contact.settings.id)
+            icon_manager.remove(contact.settings.id + '_alt')
 
     def _NH_BlinkContactDidChange(self, notification):
         contact = notification.sender
@@ -1792,6 +2124,16 @@ class ContactModel(QAbstractListModel):
                 self.moveGroup(bonjour_group, bonjour_group.reference_group)
                 bonjour_group.reference_group = None
             bonjour_group.reset_state()
+
+    def _NH_AddressbookContactDidChange(self, notification):
+        # make sure the presence policy and subscribe flag are synchronized
+        contact = notification.sender
+        if contact.presence.policy == 'default':
+            contact.presence.policy = 'allow' if contact.presence.subscribe else 'block'
+            contact.save()
+        elif contact.presence.subscribe != (True if contact.presence.policy=='allow' else False):
+            contact.presence.subscribe = True if contact.presence.policy=='allow' else False
+            contact.save()
 
     @staticmethod
     def range_iterator(indexes):
@@ -1958,6 +2300,7 @@ class ContactModel(QAbstractListModel):
 
     def removeItems(self, indexes):
         all_contacts_group = AllContactsGroup()
+        icon_manager = IconManager()
         removed_items = deque()
         removed_members = []
         undo_operations = []
@@ -1968,7 +2311,9 @@ class ContactModel(QAbstractListModel):
             elif item.group.settings is all_contacts_group:
                 removed_items.append(item.settings)
                 group_ids = [contact.group.settings.id for contact in self.iter_contacts() if contact.settings is item.settings and not contact.group.virtual]
-                undo_operations.append(AddContactOperation(contact=RecallState(item.settings), group_ids=group_ids))
+                icon = icon_manager.get_image(item.settings.id)
+                alternate_icon = icon_manager.get_image(item.settings.id + '_alt')
+                undo_operations.append(AddContactOperation(contact=RecallState(item.settings), group_ids=group_ids, icon=icon, alternate_icon=alternate_icon))
             elif item.group.settings not in removed_items:
                 item.group.settings.contacts.remove(item.settings)
                 removed_members.append(item.group.settings)
@@ -1990,6 +2335,7 @@ class ContactSearchModel(QSortFilterProxyModel):
     def __init__(self, model, parent=None):
         super(ContactSearchModel, self).__init__(parent)
         self.main_window = parent
+        self.contact_list = parent.search_list
         self.setSourceModel(model)
         self.setDynamicSortFilter(True)
         self.sort(0)
@@ -2003,17 +2349,15 @@ class ContactSearchModel(QSortFilterProxyModel):
     def filterAcceptsRow(self, source_row, source_parent):
         source_model = self.sourceModel()
         source_index = source_model.index(source_row, 0, source_parent)
-        item = source_model.data(source_index, Qt.DisplayRole)
+        item = source_index.data(Qt.UserRole)
         if isinstance(item, Group) or not item.group.virtual:
             return False
         search_tokens = self.filterRegExp().pattern().lower().split()
-        searched_item = unicode(item).lower()
+        searched_item = u' '.join([item.name] + [uri.uri for uri in item.uris]).lower() # should we only search in the username part of the uris? -Dan
         return all(token in searched_item for token in search_tokens)
 
     def lessThan(self, left_index, right_index):
-        left_item = left_index.model().data(left_index, Qt.DisplayRole)
-        right_item = right_index.model().data(right_index, Qt.DisplayRole)
-        return left_item.name < right_item.name
+        return left_index.data(Qt.DisplayRole) < right_index.data(Qt.DisplayRole)
 
     def supportedDropActions(self):
         return Qt.CopyAction
@@ -2023,7 +2367,7 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
-        contacts = [self.data(index) for index in indexes if index.isValid()]
+        contacts = [index.data(Qt.UserRole) for index in indexes if index.isValid()]
         if contacts:
             mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contacts)))
         return mime_data
@@ -2049,6 +2393,151 @@ class ContactSearchModel(QSortFilterProxyModel):
         return False
 
 
+class ContactDetailModel(QAbstractListModel):
+    implements(IObserver)
+
+    contactDeleted = pyqtSignal()
+
+    # The MIME types we accept in drop operations, in the order they should be handled
+    accepted_mime_types = ['application/x-blink-session', 'text/uri-list']
+
+    def __init__(self, parent=None):
+        super(ContactDetailModel, self).__init__(parent)
+        self.contact = None
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkContactDetailDidChange')
+        notification_center.add_observer(self, name='BlinkContactURIDidChange')
+
+    @property
+    def contact_detail(self):
+        return self.items[0] if self.items else None
+
+    def _get_contact(self):
+        return self.__dict__['contact']
+
+    def _set_contact(self, contact):
+        old_contact = self.__dict__.get('contact', Null)
+        if contact is old_contact:
+            return
+        notification_center = NotificationCenter()
+        if old_contact:
+            notification_center.remove_observer(self, sender=old_contact)
+        if contact is not None:
+            notification_center.add_observer(self, sender=contact)
+        self.__dict__['contact'] = contact
+        self.beginResetModel()
+        if contact is None:
+            self.items = []
+        else:
+            self.items = [ContactDetail(contact)] + [ContactURI(contact, uri) for uri in contact.uris]
+        self.endResetModel()
+
+    contact = property(_get_contact, _set_contact)
+    del _get_contact, _set_contact
+
+    def flags(self, index):
+        if index.isValid():
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled
+        else:
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.items)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        row = index.row()
+        item = self.items[row]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.DisplayRole:
+            return unicode(item)
+        elif role == Qt.SizeHintRole:
+            return item.size_hint
+        elif role == Qt.CheckStateRole and row > 0:
+            if isinstance(self.contact, addressbook.Contact):
+                if item.uri is self.contact.uris.default:
+                    return Qt.Checked
+                elif self.contact.uris.default is None and row == 1:
+                    return Qt.PartiallyChecked
+            return Qt.Unchecked
+        return None
+
+    def supportedDropActions(self):
+        return Qt.CopyAction
+
+    def mimeTypes(self):
+        return ['application/x-blink-contact-list', 'application/x-blink-contact-uri-list']
+
+    def mimeData(self, indexes):
+        mime_data = QMimeData()
+        items = [self.items[index.row()] for index in indexes if index.isValid()]
+        contact_list = [item for item in items if isinstance(item, ContactDetail)]
+        contact_uris = [item for item in items if isinstance(item, ContactURI)]
+        if contact_list:
+            mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contact_list)))
+        if contact_uris:
+            mime_data.setData('application/x-blink-contact-uri-list', QByteArray(pickle.dumps(contact_uris)))
+        return mime_data
+
+    def dropMimeData(self, mime_data, action, row, column, parent_index):
+        # this is here just to keep the default Qt DnD API happy
+        # the custom handler is in handleDroppedData
+        return False
+
+    def handleDroppedData(self, mime_data, action, index):
+        if action == Qt.IgnoreAction:
+            return True
+
+        for mime_type in self.accepted_mime_types:
+            if mime_data.hasFormat(mime_type):
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                return handler(mime_data, action, index)
+        else:
+            return False
+
+    def _DH_ApplicationXBlinkSession(self, mime_data, action, index):
+        return False
+
+    def _DH_TextUriList(self, mime_data, action, index):
+        return False
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_AddressbookContactDidChange(self, notification):
+        if notification.sender is self.contact and 'uris' in notification.data.modified:
+            modified_uris = notification.data.modified['uris']
+            for row in sorted((row for row, item in enumerate(self.items) if row>0 and item.uri in modified_uris.removed), reverse=True):
+                self.beginRemoveRows(QModelIndex(), row, row)
+                del self.items[row]
+                self.endRemoveRows()
+            if modified_uris.added:
+                position = len(self.items)
+                self.beginInsertRows(QModelIndex(), position, position+len(modified_uris.added)-1)
+                self.items += [ContactURI(notification.sender, uri) for uri in modified_uris.added]
+                self.endInsertRows()
+
+    def _NH_AddressbookContactWasDeleted(self, notification):
+        if notification.sender is self.contact:
+            self.contact = None
+            self.contactDeleted.emit()
+
+    def _NH_BlinkContactDetailDidChange(self, notification):
+        if self.items and notification.sender is self.items[0]:
+            index = self.index(0)
+            self.dataChanged.emit(index, index)
+
+    def _NH_BlinkContactURIDidChange(self, notification):
+        if notification.sender in self.items:
+            index = self.index(self.items.index(notification.sender))
+            self.dataChanged.emit(index, index)
+
+
 class ContextMenuActions(object):
     pass
 
@@ -2058,7 +2547,11 @@ class ContactListView(QListView):
         super(ContactListView, self).__init__(parent)
         self.setItemDelegate(ContactDelegate(self))
         self.setDropIndicatorShown(False)
-        self.drop_indicator_index = QModelIndex()
+        self.detail_model = ContactDetailModel(self)
+        self.detail_view = ContactDetailView(self)
+        self.detail_view.setModel(self.detail_model)
+        self.detail_view.hide()
+        self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.actions.add_group = QAction("Add Group", self, triggered=self._AH_AddGroup)
         self.actions.add_contact = QAction("Add Contact", self, triggered=self._AH_AddContact)
@@ -2072,13 +2565,119 @@ class ContactListView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
         self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
+        self.drop_indicator_index = QModelIndex()
         self.needs_restore = False
+        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
 
     def setModel(self, model):
         selection_model = self.selectionModel() or Null
         selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
         super(ContactListView, self).setModel(model)
         self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+
+    def contextMenuEvent(self, event):
+        model = self.model()
+        selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+        if not model.deleted_items:
+            undo_delete_text = "Undo Delete"
+        elif len(model.deleted_items[-1]) == 1:
+            operation = model.deleted_items[-1][0]
+            if type(operation) is AddContactOperation:
+                state = operation.contact.state
+                name = state.get('name', 'Contact')
+            elif type(operation) is AddGroupOperation:
+                state = operation.group.state
+                name = state.get('name', 'Group')
+            else:
+                addressbook_manager = addressbook.AddressbookManager()
+                try:
+                    contact = addressbook_manager.get_contact(operation.contact_id)
+                except KeyError:
+                    name = 'Contact'
+                else:
+                    name = contact.name or 'Contact'
+            undo_delete_text = 'Undo Delete "%s"' % name
+        else:
+            undo_delete_text = "Undo Delete (%d items)" % len(model.deleted_items[-1])
+        menu = self.context_menu
+        menu.clear()
+        if not selected_items:
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        elif len(selected_items) > 1:
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.delete_selection)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
+            self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        elif isinstance(selected_items[0], Group):
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.edit_item)
+            menu.addAction(self.actions.delete_item)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
+            self.actions.edit_item.setEnabled(selected_items[0].editable)
+            self.actions.delete_item.setEnabled(selected_items[0].deletable)
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        else:
+            contact = selected_items[0]
+            menu.addAction(self.actions.start_audio_session)
+            menu.addAction(self.actions.start_chat_session)
+            menu.addAction(self.actions.send_sms)
+            menu.addAction(self.actions.send_files)
+            self.actions.request_remote_desktop.setText("Request Desktop from %s" % (contact.name or contact.uri))
+            self.actions.share_my_desktop.setText("Share My Desktop with %s" % (contact.name or contact.uri))
+            menu.addAction(self.actions.request_remote_desktop)
+            menu.addAction(self.actions.share_my_desktop)
+            menu.addSeparator()
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
+            menu.addAction(self.actions.edit_item)
+            menu.addAction(self.actions.delete_item)
+            menu.addAction(self.actions.undo_last_delete)
+            self.actions.undo_last_delete.setText(undo_delete_text)
+            account_manager = AccountManager()
+            default_account = account_manager.default_account
+            self.actions.start_audio_session.setEnabled(default_account is not None)
+            self.actions.start_chat_session.setEnabled(False)
+            self.actions.send_sms.setEnabled(False)
+            self.actions.send_files.setEnabled(False)
+            self.actions.request_remote_desktop.setEnabled(False)
+            self.actions.share_my_desktop.setEnabled(False)
+            self.actions.edit_item.setEnabled(contact.editable)
+            self.actions.delete_item.setEnabled(contact.deletable)
+            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        menu.exec_(event.globalPos())
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
+            selected_indexes = self.selectionModel().selectedIndexes()
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            if isinstance(item, Contact):
+                session_manager = SessionManager()
+                session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
+        elif event.key() == Qt.Key_Space:
+            selected_indexes = self.selectionModel().selectedIndexes()
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
+                self.detail_model.contact = item.settings
+                self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
+                self.detail_view.animation.setStartValue(self.visualRect(selected_indexes[0]))
+                self.detail_view.animation.setEndValue(self.geometry())
+                self.detail_view.raise_()
+                self.detail_view.show()
+                self.detail_view.animation.start()
+        else:
+            super(ContactListView, self).keyPressEvent(event)
 
     def paintEvent(self, event):
         super(ContactListView, self).paintEvent(event)
@@ -2109,197 +2708,6 @@ class ContactListView(QListView):
             painter.drawPath(path)
             painter.end()
 
-    def contextMenuEvent(self, event):
-        model = self.model()
-        selected_items = [model.data(index) for index in self.selectionModel().selectedIndexes()]
-        if not model.deleted_items:
-            undo_delete_text = "Undo Delete"
-        elif len(model.deleted_items[-1]) == 1:
-            operation = model.deleted_items[-1][0]
-            if type(operation) is AddContactOperation:
-                state = operation.contact.state
-                name = state.get('name', 'Contact')
-            elif type(operation) is AddGroupOperation:
-                state = operation.group.state
-                name = state.get('name', 'Group')
-            else:
-                addressbook_manager = addressbook.AddressbookManager()
-                try:
-                    contact = addressbook_manager.get_contact(operation.contact_id)
-                except KeyError:
-                    name = 'Contact'
-                else:
-                    name = contact.name or 'Contact'
-            undo_delete_text = 'Undo Delete "%s"' % name
-        else:
-            undo_delete_text = "Undo Delete (%d items)" % len(model.deleted_items[-1])
-        menu = QMenu(self)
-        if not selected_items:
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
-            menu.addAction(self.actions.undo_last_delete)
-            self.actions.undo_last_delete.setText(undo_delete_text)
-            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        elif len(selected_items) > 1:
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
-            menu.addAction(self.actions.delete_selection)
-            menu.addAction(self.actions.undo_last_delete)
-            self.actions.undo_last_delete.setText(undo_delete_text)
-            self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
-            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        elif isinstance(selected_items[0], Group):
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
-            menu.addAction(self.actions.edit_item)
-            menu.addAction(self.actions.delete_item)
-            menu.addAction(self.actions.undo_last_delete)
-            self.actions.undo_last_delete.setText(undo_delete_text)
-            self.actions.edit_item.setEnabled(selected_items[0].editable)
-            self.actions.delete_item.setEnabled(selected_items[0].deletable)
-            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        else:
-            contact = selected_items[0]
-            menu.addAction(self.actions.start_audio_session)
-            menu.addAction(self.actions.start_chat_session)
-            menu.addAction(self.actions.send_sms)
-            menu.addSeparator()
-            menu.addAction(self.actions.send_files)
-            menu.addSeparator()
-            self.actions.request_remote_desktop.setText("Request Desktop from %s" % (contact.name or contact.uri))
-            self.actions.share_my_desktop.setText("Share My Desktop with %s" % (contact.name or contact.uri))
-            menu.addAction(self.actions.request_remote_desktop)
-            menu.addAction(self.actions.share_my_desktop)
-            menu.addSeparator()
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
-            menu.addAction(self.actions.edit_item)
-            menu.addAction(self.actions.delete_item)
-            menu.addAction(self.actions.undo_last_delete)
-            self.actions.undo_last_delete.setText(undo_delete_text)
-            account_manager = AccountManager()
-            default_account = account_manager.default_account
-            self.actions.start_audio_session.setEnabled(default_account is not None)
-            self.actions.start_chat_session.setEnabled(False)
-            self.actions.send_sms.setEnabled(False)
-            self.actions.send_files.setEnabled(False)
-            self.actions.request_remote_desktop.setEnabled(False)
-            self.actions.share_my_desktop.setEnabled(False)
-            self.actions.edit_item.setEnabled(contact.editable)
-            self.actions.delete_item.setEnabled(contact.deletable)
-            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        menu.exec_(event.globalPos())
-
-    def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
-            selected_indexes = self.selectionModel().selectedIndexes()
-            if len(selected_indexes) == 1:
-                contact = self.model().data(selected_indexes[0])
-                if not isinstance(contact, Contact):
-                    return
-                session_manager = SessionManager()
-                session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
-        else:
-            super(ContactListView, self).keyPressEvent(event)
-
-    def _AH_AddGroup(self):
-        group = Group(addressbook.Group())
-        group.settings.save = Null # disable saving until the user provides the name
-        model = self.model()
-        selection_model = self.selectionModel()
-        model.addGroup(group)
-        self.scrollToTop()
-        group.widget.edit()
-        selection_model.select(model.index(model.items.index(group)), selection_model.ClearAndSelect)
-
-    def _AH_AddContact(self):
-        model = self.model()
-        groups = set()
-        for index in self.selectionModel().selectedIndexes():
-            item = model.data(index)
-            if isinstance(item, Group) and not item.virtual:
-                groups.add(item)
-            elif isinstance(item, Contact) and not item.group.virtual:
-                groups.add(item.group)
-        preferred_group = groups.pop() if len(groups)==1 else None
-        model.main_window.contact_editor_dialog.open_for_add(model.main_window.search_box.text(), preferred_group)
-
-    def _AH_EditItem(self):
-        model = self.model()
-        index = self.selectionModel().selectedIndexes()[0]
-        item = model.data(index)
-        if isinstance(item, Group):
-            self.scrollTo(index)
-            item.widget.edit()
-        else:
-            model.main_window.contact_editor_dialog.open_for_edit(item)
-
-    def _AH_DeleteSelection(self):
-        model = self.model()
-        model.removeItems(self.selectionModel().selectedIndexes())
-        self.selectionModel().clearSelection()
-
-    def _AH_UndoLastDelete(self):
-        model = self.model()
-        addressbook_manager = addressbook.AddressbookManager()
-        icon_manager = IconManager()
-        modified_settings = []
-        for operation in model.deleted_items.pop():
-            if type(operation) is AddContactOperation:
-                contact = addressbook.Contact(operation.contact.id)
-                contact.__setstate__(operation.contact.state)
-                modified_settings.append(contact)
-                for group_id in operation.group_ids:
-                    try:
-                        group = addressbook_manager.get_group(group_id)
-                    except KeyError:
-                        pass
-                    else:
-                        group.contacts.add(contact)
-                        modified_settings.append(group)
-                if contact.icon is not None and contact.icon.is_local:
-                    icon_file = contact.icon.url[len('file://'):]
-                    icon_manager.store_file(contact.id, icon_file)
-            elif type(operation) is AddGroupOperation:
-                group = addressbook.Group(operation.group.id)
-                group.__setstate__(operation.group.state)
-                modified_settings.append(group)
-            elif type(operation) is AddGroupMemberOperation:
-                try:
-                    group = addressbook_manager.get_group(operation.group_id)
-                    contact = addressbook_manager.get_contact(operation.contact_id)
-                except KeyError:
-                    pass
-                else:
-                    group.contacts.add(contact)
-                    modified_settings.append(group)
-        model._atomic_update(save=modified_settings)
-
-    def _AH_StartAudioCall(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
-
-    def _AH_StartChatSession(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_SendSMS(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_SendFiles(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_RequestRemoteDesktop(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_ShareMyDesktop(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
     def startDrag(self, supported_actions):
         super(ContactListView, self).startDrag(supported_actions)
         if self.needs_restore:
@@ -2315,7 +2723,7 @@ class ContactListView(QListView):
         model = self.model()
         event_source = event.source()
         accepted_mime_types = set(model.accepted_mime_types)
-        provided_mime_types = set(str(x) for x in event.mimeData().formats())
+        provided_mime_types = set(event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         has_blink_contacts = 'application/x-blink-contact-list' in provided_mime_types
         has_blink_groups = 'application/x-blink-group-list' in provided_mime_types
@@ -2358,7 +2766,7 @@ class ContactListView(QListView):
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
-                item = model.data(index)
+                item = index.data(Qt.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
@@ -2378,6 +2786,100 @@ class ContactListView(QListView):
         super(ContactListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
+
+    def _AH_AddGroup(self):
+        group = Group(addressbook.Group())
+        group.settings.save = Null # disable saving until the user provides the name
+        model = self.model()
+        selection_model = self.selectionModel()
+        model.addGroup(group)
+        self.scrollToTop()
+        group.widget.edit()
+        selection_model.select(model.index(model.items.index(group)), selection_model.ClearAndSelect)
+
+    def _AH_AddContact(self):
+        model = self.model()
+        groups = set()
+        for index in self.selectionModel().selectedIndexes():
+            item = index.data(Qt.UserRole)
+            if isinstance(item, Group) and not item.virtual:
+                groups.add(item)
+            elif isinstance(item, Contact) and not item.group.virtual:
+                groups.add(item.group)
+        preferred_group = groups.pop() if len(groups)==1 else None
+        model.main_window.contact_editor_dialog.open_for_add(model.main_window.search_box.text(), preferred_group)
+
+    def _AH_EditItem(self):
+        model = self.model()
+        index = self.selectionModel().selectedIndexes()[0]
+        item = index.data(Qt.UserRole)
+        if isinstance(item, Group):
+            self.scrollTo(index)
+            item.widget.edit()
+        else:
+            model.main_window.contact_editor_dialog.open_for_edit(item.settings)
+
+    def _AH_DeleteSelection(self):
+        model = self.model()
+        model.removeItems(self.selectionModel().selectedIndexes())
+        self.selectionModel().clearSelection()
+
+    def _AH_UndoLastDelete(self):
+        model = self.model()
+        addressbook_manager = addressbook.AddressbookManager()
+        icon_manager = IconManager()
+        modified_settings = []
+        for operation in model.deleted_items.pop():
+            if type(operation) is AddContactOperation:
+                contact = addressbook.Contact(operation.contact.id)
+                contact.__setstate__(operation.contact.state)
+                modified_settings.append(contact)
+                for group_id in operation.group_ids:
+                    try:
+                        group = addressbook_manager.get_group(group_id)
+                    except KeyError:
+                        pass
+                    else:
+                        group.contacts.add(contact)
+                        modified_settings.append(group)
+                if operation.icon is not None and contact.icon is not None:
+                    icon_manager.store_data(contact.id, operation.icon)
+                if operation.alternate_icon is not None and contact.alternate_icon is not None:
+                    icon_manager.store_data(contact.id + '_alt', operation.alternate_icon)
+            elif type(operation) is AddGroupOperation:
+                group = addressbook.Group(operation.group.id)
+                group.__setstate__(operation.group.state)
+                modified_settings.append(group)
+            elif type(operation) is AddGroupMemberOperation:
+                try:
+                    group = addressbook_manager.get_group(operation.group_id)
+                    contact = addressbook_manager.get_contact(operation.contact_id)
+                except KeyError:
+                    pass
+                else:
+                    group.contacts.add(contact)
+                    modified_settings.append(group)
+        model._atomic_update(save=modified_settings)
+
+    def _AH_StartAudioCall(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+
+    def _AH_StartChatSession(self):
+        pass
+
+    def _AH_SendSMS(self):
+        pass
+
+    def _AH_SendFiles(self):
+        pass
+
+    def _AH_RequestRemoteDesktop(self):
+        pass
+
+    def _AH_ShareMyDesktop(self):
+        pass
 
     def _DH_ApplicationXBlinkGroupList(self, event, index, rect, item):
         model = self.model()
@@ -2443,12 +2945,19 @@ class ContactListView(QListView):
         else:
             event.ignore(rect)
 
+    def _SH_DoubleClicked(self, index):
+        item = index.data(Qt.UserRole)
+        if isinstance(item, Contact):
+            session_manager = SessionManager()
+            session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
+
     def _SH_SelectionModelSelectionChanged(self, selected, deselected):
         selection_model = self.selectionModel()
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
             index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
             selection_model.setCurrentIndex(index, selection_model.Select)
+        self.context_menu.hide()
 
 
 class ContactSearchListView(QListView):
@@ -2456,7 +2965,11 @@ class ContactSearchListView(QListView):
         super(ContactSearchListView, self).__init__(parent)
         self.setItemDelegate(ContactDelegate(self))
         self.setDropIndicatorShown(False)
-        self.drop_indicator_index = QModelIndex()
+        self.detail_model = ContactDetailModel(self)
+        self.detail_view = ContactDetailView(self)
+        self.detail_view.setModel(self.detail_model)
+        self.detail_view.hide()
+        self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.actions.edit_item = QAction("Edit", self, triggered=self._AH_EditItem)
         self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
@@ -2468,6 +2981,8 @@ class ContactSearchListView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
         self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
+        self.drop_indicator_index = QModelIndex()
+        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
 
     def setModel(self, model):
         selection_model = self.selectionModel() or Null
@@ -2475,28 +2990,10 @@ class ContactSearchListView(QListView):
         super(ContactSearchListView, self).setModel(model)
         self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
 
-    def focusInEvent(self, event):
-        super(ContactSearchListView, self).focusInEvent(event)
-        model = self.model()
-        selection_model = self.selectionModel()
-        if not selection_model.selectedIndexes() and model.rowCount() > 0:
-            selection_model.select(model.index(0, 0), selection_model.Select)
-
-    def paintEvent(self, event):
-        super(ContactSearchListView, self).paintEvent(event)
-        if self.drop_indicator_index.isValid():
-            rect = self.visualRect(self.drop_indicator_index)
-            painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
-            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
-            painter.end()
-
     def contextMenuEvent(self, event):
         model = self.model()
         source_model = model.sourceModel()
-        selected_items = [model.data(index) for index in self.selectionModel().selectedIndexes()]
+        selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
         if not source_model.deleted_items:
             undo_delete_text = "Undo Delete"
         elif len(source_model.deleted_items[-1]) == 1:
@@ -2518,7 +3015,8 @@ class ContactSearchListView(QListView):
             undo_delete_text = 'Undo Delete "%s"' % name
         else:
             undo_delete_text = "Undo Delete (%d items)" % len(source_model.deleted_items[-1])
-        menu = QMenu(self)
+        menu = self.context_menu
+        menu.clear()
         if not selected_items:
             menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
@@ -2534,9 +3032,7 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.start_audio_session)
             menu.addAction(self.actions.start_chat_session)
             menu.addAction(self.actions.send_sms)
-            menu.addSeparator()
             menu.addAction(self.actions.send_files)
-            menu.addSeparator()
             self.actions.request_remote_desktop.setText("Request Desktop from %s" % (contact.name or contact.uri))
             self.actions.share_my_desktop.setText("Share My Desktop with %s" % (contact.name or contact.uri))
             menu.addAction(self.actions.request_remote_desktop)
@@ -2559,87 +3055,49 @@ class ContactSearchListView(QListView):
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         menu.exec_(event.globalPos())
 
+    def focusInEvent(self, event):
+        super(ContactSearchListView, self).focusInEvent(event)
+        model = self.model()
+        selection_model = self.selectionModel()
+        if not selection_model.selectedIndexes() and model.rowCount() > 0:
+            selection_model.setCurrentIndex(model.index(-1, -1), selection_model.NoUpdate)
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
+
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Enter, Qt.Key_Return):
             selected_indexes = self.selectionModel().selectedIndexes()
-            if len(selected_indexes) == 1:
-                contact = self.model().data(selected_indexes[0])
-                if not isinstance(contact, Contact):
-                    return
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            if isinstance(item, Contact):
                 session_manager = SessionManager()
-                session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
+                session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
+        elif event.key() == Qt.Key_Escape:
+            self.model().main_window.search_box.clear()
+        elif event.key() == Qt.Key_Space:
+            selected_indexes = self.selectionModel().selectedIndexes()
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
+                self.detail_model.contact = item.settings
+                self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
+                self.detail_view.animation.setStartValue(self.visualRect(selected_indexes[0]))
+                self.detail_view.animation.setEndValue(self.geometry())
+                self.detail_view.raise_()
+                self.detail_view.show()
+                self.detail_view.animation.start()
         else:
             super(ContactSearchListView, self).keyPressEvent(event)
 
-    def _AH_EditItem(self):
-        model = self.model()
-        contact = model.data(self.selectionModel().selectedIndexes()[0])
-        model.main_window.contact_editor_dialog.open_for_edit(contact)
-
-    def _AH_DeleteSelection(self):
-        model = self.model()
-        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes())
-
-    def _AH_UndoLastDelete(self):
-        model = self.model().sourceModel()
-        addressbook_manager = addressbook.AddressbookManager()
-        icon_manager = IconManager()
-        modified_settings = []
-        for operation in model.deleted_items.pop():
-            if type(operation) is AddContactOperation:
-                contact = addressbook.Contact(operation.contact.id)
-                contact.__setstate__(operation.contact.state)
-                modified_settings.append(contact)
-                for group_id in operation.group_ids:
-                    try:
-                        group = addressbook_manager.get_group(group_id)
-                    except KeyError:
-                        pass
-                    else:
-                        group.contacts.add(contact)
-                        modified_settings.append(group)
-                if contact.icon is not None and contact.icon.is_local:
-                    icon_file = contact.icon.url[len('file://'):]
-                    icon_manager.store_file(contact.id, icon_file)
-            elif type(operation) is AddGroupOperation:
-                group = addressbook.Group(operation.group.id)
-                group.__setstate__(operation.group.state)
-                modified_settings.append(group)
-            elif type(operation) is AddGroupMemberOperation:
-                try:
-                    group = addressbook_manager.get_group(operation.group_id)
-                    contact = addressbook_manager.get_contact(operation.contact_id)
-                except KeyError:
-                    pass
-                else:
-                    group.contacts.add(contact)
-                    modified_settings.append(group)
-        model._atomic_update(save=modified_settings)
-
-    def _AH_StartAudioCall(self):
-        contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact, BonjourNeighbour) else None)
-
-    def _AH_StartChatSession(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_SendSMS(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_SendFiles(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_RequestRemoteDesktop(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
-
-    def _AH_ShareMyDesktop(self):
-        #contact = self.model().data(self.selectionModel().selectedIndexes()[0])
-        pass
+    def paintEvent(self, event):
+        super(ContactSearchListView, self).paintEvent(event)
+        if self.drop_indicator_index.isValid():
+            rect = self.visualRect(self.drop_indicator_index)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
 
     def startDrag(self, supported_actions):
         super(ContactSearchListView, self).startDrag(supported_actions)
@@ -2651,7 +3109,7 @@ class ContactSearchListView(QListView):
     def dragEnterEvent(self, event):
         model = self.model()
         accepted_mime_types = set(model.accepted_mime_types)
-        provided_mime_types = set(str(x) for x in event.mimeData().formats())
+        provided_mime_types = set(event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         if event.source() is self:
             event.ignore()
@@ -2676,7 +3134,7 @@ class ContactSearchListView(QListView):
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
-                item = self.model().data(index)
+                item = index.data(Qt.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
@@ -2693,6 +3151,72 @@ class ContactSearchListView(QListView):
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
 
+    def _AH_EditItem(self):
+        model = self.model()
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        model.main_window.contact_editor_dialog.open_for_edit(contact.settings)
+
+    def _AH_DeleteSelection(self):
+        model = self.model()
+        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes())
+
+    def _AH_UndoLastDelete(self):
+        model = self.model().sourceModel()
+        addressbook_manager = addressbook.AddressbookManager()
+        icon_manager = IconManager()
+        modified_settings = []
+        for operation in model.deleted_items.pop():
+            if type(operation) is AddContactOperation:
+                contact = addressbook.Contact(operation.contact.id)
+                contact.__setstate__(operation.contact.state)
+                modified_settings.append(contact)
+                for group_id in operation.group_ids:
+                    try:
+                        group = addressbook_manager.get_group(group_id)
+                    except KeyError:
+                        pass
+                    else:
+                        group.contacts.add(contact)
+                        modified_settings.append(group)
+                if operation.icon is not None and contact.icon is not None:
+                    icon_manager.store_data(contact.id, operation.icon)
+                if operation.alternate_icon is not None and contact.alternate_icon is not None:
+                    icon_manager.store_data(contact.id + '_alt', operation.alternate_icon)
+            elif type(operation) is AddGroupOperation:
+                group = addressbook.Group(operation.group.id)
+                group.__setstate__(operation.group.state)
+                modified_settings.append(group)
+            elif type(operation) is AddGroupMemberOperation:
+                try:
+                    group = addressbook_manager.get_group(operation.group_id)
+                    contact = addressbook_manager.get_contact(operation.contact_id)
+                except KeyError:
+                    pass
+                else:
+                    group.contacts.add(contact)
+                    modified_settings.append(group)
+        model._atomic_update(save=modified_settings)
+
+    def _AH_StartAudioCall(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+
+    def _AH_StartChatSession(self):
+        pass
+
+    def _AH_SendSMS(self):
+        pass
+
+    def _AH_SendFiles(self):
+        pass
+
+    def _AH_RequestRemoteDesktop(self):
+        pass
+
+    def _AH_ShareMyDesktop(self):
+        pass
+
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
             event.accept(rect)
@@ -2703,6 +3227,528 @@ class ContactSearchListView(QListView):
             rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
             event.ignore(rect)
 
+    def _SH_DoubleClicked(self, index):
+        item = index.data(Qt.UserRole)
+        if isinstance(item, Contact):
+            session_manager = SessionManager()
+            session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
+
+    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
+        self.context_menu.hide()
+
+
+class ContactDetailView(QListView):
+    def __init__(self, contact_list):
+        super(ContactDetailView, self).__init__(contact_list.parent())
+        palette = self.palette()
+        palette.setColor(QPalette.AlternateBase, QColor('#eeeeee'))
+        self.setPalette(palette)
+        self.contact_list = contact_list
+        self.setItemDelegate(ContactDetailDelegate(self))
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QListView.DragDrop)
+        self.setAlternatingRowColors(True)
+        self.setSelectionMode(QListView.SingleSelection)
+        self.setDropIndicatorShown(False)
+        self.animation = QPropertyAnimation(self, 'geometry')
+        self.animation.setDuration(250)
+        self.animation.setEasingCurve(QEasingCurve.Linear)
+        self.animation.finished.connect(self._SH_AnimationFinished)
+        self.context_menu = QMenu(self)
+        self.actions = ContextMenuActions()
+        self.actions.delete_contact = QAction("Delete Contact", self, triggered=self._AH_DeleteContact)
+        self.actions.edit_contact = QAction("Edit Contact", self, triggered=self._AH_EditContact)
+        self.actions.make_uri_default = QAction("Set Address As Default", self, triggered=self._AH_MakeURIDefault)
+        self.actions.start_audio_session = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
+        self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
+        self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
+        self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
+        self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
+        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
+        contact_list.installEventFilter(self)
+
+    def setModel(self, model):
+        old_model = self.model() or Null
+        old_model.contactDeleted.disconnect(self._SH_ModelContactDeleted)
+        selection_model = self.selectionModel() or Null
+        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
+        super(ContactDetailView, self).setModel(model)
+        model.contactDeleted.connect(self._SH_ModelContactDeleted)
+        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Resize:
+            new_size = event.size()
+            geometry = self.animation.endValue()
+            if geometry is not None:
+                old_size = geometry.size()
+                geometry.setSize(new_size)
+                self.animation.setEndValue(geometry)
+                geometry = self.animation.startValue()
+                geometry.setWidth(geometry.width() + new_size.width() - old_size.width())
+                self.animation.setStartValue(geometry)
+            self.resize(new_size)
+        return False
+
+    def contextMenuEvent(self, event):
+        account_manager = AccountManager()
+        model = self.model()
+        selected_indexes = self.selectionModel().selectedIndexes()
+        selected_item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        name = selected_item.uri.uri if isinstance(selected_item, ContactURI) else model.contact.name
+        contact_has_uris = model.rowCount() > 1
+        self.actions.request_remote_desktop.setText("Request Desktop from %s" % name)
+        self.actions.share_my_desktop.setText("Share My Desktop with %s" % name)
+        menu = self.context_menu
+        menu.clear()
+        menu.addAction(self.actions.start_audio_session)
+        menu.addAction(self.actions.start_chat_session)
+        menu.addAction(self.actions.send_sms)
+        menu.addAction(self.actions.send_files)
+        menu.addAction(self.actions.request_remote_desktop)
+        menu.addAction(self.actions.share_my_desktop)
+        menu.addSeparator()
+        if isinstance(selected_item, ContactURI) and isinstance(model.contact, addressbook.Contact):
+            menu.addAction(self.actions.make_uri_default)
+            self.actions.make_uri_default.setEnabled(selected_item.uri is not model.contact.uris.default)
+        menu.addAction(self.actions.edit_contact)
+        menu.addAction(self.actions.delete_contact)
+        self.actions.start_audio_session.setEnabled(account_manager.default_account is not None and contact_has_uris)
+        self.actions.start_chat_session.setEnabled(False)
+        self.actions.send_sms.setEnabled(False)
+        self.actions.send_files.setEnabled(False)
+        self.actions.request_remote_desktop.setEnabled(False)
+        self.actions.share_my_desktop.setEnabled(False)
+        menu.exec_(event.globalPos())
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
+            self._AH_StartAudioCall()
+        elif event.key() == Qt.Key_Escape:
+            self.animation.setDirection(QPropertyAnimation.Backward)
+            self.animation.start()
+        else:
+            super(ContactDetailView, self).keyPressEvent(event)
+
+    def startDrag(self, supported_actions):
+        super(ContactDetailView, self).startDrag(supported_actions)
+        main_window = self.contact_list.model().main_window
+        main_window.switch_view_button.dnd_active = False
+        if not main_window.session_model.sessions:
+            main_window.switch_view_button.view = SwitchViewButton.ContactView
+
+    def dragEnterEvent(self, event):
+        if event.source() is self:
+            self.contact_list.model().main_window.switch_view_button.dnd_active = True
+        if set(event.mimeData().formats()).isdisjoint(self.model().accepted_mime_types):
+            event.ignore()
+        else:
+            event.accept()
+            self.setState(self.DraggingState)
+
+    def dragLeaveEvent(self, event):
+        super(ContactDetailView, self).dragLeaveEvent(event)
+
+    def dragMoveEvent(self, event):
+        super(ContactDetailView, self).dragMoveEvent(event)
+        model = self.model()
+        for mime_type in model.accepted_mime_types:
+            if event.provides(mime_type):
+                index = self.indexAt(event.pos())
+                rect = self.visualRect(index)
+                item = index.data(Qt.UserRole)
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                handler(event, index, rect, item)
+                break
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        model = self.model()
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        super(ContactDetailView, self).dropEvent(event)
+
+    def _AH_DeleteContact(self):
+        self.contact_list._AH_DeleteSelection()
+
+    def _AH_EditContact(self):
+        self.contact_list.model().main_window.contact_editor_dialog.open_for_edit(self.model().contact)
+
+    def _AH_MakeURIDefault(self):
+        model = self.model()
+        contact_uri = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        model.contact.uris.default = contact_uri.uri
+        model.contact.save()
+
+    def _AH_StartAudioCall(self):
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri.uri
+        else:
+            selected_uri = contact.uri
+        session_manager = SessionManager()
+        session_manager.start_call(contact.name, selected_uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+
+    def _AH_StartChatSession(self):
+        pass
+
+    def _AH_SendSMS(self):
+        pass
+
+    def _AH_SendFiles(self):
+        pass
+
+    def _AH_RequestRemoteDesktop(self):
+        pass
+
+    def _AH_ShareMyDesktop(self):
+        pass
+
+    def _DH_ApplicationXBlinkSession(self, event, index, rect, item):
+        event.ignore(rect)
+
+    def _DH_TextUriList(self, event, index, rect, item):
+        event.ignore(rect)
+
+    def _SH_AnimationFinished(self):
+        if self.animation.direction() == QPropertyAnimation.Forward:
+            self.setFocus(True)
+        else:
+            self.hide()
+            self.contact_list.setFocus(True)
+
+    def _SH_ModelContactDeleted(self):
+        if self.isVisible():
+            if self.animation.state() == QPropertyAnimation.Running:
+                self.animation.pause()
+                self.animation.setDirection(QPropertyAnimation.Backward)
+                self.animation.resume()
+            else:
+                self.animation.setDirection(QPropertyAnimation.Backward)
+                self.animation.start()
+
+    def _SH_DoubleClicked(self, index):
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        item = index.data(Qt.UserRole)
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri.uri
+        else:
+            selected_uri = contact.uri
+        session_manager = SessionManager()
+        session_manager.start_call(contact.name, selected_uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+
+    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
+
+
+# The contact editor dialog
+#
+
+class ContactURIItem(object):
+    def __init__(self, id, uri, type=None, default=False, ghost=False):
+        self.id = id
+        self.uri = uri
+        self.type = type
+        self.default = default
+        self.ghost = ghost
+
+    def __repr__(self):
+        return "%s(%r, %r, type=%r, default=%r, ghost=%r)" % (self.__class__.__name__, self.id, self.uri, self.type, self.default, self.ghost)
+
+
+class URITypeComboBox(QComboBox):
+    builtin_types = (None, "Mobile", "Home", "Work", "SIP", "XMPP", "Other")
+
+    def __init__(self, parent=None, types=[]):
+        super(URITypeComboBox, self).__init__(parent)
+        self.setEditable(True)
+        self.addItems(self.builtin_types)
+        self.addItems(sorted(set(types) - set(self.builtin_types)))
+
+
+class EmbeddedRadioButton(QRadioButton):
+    """An embedded radio button that passes mouse events to its parent"""
+
+    def mousePressEvent(self, event):
+        super(EmbeddedRadioButton, self).mousePressEvent(event)
+        self.parent().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        super(EmbeddedRadioButton, self).mouseReleaseEvent(event)
+        self.parent().mouseReleaseEvent(event)
+
+
+class DefaultURIButton(QWidget):
+    def __init__(self, parent=None, button_group=Null):
+        super(DefaultURIButton, self).__init__(parent)
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setAutoFillBackground(False)
+        self.button = EmbeddedRadioButton(self)
+        self.button.installEventFilter(self)
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
+        self.layout.addWidget(self.button)
+        self.layout.setAlignment(self.button, Qt.AlignCenter)
+        button_group.addButton(self.button)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.FocusIn:
+            self.setFocus(Qt.OtherFocusReason)
+        return False
+
+    def isChecked(self):
+        return self.button.isChecked()
+
+    def setChecked(self, state):
+        self.button.setChecked(state)
+
+
+class ContactURIDelegate(QItemDelegate):
+    def createEditor(self, parent, option, index):
+        column = index.column()
+        if column == ContactURIModel.TypeColumn:
+            return URITypeComboBox(parent, types=index.model().uri_types)
+        elif column == ContactURIModel.DefaultColumn:
+            return DefaultURIButton(parent, index.model().button_group)
+        return super(ContactURIDelegate, self).createEditor(parent, option, index)
+
+    def setEditorData(self, widget, index):
+        column = index.column()
+        if column == ContactURIModel.TypeColumn:
+            widget.setCurrentIndex(widget.findText(index.data(Qt.EditRole)))
+        elif column == ContactURIModel.DefaultColumn:
+            widget.setChecked(index.data(Qt.EditRole))
+        else:
+            super(ContactURIDelegate, self).setEditorData(widget, index)
+
+    def setModelData(self, widget, model, index):
+        column = index.column()
+        if column == ContactURIModel.TypeColumn:
+            model.setData(index, widget.currentText(), Qt.EditRole)
+        elif column == ContactURIModel.DefaultColumn:
+            model.setData(index, widget.isChecked(), Qt.EditRole)
+        else:
+            super(ContactURIDelegate, self).setModelData(widget, model, index)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
+
+    def drawDisplay(self, painter, option, rect, text):
+        if option.fontMetrics.width(text) > rect.width():
+            # draw elided text using a fading gradient
+            color_group = QPalette.Disabled if not option.state & QStyle.State_Enabled else QPalette.Normal if option.state & QStyle.State_Active else QPalette.Inactive
+            text_margin = option.widget.style().pixelMetric(QStyle.PM_FocusFrameHMargin, None, option.widget) + 1
+            text_rect = rect.adjusted(text_margin, 0, -text_margin, 0) # remove width padding
+            width = text_rect.width()
+            gradient = QLinearGradient(0, 0, width, 0)
+            gradient.setColorAt(1-50.0/width, option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text))
+            gradient.setColorAt(1.0, Qt.transparent)
+            painter.save()
+            painter.setPen(QPen(QBrush(gradient), 1.0))
+            painter.setClipRect(text_rect)
+            painter.drawText(text_rect, Qt.TextSingleLine | int(option.displayAlignment), text)
+            painter.restore()
+        else:
+            super(ContactURIDelegate, self).drawDisplay(painter, option, rect, text)
+
+
+class ContactURIModel(QAbstractTableModel):
+    columns = ('Address', 'Type', 'Default')
+
+    AddressColumn = 0
+    TypeColumn    = 1
+    DefaultColumn = 2
+
+    def __init__(self, parent=None):
+        super(ContactURIModel, self).__init__(parent)
+        self.table_view = parent.addresses_table
+        self.items = []
+        self.uri_types = []
+        self.button_group = QButtonGroup(parent)
+
+    def flags(self, index):
+        if index.isValid():
+            return QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable
+        else:
+            return QAbstractTableModel.flags(self, index)
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.items)
+
+    def columnCount(self, parent=QModelIndex()):
+        return len(self.columns)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        row, column = index.row(), index.column()
+        item = self.items[row]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.DisplayRole:
+            if column == ContactURIModel.AddressColumn:
+                return 'Edit to add address' if item.ghost else unicode(item.uri or u'')
+        elif role == Qt.EditRole:
+            if column == ContactURIModel.AddressColumn:
+                return unicode(item.uri or u'')
+            elif column == ContactURIModel.TypeColumn:
+                return item.type or u''
+            elif column == ContactURIModel.DefaultColumn:
+                return item.default
+        elif role == Qt.ForegroundRole:
+            if column == ContactURIModel.AddressColumn and item.ghost:
+                return self.table_view.palette().brush(QPalette.Disabled, QPalette.Text).color()
+        return None
+
+    def setData(self, index, value, role=Qt.EditRole):
+        if not index.isValid() or role != Qt.EditRole:
+            return False
+        row, column = index.row(), index.column()
+        if column == ContactURIModel.AddressColumn:
+            item = self.items[row]
+            item.uri = value
+            if item.ghost and value:
+                item.ghost = False
+                self._add_item(ContactURIItem(None, None, None, False, ghost=True))
+        elif column == ContactURIModel.TypeColumn:
+            self.items[row].type = value or None
+        elif column == ContactURIModel.DefaultColumn:
+            if value:
+                for position, item in enumerate(self.items):
+                    item.default = position==row
+            else:
+                self.items[row].default = False
+        else:
+            return False
+        return True
+
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self.columns[section]
+        return super(ContactURIModel, self).headerData(section, orientation, role)
+
+    def init_with_address(self, address=None):
+        items = [ContactURIItem(None, address, None, False)] if address else []
+        items.append(ContactURIItem(None, None, None, False, ghost=True))
+        self.beginResetModel()
+        self.items = items
+        self.uri_types = []
+        self.button_group = QButtonGroup(self.table_view)
+        self.endResetModel()
+        for row in range(len(items)):
+            self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
+            self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
+        self.table_view.horizontalHeader().setResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+
+    def init_with_contact(self, contact):
+        items = [ContactURIItem(uri.id, uri.uri, uri.type, default=uri is contact.uris.default) for uri in contact.uris]
+        items.append(ContactURIItem(None, None, None, False, ghost=True))
+        self.beginResetModel()
+        self.items = items
+        self.uri_types = [uri.type for uri in contact.uris]
+        self.button_group = QButtonGroup(self.table_view)
+        self.endResetModel()
+        for row in range(len(items)):
+            self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
+            self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
+        self.table_view.horizontalHeader().setResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+
+    def update_from_contact(self, contact):
+        added_items = [item for item in self.items if item.id is None and not item.ghost]
+        try:
+            default_item = next(item for item in self.items if item.default)
+        except StopIteration:
+            default_item = None
+        else:
+            if default_item not in added_items:
+                default_item = None # only care for the default URI if it was a newly added one, else use the one from the contact
+        items = [ContactURIItem(uri.id, uri.uri, uri.type, default=default_item is None and uri is contact.uris.default) for uri in contact.uris]
+        items.extend(added_items)
+        items.append(ContactURIItem(None, None, None, False, ghost=True))
+        self.beginResetModel()
+        self.items = items
+        self.uri_types = [item.type for item in items]
+        self.button_group = QButtonGroup(self.table_view)
+        self.endResetModel()
+        for row in range(len(items)):
+            self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
+            self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
+        self.table_view.horizontalHeader().setResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+
+    def reset(self):
+        self.beginResetModel()
+        self.items = []
+        self.uri_types = []
+        self.button_group = QButtonGroup(self.table_view)
+        self.endResetModel()
+
+    def _add_item(self, item):
+        position = len(self.items)
+        self.beginInsertRows(QModelIndex(), position, position)
+        self.items.insert(position, item)
+        self.endInsertRows()
+        self.table_view.openPersistentEditor(self.index(position, ContactURIModel.TypeColumn))
+        self.table_view.openPersistentEditor(self.index(position, ContactURIModel.DefaultColumn))
+
+    def _remove_items(self, indexes):
+        for row in sorted(set(index.row() for index in indexes if index.isValid()), reverse=True):
+            self.beginRemoveRows(QModelIndex(), row, row)
+            del self.items[row]
+            self.endRemoveRows()
+
+
+class ContactURITableView(QTableView):
+    def __init__(self, parent=None):
+        super(ContactURITableView, self).__init__(parent)
+        self.setItemDelegate(ContactURIDelegate(self))
+        self.context_menu = QMenu(self)
+        self.context_menu.addAction(QAction("Delete", self, triggered=self._AH_DeleteSelection))
+        self.horizontalHeader().setResizeMode(self.horizontalHeader().ResizeToContents)
+
+    def setModel(self, model):
+        selection_model = self.selectionModel() or Null
+        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
+        super(ContactURITableView, self).setModel(model)
+        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+
+    def contextMenuEvent(self, event):
+        selected_items = [item for item in (index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
+        if selected_items:
+            self.context_menu.exec_(event.globalPos())
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Backspace, Qt.Key_Delete):
+            selected_items = [item for item in (index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
+            if selected_items:
+                self._AH_DeleteSelection()
+        else:
+            super(ContactURITableView, self).keyPressEvent(event)
+
+    def _AH_DeleteSelection(self):
+        model = self.model()
+        model._remove_items([index for index in self.selectionModel().selectedIndexes() if not index.data(Qt.UserRole).ghost])
+        self.selectionModel().clearSelection()
+
     def _SH_SelectionModelSelectionChanged(self, selected, deselected):
         selection_model = self.selectionModel()
         selection = selection_model.selection()
@@ -2711,97 +3757,138 @@ class ContactSearchListView(QListView):
             selection_model.setCurrentIndex(index, selection_model.Select)
 
 
-# The contact editor dialog
-#
-
 ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
 
 class ContactEditorDialog(base_class, ui_class):
+    implements(IObserver)
+
     def __init__(self, parent=None):
         super(ContactEditorDialog, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        self.contact_uri_model = ContactURIModel(self)
+        self.addresses_table.setModel(self.contact_uri_model)
         self.edited_contact = None
         self.target_group = None
-        self.sip_address_editor.setValidator(QRegExpValidator(QRegExp("\S+"), self))
-        self.sip_address_editor.textChanged.connect(self.enable_accept_button)
-        self.clear_button.clicked.connect(self.reset_icon)
-        self.accepted.connect(self.process_contact)
+        self.name_editor.textChanged.connect(self._SH_NameEditorTextChanged)
+        self.accepted.connect(self._SH_Accepted)
+        self.rejected.connect(self._SH_Rejected)
+        self.rejected.connect(self.contact_uri_model.reset)
+
+    def setupUi(self, contact_editor):
+        super(ContactEditorDialog, self).setupUi(contact_editor)
+        self.preferred_media.setItemData(0, 'audio')
+        self.preferred_media.setItemData(1, 'chat')
+        self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
     def open_for_add(self, sip_address=u'', target_group=None):
         self.edited_contact = None
         self.target_group = target_group
-        self.sip_address_editor.setText(sip_address)
-        self.display_name_editor.setText(u'')
-        self.icon_selector.filename = None
+        self.contact_uri_model.init_with_address(sip_address)
+        self.name_editor.setText(u'')
+        self.icon_selector.init_with_contact(None)
+        self.presence.setChecked(True)
         self.preferred_media.setCurrentIndex(0)
         self.accept_button.setText(u'Add')
-        self.accept_button.setEnabled(sip_address != u'')
+        self.accept_button.setEnabled(False)
         self.show()
 
     def open_for_edit(self, contact):
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=contact)
         self.edited_contact = contact
-        self.sip_address_editor.setText(contact.uri)
-        self.display_name_editor.setText(contact.name)
-        if contact.settings.icon is not None and contact.settings.icon.is_local:
-            self.icon_selector.filename = contact.settings.icon.url[len('file://'):]
-        elif contact.settings.icon:
-            icon = IconManager().get(contact.settings.id)
-            if icon:
-                self.icon_selector.setPixmap(icon.pixmap(32))
-        else:
-            self.icon_selector.filename = None
-        self.preferred_media.setCurrentIndex(self.preferred_media.findText(contact.settings.preferred_media.title()))
+        self.contact_uri_model.init_with_contact(contact)
+        self.name_editor.setText(contact.name)
+        self.icon_selector.init_with_contact(contact)
+        self.presence.setChecked(contact.presence.subscribe)
+        self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
         self.accept_button.setText(u'Ok')
         self.accept_button.setEnabled(True)
-        self.subscribe_presence.setChecked(contact.settings.presence.subscribe)
         self.show()
 
-    def reset_icon(self):
-        self.icon_selector.filename = None
-
-    def enable_accept_button(self, text):
+    def _SH_NameEditorTextChanged(self, text):
         self.accept_button.setEnabled(text != u'')
 
-    def process_contact(self):
+    def _SH_Accepted(self):
+        if self.edited_contact is not None:
+            notification_center = NotificationCenter()
+            notification_center.remove_observer(self, sender=self.edited_contact)
+
         contact_model = self.parent().contact_model
         icon_manager = IconManager()
+
         if self.edited_contact is None:
             contact = addressbook.Contact()
         else:
-            contact = self.edited_contact.settings
-        try:
-            uri = next(iter(contact.uris))
-        except StopIteration:
-            contact.uris.add(addressbook.ContactURI(uri=self.sip_address_editor.text()))
-        else:
-            uri.uri = self.sip_address_editor.text()
-        contact.name = self.display_name_editor.text()
-        contact.preferred_media = self.preferred_media.currentText().lower()
-        if self.subscribe_presence.isChecked():
+            contact = self.edited_contact
+
+        for id in set(contact.uris.ids()).difference(item.id for item in self.contact_uri_model.items):
+            contact.uris.remove(contact.uris[id])
+        for item in (item for item in self.contact_uri_model.items if item.uri):
+            try:
+                contact_uri = contact.uris[item.id]
+            except KeyError:
+                contact_uri = addressbook.ContactURI()
+                contact.uris.add(contact_uri)
+            contact_uri.uri = item.uri
+            contact_uri.type = item.type
+            if item.default:
+                contact.uris.default = contact_uri
+
+        contact.name = self.name_editor.text()
+        contact.preferred_media = self.preferred_media.itemData(self.preferred_media.currentIndex())
+        if self.presence.isChecked():
             contact.presence.policy = 'allow'
             contact.presence.subscribe = True
         else:
-            contact.presence.policy = 'default'
+            contact.presence.policy = 'block'
             contact.presence.subscribe = False
-        if self.icon_selector.filename is not None:
-            icon_file = ApplicationData.get(self.icon_selector.filename)
-            icon_descriptor = IconDescriptor('file://' + icon_file)
+
+        if self.icon_selector.filename is self.icon_selector.NotSelected:
+            pass
+        elif self.icon_selector.filename is None:
+            icon_manager.remove(contact.id + '_alt')
+            contact.alternate_icon = None
         else:
-            icon_file = icon_descriptor = None
-        if contact.icon != icon_descriptor:
-            if icon_file is not None:
-                icon_manager.store_file(contact.id, icon_file)
-            else:
-                icon_manager.remove(contact.id)
-            contact.icon = icon_descriptor
+            icon_descriptor = IconDescriptor('file://' + self.icon_selector.filename, int(os.stat(self.icon_selector.filename).st_mtime))
+            if contact.alternate_icon != icon_descriptor:
+                icon_manager.store_file(contact.id + '_alt', icon_descriptor.url.path)
+                contact.alternate_icon = icon_descriptor
+
         modified_settings = [contact]
         if self.target_group is not None:
             self.target_group.settings.contacts.add(contact)
             modified_settings.append(self.target_group.settings)
         contact_model._atomic_update(save=modified_settings)
+
+        self.contact_uri_model.reset()
         self.edited_contact = None
         self.target_group = None
+
+    def _SH_Rejected(self):
+        if self.edited_contact is not None:
+            notification_center = NotificationCenter()
+            notification_center.remove_observer(self, sender=self.edited_contact)
+        self.contact_uri_model.reset()
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_AddressbookContactDidChange(self, notification):
+        contact = notification.sender
+        modified_attributes = set(notification.data.modified)
+        if 'name' in modified_attributes:
+            self.name_editor.setText(contact.name)
+        if 'presence.subscribe' in modified_attributes:
+            self.presence.setChecked(contact.presence.subscribe)
+        if 'preferred_media' in modified_attributes:
+            self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
+        if modified_attributes.intersection(('uris', 'uris.default')):
+            self.contact_uri_model.update_from_contact(contact)
+        if 'icon' in modified_attributes:
+            self.icon_selector.update_from_contact(contact)
 
 del ui_class, base_class
 

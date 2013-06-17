@@ -961,7 +961,7 @@ class SessionModel(QAbstractListModel):
     structureChanged = pyqtSignal()
 
     # The MIME types we accept in drop operations, in the order they should be handled
-    accepted_mime_types = ['application/x-blink-session-list', 'application/x-blink-contact-list']
+    accepted_mime_types = ['application/x-blink-session-list', 'application/x-blink-contact-list', 'application/x-blink-contact-uri-list']
 
     def __init__(self, parent=None):
         super(SessionModel, self).__init__(parent)
@@ -1103,11 +1103,28 @@ class SessionModel(QAbstractListModel):
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
         if not index.isValid():
             return
+        try:
+            contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
+        except Exception:
+            return
         session = self.sessions[index.row()]
-        contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
         session_manager = SessionManager()
         for contact in contacts:
             session_manager.start_call(contact.name, contact.uri, contact=contact, conference_sibling=session)
+        return True
+
+    def _DH_ApplicationXBlinkContactUriList(self, mime_data, action, index):
+        if not index.isValid():
+            return
+        try:
+            contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
+        except Exception:
+            return
+        session = self.sessions[index.row()]
+        session_manager = SessionManager()
+        for contact_uri in contact_uris:
+            contact = contact_uri.contact
+            session_manager.start_call(contact.name, contact_uri.uri.uri, contact=contact, conference_sibling=session)
         return True
 
     def _add_session(self, session):
@@ -1340,7 +1357,7 @@ class SessionListView(QListView):
     def dragEnterEvent(self, event):
         event_source = event.source()
         accepted_mime_types = set(self.model().accepted_mime_types)
-        provided_mime_types = set(str(x) for x in event.mimeData().formats())
+        provided_mime_types = set(event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         if not acceptable_mime_types:
             event.ignore() # no acceptable mime types found
@@ -1413,6 +1430,20 @@ class SessionListView(QListView):
                 event.accept(rect)
 
     def _DH_ApplicationXBlinkContactList(self, event, index, rect, session):
+        model = self.model()
+        if not index.isValid():
+            rect = self.viewport().rect()
+            rect.setTop(self.visualRect(model.index(len(model.sessions)-1)).bottom())
+            event.ignore(rect)
+        else:
+            event.accept(rect)
+            if session.conference is not None:
+                for sibling in session.conference.sessions:
+                    sibling.widget.drop_indicator = True
+            else:
+                session.widget.drop_indicator = True
+
+    def _DH_ApplicationXBlinkContactUriList(self, event, index, rect, session):
         model = self.model()
         if not index.isValid():
             rect = self.viewport().rect()
