@@ -372,10 +372,7 @@ class MainWindow(base_class, ui_class):
         if not self.account_state.state.internal:
             self.saved_account_state = None
         settings = BlinkSettings()
-        if self.saved_account_state:
-            settings.presence.current_state = PresenceState(*self.saved_account_state)
-        else:
-            settings.presence.current_state = PresenceState(self.account_state.state, self.account_state.note)
+        settings.presence.current_state = PresenceState(self.account_state.state, self.account_state.note)
         settings.presence.state_history = [PresenceState(state, note) for state, note in self.account_state.history]
         settings.save()
 
