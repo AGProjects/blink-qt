@@ -3579,6 +3579,8 @@ class ContactURIModel(QAbstractTableModel):
     TypeColumn    = 1
     DefaultColumn = 2
 
+    default_uri_type = 'SIP'
+
     def __init__(self, parent=None):
         super(ContactURIModel, self).__init__(parent)
         self.table_view = parent.addresses_table
@@ -3629,7 +3631,7 @@ class ContactURIModel(QAbstractTableModel):
             item.uri = value
             if item.ghost and value:
                 item.ghost = False
-                self._add_item(ContactURIItem(None, None, None, False, ghost=True))
+                self._add_item(ContactURIItem(None, None, self.default_uri_type, False, ghost=True))
         elif column == ContactURIModel.TypeColumn:
             self.items[row].type = value or None
         elif column == ContactURIModel.DefaultColumn:
@@ -3648,8 +3650,8 @@ class ContactURIModel(QAbstractTableModel):
         return super(ContactURIModel, self).headerData(section, orientation, role)
 
     def init_with_address(self, address=None):
-        items = [ContactURIItem(None, address, None, False)] if address else []
-        items.append(ContactURIItem(None, None, None, False, ghost=True))
+        items = [ContactURIItem(None, address, self.default_uri_type, False)] if address else []
+        items.append(ContactURIItem(None, None, self.default_uri_type, False, ghost=True))
         self.beginResetModel()
         self.items = items
         self.uri_types = []
@@ -3662,7 +3664,7 @@ class ContactURIModel(QAbstractTableModel):
 
     def init_with_contact(self, contact):
         items = [ContactURIItem(uri.id, uri.uri, uri.type, default=uri is contact.uris.default) for uri in contact.uris]
-        items.append(ContactURIItem(None, None, None, False, ghost=True))
+        items.append(ContactURIItem(None, None, self.default_uri_type, False, ghost=True))
         self.beginResetModel()
         self.items = items
         self.uri_types = [uri.type for uri in contact.uris]
@@ -3684,7 +3686,7 @@ class ContactURIModel(QAbstractTableModel):
                 default_item = None # only care for the default URI if it was a newly added one, else use the one from the contact
         items = [ContactURIItem(uri.id, uri.uri, uri.type, default=default_item is None and uri is contact.uris.default) for uri in contact.uris]
         items.extend(added_items)
-        items.append(ContactURIItem(None, None, None, False, ghost=True))
+        items.append(ContactURIItem(None, None, self.default_uri_type, False, ghost=True))
         self.beginResetModel()
         self.items = items
         self.uri_types = [item.type for item in items]
