@@ -403,7 +403,7 @@ class PreferencesWindow(base_class, ui_class):
         except IndexError:
             return None
         else:
-            return self.account_list.model().data(selected_index, Qt.UserRole).account
+            return selected_index.data(Qt.UserRole).account
 
     def _sync_defaults(self):
         settings = SIPSimpleSettings()
@@ -703,7 +703,7 @@ class PreferencesWindow(base_class, ui_class):
             self.delete_account_button.setEnabled(False)
             self.account_tab_widget.setEnabled(False)
         else:
-            selected_account = self.account_list.model().data(selected_index, Qt.UserRole).account
+            selected_account = selected_index.data(Qt.UserRole).account
             self.delete_account_button.setEnabled(selected_account is not BonjourAccount())
             tab_widget = self.account_tab_widget
             tab_widget.setEnabled(True)
@@ -730,7 +730,7 @@ class PreferencesWindow(base_class, ui_class):
         model = self.account_list.model()
 
         selected_index = self.account_list.selectionModel().selectedIndexes()[0]
-        selected_account = model.data(selected_index, Qt.UserRole).account
+        selected_account = selected_index.data(Qt.UserRole).account
 
         title, message = u"Remove Account", u"Permanently remove account %s?" % selected_account.id
         if QMessageBox.question(self, title, message, QMessageBox.Ok|QMessageBox.Cancel) == QMessageBox.Cancel:
