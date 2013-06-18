@@ -7,13 +7,6 @@ Code refactoring
 
 + do not kill greenlets but interrupt commands instead (sipsimple)
 - refactor how models/dialogs/windows are created and where are they kept
-- blink/contacts.py GoogleContactsManager.stop_adding_contacts is always False
-- rename GoogleContactsManager to GoogleContactManager
-- rename GoogleContactsGroup to GoogleContactGroup
-- rename contact_model.google_contacts_group to google_contact_group
-- integrate GoogleContactManager into ContactModel?
-- GoogleContactsManager use defaultdict for entries_map (see update_contacts)
-- race condition in GoogleContactsManager with stop_adding_contacts
 - GoogleContactManager.enable_captcha should be decorated to run in the gui thread
 - GoogleContactManager._set_captcha_image should be decorated to run in the gui thread
 - _authorize_google_account from google dialog needs refactoring

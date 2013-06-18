@@ -2,11 +2,20 @@
 Roadmap
 -------
 
-+ Address Book refactoring
 + Presence
-+ Call History menu
 + Call transfer
 + Answering machine
+
+
+Fixes and improvements
+----------------------
+
+- Save presence state on the addressbook contact not the GUI contacts
+- Have the icon selection on the account state button's menu
+- Explore the scaledContents attribute for the IconSelector label
+- Use the primary attribute of Google contact URIs to implement the default
+  URI for Google contacts
+- Group together all bonjour URIs published by the same device
 
 
 Nice to have
@@ -26,3 +35,4 @@ Nice to have
 - Desktop notifications
 - Desktop sharing
 - Accesibility features for blind users
+
