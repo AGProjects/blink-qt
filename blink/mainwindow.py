@@ -420,7 +420,7 @@ class MainWindow(base_class, ui_class):
             session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
 
     def _SH_BreakConference(self):
-        active_session = self.session_list.selectionModel().selectedIndexes()[0].data()
+        active_session = self.session_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         self.session_model.breakConference(active_session.conference)
 
     def _SH_ContactListSelectionChanged(self, selected, deselected):
@@ -521,7 +521,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         selected_indexes = selected.indexes()
-        active_session = selected_indexes[0].data() if selected_indexes else Null
+        active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
         if active_session.conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
@@ -539,7 +539,7 @@ class MainWindow(base_class, ui_class):
         self.active_sessions_label.setVisible(any(active_sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
-        active_session = selected_indexes[0].data() if selected_indexes else Null
+        active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
         if active_session.conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)

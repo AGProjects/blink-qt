@@ -93,6 +93,9 @@ class SessionItem(QObject):
     def __reduce__(self):
         return (self.__class__, (self.name, self.uri, Null, Null, Null), None)
 
+    def __unicode__(self):
+        return unicode(self.name)
+
     @property
     def pending_removal(self):
         return self.audio_stream is None and self.video_stream is None
@@ -932,7 +935,7 @@ class SessionDelegate(QStyledItemDelegate):
         super(SessionDelegate, self).__init__(parent)
 
     def createEditor(self, parent, options, index):
-        session = index.model().data(index, Qt.DisplayRole)
+        session = index.data(Qt.UserRole)
         session.widget = SessionWidget(session, parent)
         session.widget.hold_button.clicked.connect(partial(self._SH_HoldButtonClicked, session))
         return session.widget
@@ -941,7 +944,7 @@ class SessionDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
     def paint(self, painter, option, index):
-        session = index.model().data(index, Qt.DisplayRole)
+        session = index.data(Qt.UserRole)
         if session.widget.size() != option.rect.size():
             # For some reason updateEditorGeometry only receives the peak value
             # of the size that the widget ever had, so it will never shrink it.
@@ -987,9 +990,14 @@ class SessionModel(QAbstractListModel):
         return len(self.sessions)
 
     def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid() or role != Qt.DisplayRole:
+        if not index.isValid():
             return None
-        return self.sessions[index.row()]
+        item = self.sessions[index.row()]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.DisplayRole:
+            return unicode(item)
+        return None
 
     def supportedDropActions(self):
         return Qt.CopyAction | Qt.MoveAction
@@ -1214,7 +1222,7 @@ class SessionModel(QAbstractListModel):
         selection_mode = session_list.selectionMode()
         session_list.setSelectionMode(session_list.NoSelection)
         selected = any(session.widget.selected for session in sessions)
-        selected_session = self.data(selection_model.selectedIndexes()[0]) if selected else None
+        selected_session = selection_model.selectedIndexes()[0].data(Qt.UserRole) if selected else None
         for session in sessions:
             self._remove_session(session)
         self.beginInsertRows(QModelIndex(), 0, len(sessions)-1)
@@ -1297,9 +1305,9 @@ class SessionListView(QListView):
             current_index = selection_model.currentIndex()
             if current_index.isValid():
                 step = 1 if event.key() == Qt.Key_Down else -1
-                conference = current_index.data().conference
+                conference = current_index.data(Qt.UserRole).conference
                 new_index = current_index.sibling(current_index.row()+step, current_index.column())
-                while conference is not None and new_index.isValid() and new_index.data().conference is conference:
+                while conference is not None and new_index.isValid() and new_index.data(Qt.UserRole).conference is conference:
                     new_index = new_index.sibling(new_index.row()+step, new_index.column())
                 if new_index.isValid():
                     selection_model.select(new_index, selection_model.ClearAndSelect)
@@ -1340,7 +1348,7 @@ class SessionListView(QListView):
     def startDrag(self, supported_actions):
         if self._pressed_index is not None and self._pressed_index.isValid():
             model = self.model()
-            self.dragged_session = model.data(self._pressed_index)
+            self.dragged_session = self._pressed_index.data(Qt.UserRole)
             rect = self.visualRect(self._pressed_index)
             rect.adjust(1, 1, -1, -1)
             pixmap = QPixmap(rect.size())
@@ -1391,7 +1399,7 @@ class SessionListView(QListView):
             if event.provides(mime_type):
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
-                session = self.model().data(index)
+                session = index.data(Qt.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, session)
@@ -1461,24 +1469,24 @@ class SessionListView(QListView):
                 session.widget.drop_indicator = True
 
     def _SH_HangupShortcutActivated(self):
-        session = self.model().data(self.selectedIndexes()[0])
+        session = self.selectedIndexes()[0].data(Qt.UserRole)
         if session.conference is None:
             session.widget.hangup_button.click()
 
     def _SH_HoldShortcutActivated(self):
-        session = self.model().data(self.selectedIndexes()[0])
+        session = self.selectedIndexes()[0].data(Qt.UserRole)
         if session.conference is None:
             session.widget.hold_button.click()
 
     def _SH_SelectionModelSelectionChanged(self, selected, deselected):
         model = self.model()
-        for session in (model.data(index) for index in deselected.indexes()):
+        for session in (index.data(Qt.UserRole) for index in deselected.indexes()):
             if session.conference is not None:
                 for sibling in session.conference.sessions:
                     sibling.widget.selected = False
             else:
                 session.widget.selected = False
-        for session in (model.data(index) for index in selected.indexes()):
+        for session in (index.data(Qt.UserRole) for index in selected.indexes()):
             if session.conference is not None:
                 for sibling in session.conference.sessions:
                     sibling.widget.selected = True
@@ -1988,8 +1996,8 @@ class SessionManager(object):
             return
         selected_indexes = selected.indexes()
         deselected_indexes = deselected.indexes()
-        old_active_session = self.session_model.data(deselected_indexes[0]) if deselected_indexes else Null
-        new_active_session = self.session_model.data(selected_indexes[0]) if selected_indexes else Null
+        old_active_session = deselected_indexes[0].data(Qt.UserRole) if deselected_indexes else Null
+        new_active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
         if old_active_session.conference and old_active_session.conference is not new_active_session.conference:
             for session in old_active_session.conference.sessions:
                 session.active = False
