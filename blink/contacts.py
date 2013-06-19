@@ -2020,7 +2020,7 @@ class ContactModel(QAbstractListModel):
                 contact = addressbook.Contact(id)
                 contact.name = name
                 contact.preferred_media = preferred_media
-                contact.uris = [addressbook.ContactURI(uri=uri)]
+                contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
                 contact.icon = IconDescriptor('file://' + icon)
                 return contact
             test_contacts = [{'id': 'test_audio',      'name': 'Test Call',         'preferred_media': 'audio', 'uri': '3333@sip2sip.info',            'icon': Resources.get('icons/test-call.png')},
