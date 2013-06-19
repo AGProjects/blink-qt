@@ -16,7 +16,9 @@ import cjson
 sip.setapi('QString',  2)
 sip.setapi('QVariant', 2)
 
-from PyQt4.QtGui import QApplication
+from PyQt4.QtCore import Qt
+from PyQt4.QtGui  import QApplication
+
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
@@ -92,6 +94,7 @@ class Blink(QApplication):
 
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
+        self.setAttribute(Qt.AA_DontShowIconsInMenus, False)
         self.application = SIPApplication()
         self.first_run = False
         self.main_window = MainWindow()
