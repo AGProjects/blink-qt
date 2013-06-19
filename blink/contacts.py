@@ -3865,7 +3865,7 @@ class ContactEditorDialog(base_class, ui_class):
             icon_manager.remove(contact.id + '_alt')
             contact.alternate_icon = None
         else:
-            icon_descriptor = IconDescriptor('file://' + self.icon_selector.filename, int(os.stat(self.icon_selector.filename).st_mtime))
+            icon_descriptor = IconDescriptor('file://' + self.icon_selector.filename, unicode(int(os.stat(self.icon_selector.filename).st_mtime)))
             if contact.alternate_icon != icon_descriptor:
                 icon_manager.store_file(contact.id + '_alt', icon_descriptor.url.path)
                 contact.alternate_icon = icon_descriptor
