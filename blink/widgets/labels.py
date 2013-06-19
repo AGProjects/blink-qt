@@ -16,6 +16,10 @@ from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import QtDynamicProperty
 
 
+class ContextMenuActions(object):
+    pass
+
+
 class IconSelector(QLabel):
     default_icon = QtDynamicProperty('default_icon', QIcon)
     icon_size = QtDynamicProperty('icon_size', int)
@@ -24,8 +28,9 @@ class IconSelector(QLabel):
 
     def __init__(self, parent=None):
         super(IconSelector, self).__init__(parent)
-        self.addAction(QAction(u'Select icon...', self, triggered=self._SH_ChangeIconActionTriggered))
-        self.addAction(QAction(u'Use contact provided icon', self, triggered=self._SH_ClearIconActionTriggered))
+        self.actions = ContextMenuActions()
+        self.actions.select_icon = QAction(u'Select icon...', self, triggered=self._SH_ChangeIconActionTriggered)
+        self.actions.remove_icon = QAction(u'Use contact provided icon', self, triggered=self._SH_RemoveIconActionTriggered)
         self.icon_size = 48
         self.default_icon = None
         self.contact_icon = None
@@ -96,8 +101,10 @@ class IconSelector(QLabel):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.rect().contains(event.pos()):
+            self.actions.remove_icon.setEnabled(self.icon is not self.contact_icon)
             menu = QMenu(self)
-            menu.addActions(self.actions())
+            menu.addAction(self.actions.select_icon)
+            menu.addAction(self.actions.remove_icon)
             menu.exec_(self.mapToGlobal(self.rect().translated(0, 2).bottomLeft()))
         super(IconSelector, self).mouseReleaseEvent(event)
 
@@ -106,7 +113,7 @@ class IconSelector(QLabel):
         if filename:
             self.filename = filename
 
-    def _SH_ClearIconActionTriggered(self):
+    def _SH_RemoveIconActionTriggered(self):
         self.filename = None
 
 
