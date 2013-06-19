@@ -2011,27 +2011,40 @@ class ContactModel(QAbstractListModel):
 
     def _NH_SIPApplicationWillStart(self, notification):
         from blink import Blink
-        blink = Blink()
         self.state = 'starting'
+        test_contacts = [{'id': 'test_audio',      'name': 'Test Call',         'preferred_media': 'audio', 'uri': '3333@sip2sip.info',            'icon': Resources.get('icons/test-call.png')},
+                         {'id': 'test_microphone', 'name': 'Test Microphone',   'preferred_media': 'audio', 'uri': '4444@sip2sip.info',            'icon': Resources.get('icons/test-echo.png')},
+                         {'id': 'test_conference', 'name': 'Test Conference',   'preferred_media': 'chat',  'uri': 'test@conference.sip2sip.info', 'icon': Resources.get('icons/test-conference.png')},
+                         {'id': 'test_zipdx',      'name': 'VUC http://vuc.me', 'preferred_media': 'audio', 'uri': '200901@login.zipdx.com',       'icon': Resources.get('icons/vuc-conference.png')}]
+        blink = Blink()
+        icon_manager = IconManager()
         if blink.first_run:
-            icon_manager = IconManager()
             def make_contact(id, name, preferred_media, uri, icon):
                 icon_manager.store_file(id, icon)
                 contact = addressbook.Contact(id)
                 contact.name = name
                 contact.preferred_media = preferred_media
                 contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
-                contact.icon = IconDescriptor('file://' + icon)
+                contact.icon = IconDescriptor('file://' + icon, unicode(int(os.stat(icon).st_mtime)))
                 return contact
-            test_contacts = [{'id': 'test_audio',      'name': 'Test Call',         'preferred_media': 'audio', 'uri': '3333@sip2sip.info',            'icon': Resources.get('icons/test-call.png')},
-                             {'id': 'test_microphone', 'name': 'Test Microphone',   'preferred_media': 'audio', 'uri': '4444@sip2sip.info',            'icon': Resources.get('icons/test-echo.png')},
-                             {'id': 'test_conference', 'name': 'Test Conference',   'preferred_media': 'chat',  'uri': 'test@conference.sip2sip.info', 'icon': Resources.get('icons/test-conference.png')},
-                             {'id': 'test_zipdx',      'name': 'VUC http://vuc.me', 'preferred_media': 'audio', 'uri': '200901@login.zipdx.com',       'icon': Resources.get('icons/vuc-conference.png')}]
             test_group = addressbook.Group(id='test')
             test_group.name = 'Test'
             test_group.contacts = [make_contact(**entry) for entry in test_contacts]
             modified_settings = list(test_group.contacts) + [test_group]
             self._atomic_update(save=modified_settings)
+        else:
+            addressbook_manager = addressbook.AddressbookManager()
+            for entry in test_contacts:
+                try:
+                    contact = addressbook_manager.get_contact(entry['id'])
+                except KeyError:
+                    continue
+                icon = entry['icon']
+                icon_descriptor = IconDescriptor('file://' + icon, unicode(int(os.stat(icon).st_mtime)))
+                if contact.icon != icon_descriptor:
+                    icon_manager.store_file(contact.id, icon)
+                    contact.icon = icon_descriptor
+                    contact.save()
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.state = 'started'
