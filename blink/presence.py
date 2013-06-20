@@ -364,7 +364,6 @@ class PresenceSubscriptionHandler(object):
     @run_in_green_thread
     def _process_presence_data(self, uris=None):
         addressbook_manager = addressbook.AddressbookManager()
-        notification_center = NotificationCenter()
 
         current_pidf_map = {}
         contact_pidf_map = {}
@@ -395,8 +394,9 @@ class PresenceSubscriptionHandler(object):
                 note = unicode(next(iter(service.notes))) if service.notes else None
                 icon = unicode(service.icon) if service.icon else None
 
+                # review this logic (add NotChanged, NoIcon, ... markers to better represent the icon data and icon descriptor) -Dan
                 icon_data = icon_descriptor = None
-                if icon and icon != unknown_icon and (not contact.icon or (contact.icon and not contact.icon.is_local)):
+                if icon and icon != unknown_icon:
                     if 'blink-icon' in icon and contact.icon and icon == contact.icon.url:
                         # Fast path, icon hasn't changed
                         pass
@@ -404,9 +404,16 @@ class PresenceSubscriptionHandler(object):
                         icon_data, etag = self._download_icon(icon, contact.icon.etag if contact.icon else None)
                         if icon_data:
                             icon_descriptor = IconDescriptor(icon, etag)
+            self._update_contact_presence_state(contact, state, note, icon_descriptor, icon_data)
 
-            data = NotificationData(state=state, note=note, icon_descriptor=icon_descriptor, icon_data=icon_data)
-            notification_center.post_notification('AddressbookContactGotPresenceUpdate', sender=contact, data=data)
+    @run_in_gui_thread
+    def _update_contact_presence_state(self, contact, state, note, icon_descriptor, icon_data):
+        contact.presence.state = state
+        contact.presence.note = note
+        if icon_data:
+            IconManager().store_data(contact.id, icon_data)
+            contact.icon = icon_descriptor
+        contact.save()
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)

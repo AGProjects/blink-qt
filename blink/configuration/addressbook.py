@@ -5,8 +5,8 @@
 
 __all__ = ['ContactExtension', 'GroupExtension']
 
-from sipsimple.addressbook import ContactExtension, GroupExtension, SharedSetting
-from sipsimple.configuration import Setting
+from sipsimple.addressbook import ContactExtension, GroupExtension, PresenceSettings, SharedSetting
+from sipsimple.configuration import Setting, RuntimeSetting
 
 from blink.configuration.datatypes import IconDescriptor
 
@@ -14,7 +14,13 @@ from blink.configuration.datatypes import IconDescriptor
 SharedSetting.set_namespace('ag-projects:blink')
 
 
+class PresenceSettingsExtension(PresenceSettings):
+    state = RuntimeSetting(type=unicode, nillable=True, default=None)
+    note = RuntimeSetting(type=unicode, nillable=True, default=None)
+
+
 class ContactExtension(ContactExtension):
+    presence = PresenceSettingsExtension
     icon = Setting(type=IconDescriptor, nillable=True, default=None)
     alternate_icon = Setting(type=IconDescriptor, nillable=True, default=None)
     preferred_media = SharedSetting(type=str, default='audio')

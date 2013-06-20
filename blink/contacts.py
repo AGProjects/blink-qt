@@ -793,8 +793,6 @@ class Contact(object):
     def __init__(self, contact, group):
         self.settings = contact
         self.group = group
-        self.state = None
-        self.note = None
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
 
@@ -822,7 +820,7 @@ class Contact(object):
         return '%s(%r, %r)' % (self.__class__.__name__, self.settings, self.group)
 
     def __getstate__(self):
-        return (self.settings.id, dict(group=self.group, state=self.state, note=self.note))
+        return (self.settings.id, dict(group=self.group))
 
     def __setstate__(self, state):
         contact_id, state = state
@@ -865,6 +863,14 @@ class Contact(object):
             return next(uri.uri for uri in self.settings.uris)
         except StopIteration:
             return u''
+
+    @property
+    def state(self):
+        return self.settings.presence.state
+
+    @property
+    def note(self):
+        return self.settings.presence.note
 
     @property
     def icon(self):
@@ -914,16 +920,6 @@ class Contact(object):
         if set(['icon', 'alternate_icon']).intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
-        notification.center.post_notification('BlinkContactDidChange', sender=self)
-
-    def _NH_AddressbookContactGotPresenceUpdate(self, notification):
-        self.state = notification.data.state
-        self.note = notification.data.note
-        if notification.data.icon_data:
-            icon = IconManager().store_data(self.settings.id, notification.data.icon_data)
-            if icon:
-                self.settings.icon = notification.data.icon_descriptor
-                self.settings.save()
         notification.center.post_notification('BlinkContactDidChange', sender=self)
 
 
@@ -943,8 +939,6 @@ class ContactDetail(object):
 
     def __init__(self, contact):
         self.settings = contact
-        self.state = None
-        self.note = None
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
 
@@ -952,7 +946,7 @@ class ContactDetail(object):
         return '%s(%r)' % (self.__class__.__name__, self.settings)
 
     def __getstate__(self):
-        return (self.settings.id, dict(state=self.state, note=self.note))
+        return (self.settings.id, {})
 
     def __setstate__(self, state):
         contact_id, state = state
@@ -995,6 +989,14 @@ class ContactDetail(object):
             return next(uri.uri for uri in self.settings.uris)
         except StopIteration:
             return u''
+
+    @property
+    def state(self):
+        return self.settings.presence.state
+
+    @property
+    def note(self):
+        return self.settings.presence.note
 
     @property
     def icon(self):
@@ -1046,11 +1048,6 @@ class ContactDetail(object):
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
 
-    def _NH_AddressbookContactGotPresenceUpdate(self, notification):
-        self.state = notification.data.state
-        self.note = notification.data.note
-        notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
-
 
 class ContactURI(object):
     implements(IObserver)
@@ -1066,8 +1063,6 @@ class ContactURI(object):
         self.contact = contact
         self.uri = uri
         self.default = default
-        self.state = None
-        self.note = None
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
 
@@ -1075,7 +1070,7 @@ class ContactURI(object):
         return '%s(%r, %r)' % (self.__class__.__name__, self.contact, self.uri)
 
     def __getstate__(self):
-        state_dict = dict(default=self.default, state=self.state, note=self.note)
+        state_dict = dict(default=self.default)
         if isinstance(self.contact, addressbook.Contact):
             uri_id = self.uri.id
         else:
