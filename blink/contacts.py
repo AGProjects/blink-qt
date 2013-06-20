@@ -866,11 +866,11 @@ class Contact(object):
 
     @property
     def state(self):
-        return self.settings.presence.state
+        return self.settings.presence.state if isinstance(self.settings, addressbook.Contact) else None
 
     @property
     def note(self):
-        return self.settings.presence.note
+        return self.settings.presence.note if isinstance(self.settings, addressbook.Contact) else None
 
     @property
     def icon(self):
@@ -992,11 +992,11 @@ class ContactDetail(object):
 
     @property
     def state(self):
-        return self.settings.presence.state
+        return self.settings.presence.state if isinstance(self.settings, addressbook.Contact) else None
 
     @property
     def note(self):
-        return self.settings.presence.note
+        return self.settings.presence.note if isinstance(self.settings, addressbook.Contact) else None
 
     @property
     def icon(self):
