@@ -2,10 +2,22 @@
 Roadmap
 -------
 
++ Minimize to Windows system tray
 + Presence
 + Call transfer
-+ Answering machine
-
++ File transfer
++ Migrate to new core
+  - Acoustic Echo Cancelation
+  - OPUS codec
+  - ICE fixes
+  - Hold fixes
+  - Hangup on RTP timeout
+  - Fix crash on shutdown
+  - TCP transport improvements
+- Chat sessions
+- Multi-party conferencing
+- Screen sharing
+- Video sessions
 
 Fixes and improvements
 ----------------------
@@ -22,8 +34,7 @@ Nice to have
 ------------
 
 - LDAP
-- Chat
-- File transfer
+- Answering machine
 - History browser
 - Logs window
 - Dial SIP URI from server web page
@@ -31,8 +42,7 @@ Nice to have
 - Device switching window when detected at runtime
 - Alert panel for redirect 30X
 - Dial SIP URIs from the system
-- Minimize to Windows system tray
 - Desktop notifications
-- Desktop sharing
 - Accesibility features for blind users
+
 
