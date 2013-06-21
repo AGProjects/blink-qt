@@ -753,13 +753,13 @@ padding: 2px;</string>
             </property>
             <property name="icon">
              <iconset>
-              <normaloff>icons/bell-on.png</normaloff>
-              <normalon>icons/bell-off.png</normalon>icons/bell-on.png</iconset>
+              <normaloff>icons/bell-on.svg</normaloff>
+              <normalon>icons/bell-off.svg</normalon>icons/bell-on.svg</iconset>
             </property>
             <property name="iconSize">
              <size>
-              <width>18</width>
-              <height>18</height>
+              <width>16</width>
+              <height>16</height>
              </size>
             </property>
             <property name="checkable">
