@@ -3324,7 +3324,7 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.request_remote_desktop)
         menu.addAction(self.actions.share_my_desktop)
         menu.addSeparator()
-        if isinstance(selected_item, ContactURI) and isinstance(model.contact, addressbook.Contact):
+        if isinstance(selected_item, ContactURI) and model.contact_detail.editable:
             menu.addAction(self.actions.make_uri_default)
             self.actions.make_uri_default.setEnabled(selected_item.uri is not model.contact.uris.default)
         menu.addAction(self.actions.edit_contact)
@@ -3335,6 +3335,8 @@ class ContactDetailView(QListView):
         self.actions.send_files.setEnabled(False)
         self.actions.request_remote_desktop.setEnabled(False)
         self.actions.share_my_desktop.setEnabled(False)
+        self.actions.edit_contact.setEnabled(model.contact_detail.editable)
+        self.actions.delete_contact.setEnabled(model.contact_detail.deletable)
         menu.exec_(event.globalPos())
 
     def hideEvent(self, event):
