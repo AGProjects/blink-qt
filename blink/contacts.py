@@ -20,6 +20,7 @@ from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType, Singleton
 from application.python import Null
 from application.system import unlink
+from backports.collections import OrderedDict
 from collections import deque
 from datetime import datetime
 from eventlib import coros, proc
@@ -211,51 +212,109 @@ class AllContactsGroup(VirtualGroup):
         notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
 
 
+class BonjourURI(unicode):
+    def __new__(cls, value):
+        instance = unicode.__new__(cls, unicode(value).partition(':')[2])
+        instance.__uri__ = value
+        return instance
+
+    @property
+    def user(self):
+        return self.__uri__.user
+
+    @property
+    def host(self):
+        return self.__uri__.host
+
+    @property
+    def transport(self):
+        return self.__uri__.transport
+
+
 class BonjourNeighbourURI(object):
-    def __init__(self, uri, type=None):
+    def __init__(self, id, uri):
+        self.id = id
         self.uri = uri
-        self.type = type
+
+    @property
+    def type(self):
+        return self.uri.transport.upper()
 
     def __repr__(self):
-        return "%s(%r, %r)" % (self.__class__.__name__, self.uri, self.type)
+        return "%s(%r, %r)" % (self.__class__.__name__, self.id, self.uri.__uri__)
+
+    def __setattr__(self, name, value):
+        if name == 'uri' and not isinstance(value, BonjourURI):
+            value = BonjourURI(value)
+        object.__setattr__(self, name, value)
+
+
+class BonjourNeighbourURIList(object):
+    def __init__(self, uris=[]):
+        self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
+    def __getitem__(self, id):
+        return self._uri_map[id]
+    def __contains__(self, id):
+        return id in self._uri_map
+    def __iter__(self):
+        return iter(self._uri_map.values())
+    def __len__(self):
+        return len(self._uri_map)
+    __hash__ = None
+    def get(self, key, default=None):
+        return self._item_map.get(key, default)
+    def add(self, uri):
+        self._uri_map[uri.id] = uri
+    def pop(self, id, *args):
+        return self._uri_map.pop(id, *args)
+    def remove(self, uri):
+        self._uri_map.pop(uri.id, None)
+    @property
+    def default(self):
+        return sorted(self, key=lambda item: 0 if item.uri.transport=='tls' else 1 if item.uri.transport=='tcp' else 2)[0] if self._uri_map else None
+
+
+class BonjourPresence(object):
+    def __init__(self, state=None, note=None):
+        self.state = state
+        self.note = note
 
 
 class BonjourNeighbour(object):
-    def __init__(self, name, uri, hostname, neighbour):
-        self.name = name
-        self.uris = [BonjourNeighbourURI(uri)]
-        self.hostname = hostname
-        self.neighbour = neighbour
+    id = WriteOnceAttribute()
 
-    @property
-    def id(self):
-        return self.neighbour
+    def __init__(self, id, name, hostname, uris=[], presence=None):
+        self.id = id
+        self.name = name
+        self.hostname = hostname
+        self.uris = BonjourNeighbourURIList(uris)
+        self.presence = presence or BonjourPresence()
 
 
 class BonjourNeighboursList(object):
     def __init__(self):
-        self.contacts = {}
+        self._contact_map = {}
     def __getitem__(self, id):
-        return self.contacts[id]
+        return self._contact_map[id]
     def __contains__(self, id):
-        return id in self.contacts
+        return id in self._contact_map
     def __iter__(self):
-        return iter(self.contacts.values())
+        return iter(self._contact_map.values())
     def __len__(self):
-        return len(self.contacts)
+        return len(self._contact_map)
     __hash__ = None
     def add(self, contact):
-        self.contacts[contact.id] = contact
+        self._contact_map[contact.id] = contact
     def pop(self, id, *args):
-        return self.contacts.pop(id, *args)
+        return self._contact_map.pop(id, *args)
+    def remove(self, contact):
+        return self._contact_map.pop(contact.id, None)
 
 
-class BonjourNeighboursGroup(VirtualGroup):
+class BonjourNeighboursManager(object):
+    __metaclass__ = Singleton
     implements(IObserver)
 
-    __id__ = 'bonjour_neighbours'
-
-    name = Setting(type=unicode, default='Bonjour Neighbours')
     contacts = WriteOnceAttribute()
 
     def __init__(self):
@@ -267,27 +326,74 @@ class BonjourNeighboursGroup(VirtualGroup):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _NH_BonjourAccountDidAddNeighbour(self, notification):
+        neighbour, record = notification.data.neighbour, notification.data.record
+        contact_id = record.id or neighbour
+        contact_uri = BonjourNeighbourURI(neighbour, record.uri)
+        try:
+            contact = self.contacts[contact_id]
+        except KeyError:
+            contact = BonjourNeighbour(contact_id, record.name, record.host, [contact_uri], BonjourPresence(record.presence.state, record.presence.note))
+            self.contacts.add(contact)
+            notification.center.post_notification('BonjourNeighboursManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
+        else:
+            contact.uris.add(contact_uri)
+            notification.center.post_notification('BonjourNeighboursManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
+        contact_id = notification.data.record.id or notification.data.neighbour
+        contact = self.contacts[contact_id]
+        contact.uris.pop(notification.data.neighbour, None)
+        if not contact.uris:
+            self.contacts.remove(contact)
+            notification.center.post_notification('BonjourNeighboursManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+        else:
+            notification.center.post_notification('BonjourNeighboursManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_BonjourAccountDidUpdateNeighbour(self, notification):
+        neighbour, record = notification.data.neighbour, notification.data.record
+        contact = self.contacts[record.id or neighbour]
+        contact_uri = contact.uris[neighbour]
+        contact.name = record.name
+        contact.host = record.host
+        contact.presence.state = record.presence.state
+        contact.presence.note = record.presence.note
+        contact_uri.uri = record.uri
+        notification.center.post_notification('BonjourNeighboursManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
+
+
+class BonjourNeighboursGroup(VirtualGroup):
+    implements(IObserver)
+
+    __id__ = 'bonjour_neighbours'
+
+    name = Setting(type=unicode, default='Bonjour Neighbours')
+    contacts = property(lambda self: self.__manager__.contacts)
+
+    def __init__(self):
+        self.__manager__ = BonjourNeighboursManager()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=BonjourAccount())
+        notification_center.add_observer(self, sender=self.__manager__)
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
     def _NH_SIPAccountWillActivate(self, notification):
         notification.center.post_notification('VirtualGroupWasActivated', sender=self)
 
     def _NH_SIPAccountDidDeactivate(self, notification):
         notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
 
-    def _NH_BonjourAccountDidAddNeighbour(self, notification):
-        contact = BonjourNeighbour(notification.data.display_name, unicode(notification.data.uri), notification.data.host, notification.data.neighbour)
-        self.contacts.add(contact)
-        notification.center.post_notification('VirtualGroupDidAddContact', sender=self, data=NotificationData(contact=contact))
+    def _NH_BonjourNeighboursManagerDidAddContact(self, notification):
+        notification.center.post_notification('VirtualGroupDidAddContact', sender=self, data=notification.data)
 
-    def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
-        contact = self.contacts.pop(notification.data.neighbour)
-        notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+    def _NH_BonjourNeighboursManagerDidRemoveContact(self, notification):
+        notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=notification.data)
 
-    def _NH_BonjourAccountDidUpdateNeighbour(self, notification):
-        contact = self.contacts[notification.data.neighbour]
-        contact.display_name = notification.data.display_name
-        contact.host = notification.data.host
-        contact.uri = unicode(notification.data.uri)
-        notification.center.post_notification('VirtualContactDidChange', sender=contact)
+    def _NH_BonjourNeighboursManagerDidUpdateContact(self, notification):
+        notification.center.post_notification('VirtualContactDidChange', sender=notification.data.contact)
 
 
 class GoogleContactID(unicode):
@@ -301,20 +407,23 @@ class GoogleContactIcon(object):
 
 
 class GoogleContactURI(object):
-    def __init__(self, uri, type):
+    id = property(lambda self: self.uri)
+
+    def __init__(self, uri, type, default=False):
         self.uri = uri
         self.type = type
+        self.default = default
 
     def __repr__(self):
-        return "%s(%r, %r)" % (self.__class__.__name__, self.uri, self.type)
+        return "%s(%r, %r, %r)" % (self.__class__.__name__, self.uri, self.type, self.default)
 
     @classmethod
     def from_number(cls, number):
-        return cls(number.text, cls._get_label(number))
+        return cls(re.sub('[\s()-]', '', number.text), cls._get_label(number), number.primary=='true')
 
     @classmethod
     def from_email(cls, email):
-        return cls(re.sub('^sips?:', '', email.address), cls._get_label(email))
+        return cls(re.sub('^sips?:', '', email.address), cls._get_label(email), False) # for now do not let email addresses become default URIs -Dan
 
     @staticmethod
     def _get_label(entry):
@@ -322,6 +431,40 @@ class GoogleContactURI(object):
             return entry.label.strip()
         else:
             return entry.rel.rpartition('#')[2].replace('_', ' ').strip().title()
+
+
+class GoogleContactURIList(object):
+    def __init__(self, uris=[]):
+        self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
+    def __getitem__(self, id):
+        return self._uri_map[id]
+    def __contains__(self, id):
+        return id in self._uri_map
+    def __iter__(self):
+        return iter(self._uri_map.values())
+    def __len__(self):
+        return len(self._uri_map)
+    __hash__ = None
+    def get(self, key, default=None):
+        return self._item_map.get(key, default)
+    def add(self, uri):
+        self._uri_map[uri.id] = uri
+    def pop(self, id, *args):
+        return self._uri_map.pop(id, *args)
+    def remove(self, uri):
+        self._uri_map.pop(uri.id, None)
+    @property
+    def default(self):
+        try:
+            return next(uri for uri in self if uri.default)
+        except StopIteration:
+            return None
+
+
+class GooglePresence(object):
+    def __init__(self, state=None, note=None):
+        self.state = state
+        self.note = note
 
 
 class GoogleContact(object):
@@ -332,7 +475,8 @@ class GoogleContact(object):
         self.name = name
         self.company = company
         self.icon = icon
-        self.uris = uris
+        self.uris = GoogleContactURIList(uris)
+        self.presence = GooglePresence()
 
     def __reduce__(self):
         return (self.__class__, (self.id, self.name, self.company, self.icon, self.uris))
@@ -340,21 +484,24 @@ class GoogleContact(object):
 
 class GoogleContactsList(object):
     def __init__(self):
-        self.contacts = {}
+        self._contact_map = {}
         self.timestamp = None
     def __getitem__(self, id):
-        return self.contacts[id]
+        return self._contact_map[id]
     def __contains__(self, id):
-        return id in self.contacts
+        return id in self._contact_map
     def __iter__(self):
-        return iter(self.contacts.values())
+        return iter(self._contact_map.values())
     def __len__(self):
-        return len(self.contacts)
+        return len(self._contact_map)
     __hash__ = None
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._contact_map # accessing this will fail if the pickle was created by an older version of the code, thus invalidating the unpickling
     def add(self, contact):
-        self.contacts[contact.id] = contact
+        self._contact_map[contact.id] = contact
     def pop(self, id, *args):
-        return self.contacts.pop(id, *args)
+        return self._contact_map.pop(id, *args)
 
 
 class GoogleContactsManager(object):
@@ -857,7 +1004,7 @@ class Contact(object):
 
     @property
     def uri(self):
-        if isinstance(self.settings, addressbook.Contact) and self.settings.uris.default is not None:
+        if self.settings.uris.default is not None:
             return self.settings.uris.default.uri
         try:
             return next(uri.uri for uri in self.settings.uris)
@@ -866,11 +1013,11 @@ class Contact(object):
 
     @property
     def state(self):
-        return self.settings.presence.state if isinstance(self.settings, addressbook.Contact) else None
+        return self.settings.presence.state
 
     @property
     def note(self):
-        return self.settings.presence.note if isinstance(self.settings, addressbook.Contact) else None
+        return self.settings.presence.note
 
     @property
     def icon(self):
@@ -911,7 +1058,6 @@ class Contact(object):
                 pixmap = self.icon.pixmap(size)
             return self.__dict__.setdefault('pixmap', pixmap)
 
-    @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
@@ -920,6 +1066,11 @@ class Contact(object):
         if set(['icon', 'alternate_icon']).intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
+        notification.center.post_notification('BlinkContactDidChange', sender=self)
+
+    def _NH_VirtualContactDidChange(self, notification):
+        self.__dict__.pop('icon', None)
+        self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDidChange', sender=self)
 
 
@@ -983,7 +1134,7 @@ class ContactDetail(object):
 
     @property
     def uri(self):
-        if isinstance(self.settings, addressbook.Contact) and self.settings.uris.default is not None:
+        if self.settings.uris.default is not None:
             return self.settings.uris.default.uri
         try:
             return next(uri.uri for uri in self.settings.uris)
@@ -992,11 +1143,11 @@ class ContactDetail(object):
 
     @property
     def state(self):
-        return self.settings.presence.state if isinstance(self.settings, addressbook.Contact) else None
+        return self.settings.presence.state
 
     @property
     def note(self):
-        return self.settings.presence.note if isinstance(self.settings, addressbook.Contact) else None
+        return self.settings.presence.note
 
     @property
     def icon(self):
@@ -1037,7 +1188,6 @@ class ContactDetail(object):
                 pixmap = self.icon.pixmap(size)
             return self.__dict__.setdefault('pixmap', pixmap)
 
-    @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
@@ -1046,6 +1196,11 @@ class ContactDetail(object):
         if set(['icon', 'alternate_icon']).intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
+        notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
+
+    def _NH_VirtualContactDidChange(self, notification):
+        self.__dict__.pop('icon', None)
+        self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
 
 
@@ -1059,10 +1214,9 @@ class ContactURI(object):
     editable = property(lambda self: isinstance(self.contact, addressbook.Contact))
     deletable = property(lambda self: isinstance(self.contact, addressbook.Contact))
 
-    def __init__(self, contact, uri, default=False):
+    def __init__(self, contact, uri):
         self.contact = contact
         self.uri = uri
-        self.default = default
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
 
@@ -1070,12 +1224,12 @@ class ContactURI(object):
         return '%s(%r, %r)' % (self.__class__.__name__, self.contact, self.uri)
 
     def __getstate__(self):
-        state_dict = dict(default=self.default)
         if isinstance(self.contact, addressbook.Contact):
             uri_id = self.uri.id
+            state_dict = dict()
         else:
             uri_id = None
-            state_dict['uri'] = self.uri
+            state_dict = dict(uri=self.uri)
         return (self.contact.id, uri_id, state_dict)
 
     def __setstate__(self, state):
@@ -1096,7 +1250,6 @@ class ContactURI(object):
     def __unicode__(self):
         return u'%s (%s)' % (self.uri.uri, self.uri.type) if self.uri.type else unicode(self.uri.uri)
 
-    @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
@@ -2415,6 +2568,8 @@ class ContactDetailModel(QAbstractListModel):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BlinkContactDetailDidChange')
         notification_center.add_observer(self, name='BlinkContactURIDidChange')
+        notification_center.add_observer(self, name='VirtualGroupDidRemoveContact')
+        notification_center.add_observer(self, name='VirtualContactDidChange')
 
     @property
     def contact_detail(self):
@@ -2464,11 +2619,10 @@ class ContactDetailModel(QAbstractListModel):
         elif role == Qt.SizeHintRole:
             return item.size_hint
         elif role == Qt.CheckStateRole and row > 0:
-            if isinstance(self.contact, addressbook.Contact):
-                if item.uri is self.contact.uris.default:
-                    return Qt.Checked
-                elif self.contact.uris.default is None and row == 1:
-                    return Qt.PartiallyChecked
+            if item.uri is self.contact.uris.default:
+                return Qt.Checked
+            elif self.contact.uris.default is None and row == 1:
+                return Qt.PartiallyChecked
             return Qt.Unchecked
         return None
 
@@ -2530,13 +2684,32 @@ class ContactDetailModel(QAbstractListModel):
                 self.items += [ContactURI(notification.sender, uri) for uri in modified_uris.added]
                 self.endInsertRows()
 
-    def _NH_AddressbookContactWasDeleted(self, notification):
+    def _NH_VirtualContactDidChange(self, notification):
         if notification.sender is self.contact:
+            old_uris = set(item.uri for item in self.items[1:])
+            added_uris = [uri for uri in self.contact.uris if uri not in old_uris]
+            removed_uris = old_uris.difference(self.contact.uris)
+            modified_uris = old_uris.difference(removed_uris)
+            for row in sorted((row for row, item in enumerate(self.items) if row>0 and item.uri in removed_uris), reverse=True):
+                self.beginRemoveRows(QModelIndex(), row, row)
+                del self.items[row]
+                self.endRemoveRows()
+            if added_uris:
+                position = len(self.items)
+                self.beginInsertRows(QModelIndex(), position, position+len(added_uris)-1)
+                self.items += [ContactURI(self.contact, uri) for uri in added_uris]
+                self.endInsertRows()
+            for row in (row for row, item in enumerate(self.items) if row>0 and item.uri in modified_uris):
+                index = self.index(row)
+                self.dataChanged.emit(index, index)
+
+    def _NH_VirtualGroupDidRemoveContact(self, notification):
+        if notification.data.contact is self.contact:
             self.contact = None
             self.contactDeleted.emit()
 
     def _NH_BlinkContactDetailDidChange(self, notification):
-        if self.items and notification.sender is self.items[0]:
+        if self.items and notification.sender is self.contact_detail:
             index = self.index(0)
             self.dataChanged.emit(index, index)
 
