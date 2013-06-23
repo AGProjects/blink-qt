@@ -165,10 +165,8 @@ class PresencePublicationHandler(object):
         else:
             accounts = [account]
         for account in accounts:
-            if blink_settings.presence.offline_note:
-                account.xcap_manager.set_offline_status(OfflineStatus(self.build_offline_pidf(account, blink_settings.presence.offline_note)))
-            else:
-                account.xcap_manager.set_offline_status(None)
+            status = OfflineStatus(self.build_offline_pidf(account, blink_settings.presence.offline_note)) if blink_settings.presence.offline_note else None
+            account.xcap_manager.set_offline_status(status)
 
     def set_xcap_icon(self, account=None):
         blink_settings = BlinkSettings()
@@ -177,14 +175,10 @@ class PresencePublicationHandler(object):
             accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.discovered]
         else:
             accounts = [account]
-        icon = None
-        if blink_settings.presence.icon:
-            try:
-                data = open(blink_settings.presence.icon.url.path).read()
-            except Exception:
-                pass
-            else:
-                icon = Icon(data, 'image/png')
+        try:
+            icon = Icon(file(blink_settings.presence.icon.url.path).read(), 'image/png')
+        except Exception:
+            icon = None
         for account in accounts:
             account.xcap_manager.set_status_icon(icon)
 
@@ -281,16 +275,10 @@ class PresencePublicationHandler(object):
         offline_status = notification.data.offline_status
         status_icon = notification.data.status_icon
 
-        offline_note = None
-        if offline_status:
-            offline_pidf = offline_status.pidf
-            try:
-                service = next(offline_pidf.services)
-                note = next(iter(service.notes))
-            except StopIteration:
-                pass
-            else:
-                offline_note = unicode(note)
+        try:
+            offline_note = next(note for service in offline_status.pidf.services for note in service.notes)
+        except (AttributeError, StopIteration):
+            offline_note = None
 
         blink_settings.presence.offline_note = offline_note
         blink_settings.save()
