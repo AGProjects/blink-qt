@@ -133,7 +133,7 @@ class PresencePublicationHandler(object):
 
         return doc
 
-    def build_offline_pidf(self, account, offline_note=None):
+    def build_offline_pidf(self, account, note=None):
         doc = pidf.PIDF(str(account.uri))
         timestamp = ISOTimestamp.now()
 
@@ -151,8 +151,8 @@ class PresencePublicationHandler(object):
         service.contact = pidf.Contact(str(account.uri))
         service.capabilities = caps.ServiceCapabilities()
         service.timestamp = pidf.ServiceTimestamp(timestamp)
-        if offline_note:
-            service.notes.add(offline_note)
+        if note:
+            service.notes.add(note)
         doc.add(service)
 
         return doc
