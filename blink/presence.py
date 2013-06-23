@@ -200,6 +200,7 @@ class PresencePublicationHandler(object):
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if notification.sender is BlinkSettings():
+            # TODO: use a transaction here as well? -Dan
             if 'presence.offline_note' in notification.data.modified:
                 self.set_xcap_offline_note()
             if 'presence.icon' in notification.data.modified:
@@ -217,9 +218,9 @@ class PresencePublicationHandler(object):
                 account.icon = None
             if set(['display_name', 'xcap.enabled', 'xcap.discovered']).intersection(notification.data.modified):
                 if 'xcap.discovered' in notification.data.modified and account.xcap.enabled and account.xcap.discovered:
-                    # TODO: group these in a transaction? Needs to be done in the file-io thread -Saul
-                    self.set_xcap_offline_note(account)
-                    self.set_xcap_icon(account)
+                    with account.xcap_manager.transaction():
+                        self.set_xcap_offline_note(account)
+                        self.set_xcap_icon(account)
                 self.publish(account)
 
     def _NH_SIPAccountWillActivate(self, notification):
