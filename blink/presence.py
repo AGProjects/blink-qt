@@ -84,7 +84,7 @@ class PresencePublicationHandler(object):
 
         if presence_state == 'Invisible':
             # Publish an empty offline state so that other clients are also synced
-            return self.build_offline_pidf(account, False)
+            return self.build_offline_pidf(account, None)
 
         doc = pidf.PIDF(str(account.uri))
         timestamp = ISOTimestamp.now()
