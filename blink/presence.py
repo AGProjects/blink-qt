@@ -214,6 +214,7 @@ class PresencePublicationHandler(object):
         if account is not BonjourAccount():
             notification.center.add_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
             account.icon = None
+        self.publish([account])
 
     def _NH_SIPAccountWillDeactivate(self, notification):
         account = notification.sender
