@@ -3,6 +3,7 @@
 
 __all__ = ['HistoryManager']
 
+import re
 import cPickle as pickle
 
 from application.notification import IObserver, NotificationCenter
@@ -105,6 +106,9 @@ class HistoryEntry(object):
             display_name = remote_identity.display_name
         else:
             display_name = contact.name
+        m = phone_number_re.match(remote_uri_str)
+        if m:
+            remote_uri_str = m.group('number')
         if display_name:
             remote_identity_str = '%s <%s>' % (display_name, remote_uri_str)
         else:
@@ -127,6 +131,8 @@ class HistoryEntry(object):
         reason = ' %s' % self.reason.title() if self.reason else ''
         return u'%s%s%s%s' % (self.remote_identity, time, duration, reason)
 
+
+phone_number_re = re.compile(r'^(?P<number>(00|\+)[1-9]\d{4,14})@')
 
 def format_date(dt):
     now = datetime.now()
