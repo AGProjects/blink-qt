@@ -49,8 +49,8 @@ class PresencePublicationHandler(object):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPAccountWillActivate')
         notification_center.add_observer(self, name='SIPAccountWillDeactivate')
+        notification_center.add_observer(self, name='SIPAccountDidDiscoverXCAPSupport')
         notification_center.add_observer(self, name='SystemDidWakeUpFromSleep')
-        notification_center.add_observer(self, name='XCAPManagerDidDiscoverServerCapabilities')
         notification_center.add_observer(self, name='XCAPManagerDidReloadData')
         notification_center.add_observer(self, sender=BlinkSettings(), name='CFGSettingsObjectDidChange')
         try:
@@ -62,8 +62,8 @@ class PresencePublicationHandler(object):
         notification_center = NotificationCenter()
         notification_center.remove_observer(self, name='SIPAccountWillActivate')
         notification_center.remove_observer(self, name='SIPAccountWillDeactivate')
+        notification_center.remove_observer(self, name='SIPAccountDidDiscoverXCAPSupport')
         notification_center.remove_observer(self, name='SystemDidWakeUpFromSleep')
-        notification_center.remove_observer(self, name='XCAPManagerDidDiscoverServerCapabilities')
         notification_center.remove_observer(self, name='XCAPManagerDidReloadData')
         notification_center.remove_observer(self, sender=BlinkSettings(), name='CFGSettingsObjectDidChange')
 
@@ -161,7 +161,7 @@ class PresencePublicationHandler(object):
         blink_settings = BlinkSettings()
         if not account:
             account_manager = AccountManager()
-            accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.discovered]
+            accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.enabled and account.xcap.discovered]
         else:
             accounts = [account]
         for account in accounts:
@@ -172,7 +172,7 @@ class PresencePublicationHandler(object):
         blink_settings = BlinkSettings()
         if not account:
             account_manager = AccountManager()
-            accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.discovered]
+            accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.enabled and account.xcap.discovered]
         else:
             accounts = [account]
         try:
@@ -209,18 +209,9 @@ class PresencePublicationHandler(object):
                 self.publish()
         else:
             account = notification.sender
-            if 'presence.enabled' in notification.data.modified:
-                if account.presence.enabled:
-                    self.publish(account)
-                # The account itself will unpublish when presence is disabled
-                return
             if set(['xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified):
                 account.icon = None
-            if set(['display_name', 'xcap.enabled', 'xcap.discovered']).intersection(notification.data.modified):
-                if 'xcap.discovered' in notification.data.modified and account.xcap.enabled and account.xcap.discovered:
-                    with account.xcap_manager.transaction():
-                        self.set_xcap_offline_note(account)
-                        self.set_xcap_icon(account)
+            if set(['presence.enabled', 'display_name', 'xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified) and account.presence.enabled:
                 self.publish(account)
 
     def _NH_SIPAccountWillActivate(self, notification):
@@ -264,10 +255,11 @@ class PresencePublicationHandler(object):
                 blink_settings.presence.state_history = [new_state] + [state for state in blink_settings.presence.state_history if state!=new_state]
         blink_settings.save()
 
-    def _NH_XCAPManagerDidDiscoverServerCapabilities(self, notification):
-        account = notification.sender.account
-        if account.enabled and account.presence.enabled:
-            self.publish(account)
+    def _NH_SIPAccountDidDiscoverXCAPSupport(self, notification):
+        account = notification.sender
+        with account.xcap_manager.transaction():
+            self.set_xcap_offline_note(account)
+            self.set_xcap_icon(account)
 
     def _NH_XCAPManagerDidReloadData(self, notification):
         account = notification.sender.account
