@@ -6,11 +6,11 @@
 __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
 from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, PresenceSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
-from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension
+from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension, RuntimeSetting
 from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, NonNegativeInteger, SIPTransportList, SRTPEncryption
 from sipsimple.util import user_info
 
-from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL
+from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL, IconDescriptor
 
 
 class BonjourMSRPSettingsExtension(BonjourMSRPSettings):
@@ -68,6 +68,7 @@ class TLSSettingsExtension(TLSSettings):
 
 class XCAPSettingsExtension(XCAPSettings):
     enabled = Setting(type=bool, default=True)
+    icon = RuntimeSetting(type=IconDescriptor, nillable=True, default=None)
 
 
 class AccountExtension(SettingsObjectExtension):

@@ -109,8 +109,8 @@ class PresencePublicationHandler(object):
         service.contact = pidf.Contact(str(account.contact.public_gruu or account.uri))
         if account.display_name:
             service.display_name = cipid.DisplayName(account.display_name)
-        if account.icon:
-            service.icon = cipid.Icon("%s#blink-icon%s" % (account.icon.url, account.icon.etag))
+        if account.xcap.icon:
+            service.icon = cipid.Icon("%s#blink-icon%s" % (account.xcap.icon.url, account.xcap.icon.etag))
         else:
             service.icon = cipid.Icon(unknown_icon)
         service.device_info = pidf.DeviceInfo(instance_id, description=self.hostname, user_agent=settings.user_agent)
@@ -175,11 +175,12 @@ class PresencePublicationHandler(object):
     @run_in_gui_thread
     def _save_icon(self, icon_data, icon_hash):
         blink_settings = BlinkSettings()
+        icon_manager = IconManager()
         if icon_data is not None is not icon_hash:
-            icon_manager = IconManager()
             icon = icon_manager.store_data('avatar', icon_data)
             blink_settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash) if icon is not None else None
         else:
+            icon_manager.remove('avatar')
             blink_settings.presence.icon = None
         blink_settings.save()
 
@@ -204,8 +205,9 @@ class PresencePublicationHandler(object):
         else:
             account = notification.sender
             if set(['xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified):
-                account.icon = None
-            if set(['presence.enabled', 'display_name', 'xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified) and account.presence.enabled:
+                account.xcap.icon = None
+                account.save()
+            if set(['presence.enabled', 'display_name', 'xcap.enabled', 'xcap.icon', 'xcap.xcap_root']).intersection(notification.data.modified) and account.presence.enabled:
                 self.publish([account])
 
     def _NH_SIPAccountWillActivate(self, notification):
@@ -213,7 +215,6 @@ class PresencePublicationHandler(object):
         notification.center.add_observer(self, sender=account, name='CFGSettingsObjectDidChange')
         if account is not BonjourAccount():
             notification.center.add_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
-            account.icon = None
         self.publish([account])
 
     def _NH_SIPAccountWillDeactivate(self, notification):
@@ -221,7 +222,6 @@ class PresencePublicationHandler(object):
         notification.center.remove_observer(self, sender=account, name='CFGSettingsObjectDidChange')
         if account is not BonjourAccount():
             notification.center.remove_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
-            account.icon = None
 
     def _NH_SIPAccountGotSelfPresenceState(self, notification):
         pidf_doc = notification.data.pidf
@@ -279,12 +279,12 @@ class PresencePublicationHandler(object):
                 pass
             else:
                 self._save_icon(status_icon.data, icon_hash)
-            if icon_desc != account.icon:
-                account.icon = icon_desc
-                self.publish([account])
         else:
-            # TODO: remove local icon?
-            pass
+            icon_desc = None
+            self._save_icon(None, None)
+
+        account.xcap.icon = icon_desc
+        account.save()
 
 
 class PresenceSubscriptionHandler(object):
