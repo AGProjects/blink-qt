@@ -86,6 +86,7 @@ class AccountExtension(SettingsObjectExtension):
 
 class BonjourAccountExtension(SettingsObjectExtension):
     msrp = BonjourMSRPSettingsExtension
+    presence = PresenceSettingsExtension
     rtp = RTPSettingsExtension
     sip = BonjourSIPSettings
     sounds = SoundSettings

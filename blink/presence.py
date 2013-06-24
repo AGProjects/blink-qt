@@ -24,6 +24,7 @@ from zope.interface import implements
 
 from sipsimple import addressbook
 from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.account.bonjour import BonjourPresenceState
 from sipsimple.account.xcap import Icon, OfflineStatus
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.payloads import caps, cipid, pidf, prescontent, rpid
@@ -67,15 +68,14 @@ class PresencePublicationHandler(object):
         notification_center.remove_observer(self, name='XCAPManagerDidReloadData')
         notification_center.remove_observer(self, sender=BlinkSettings(), name='CFGSettingsObjectDidChange')
 
-    def publish(self, account=None):
-        if not account:
-            account_manager = AccountManager()
-            bonjour_account = BonjourAccount()
-            accounts = [account for account in account_manager.get_accounts() if account is not bonjour_account and account.enabled and account.presence.enabled]
-        else:
-            accounts = [account]
+    def publish(self, accounts):
+        bonjour_account = BonjourAccount()
         for account in accounts:
-            account.presence_state = self.build_pidf(account)
+            if account is not bonjour_account:
+                account.presence_state = self.build_pidf(account)
+            else:
+                blink_settings = BlinkSettings()
+                account.presence_state = BonjourPresenceState(blink_settings.presence.current_state.state, blink_settings.presence.current_state.note)
 
     def build_pidf(self, account):
         blink_settings = BlinkSettings()
@@ -190,33 +190,35 @@ class PresencePublicationHandler(object):
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if notification.sender is BlinkSettings():
+            account_manager = AccountManager()
             if set(['presence.icon', 'presence.offline_note']).intersection(notification.data.modified):
                 # TODO: use a transaction here as well? -Dan
-                accounts = [account for account in AccountManager().get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered]
+                accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered]
                 if 'presence.offline_note' in notification.data.modified:
                     self.set_xcap_offline_note(accounts)
                 if 'presence.icon' in notification.data.modified:
                     self.set_xcap_icon(accounts)
             if 'presence.current_state' in notification.data.modified:
-                self.publish()
+                accounts = [account for account in account_manager.get_accounts() if account.enabled and account.presence.enabled]
+                self.publish(accounts)
         else:
             account = notification.sender
             if set(['xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified):
                 account.icon = None
             if set(['presence.enabled', 'display_name', 'xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified) and account.presence.enabled:
-                self.publish(account)
+                self.publish([account])
 
     def _NH_SIPAccountWillActivate(self, notification):
-        if notification.sender is not BonjourAccount():
-            account = notification.sender
-            notification.center.add_observer(self, sender=account, name='CFGSettingsObjectDidChange')
+        account = notification.sender
+        notification.center.add_observer(self, sender=account, name='CFGSettingsObjectDidChange')
+        if account is not BonjourAccount():
             notification.center.add_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
             account.icon = None
 
     def _NH_SIPAccountWillDeactivate(self, notification):
-        if notification.sender is not BonjourAccount():
-            account = notification.sender
-            notification.center.remove_observer(self, sender=account, name='CFGSettingsObjectDidChange')
+        account = notification.sender
+        notification.center.remove_observer(self, sender=account, name='CFGSettingsObjectDidChange')
+        if account is not BonjourAccount():
             notification.center.remove_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
             account.icon = None
 
@@ -278,7 +280,7 @@ class PresencePublicationHandler(object):
                 self._save_icon(status_icon.data, icon_hash)
             if icon_desc != account.icon:
                 account.icon = icon_desc
-                self.publish(account)
+                self.publish([account])
         else:
             # TODO: remove local icon?
             pass
