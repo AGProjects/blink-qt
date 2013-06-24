@@ -157,24 +157,14 @@ class PresencePublicationHandler(object):
 
         return doc
 
-    def set_xcap_offline_note(self, account=None):
+    def set_xcap_offline_note(self, accounts):
         blink_settings = BlinkSettings()
-        if not account:
-            account_manager = AccountManager()
-            accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.enabled and account.xcap.discovered]
-        else:
-            accounts = [account]
         for account in accounts:
             status = OfflineStatus(self.build_offline_pidf(account, blink_settings.presence.offline_note)) if blink_settings.presence.offline_note else None
             account.xcap_manager.set_offline_status(status)
 
-    def set_xcap_icon(self, account=None):
+    def set_xcap_icon(self, accounts):
         blink_settings = BlinkSettings()
-        if not account:
-            account_manager = AccountManager()
-            accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.xcap.enabled and account.xcap.discovered]
-        else:
-            accounts = [account]
         try:
             icon = Icon(file(blink_settings.presence.icon.url.path).read(), 'image/png')
         except Exception:
@@ -200,11 +190,13 @@ class PresencePublicationHandler(object):
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if notification.sender is BlinkSettings():
-            # TODO: use a transaction here as well? -Dan
-            if 'presence.offline_note' in notification.data.modified:
-                self.set_xcap_offline_note()
-            if 'presence.icon' in notification.data.modified:
-                self.set_xcap_icon()
+            if set(['presence.icon', 'presence.offline_note']).intersection(notification.data.modified):
+                # TODO: use a transaction here as well? -Dan
+                accounts = [account for account in AccountManager().get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered]
+                if 'presence.offline_note' in notification.data.modified:
+                    self.set_xcap_offline_note(accounts)
+                if 'presence.icon' in notification.data.modified:
+                    self.set_xcap_icon(accounts)
             if 'presence.current_state' in notification.data.modified:
                 self.publish()
         else:
@@ -258,8 +250,8 @@ class PresencePublicationHandler(object):
     def _NH_SIPAccountDidDiscoverXCAPSupport(self, notification):
         account = notification.sender
         with account.xcap_manager.transaction():
-            self.set_xcap_offline_note(account)
-            self.set_xcap_icon(account)
+            self.set_xcap_offline_note([account])
+            self.set_xcap_icon([account])
 
     def _NH_XCAPManagerDidReloadData(self, notification):
         account = notification.sender.account
