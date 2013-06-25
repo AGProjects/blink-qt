@@ -164,11 +164,8 @@ class PresencePublicationHandler(object):
             account.xcap_manager.set_offline_status(status)
 
     def set_xcap_icon(self, accounts):
-        blink_settings = BlinkSettings()
-        try:
-            icon = Icon(file(blink_settings.presence.icon.url.path).read(), 'image/png')
-        except Exception:
-            icon = None
+        icon_manager = IconManager()
+        icon = Icon(icon_manager.get_image('avatar'), 'image/png')
         for account in accounts:
             account.xcap_manager.set_status_icon(icon)
 
