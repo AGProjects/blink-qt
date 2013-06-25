@@ -106,7 +106,7 @@ class LogManager(object):
         self._siptrace_packet_count = 0
         self.event_queue = EventQueue(handler=self._process_notification, name='Log handling')
         self.event_queue.start()
-        while settings.logs.trace_notifications and self.notification_queue.notifications:
+        while settings.logs.trace_notifications and self.notification_queue and self.notification_queue.notifications:
             notification = self.notification_queue.notifications.popleft()
             self.handle_notification(notification)
         self.notification_queue = None
