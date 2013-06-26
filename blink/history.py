@@ -109,7 +109,7 @@ class HistoryEntry(object):
         m = phone_number_re.match(remote_uri_str)
         if m:
             remote_uri_str = m.group('number')
-        if display_name:
+        if display_name and display_name != remote_uri_str:
             remote_identity_str = '%s <%s>' % (display_name, remote_uri_str)
         else:
             remote_identity_str = remote_uri_str
@@ -132,7 +132,7 @@ class HistoryEntry(object):
         return u'%s%s%s%s' % (self.remote_identity, time, duration, reason)
 
 
-phone_number_re = re.compile(r'^(?P<number>(00|\+)[1-9]\d{4,14})@')
+phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
 def format_date(dt):
     now = datetime.now()
