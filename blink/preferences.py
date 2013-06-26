@@ -177,6 +177,7 @@ class PreferencesWindow(base_class, ui_class):
 
         # Account
         self.account_list.selectionModel().selectionChanged.connect(self._SH_AccountListSelectionChanged)
+        self.account_list.model().dataChanged.connect(self._SH_AccountListDataChanged)
         self.add_account_button.clicked.connect(self.show_add_account_dialog)
         self.delete_account_button.clicked.connect(self._SH_DeleteAccountButtonClicked)
 
@@ -561,6 +562,14 @@ class PreferencesWindow(base_class, ui_class):
         self.display_name_editor.setText(account.display_name or u'')
         if account is not bonjour_account:
             self.password_editor.setText(account.auth.password)
+            selected_index = self.account_list.selectionModel().selectedIndexes()[0]
+            selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
+            if selected_account_info.registration_state:
+                self.account_registration_label.setText(u'Registration %s' % selected_account_info.registration_state.title())
+            else:
+                self.account_registration_label.setText(u'Not Registered')
+        else:
+            self.account_registration_label.setText(u'')
 
         # Media tab
         self.account_audio_codecs_list.clear()
@@ -727,6 +736,20 @@ class PreferencesWindow(base_class, ui_class):
                 self.voicemail_uri_editor.inactiveText = u"Discovered by subscribing to %s" % selected_account.id
                 self.xcap_root_editor.inactiveText = u"Taken from the DNS TXT record for xcap.%s" % selected_account.id.domain
             self.load_account_settings(selected_account)
+
+    def _SH_AccountListDataChanged(self, topLeft, bottomRight):
+        try:
+            selected_index = self.account_list.selectionModel().selectedIndexes()[0]
+        except IndexError:
+            pass
+        else:
+            account_info = self.account_list.model().data(topLeft, Qt.UserRole)
+            selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
+            if selected_account_info is account_info:
+                if account_info.registration_state:
+                    self.account_registration_label.setText(u'Registration %s' % account_info.registration_state.title())
+                else:
+                    self.account_registration_label.setText(u'Not Registered')
 
     def _SH_DeleteAccountButtonClicked(self):
         model = self.account_list.model()
