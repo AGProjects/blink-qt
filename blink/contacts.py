@@ -990,7 +990,7 @@ class Contact(object):
         if isinstance(self.settings, BonjourNeighbour):
             return '%s (%s)' % (self.settings.name, self.settings.hostname)
         elif isinstance(self.settings, GoogleContact):
-            return self.settings.name or self.settings.company
+            return self.settings.name or self.settings.company or u''
         else:
             return self.settings.name
 
