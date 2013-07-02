@@ -195,7 +195,7 @@ class PresencePublicationHandler(object):
             if set(['xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified):
                 account.xcap.icon = None
                 account.save()
-            if set(['presence.enabled', 'display_name', 'xcap.enabled', 'xcap.icon', 'xcap.xcap_root']).intersection(notification.data.modified) and account.presence.enabled:
+            elif set(['presence.enabled', 'display_name', 'xcap.icon']).intersection(notification.data.modified) and account.presence.enabled:
                 account.presence_state = BlinkPresenceState(account).online_state
 
     def _NH_SIPAccountWillActivate(self, notification):
