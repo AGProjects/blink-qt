@@ -27,8 +27,8 @@ from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.account.bonjour import BonjourPresenceState
 from sipsimple.account.xcap import Icon, OfflineStatus
 from sipsimple.configuration.settings import SIPSimpleSettings
-from sipsimple.payloads import caps, cipid, pidf, prescontent, rpid
-from sipsimple.threading import run_in_twisted_thread
+from sipsimple.payloads import caps, pidf, prescontent, rpid
+from sipsimple.payloads import cipid; cipid # needs to be imported to register its namespace and extensions
 from sipsimple.threading.green import run_in_green_thread
 from sipsimple.util import ISOTimestamp
 
@@ -41,6 +41,109 @@ from blink.util import run_in_gui_thread
 epoch = datetime.fromtimestamp(0, tzutc())
 sip_prefix_re = re.compile("^sips?:")
 unknown_icon = "blink://unknown"
+
+
+class BlinkPresenceState(object):
+    def __init__(self, account):
+        self.account = account
+
+    @property
+    def online_state(self):
+        blink_settings = BlinkSettings()
+
+        state = blink_settings.presence.current_state.state
+        note = blink_settings.presence.current_state.note
+
+        state = 'offline' if state=='Invisible' else state.lower()
+
+        if self.account is BonjourAccount():
+            return BonjourPresenceState(state, note)
+
+        try:
+            hostname = socket.gethostname()
+        except Exception:
+            hostname = 'localhost'
+        account_id = hashlib.md5(self.account.id).hexdigest()
+        timestamp = ISOTimestamp.now()
+
+        doc = pidf.PIDF(str(self.account.uri))
+
+        person = pidf.Person('PID-%s' % account_id)
+        person.timestamp = timestamp
+        person.activities = rpid.Activities()
+        person.activities.add(state)
+        doc.add(person)
+
+        if state == 'offline':
+            service = pidf.Service('SID-%s' % account_id)
+            service.status = 'closed'
+            service.status.extended = state
+            service.contact = str(self.account.uri)
+            service.timestamp = timestamp
+            service.capabilities = caps.ServiceCapabilities()
+            doc.add(service)
+        else:
+            settings = SIPSimpleSettings()
+            instance_id = str(uuid.UUID(settings.instance_id))
+            service = pidf.Service('SID-%s' % instance_id)
+            service.status = 'open'
+            service.status.extended = state
+            service.contact = str(self.account.contact.public_gruu or self.account.uri)
+            service.timestamp = timestamp
+            service.capabilities = caps.ServiceCapabilities()
+            service.capabilities.audio = True
+            service.capabilities.text = False
+            service.capabilities.message = False
+            service.capabilities.file_transfer = False
+            service.capabilities.screen_sharing_server = False
+            service.capabilities.screen_sharing_client = False
+            service.display_name = self.account.display_name or None
+            service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon else unknown_icon
+            service.device_info = pidf.DeviceInfo(instance_id, description=hostname, user_agent=settings.user_agent)
+            service.device_info.time_offset = pidf.TimeOffset()
+            # TODO: Add real user input data -Saul
+            service.user_input = rpid.UserInput()
+            service.user_input.idle_threshold = 600
+            service.add(pidf.DeviceID(instance_id))
+            if note:
+                service.notes.add(note)
+            doc.add(service)
+
+            device = pidf.Device('DID-%s' % instance_id, device_id=pidf.DeviceID(instance_id))
+            device.timestamp = timestamp
+            device.notes.add(u'%s at %s' % (settings.user_agent, hostname))
+            doc.add(device)
+
+        return doc
+
+    @property
+    def offline_state(self):
+        blink_settings = BlinkSettings()
+
+        if self.account is BonjourAccount() or not blink_settings.presence.offline_note:
+            return None
+
+        account_id = hashlib.md5(self.account.id).hexdigest()
+        timestamp = ISOTimestamp.now()
+
+        doc = pidf.PIDF(str(self.account.uri))
+
+        person = pidf.Person('PID-%s' % account_id)
+        person.timestamp = timestamp
+        person.activities = rpid.Activities()
+        person.activities.add('offline')
+        doc.add(person)
+
+        service = pidf.Service('SID-%s' % account_id)
+        service.status = 'closed'
+        service.status.extended = 'offline'
+        service.contact = str(self.account.uri)
+        service.timestamp = timestamp
+        service.capabilities = caps.ServiceCapabilities()
+        service.notes.add(blink_settings.presence.offline_note)
+        doc.add(service)
+
+        return doc
 
 
 class PresencePublicationHandler(object):
@@ -68,120 +171,6 @@ class PresencePublicationHandler(object):
         notification_center.remove_observer(self, name='XCAPManagerDidReloadData')
         notification_center.remove_observer(self, sender=BlinkSettings(), name='CFGSettingsObjectDidChange')
 
-    def publish(self, accounts):
-        bonjour_account = BonjourAccount()
-        for account in accounts:
-            if account is not bonjour_account:
-                account.presence_state = self.build_pidf(account)
-            else:
-                blink_settings = BlinkSettings()
-                account.presence_state = BonjourPresenceState(blink_settings.presence.current_state.state, blink_settings.presence.current_state.note)
-
-    def build_pidf(self, account):
-        blink_settings = BlinkSettings()
-        presence_state = blink_settings.presence.current_state.state
-        presence_note = blink_settings.presence.current_state.note
-
-        if presence_state == 'Invisible':
-            # Publish an empty offline state so that other clients are also synced
-            return self.build_offline_pidf(account, None)
-
-        doc = pidf.PIDF(str(account.uri))
-        timestamp = ISOTimestamp.now()
-
-        person = pidf.Person('PID-%s' % hashlib.md5(account.id).hexdigest())
-        person.timestamp = pidf.PersonTimestamp(timestamp)
-        doc.add(person)
-
-        status = pidf.Status(basic='open')
-        status.extended = presence_state.lower()
-
-        person.activities = rpid.Activities()
-        person.activities.add(unicode(status.extended))
-
-        settings = SIPSimpleSettings()
-        instance_id = str(uuid.UUID(settings.instance_id))
-
-        service = pidf.Service('SID-%s' % instance_id, status=status)
-        if presence_note:
-            service.notes.add(presence_note)
-        service.timestamp = pidf.ServiceTimestamp(timestamp)
-        service.contact = pidf.Contact(str(account.contact.public_gruu or account.uri))
-        if account.display_name:
-            service.display_name = cipid.DisplayName(account.display_name)
-        if account.xcap.icon:
-            service.icon = cipid.Icon("%s#blink-icon%s" % (account.xcap.icon.url, account.xcap.icon.etag))
-        else:
-            service.icon = cipid.Icon(unknown_icon)
-        service.device_info = pidf.DeviceInfo(instance_id, description=self.hostname, user_agent=settings.user_agent)
-        service.device_info.time_offset = pidf.TimeOffset()
-        service.capabilities = caps.ServiceCapabilities(audio=True, text=False)
-        service.capabilities.message = False
-        service.capabilities.file_transfer = False
-        service.capabilities.screen_sharing_server = False
-        service.capabilities.screen_sharing_client = False
-        # TODO: Add real user input data -Saul
-        service.user_input = rpid.UserInput()
-        service.user_input.idle_threshold = 600
-        service.add(pidf.DeviceID(instance_id))
-        doc.add(service)
-
-        device = pidf.Device('DID-%s' % instance_id, device_id=pidf.DeviceID(instance_id))
-        device.timestamp = pidf.DeviceTimestamp(timestamp)
-        device.notes.add(u'%s at %s' % (settings.user_agent, self.hostname))
-        doc.add(device)
-
-        return doc
-
-    def build_offline_pidf(self, account, note=None):
-        doc = pidf.PIDF(str(account.uri))
-        timestamp = ISOTimestamp.now()
-
-        account_hash = hashlib.md5(account.id).hexdigest()
-        person = pidf.Person('PID-%s' % account_hash)
-        person.timestamp = pidf.PersonTimestamp(timestamp)
-        doc.add(person)
-
-        person.activities = rpid.Activities()
-        person.activities.add(u'offline')
-
-        service = pidf.Service('SID-%s' % account_hash)
-        service.status = pidf.Status(basic='closed')
-        service.status.extended = u'offline'
-        service.contact = pidf.Contact(str(account.uri))
-        service.capabilities = caps.ServiceCapabilities()
-        service.timestamp = pidf.ServiceTimestamp(timestamp)
-        if note:
-            service.notes.add(note)
-        doc.add(service)
-
-        return doc
-
-    def set_xcap_offline_note(self, accounts):
-        blink_settings = BlinkSettings()
-        for account in accounts:
-            status = OfflineStatus(self.build_offline_pidf(account, blink_settings.presence.offline_note)) if blink_settings.presence.offline_note else None
-            account.xcap_manager.set_offline_status(status)
-
-    def set_xcap_icon(self, accounts):
-        icon_manager = IconManager()
-        icon = Icon(icon_manager.get_image('avatar'), 'image/png')
-        for account in accounts:
-            account.xcap_manager.set_status_icon(icon)
-
-    @run_in_gui_thread
-    def _save_icon(self, icon_data, icon_hash):
-        blink_settings = BlinkSettings()
-        icon_manager = IconManager()
-        if icon_data is not None is not icon_hash:
-            icon = icon_manager.store_data('avatar', icon_data)
-            blink_settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash) if icon is not None else None
-        else:
-            icon_manager.remove('avatar')
-            blink_settings.presence.icon = None
-        blink_settings.save()
-
-    @run_in_twisted_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
@@ -189,36 +178,36 @@ class PresencePublicationHandler(object):
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if notification.sender is BlinkSettings():
             account_manager = AccountManager()
-            if set(['presence.icon', 'presence.offline_note']).intersection(notification.data.modified):
-                # TODO: use a transaction here as well? -Dan
-                accounts = [account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered]
-                if 'presence.offline_note' in notification.data.modified:
-                    self.set_xcap_offline_note(accounts)
-                if 'presence.icon' in notification.data.modified:
-                    self.set_xcap_icon(accounts)
+            if 'presence.offline_note' in notification.data.modified:
+                for account in (account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered):
+                    state = BlinkPresenceState(account).offline_state
+                    account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
+            if 'presence.icon' in notification.data.modified:
+                icon_data = IconManager().get_image('avatar')
+                icon = Icon(icon_data, 'image/png') if icon_data is not None else None
+                for account in (account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered):
+                    account.xcap_manager.set_status_icon(icon)
             if 'presence.current_state' in notification.data.modified:
-                accounts = [account for account in account_manager.get_accounts() if account.enabled and account.presence.enabled]
-                self.publish(accounts)
+                for account in (account for account in account_manager.get_accounts() if account.enabled and account.presence.enabled):
+                    account.presence_state = BlinkPresenceState(account).online_state
         else:
             account = notification.sender
             if set(['xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified):
                 account.xcap.icon = None
                 account.save()
             if set(['presence.enabled', 'display_name', 'xcap.enabled', 'xcap.icon', 'xcap.xcap_root']).intersection(notification.data.modified) and account.presence.enabled:
-                self.publish([account])
+                account.presence_state = BlinkPresenceState(account).online_state
 
     def _NH_SIPAccountWillActivate(self, notification):
         account = notification.sender
         notification.center.add_observer(self, sender=account, name='CFGSettingsObjectDidChange')
-        if account is not BonjourAccount():
-            notification.center.add_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
-        self.publish([account])
+        notification.center.add_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
+        account.presence_state = BlinkPresenceState(account).online_state
 
     def _NH_SIPAccountWillDeactivate(self, notification):
         account = notification.sender
         notification.center.remove_observer(self, sender=account, name='CFGSettingsObjectDidChange')
-        if account is not BonjourAccount():
-            notification.center.remove_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
+        notification.center.remove_observer(self, sender=account, name='SIPAccountGotSelfPresenceState')
 
     def _NH_SIPAccountGotSelfPresenceState(self, notification):
         pidf_doc = notification.data.pidf
@@ -250,12 +239,16 @@ class PresencePublicationHandler(object):
     def _NH_SIPAccountDidDiscoverXCAPSupport(self, notification):
         account = notification.sender
         with account.xcap_manager.transaction():
-            self.set_xcap_offline_note([account])
-            self.set_xcap_icon([account])
+            state = BlinkPresenceState(account).offline_state
+            icon_data = IconManager().get_image('avatar')
+            account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
+            account.xcap_manager.set_status_icon(Icon(icon_data, 'image/png') if icon_data is not None else None)
 
+    @run_in_gui_thread
     def _NH_XCAPManagerDidReloadData(self, notification):
         account = notification.sender.account
         blink_settings = BlinkSettings()
+        icon_manager = IconManager()
 
         offline_status = notification.data.offline_status
         status_icon = notification.data.status_icon
@@ -271,14 +264,15 @@ class PresencePublicationHandler(object):
         if status_icon:
             icon_desc = IconDescriptor(notification.sender.status_icon.uri, notification.sender.status_icon.etag)
             icon_hash = hashlib.sha512(status_icon.data).hexdigest()
-            if blink_settings.presence.icon and blink_settings.presence.icon.etag == icon_hash:
-                # Icon didn't change
-                pass
-            else:
-                self._save_icon(status_icon.data, icon_hash)
+            if not blink_settings.presence.icon or blink_settings.presence.icon.etag != icon_hash:
+                icon = icon_manager.store_data('avatar', status_icon.data)
+                blink_settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash) if icon is not None else None
+                blink_settings.save()
         else:
             icon_desc = None
-            self._save_icon(None, None)
+            icon_manager.remove('avatar')
+            blink_settings.presence.icon = None
+            blink_settings.save()
 
         account.xcap.icon = icon_desc
         account.save()
