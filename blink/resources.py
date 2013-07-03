@@ -9,11 +9,15 @@ import os
 import platform
 import sys
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui  import QIcon, QPixmap
+from PyQt4.QtCore import Qt, QBuffer, QThread
+from PyQt4.QtGui  import QApplication, QIcon, QPixmap
+
 from application.python.descriptor import classproperty
 from application.python.types import Singleton
 from application.system import makedirs, unlink
+from threading import Event
+
+from blink.util import run_in_gui_thread
 
 
 class DirectoryContextManager(unicode):
@@ -88,21 +92,38 @@ class IconManager(object):
         except KeyError:
             pixmap = QPixmap()
             filename = ApplicationData.get(os.path.join('images', id + '.png'))
-            if pixmap.load(filename):
+            try:
+                data = file(filename).read()
+            except (IOError, OSError):
+                data = None
+            if pixmap.loadFromData(data):
                 icon = QIcon(pixmap)
                 icon.filename = filename
+                icon.content = data
             else:
                 icon = None
             return self.iconmap.setdefault(id, icon)
 
     def get_image(self, id):
-        icon = self.get(id)
+        application = QApplication.instance()
+        if QThread.currentThread() is application.thread():
+            icon = self.get(id)
+        else:
+            @run_in_gui_thread
+            def get_icon(id, event):
+                try:
+                    event.icon = self.get(id)
+                except:
+                    event.icon = None
+                finally:
+                    event.set()
+            event = Event()
+            get_icon(id, event)
+            event.wait()
+            icon = event.icon
         if icon is None:
             return None
-        try:
-            return file(icon.filename).read()
-        except Exception:
-            return None
+        return icon.content
 
     def store_data(self, id, data):
         directory = ApplicationData.get('images')
@@ -112,9 +133,14 @@ class IconManager(object):
         if data is not None and pixmap.loadFromData(data):
             if pixmap.size().width() > self.max_size or pixmap.size().height() > self.max_size:
                 pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            pixmap.save(filename)
+            buffer = QBuffer()
+            pixmap.save(buffer, 'png')
+            data = str(buffer.data())
+            with open(filename, 'wb') as f:
+                f.write(data)
             icon = QIcon(pixmap)
             icon.filename = filename
+            icon.content = data
         else:
             unlink(filename)
             icon = None
@@ -131,9 +157,14 @@ class IconManager(object):
         if file is not None and pixmap.load(file):
             if pixmap.size().width() > self.max_size or pixmap.size().height() > self.max_size:
                 pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            pixmap.save(filename)
+            buffer = QBuffer()
+            pixmap.save(buffer, 'png')
+            data = str(buffer.data())
+            with open(filename, 'wb') as f:
+                f.write(data)
             icon = QIcon(pixmap)
             icon.filename = filename
+            icon.content = data
         else:
             unlink(filename)
             icon = None
