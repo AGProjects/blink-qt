@@ -179,10 +179,6 @@ class IconDescriptor(object):
     def __repr__(self):
         return '%s(%r, %r)' % (self.__class__.__name__, self.url, self.etag)
 
-    @property
-    def is_local(self):
-        return self.url.scheme in ('', 'file')
-
 
 class PresenceState(object):
     def __init__(self, state, note=None):
