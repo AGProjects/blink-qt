@@ -157,10 +157,6 @@ class PresencePublicationHandler(object):
         notification_center.add_observer(self, name='SystemDidWakeUpFromSleep')
         notification_center.add_observer(self, name='XCAPManagerDidReloadData')
         notification_center.add_observer(self, sender=BlinkSettings(), name='CFGSettingsObjectDidChange')
-        try:
-            self.hostname = socket.gethostname()
-        except Exception:
-            self.hostname = 'localhost'
 
     def stop(self):
         notification_center = NotificationCenter()
