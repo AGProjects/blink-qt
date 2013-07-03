@@ -108,6 +108,10 @@ class Blink(QApplication):
         self.log_manager = LogManager()
         self.presence_manager = PresenceManager()
 
+        # Prevent application from exiting after last window is closed if system tray was initialized
+        if self.main_window.system_tray_icon:
+            self.setQuitOnLastWindowClosed(False)
+
         self.update_manager = UpdateManager()
         self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
         self.main_window.check_for_updates_action.setVisible(self.update_manager != Null)

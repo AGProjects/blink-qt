@@ -10,8 +10,8 @@ from functools import partial
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QSettings, QUrl
-from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
-from PyQt4.QtGui  import QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
+from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QMenu, QShortcut
+from PyQt4.QtGui  import QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2, QSystemTrayIcon
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -85,6 +85,18 @@ class MainWindow(base_class, ui_class):
         self.main_view.setCurrentWidget(self.contacts_panel)
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
         self.search_view.setCurrentWidget(self.search_list_panel)
+
+        # System tray
+        if QSystemTrayIcon.isSystemTrayAvailable() and not os.getenv('XDG_CURRENT_DESKTOP', '').lower().startswith('unity'):
+            self.system_tray_icon = QSystemTrayIcon(QIcon(Resources.get('icons/blink.png')), self)
+            self.system_tray_icon.activated.connect(self._SH_SystemTrayIconActivated)
+            menu = QMenu(self)
+            menu.addAction(QAction("Show", self, triggered=self._AH_SystemTrayShowWindow))
+            menu.addAction(QAction(QIcon(Resources.get('icons/application-exit.png')), "Quit", self, triggered=self._AH_QuitActionTriggered))
+            self.system_tray_icon.setContextMenu(menu)
+            self.system_tray_icon.show()
+        else:
+            self.system_tray_icon = None
 
         # Accounts
         self.account_model = AccountModel(self)
@@ -160,7 +172,7 @@ class MainWindow(base_class, ui_class):
         self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatTriggered)
         self.auto_accept_files_action.triggered.connect(self._AH_AutoAcceptFilesTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
-        self.quit_action.triggered.connect(self.close)
+        self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
 
         # Call menu actions
         self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
@@ -366,6 +378,19 @@ class MainWindow(base_class, ui_class):
         except KeyError:
             account = None
         session_manager.start_call(None, action.entry.target_uri, account=account)
+
+    def _AH_SystemTrayShowWindow(self, checked):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _AH_QuitActionTriggered(self, checked):
+        self.close()
+        if self.system_tray_icon is not None:
+            self.system_tray_icon.hide()
+            from blink import Blink
+            blink = Blink()
+            blink.quit()
 
     def _SH_AccountStateChanged(self):
         self.activity_note.setText(self.account_state.note)
@@ -591,6 +616,12 @@ class MainWindow(base_class, ui_class):
 
     def _SH_PendingWatcherDialogFinished(self, dialog, code):
         self.pending_watcher_dialogs.remove(dialog)
+
+    def _SH_SystemTrayIconActivated(self, reason):
+        if reason == QSystemTrayIcon.Trigger:
+            self.show()
+            self.raise_()
+            self.activateWindow()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
