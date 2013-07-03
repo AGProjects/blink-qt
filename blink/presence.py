@@ -103,7 +103,12 @@ class BlinkPresenceState(object):
             service.capabilities.screen_sharing_server = False
             service.capabilities.screen_sharing_client = False
             service.display_name = self.account.display_name or None
-            service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon else unknown_icon
+            if account.xcap.icon is None:
+                service.icon = None
+            elif account.xcap.icon.url == unknown_icon:
+                service.icon = unknown_icon
+            else:
+                service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag)
             service.device_info = pidf.DeviceInfo(instance_id, description=hostname, user_agent=settings.user_agent)
             service.device_info.time_offset = pidf.TimeOffset()
             # TODO: Add real user input data -Saul
