@@ -14,6 +14,7 @@ from PyQt4.QtCore import Qt, QTimer
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null, limit
+from application.python.types import MarkerType
 from datetime import datetime
 from dateutil.tz import tzutc
 from eventlib.green import urllib2
@@ -41,6 +42,10 @@ from blink.util import run_in_gui_thread
 epoch = datetime.fromtimestamp(0, tzutc())
 sip_prefix_re = re.compile("^sips?:")
 unknown_icon = "blink://unknown"
+
+class NoIcon:       __metaclass__ = MarkerType
+class SameIcon:     __metaclass__ = MarkerType
+class UnknownIcon:  __metaclass__ = MarkerType
 
 
 class BlinkPresenceState(object):
@@ -258,8 +263,8 @@ class PresencePublicationHandler(object):
         blink_settings.save()
 
         if status_icon:
-            icon_desc = IconDescriptor(notification.sender.status_icon.uri, notification.sender.status_icon.etag)
             icon_hash = hashlib.sha512(status_icon.data).hexdigest()
+            icon_desc = IconDescriptor(notification.sender.status_icon.uri, icon_hash)
             if not blink_settings.presence.icon or blink_settings.presence.icon.etag != icon_hash:
                 icon = icon_manager.store_data('avatar', status_icon.data)
                 blink_settings.presence.icon = IconDescriptor(FileURL(icon.filename), icon_hash) if icon is not None else None
@@ -357,24 +362,39 @@ class PresenceSubscriptionHandler(object):
                 note = unicode(next(iter(service.notes))) if service.notes else None
                 icon = unicode(service.icon) if service.icon else None
 
-                # review this logic (add NotChanged, NoIcon, ... markers to better represent the icon data and icon descriptor) -Dan
-                icon_data = icon_descriptor = None
                 if icon and icon != unknown_icon:
-                    if 'blink-icon' in icon and contact.icon and icon == contact.icon.url:
-                        # Fast path, icon hasn't changed
-                        pass
+                    url, token, icon_hash = icon.partition('blink-icon')
+                    if token:
+                        if contact.icon and icon_hash == contact.icon.etag:
+                            # Fast path, icon hasn't changed
+                            icon_data = SameIcon
+                            icon_descriptor = None
+                        else:
+                            # New icon, client uses fast path mechanism
+                            icon_data, etag = self._download_icon(icon, None)
+                            icon_descriptor = IconDescriptor(icon, icon_hash) if icon_data else None
                     else:
                         icon_data, etag = self._download_icon(icon, contact.icon.etag if contact.icon else None)
-                        if icon_data:
-                            icon_descriptor = IconDescriptor(icon, etag)
+                        icon_descriptor = IconDescriptor(icon, etag) if icon_data else None
+                elif icon == unknown_icon:
+                    icon_data = UnknownIcon
+                    icon_descriptor = None
+                else:
+                    icon_data = NoIcon
+                    icon_descriptor = None
+
             self._update_contact_presence_state(contact, state, note, icon_descriptor, icon_data)
 
     @run_in_gui_thread
     def _update_contact_presence_state(self, contact, state, note, icon_descriptor, icon_data):
+        icon_manager = IconManager()
         contact.presence.state = state
         contact.presence.note = note
-        if icon_data:
-            IconManager().store_data(contact.id, icon_data)
+        if icon_data is NoIcon:
+            icon_manager.remove(contact.id)
+            contact.icon = None
+        elif icon_data not in (SameIcon, UnknownIcon):
+            icon_manager.store_data(contact.id, icon_data)
             contact.icon = icon_descriptor
         contact.save()
 
