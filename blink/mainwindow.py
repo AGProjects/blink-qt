@@ -9,7 +9,7 @@ import os
 from functools import partial
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QUrl
+from PyQt4.QtCore import Qt, QSettings, QUrl
 from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QShortcut
 from PyQt4.QtGui  import QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2
 
@@ -63,6 +63,11 @@ class MainWindow(base_class, ui_class):
 
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
+
+        qt_settings = QSettings()
+        geometry = qt_settings.value("main_window/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
 
         self.default_icon_path = Resources.get('icons/default-avatar.png')
         self.default_icon = QIcon(self.default_icon_path)
@@ -209,6 +214,8 @@ class MainWindow(base_class, ui_class):
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
     def closeEvent(self, event):
+        qt_settings = QSettings()
+        qt_settings.setValue("main_window/geometry", self.saveGeometry())
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
         self.conference_dialog.close()

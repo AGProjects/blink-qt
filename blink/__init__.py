@@ -97,6 +97,12 @@ class Blink(QApplication):
         self.setAttribute(Qt.AA_DontShowIconsInMenus, False)
         self.application = SIPApplication()
         self.first_run = False
+
+        self.setOrganizationDomain("ag-projects.com")
+        self.setOrganizationName("AG Projects")
+        self.setApplicationName("Blink")
+        self.setApplicationVersion(__version__)
+
         self.main_window = MainWindow()
         self.ip_address_monitor = IPAddressMonitor()
         self.log_manager = LogManager()
