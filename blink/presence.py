@@ -32,7 +32,7 @@ from sipsimple.payloads import cipid; cipid # needs to be imported to register i
 from sipsimple.threading.green import run_in_green_thread
 from sipsimple.util import ISOTimestamp
 
-from blink.configuration.datatypes import IconDescriptor, PresenceState
+from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.resources import IconManager, Resources
 from blink.util import run_in_gui_thread
@@ -262,7 +262,7 @@ class PresencePublicationHandler(object):
             icon_hash = hashlib.sha512(status_icon.data).hexdigest()
             if not blink_settings.presence.icon or blink_settings.presence.icon.etag != icon_hash:
                 icon = icon_manager.store_data('avatar', status_icon.data)
-                blink_settings.presence.icon = IconDescriptor('file://' + icon.filename, icon_hash) if icon is not None else None
+                blink_settings.presence.icon = IconDescriptor(FileURL(icon.filename), icon_hash) if icon is not None else None
                 blink_settings.save()
         else:
             icon_desc = None

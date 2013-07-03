@@ -3,10 +3,11 @@
 
 """Definitions of datatypes for use in settings extensions."""
 
-__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'AuthorizationToken', 'InvalidToken', 'IconDescriptor', 'PresenceState', 'PresenceStateList']
+__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'AuthorizationToken', 'InvalidToken', 'IconDescriptor', 'PresenceState', 'PresenceStateList']
 
 import os
 import re
+from urllib import pathname2url, url2pathname
 from urlparse import urlparse
 
 from sipsimple.configuration.datatypes import Hostname, List
@@ -136,11 +137,18 @@ class AuthorizationToken(str):
 InvalidToken = AuthorizationToken() # a valid token is never empty
 
 
+class FileURL(unicode):
+    def __new__(cls, value):
+        if not value.startswith('file:'):
+            value = 'file:' + pathname2url(os.path.abspath(value))
+        return unicode.__new__(cls, value)
+
+
 class ParsedURL(unicode):
     fragment = property(lambda self: self.__parsed__.fragment)
     netloc   = property(lambda self: self.__parsed__.netloc)
     params   = property(lambda self: self.__parsed__.params)
-    path     = property(lambda self: self.__parsed__.path)
+    path     = property(lambda self: self.__parsed__.path if self.scheme != 'file' else url2pathname(self.__parsed__.path))
     query    = property(lambda self: self.__parsed__.query)
     scheme   = property(lambda self: self.__parsed__.scheme)
 

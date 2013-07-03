@@ -27,7 +27,7 @@ from blink.contacts import BonjourNeighbour, Contact, ContactEditorDialog, Conta
 from blink.history import HistoryManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, SessionModel
-from blink.configuration.datatypes import IconDescriptor, InvalidToken, PresenceState
+from blink.configuration.datatypes import IconDescriptor, FileURL, InvalidToken, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
 from blink.resources import IconManager, Resources
@@ -388,7 +388,7 @@ class MainWindow(base_class, ui_class):
                 icon_contents = icon_manager.get_image('avatar')
                 if icon_contents is not None:
                     hash = hashlib.sha512(icon_contents).hexdigest()
-                    blink_settings.presence.icon = IconDescriptor('file://' + icon.filename, hash)
+                    blink_settings.presence.icon = IconDescriptor(FileURL(icon.filename), hash)
                 else:
                     icon_manager.remove('avatar')
                     blink_settings.presence.icon = None

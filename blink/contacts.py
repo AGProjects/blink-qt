@@ -39,7 +39,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
 from sipsimple.threading.green import Command, call_in_green_thread, run_in_green_thread
 
-from blink.configuration.datatypes import AuthorizationToken, InvalidToken, IconDescriptor
+from blink.configuration.datatypes import AuthorizationToken, InvalidToken, IconDescriptor, FileURL
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager
 from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread
@@ -2173,7 +2173,7 @@ class ContactModel(QAbstractListModel):
                 contact.name = name
                 contact.preferred_media = preferred_media
                 contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
-                contact.icon = IconDescriptor('file://' + icon, unicode(int(os.stat(icon).st_mtime)))
+                contact.icon = IconDescriptor(FileURL(icon), unicode(int(os.stat(icon).st_mtime)))
                 return contact
             test_group = addressbook.Group(id='test')
             test_group.name = 'Test'
@@ -2188,7 +2188,7 @@ class ContactModel(QAbstractListModel):
                 except KeyError:
                     continue
                 icon = entry['icon']
-                icon_descriptor = IconDescriptor('file://' + icon, unicode(int(os.stat(icon).st_mtime)))
+                icon_descriptor = IconDescriptor(FileURL(icon), unicode(int(os.stat(icon).st_mtime)))
                 if contact.icon != icon_descriptor:
                     icon_manager.store_file(contact.id, icon)
                     contact.icon = icon_descriptor
@@ -4035,7 +4035,7 @@ class ContactEditorDialog(base_class, ui_class):
             icon_manager.remove(contact.id + '_alt')
             contact.alternate_icon = None
         else:
-            icon_descriptor = IconDescriptor('file://' + self.icon_selector.filename, unicode(int(os.stat(self.icon_selector.filename).st_mtime)))
+            icon_descriptor = IconDescriptor(FileURL(self.icon_selector.filename), unicode(int(os.stat(self.icon_selector.filename).st_mtime)))
             if contact.alternate_icon != icon_descriptor:
                 icon_manager.store_file(contact.id + '_alt', icon_descriptor.url.path)
                 contact.alternate_icon = icon_descriptor
