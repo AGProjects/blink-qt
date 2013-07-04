@@ -319,8 +319,12 @@ class PresenceSubscriptionHandler(object):
             response = urllib2.urlopen(req)
             content = response.read()
             info = response.info()
-        except (ConnectionLost, urllib2.HTTPError, urllib2.URLError):
-            return None, None
+        except urllib2.HTTPError, e:
+            if e.code == 404:
+                return NoIcon, None
+            return SameIcon, None
+        except (ConnectionLost, urllib2.URLError):
+            return SameIcon, None
         content_type = info.getheader('content-type')
         etag = info.getheader('etag')
         if etag.startswith('W/'):
@@ -331,7 +335,7 @@ class PresenceSubscriptionHandler(object):
                 pres_content = prescontent.PresenceContentDocument.parse(content)
                 content = base64.decodestring(pres_content.data.value)
             except Exception:
-                return None, None
+                return SameIcon, None
         return content, etag
 
     @run_in_green_thread
@@ -355,7 +359,10 @@ class PresenceSubscriptionHandler(object):
 
         for contact, pidf_list in contact_pidf_map.iteritems():
             if not pidf_list:
-                state = note = icon_descriptor = icon_data = None
+                state = None
+                note = None
+                icon_descriptor = None
+                icon_data = UnknownIcon
             else:
                 services = list(chain(*(list(pidf_doc.services) for pidf_doc in pidf_list)))
                 services.sort(key=lambda obj: obj.timestamp.value if obj.timestamp else epoch, reverse=True)
@@ -377,10 +384,10 @@ class PresenceSubscriptionHandler(object):
                         else:
                             # New icon, client uses fast path mechanism
                             icon_data, etag = self._download_icon(icon, None)
-                            icon_descriptor = IconDescriptor(icon, icon_hash) if icon_data else None
+                            icon_descriptor = IconDescriptor(icon, icon_hash) if icon_data not in (NoIcon, SameIcon, UnknownIcon) else None
                     else:
                         icon_data, etag = self._download_icon(icon, contact.icon.etag if contact.icon else None)
-                        icon_descriptor = IconDescriptor(icon, etag) if icon_data else None
+                        icon_descriptor = IconDescriptor(icon, etag) if icon_data not in (NoIcon, SameIcon, UnknownIcon) else None
                 elif icon == unknown_icon:
                     icon_data = UnknownIcon
                     icon_descriptor = None
