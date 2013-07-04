@@ -103,9 +103,9 @@ class BlinkPresenceState(object):
             service.capabilities.screen_sharing_server = False
             service.capabilities.screen_sharing_client = False
             service.display_name = self.account.display_name or None
-            if account.xcap.icon is None:
+            if self.account.xcap.icon is None:
                 service.icon = None
-            elif account.xcap.icon.url == unknown_icon:
+            elif self.account.xcap.icon.url == unknown_icon:
                 service.icon = unknown_icon
             else:
                 service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag)
