@@ -392,7 +392,7 @@ class PresenceSubscriptionHandler(object):
                     icon_data = UnknownIcon
                     icon_descriptor = None
                 else:
-                    icon_data = NoIcon
+                    icon_data = UnknownIcon if state=='offline' else NoIcon
                     icon_descriptor = None
 
             self._update_contact_presence_state(contact, state, note, icon_descriptor, icon_data)
