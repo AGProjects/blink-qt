@@ -2764,8 +2764,8 @@ class ContactListView(QListView):
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
-        self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
-        self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
+        self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
+        self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
         self.drop_indicator_index = QModelIndex()
         self.needs_restore = False
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
@@ -2832,10 +2832,8 @@ class ContactListView(QListView):
             menu.addAction(self.actions.start_chat_session)
             menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
-            self.actions.request_remote_desktop.setText("Request Desktop from %s" % (contact.name or contact.uri))
-            self.actions.share_my_desktop.setText("Share My Desktop with %s" % (contact.name or contact.uri))
-            menu.addAction(self.actions.request_remote_desktop)
-            menu.addAction(self.actions.share_my_desktop)
+            menu.addAction(self.actions.request_screen)
+            menu.addAction(self.actions.share_my_screen)
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
@@ -2849,8 +2847,8 @@ class ContactListView(QListView):
             self.actions.start_chat_session.setEnabled(False)
             self.actions.send_sms.setEnabled(False)
             self.actions.send_files.setEnabled(False)
-            self.actions.request_remote_desktop.setEnabled(False)
-            self.actions.share_my_desktop.setEnabled(False)
+            self.actions.request_screen.setEnabled(False)
+            self.actions.share_my_screen.setEnabled(False)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
@@ -3076,10 +3074,10 @@ class ContactListView(QListView):
     def _AH_SendFiles(self):
         pass
 
-    def _AH_RequestRemoteDesktop(self):
+    def _AH_RequestScreen(self):
         pass
 
-    def _AH_ShareMyDesktop(self):
+    def _AH_ShareMyScreen(self):
         pass
 
     def _DH_ApplicationXBlinkGroupList(self, event, index, rect, item):
@@ -3180,8 +3178,8 @@ class ContactSearchListView(QListView):
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
-        self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
-        self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
+        self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
+        self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
 
@@ -3234,10 +3232,8 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.start_chat_session)
             menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
-            self.actions.request_remote_desktop.setText("Request Desktop from %s" % (contact.name or contact.uri))
-            self.actions.share_my_desktop.setText("Share My Desktop with %s" % (contact.name or contact.uri))
-            menu.addAction(self.actions.request_remote_desktop)
-            menu.addAction(self.actions.share_my_desktop)
+            menu.addAction(self.actions.request_screen)
+            menu.addAction(self.actions.share_my_screen)
             menu.addSeparator()
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
@@ -3249,8 +3245,8 @@ class ContactSearchListView(QListView):
             self.actions.start_chat_session.setEnabled(False)
             self.actions.send_sms.setEnabled(False)
             self.actions.send_files.setEnabled(False)
-            self.actions.request_remote_desktop.setEnabled(False)
-            self.actions.share_my_desktop.setEnabled(False)
+            self.actions.request_screen.setEnabled(False)
+            self.actions.share_my_screen.setEnabled(False)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
@@ -3412,10 +3408,10 @@ class ContactSearchListView(QListView):
     def _AH_SendFiles(self):
         pass
 
-    def _AH_RequestRemoteDesktop(self):
+    def _AH_RequestScreen(self):
         pass
 
-    def _AH_ShareMyDesktop(self):
+    def _AH_ShareMyScreen(self):
         pass
 
     def _DH_TextUriList(self, event, index, rect, item):
@@ -3471,8 +3467,8 @@ class ContactDetailView(QListView):
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
-        self.actions.request_remote_desktop = QAction("Request Remote Desktop", self, triggered=self._AH_RequestRemoteDesktop)
-        self.actions.share_my_desktop = QAction("Share My Desktop", self, triggered=self._AH_ShareMyDesktop)
+        self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
+        self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
         contact_list.installEventFilter(self)
 
@@ -3504,18 +3500,15 @@ class ContactDetailView(QListView):
         model = self.model()
         selected_indexes = self.selectionModel().selectedIndexes()
         selected_item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
-        name = selected_item.uri.uri if isinstance(selected_item, ContactURI) else model.contact.name
         contact_has_uris = model.rowCount() > 1
-        self.actions.request_remote_desktop.setText("Request Desktop from %s" % name)
-        self.actions.share_my_desktop.setText("Share My Desktop with %s" % name)
         menu = self.context_menu
         menu.clear()
         menu.addAction(self.actions.start_audio_session)
         menu.addAction(self.actions.start_chat_session)
         menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.send_files)
-        menu.addAction(self.actions.request_remote_desktop)
-        menu.addAction(self.actions.share_my_desktop)
+        menu.addAction(self.actions.request_screen)
+        menu.addAction(self.actions.share_my_screen)
         menu.addSeparator()
         if isinstance(selected_item, ContactURI) and model.contact_detail.editable:
             menu.addAction(self.actions.make_uri_default)
@@ -3526,8 +3519,8 @@ class ContactDetailView(QListView):
         self.actions.start_chat_session.setEnabled(False)
         self.actions.send_sms.setEnabled(False)
         self.actions.send_files.setEnabled(False)
-        self.actions.request_remote_desktop.setEnabled(False)
-        self.actions.share_my_desktop.setEnabled(False)
+        self.actions.request_screen.setEnabled(False)
+        self.actions.share_my_screen.setEnabled(False)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
         self.actions.delete_contact.setEnabled(model.contact_detail.deletable)
         menu.exec_(event.globalPos())
@@ -3616,10 +3609,10 @@ class ContactDetailView(QListView):
     def _AH_SendFiles(self):
         pass
 
-    def _AH_RequestRemoteDesktop(self):
+    def _AH_RequestScreen(self):
         pass
 
-    def _AH_ShareMyDesktop(self):
+    def _AH_ShareMyScreen(self):
         pass
 
     def _DH_ApplicationXBlinkSession(self, event, index, rect, item):
