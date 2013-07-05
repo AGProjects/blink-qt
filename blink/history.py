@@ -100,21 +100,21 @@ class HistoryEntry(object):
         else:
             duration = None
         remote_identity = session.remote_identity
-        remote_uri_str = '%s@%s' % (remote_identity.uri.user, remote_identity.uri.host)
+        remote_uri = '%s@%s' % (remote_identity.uri.user, remote_identity.uri.host)
         try:
-            contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri_str in (addr.uri for addr in contact.uris))
+            contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri in (addr.uri for addr in contact.uris))
         except StopIteration:
             display_name = remote_identity.display_name
         else:
             display_name = contact.name
-        match = self.phone_number_re.match(remote_uri_str)
+        match = self.phone_number_re.match(remote_uri)
         if match:
-            remote_uri_str = match.group('number')
-        if display_name and display_name != remote_uri_str:
-            remote_identity_str = '%s <%s>' % (display_name, remote_uri_str)
+            remote_uri = match.group('number')
+        if display_name and display_name != remote_uri:
+            remote_identity = '%s <%s>' % (display_name, remote_uri)
         else:
-            remote_identity_str = remote_uri_str
-        return cls(remote_identity_str, remote_uri_str, unicode(session.account.id), call_time, duration)
+            remote_identity = remote_uri
+        return cls(remote_identity, remote_uri, unicode(session.account.id), call_time, duration)
 
     def __unicode__(self):
         if self.call_time:
