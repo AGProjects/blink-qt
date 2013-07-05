@@ -2,7 +2,6 @@
 Roadmap
 -------
 
-+ Minimize to Windows system tray
 + Presence
 + Call transfer
 + File transfer
@@ -22,13 +21,27 @@ Roadmap
 Fixes and improvements
 ----------------------
 
-- Save presence state on the addressbook contact not the GUI contacts
 - Have the icon selection on the account state button's menu
 - Explore the scaledContents attribute for the IconSelector label
-- Use the primary attribute of Google contact URIs to implement the default
-  URI for Google contacts
-- Group together all bonjour URIs published by the same device
-
+- fix dialed uri (% encode them to avoid errors)
+- handle http:// urls using QDesktopServices from QtGui
+- remove old python 2.6.x code from sipsimple ?
+- remove objects from the ID mapping when deleted, as they can't be resurrected
+- add "Remove from group" context menu entry
+- do we really need instance_id in bonjour? we could use user@domain
+  also what we publish should be a runtime id, not settings.instance_id,
+  unless the latter is made a RuntimeSetting
+- show edit/delete/set address as default menu entries in bonjour/google
+  detail views? 
+- should we let email addresses from google contacts become default URIs?
+  should we even include them as URIs?
+- review presence code, _NH_CFGObjectSettingsDidChange logic on publisher.
+  should we publish if xcap is disabled?
+- store url, etag & hash in IconDescriptor
+- re-evaluate what to do about missing icons. maybe have a blink://no-icon
+  url when the icon is deleted
+- save state timestamp so we don't overwrite the state when we start a new
+  instance of blink and it publishes its old state on startup
 
 Nice to have
 ------------
