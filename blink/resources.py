@@ -5,6 +5,7 @@
 
 __all__ = ['ApplicationData', 'Resources', 'IconManager']
 
+import imghdr
 import os
 import platform
 import sys
@@ -131,11 +132,13 @@ class IconManager(object):
         makedirs(directory)
         pixmap = QPixmap()
         if data is not None and pixmap.loadFromData(data):
-            if pixmap.size().width() > self.max_size or pixmap.size().height() > self.max_size:
+            image_size = pixmap.size()
+            if image_size.width() > self.max_size or image_size.height() > self.max_size:
                 pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            buffer = QBuffer()
-            pixmap.save(buffer, 'png')
-            data = str(buffer.data())
+            if imghdr.what(None, data) != 'png' or pixmap.size() != image_size:
+                buffer = QBuffer()
+                pixmap.save(buffer, 'png')
+                data = str(buffer.data())
             with open(filename, 'wb') as f:
                 f.write(data)
             icon = QIcon(pixmap)
