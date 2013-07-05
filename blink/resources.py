@@ -97,7 +97,7 @@ class IconManager(object):
                 data = file(filename).read()
             except (IOError, OSError):
                 data = None
-            if pixmap.loadFromData(data):
+            if data is not None and pixmap.loadFromData(data):
                 icon = QIcon(pixmap)
                 icon.filename = filename
                 icon.content = data
