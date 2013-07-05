@@ -268,7 +268,7 @@ class PresencePublicationHandler(object):
         blink_settings.save()
 
         if status_icon:
-            icon_hash = hashlib.sha512(status_icon.data).hexdigest()
+            icon_hash = hashlib.sha1(status_icon.data).hexdigest()
             icon_desc = IconDescriptor(notification.sender.status_icon.uri, icon_hash)
             if not blink_settings.presence.icon or blink_settings.presence.icon.etag != icon_hash:
                 icon = icon_manager.store_data('avatar', status_icon.data)

@@ -419,7 +419,7 @@ class MainWindow(base_class, ui_class):
                 icon = icon_manager.store_file('avatar', filename)
                 icon_contents = icon_manager.get_image('avatar')
                 if icon_contents is not None:
-                    hash = hashlib.sha512(icon_contents).hexdigest()
+                    hash = hashlib.sha1(icon_contents).hexdigest()
                     blink_settings.presence.icon = IconDescriptor(FileURL(icon.filename), hash)
                 else:
                     icon_manager.remove('avatar')
