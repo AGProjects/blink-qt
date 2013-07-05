@@ -79,6 +79,7 @@ class HistoryManager(object):
 
 
 class HistoryEntry(object):
+    phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self, remote_identity, target_uri, account_id, call_time, duration, reason=None):
         self.remote_identity = remote_identity
@@ -106,9 +107,9 @@ class HistoryEntry(object):
             display_name = remote_identity.display_name
         else:
             display_name = contact.name
-        m = phone_number_re.match(remote_uri_str)
-        if m:
-            remote_uri_str = m.group('number')
+        match = self.phone_number_re.match(remote_uri_str)
+        if match:
+            remote_uri_str = match.group('number')
         if display_name and display_name != remote_uri_str:
             remote_identity_str = '%s <%s>' % (display_name, remote_uri_str)
         else:
@@ -131,8 +132,6 @@ class HistoryEntry(object):
         reason = ' %s' % self.reason.title() if self.reason else ''
         return u'%s%s%s%s' % (self.remote_identity, time, duration, reason)
 
-
-phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
 def format_date(dt):
     now = datetime.now()
