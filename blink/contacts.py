@@ -1062,7 +1062,7 @@ class Contact(object):
                 painter.setRenderHint(QPainter.Antialiasing, True)
                 painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
                 painter.setClipPath(path)
-                painter.drawPixmap(0, 0, self.icon.pixmap(size))
+                self.icon.paint(painter, pixmap.rect(), Qt.AlignCenter)
                 painter.end()
             else:
                 pixmap = self.icon.pixmap(size)
@@ -1202,7 +1202,7 @@ class ContactDetail(object):
                 painter.setRenderHint(QPainter.Antialiasing, True)
                 painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
                 painter.setClipPath(path)
-                painter.drawPixmap(0, 0, self.icon.pixmap(size))
+                self.icon.paint(painter, pixmap.rect(), Qt.AlignCenter)
                 painter.end()
             else:
                 pixmap = self.icon.pixmap(size)
