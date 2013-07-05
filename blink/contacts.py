@@ -995,12 +995,22 @@ class Contact(object):
             return self.settings.name
 
     @property
-    def uris(self):
-        return self.settings.uris
+    def location(self):
+        if isinstance(self.settings, BonjourNeighbour):
+            return self.settings.hostname
+        else:
+            return None
 
     @property
     def info(self):
-        return self.note or self.uri
+        if isinstance(self.settings, BonjourNeighbour):
+            return self.note or '@' + self.uri.host
+        else:
+            return self.note or self.uri
+
+    @property
+    def uris(self):
+        return self.settings.uris
 
     @property
     def uri(self):
@@ -1125,12 +1135,22 @@ class ContactDetail(object):
             return self.settings.name
 
     @property
-    def uris(self):
-        return self.settings.uris
+    def location(self):
+        if isinstance(self.settings, BonjourNeighbour):
+            return self.settings.hostname
+        else:
+            return None
 
     @property
     def info(self):
-        return self.note or self.uri
+        if isinstance(self.settings, BonjourNeighbour):
+            return self.note or '@' + self.uri.host
+        else:
+            return self.note or self.uri
+
+    @property
+    def uris(self):
+        return self.settings.uris
 
     @property
     def uri(self):
