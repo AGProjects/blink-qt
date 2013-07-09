@@ -107,7 +107,7 @@ class HistoryEntry(object):
             display_name = remote_identity.display_name
         else:
             display_name = contact.name
-        match = self.phone_number_re.match(remote_uri)
+        match = cls.phone_number_re.match(remote_uri)
         if match:
             remote_uri = match.group('number')
         if display_name and display_name != remote_uri:
