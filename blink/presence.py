@@ -40,7 +40,6 @@ from blink.util import run_in_gui_thread
 
 
 epoch = datetime.fromtimestamp(0, tzutc())
-sip_prefix_re = re.compile("^sips?:")
 unknown_icon = "blink://unknown"
 
 class NoIcon:       __metaclass__ = MarkerType
@@ -287,6 +286,8 @@ class PresencePublicationHandler(object):
 class PresenceSubscriptionHandler(object):
     implements(IObserver)
 
+    sip_prefix_re = re.compile("^sips?:")
+
     def __init__(self):
         self._pidf_map = {}
         self._winfo_map = {}
@@ -354,7 +355,7 @@ class PresenceSubscriptionHandler(object):
 
         for uri in uris:
             pidf_list = current_pidf_map.get(uri, [])
-            for contact in (contact for contact in addressbook_manager.get_contacts() if uri in (sip_prefix_re.sub('', contact_uri.uri) for contact_uri in contact.uris)):
+            for contact in (contact for contact in addressbook_manager.get_contacts() if uri in (self.sip_prefix_re.sub('', contact_uri.uri) for contact_uri in contact.uris)):
                 contact_pidf_map.setdefault(contact, []).extend(pidf_list)
 
         for contact, pidf_list in contact_pidf_map.iteritems():
@@ -442,7 +443,7 @@ class PresenceSubscriptionHandler(object):
 
     def _NH_SIPAccountGotPresenceState(self, notification):
         account = notification.sender
-        new_pidf_map = dict((sip_prefix_re.sub('', uri), resource.pidf_list) for uri, resource in notification.data.resource_map.iteritems())
+        new_pidf_map = dict((self.sip_prefix_re.sub('', uri), resource.pidf_list) for uri, resource in notification.data.resource_map.iteritems())
         if notification.data.full_state:
             self._pidf_map.setdefault(account.id, {}).clear()
         self._pidf_map[account.id].update(new_pidf_map)
@@ -458,7 +459,7 @@ class PresenceSubscriptionHandler(object):
             self._winfo_map[account.id].clear()
 
         for watcher in watcher_list:
-            uri = sip_prefix_re.sub('', watcher.sipuri)
+            uri = self.sip_prefix_re.sub('', watcher.sipuri)
             if uri != account.id:
                 # Skip own URI, XCAP may be down and policy may not be inplace yet
                 self._winfo_map[account.id].setdefault(watcher.status, set()).add(uri)
