@@ -95,7 +95,7 @@ class BlinkPresenceSettings(SettingsGroup):
     current_state = Setting(type=PresenceState, default=PresenceState('Available'))
     state_history = Setting(type=PresenceStateList, default=PresenceStateList())
     offline_note = Setting(type=unicode, nillable=True)
-    icon = Setting(type=IconDescriptor, default=IconDescriptor('blink://unknown'), nillable=True)
+    icon = Setting(type=IconDescriptor, nillable=True)
 
 
 class BlinkSettings(SettingsObject):

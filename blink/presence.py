@@ -14,7 +14,6 @@ from PyQt4.QtCore import Qt, QTimer
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null, limit
-from application.python.types import MarkerType
 from datetime import datetime
 from dateutil.tz import tzutc
 from eventlib.green import urllib2
@@ -40,11 +39,6 @@ from blink.util import run_in_gui_thread
 
 
 epoch = datetime.fromtimestamp(0, tzutc())
-unknown_icon = "blink://unknown"
-
-class NoIcon:       __metaclass__ = MarkerType
-class SameIcon:     __metaclass__ = MarkerType
-class UnknownIcon:  __metaclass__ = MarkerType
 
 
 class BlinkPresenceState(object):
@@ -102,12 +96,7 @@ class BlinkPresenceState(object):
             service.capabilities.screen_sharing_server = False
             service.capabilities.screen_sharing_client = False
             service.display_name = self.account.display_name or None
-            if self.account.xcap.icon is None:
-                service.icon = None
-            elif self.account.xcap.icon.url == unknown_icon:
-                service.icon = unknown_icon
-            else:
-                service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag)
+            service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon is not None else None
             service.device_info = pidf.DeviceInfo(instance_id, description=hostname, user_agent=settings.user_agent)
             service.device_info.time_offset = pidf.TimeOffset()
             # TODO: Add real user input data -Saul
@@ -283,6 +272,35 @@ class PresencePublicationHandler(object):
         account.save()
 
 
+class ContactIcon(object):
+    def __init__(self, data, descriptor):
+        self.data = data
+        self.descriptor = descriptor
+
+    @classmethod
+    def fetch(cls, url, etag=None, descriptor_etag=None):
+        headers = {'If-None-Match': etag} if etag else {}
+        req = urllib2.Request(url, headers=headers)
+        try:
+            response = urllib2.urlopen(req)
+            content = response.read()
+            info = response.info()
+        except (ConnectionLost, urllib2.URLError, urllib2.HTTPError):
+            return None
+        content_type = info.getheader('content-type')
+        etag = info.getheader('etag')
+        if etag.startswith('W/'):
+            etag = etag[2:]
+        etag = etag.replace('\"', '')
+        if content_type == prescontent.PresenceContentDocument.content_type:
+            try:
+                pres_content = prescontent.PresenceContentDocument.parse(content)
+                data = base64.decodestring(pres_content.data.value)
+            except Exception:
+                return None
+        return cls(data, IconDescriptor(url, descriptor_etag or etag))
+
+
 class PresenceSubscriptionHandler(object):
     implements(IObserver)
 
@@ -313,32 +331,6 @@ class PresenceSubscriptionHandler(object):
                 timer.cancel()
         self._winfo_timers.clear()
 
-    def _download_icon(self, url, etag):
-        headers = {'If-None-Match': etag} if etag else {}
-        req = urllib2.Request(url, headers=headers)
-        try:
-            response = urllib2.urlopen(req)
-            content = response.read()
-            info = response.info()
-        except urllib2.HTTPError, e:
-            if e.code == 404:
-                return NoIcon, None
-            return SameIcon, None
-        except (ConnectionLost, urllib2.URLError):
-            return SameIcon, None
-        content_type = info.getheader('content-type')
-        etag = info.getheader('etag')
-        if etag.startswith('W/'):
-            etag = etag[2:]
-        etag = etag.replace('\"', '')
-        if content_type == prescontent.PresenceContentDocument.content_type:
-            try:
-                pres_content = prescontent.PresenceContentDocument.parse(content)
-                content = base64.decodestring(pres_content.data.value)
-            except Exception:
-                return SameIcon, None
-        return content, etag
-
     @run_in_green_thread
     def _process_presence_data(self, uris=None):
         addressbook_manager = addressbook.AddressbookManager()
@@ -360,10 +352,7 @@ class PresenceSubscriptionHandler(object):
 
         for contact, pidf_list in contact_pidf_map.iteritems():
             if not pidf_list:
-                state = None
-                note = None
-                icon_descriptor = None
-                icon_data = UnknownIcon
+                state = note = icon = None
             else:
                 services = list(chain(*(list(pidf_doc.services) for pidf_doc in pidf_list)))
                 services.sort(key=lambda obj: obj.timestamp.value if obj.timestamp else epoch, reverse=True)
@@ -373,42 +362,32 @@ class PresenceSubscriptionHandler(object):
                 else:
                     state = 'available' if service.status.basic=='open' else 'offline'
                 note = unicode(next(iter(service.notes))) if service.notes else None
-                icon = unicode(service.icon) if service.icon else None
+                icon_url = unicode(service.icon) if service.icon else None
 
-                if icon and icon != unknown_icon:
-                    url, token, icon_hash = icon.partition('blink-icon')
+                if icon_url:
+                    url, token, icon_hash = icon_url.partition('blink-icon')
                     if token:
                         if contact.icon and icon_hash == contact.icon.etag:
                             # Fast path, icon hasn't changed
-                            icon_data = SameIcon
-                            icon_descriptor = None
+                            icon = None
                         else:
                             # New icon, client uses fast path mechanism
-                            icon_data, etag = self._download_icon(icon, None)
-                            icon_descriptor = IconDescriptor(icon, icon_hash) if icon_data not in (NoIcon, SameIcon, UnknownIcon) else None
+                            icon = ContactIcon.fetch(icon_url, etag=None, descriptor_etag=icon_hash)
                     else:
-                        icon_data, etag = self._download_icon(icon, contact.icon.etag if contact.icon else None)
-                        icon_descriptor = IconDescriptor(icon, etag) if icon_data not in (NoIcon, SameIcon, UnknownIcon) else None
-                elif icon == unknown_icon:
-                    icon_data = UnknownIcon
-                    icon_descriptor = None
+                        icon = ContactIcon.fetch(icon_url, etag=contact.icon.etag if contact.icon else None)
                 else:
-                    icon_data = UnknownIcon if state=='offline' else NoIcon
-                    icon_descriptor = None
+                    icon = None
 
-            self._update_contact_presence_state(contact, state, note, icon_descriptor, icon_data)
+            self._update_presence_state(contact, state, note, icon)
 
     @run_in_gui_thread
-    def _update_contact_presence_state(self, contact, state, note, icon_descriptor, icon_data):
+    def _update_presence_state(self, contact, state, note, icon):
         icon_manager = IconManager()
         contact.presence.state = state
         contact.presence.note = note
-        if icon_data is NoIcon:
-            icon_manager.remove(contact.id)
-            contact.icon = None
-        elif icon_data not in (SameIcon, UnknownIcon):
-            icon_manager.store_data(contact.id, icon_data)
-            contact.icon = icon_descriptor
+        if icon is not None:
+            icon_manager.store_data(contact.id, icon.data)
+            contact.icon = icon.descriptor
         contact.save()
 
     def handle_notification(self, notification):
