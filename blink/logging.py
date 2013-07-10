@@ -179,9 +179,9 @@ class LogManager(object):
         settings = SIPSimpleSettings()
         if not settings.logs.trace_pjsip:
             return
-        message = "(%(level)d) %(sender)14s: %(message)s" % notification.data.__dict__
+        message = "(%(level)d) %(message)s" % notification.data.__dict__
         try:
-            self.pjsiptrace_file.write('%s [%s %d] %s\n' % (notification.datetime, self.name, self.pid, message))
+            self.pjsiptrace_file.write('[%s %d] %s\n' % (self.name, self.pid, message))
             self.pjsiptrace_file.flush()
         except Exception:
             pass
