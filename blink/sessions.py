@@ -1266,6 +1266,13 @@ class ContextMenuActions(object):
     pass
 
 
+# workaround class because passing context to the QShortcut constructor segfaults (fixed upstreams on 09-Apr-2013) -Dan
+class QShortcut(QShortcut):
+    def __init__(self, key, parent, member=None, ambiguousMember=None, context=Qt.WindowShortcut):
+        super(QShortcut, self).__init__(key, parent, member, ambiguousMember)
+        self.setContext(context)
+
+
 class SessionListView(QListView):
     def __init__(self, parent=None):
         super(SessionListView, self).__init__(parent)
@@ -1275,14 +1282,11 @@ class SessionListView(QListView):
         self.dragged_session = None
         self._pressed_position = None
         self._pressed_index = None
-        self._hangup_shortcut = QShortcut(self)
-        self._hangup_shortcut.setKey('CTRL+ESC')
-        self._hangup_shortcut.setContext(Qt.ApplicationShortcut)
-        self._hangup_shortcut.activated.connect(self._SH_HangupShortcutActivated)
-        self._hold_shortcut = QShortcut(self)
-        self._hold_shortcut.setKey('CTRL+SPACE')
-        self._hold_shortcut.setContext(Qt.ApplicationShortcut)
-        self._hold_shortcut.activated.connect(self._SH_HoldShortcutActivated)
+        self._hangup_shortcuts = []
+        self._hangup_shortcuts.append(QShortcut('Ctrl+Esc', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
+        self._hangup_shortcuts.append(QShortcut('Ctrl+Delete', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
+        self._hangup_shortcuts.append(QShortcut('Ctrl+Backspace', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
+        self._hold_shortcut = QShortcut('Ctrl+Space', self, member=self._SH_HoldShortcutActivated, context=Qt.ApplicationShortcut)
 
     def setModel(self, model):
         selection_model = self.selectionModel() or Null
