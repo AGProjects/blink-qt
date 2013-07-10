@@ -205,7 +205,7 @@ class MainWindow(base_class, ui_class):
         super(MainWindow, self).setupUi(self)
 
         self.search_box.shortcut = QShortcut(self.search_box)
-        self.search_box.shortcut.setKey('CTRL+F')
+        self.search_box.shortcut.setKey('Ctrl+F')
 
         self.output_devices_group = QActionGroup(self)
         self.input_devices_group = QActionGroup(self)
