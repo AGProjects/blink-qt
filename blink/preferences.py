@@ -1024,7 +1024,7 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_EnableEchoCancellingButtonClicked(self, checked):
         settings = SIPSimpleSettings()
-        settings.audio.tail_length = 200 if checked else 0
+        settings.audio.tail_length = DefaultValue if checked else 0
         settings.save()
 
     # Audio codecs signal handlers

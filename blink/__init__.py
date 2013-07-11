@@ -32,6 +32,7 @@ from zope.interface import implements
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
 from sipsimple.application import SIPApplication
+from sipsimple.configuration import DefaultValue
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.storage import FileStorage
 from sipsimple.threading import run_in_twisted_thread
@@ -241,6 +242,10 @@ class Blink(QApplication):
         if settings.google_contacts.authorization_token is InvalidToken:
             self.main_window.google_contacts_dialog.open_for_incorrect_password()
         self.update_manager.initialize()
+        if settings.audio.tail_length:
+            # Fix old hardcoded setting value
+            settings.audio.tail_length = DefaultValue
+            settings.save()
 
     def _NH_SIPApplicationWillEnd(self, notification):
         self.ip_address_monitor.stop()
