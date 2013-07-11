@@ -27,6 +27,7 @@ class AnsweringMachineSettings(SettingsGroup):
 class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'))
     sample_rate = Setting(type=SampleRate, default=44100)
+    tail_length = Setting(type=NonNegativeInteger, default=15)
 
 
 class ChatSettingsExtension(ChatSettings):
