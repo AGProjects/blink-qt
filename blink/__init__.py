@@ -242,7 +242,7 @@ class Blink(QApplication):
         if settings.google_contacts.authorization_token is InvalidToken:
             self.main_window.google_contacts_dialog.open_for_incorrect_password()
         self.update_manager.initialize()
-        if settings.audio.tail_length:
+        if settings.audio.tail_length not in (0, SIPSimpleSettings.audio.tail_length.default):
             # Fix old hardcoded setting value
             settings.audio.tail_length = DefaultValue
             settings.save()
