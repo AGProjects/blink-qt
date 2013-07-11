@@ -239,6 +239,19 @@
             <property name="margin">
              <number>10</number>
             </property>
+            <item row="2" column="1">
+             <widget class="QListWidget" name="account_video_codecs_list">
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <property name="dragEnabled">
+               <bool>true</bool>
+              </property>
+              <property name="dragDropMode">
+               <enum>QAbstractItemView::InternalMove</enum>
+              </property>
+             </widget>
+            </item>
             <item row="0" column="0">
              <widget class="QLabel" name="account_audio_codecs_label">
               <property name="font">
@@ -276,86 +289,6 @@
              <widget class="Line" name="line_7">
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0">
-             <widget class="QListWidget" name="account_audio_codecs_list">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="horizontalScrollBarPolicy">
-               <enum>Qt::ScrollBarAlwaysOff</enum>
-              </property>
-              <property name="dragEnabled">
-               <bool>true</bool>
-              </property>
-              <property name="dragDropMode">
-               <enum>QAbstractItemView::InternalMove</enum>
-              </property>
-              <item>
-               <property name="text">
-                <string>G722</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>speex</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>GSM</string>
-               </property>
-               <property name="checkState">
-                <enum>Unchecked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>iLBC</string>
-               </property>
-               <property name="checkState">
-                <enum>Unchecked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>PCMU</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>PCMA</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item row="2" column="1">
-             <widget class="QListWidget" name="account_video_codecs_list">
-              <property name="horizontalScrollBarPolicy">
-               <enum>Qt::ScrollBarAlwaysOff</enum>
-              </property>
-              <property name="dragEnabled">
-               <bool>true</bool>
-              </property>
-              <property name="dragDropMode">
-               <enum>QAbstractItemView::InternalMove</enum>
               </property>
              </widget>
             </item>
@@ -503,6 +436,81 @@
                 </widget>
                </item>
               </layout>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QListWidget" name="account_audio_codecs_list">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <property name="dragEnabled">
+               <bool>true</bool>
+              </property>
+              <property name="dragDropMode">
+               <enum>QAbstractItemView::InternalMove</enum>
+              </property>
+              <item>
+               <property name="text">
+                <string>opus</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>speex</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>G722</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>GSM</string>
+               </property>
+               <property name="checkState">
+                <enum>Unchecked</enum>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>iLBC</string>
+               </property>
+               <property name="checkState">
+                <enum>Unchecked</enum>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>PCMU</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>PCMA</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
              </widget>
             </item>
            </layout>
@@ -1561,7 +1569,7 @@
              </property>
              <item>
               <property name="text">
-               <string>G722</string>
+               <string>opus</string>
               </property>
               <property name="checkState">
                <enum>Checked</enum>
@@ -1570,6 +1578,14 @@
              <item>
               <property name="text">
                <string>speex</string>
+              </property>
+              <property name="checkState">
+               <enum>Checked</enum>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>G722</string>
               </property>
               <property name="checkState">
                <enum>Checked</enum>
