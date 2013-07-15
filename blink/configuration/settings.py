@@ -10,7 +10,7 @@ import sys
 
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObject, SettingsObjectExtension
 from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger, PositiveInteger, Path, SampleRate
-from sipsimple.configuration.settings import AudioSettings, ChatSettings, FileTransferSettings, LogsSettings, RTPSettings, TLSSettings
+from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, FileTransferSettings, LogsSettings, RTPSettings, TLSSettings
 
 from blink import __version__
 from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
@@ -24,10 +24,15 @@ class AnsweringMachineSettings(SettingsGroup):
     unavailable_message = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/unavailable_message.wav')), nillable=True)
 
 
+class EchoCancellerSettingsExtension(EchoCancellerSettings):
+    enabled = Setting(type=bool, default=True)
+    tail_length = Setting(type=NonNegativeInteger, default=15)
+
+
 class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'))
     sample_rate = Setting(type=SampleRate, default=44100)
-    tail_length = Setting(type=NonNegativeInteger, default=15)
+    echo_canceller = EchoCancellerSettingsExtension
 
 
 class ChatSettingsExtension(ChatSettings):

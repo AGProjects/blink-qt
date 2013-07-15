@@ -487,7 +487,7 @@ class PreferencesWindow(base_class, ui_class):
 
         # Audio devices
         self.load_audio_devices()
-        self.enable_echo_cancelling_button.setChecked(settings.audio.tail_length != 0)
+        self.enable_echo_cancelling_button.setChecked(settings.audio.echo_canceller.enabled)
         self.audio_sample_rate_button.clear()
         for rate in SIPSimpleSettings.audio.sample_rate.type.valid_values:
             self.audio_sample_rate_button.addItem(str(rate), rate)
@@ -1024,7 +1024,7 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_EnableEchoCancellingButtonClicked(self, checked):
         settings = SIPSimpleSettings()
-        settings.audio.tail_length = DefaultValue if checked else 0
+        settings.audio.echo_canceller.enabled = checked
         settings.save()
 
     # Audio codecs signal handlers
