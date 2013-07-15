@@ -257,7 +257,7 @@ class PresencePublicationHandler(object):
 
         if status_icon:
             icon_hash = hashlib.sha1(status_icon.data).hexdigest()
-            icon_desc = IconDescriptor(notification.sender.status_icon.uri, icon_hash)
+            icon_desc = IconDescriptor(status_icon.url, icon_hash)
             if not blink_settings.presence.icon or blink_settings.presence.icon.etag != icon_hash:
                 icon = icon_manager.store_data('avatar', status_icon.data)
                 blink_settings.presence.icon = IconDescriptor(FileURL(icon.filename), icon_hash) if icon is not None else None
