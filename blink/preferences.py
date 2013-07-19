@@ -644,6 +644,8 @@ class PreferencesWindow(base_class, ui_class):
             selection_model.select(model.index(index), selection_model.ClearAndSelect)
         self._update_logs_size_label()
         super(PreferencesWindow, self).show()
+        self.raise_()
+        self.activateWindow()
 
     def show_for_accounts(self):
         self.accounts_action.trigger()
