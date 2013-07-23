@@ -65,6 +65,7 @@ class RTPSettingsExtension(RTPSettings):
 
 class ServerSettings(SettingsGroup):
     enrollment_url = Setting(type=HTTPURL, default="https://blink.sipthor.net/enrollment.phtml")
+    updater_url = Setting(type=HTTPURL, default="https://blink.sipthor.net/BlinkQTAppcast.xml")
 
 
 class SoundSettings(SettingsGroup):
