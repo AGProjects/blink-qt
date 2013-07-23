@@ -29,6 +29,11 @@ from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
+try:
+    from blink import branding
+except ImportError:
+    branding = Null
+
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
 from sipsimple.application import SIPApplication
@@ -123,6 +128,8 @@ class Blink(QApplication):
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
         session_manager = SessionManager()
         session_manager.initialize(self.main_window, self.main_window.session_model)
+
+        branding.setup(self)
 
     def run(self):
         from blink.util import call_in_gui_thread as call_later
