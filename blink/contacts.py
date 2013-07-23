@@ -3977,6 +3977,7 @@ class ContactEditorDialog(base_class, ui_class):
         super(ContactEditorDialog, self).setupUi(contact_editor)
         self.preferred_media.setItemData(0, 'audio')
         self.preferred_media.setItemData(1, 'chat')
+        self.preferred_media.setItemData(2, 'audio+chat')
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
     def open_for_add(self, sip_address=u'', target_group=None):
