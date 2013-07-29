@@ -10,7 +10,7 @@ from application.notification import IObserver, NotificationCenter
 from application.python import Null
 from application.python.types import Singleton
 from collections import deque
-from datetime import datetime
+from datetime import date, datetime
 from zope.interface import implements
 
 from sipsimple.account import BonjourAccount
@@ -133,17 +133,16 @@ class HistoryEntry(object):
         return u'%s%s%s%s' % (self.remote_identity, time, duration, reason)
 
 
-def format_date(dt):
-    now = datetime.now()
-    delta = now - dt
-    if (dt.year, dt.month, dt.day) == (now.year, now.month, now.day):
-        return dt.strftime("at %H:%M")
-    elif delta.days <= 1:
-        return "Yesterday at %s" % dt.strftime("%H:%M")
-    elif delta.days < 7:
-        return dt.strftime("on %A")
-    elif delta.days < 300:
-        return dt.strftime("on %B %d")
+def format_date(when):
+    days = (date.today() - when.date()).days
+    if days == 0:
+        return when.strftime("at %H:%M")
+    elif days == 1:
+        return when.strftime("Yesterday at %H:%M")
+    elif days < 7:
+        return when.strftime("on %A")
+    elif days < 365:
+        return when.strftime("on %B %d")
     else:
-        return dt.strftime("on %Y-%m-%d")
+        return when.strftime("on %Y-%m-%d")
 
