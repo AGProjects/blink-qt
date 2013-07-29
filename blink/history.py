@@ -133,7 +133,7 @@ class HistoryEntry(object):
         if self.duration:
             result += ' for '
             if self.duration.days > 0 or self.duration.seconds > 3600:
-                result += '%i hours, ' % (self.duration.days*3600*24 + int(self.duration.seconds/3600))
+                result += '%i hours, ' % (self.duration.days*24 + int(self.duration.seconds/3600))
             secs = self.duration.seconds % 3600
             result += '%02i:%02i' % (int(secs/60), secs % 60)
         if self.reason:
