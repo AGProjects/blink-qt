@@ -117,32 +117,27 @@ class HistoryEntry(object):
         return cls(remote_identity, remote_uri, unicode(session.account.id), call_time, duration)
 
     def __unicode__(self):
+        result = unicode(self.remote_identity)
         if self.call_time:
-            time = ' %s' % format_date(self.call_time)
-        else:
-            time = ''
+            days = (date.today() - self.call_time.date()).days
+            if days == 0:
+                result += self.call_time.strftime(" at %H:%M")
+            elif days == 1:
+                result += self.call_time.strftime(" Yesterday at %H:%M")
+            elif days < 7:
+                result += self.call_time.strftime(" on %A")
+            elif days < 365:
+                result += self.call_time.strftime(" on %B %d")
+            else:
+                result += self.call_time.strftime(" on %Y-%m-%d")
         if self.duration:
-            duration = ' for '
+            result += ' for '
             if self.duration.days > 0 or self.duration.seconds > 3600:
-                duration += '%i hours, ' % (self.duration.days*3600*24 + int(self.duration.seconds/3600))
+                result += '%i hours, ' % (self.duration.days*3600*24 + int(self.duration.seconds/3600))
             secs = self.duration.seconds % 3600
-            duration += '%02i:%02i' % (int(secs/60), secs % 60)
-        else:
-            duration = ''
-        reason = ' %s' % self.reason.title() if self.reason else ''
-        return u'%s%s%s%s' % (self.remote_identity, time, duration, reason)
+            result += '%02i:%02i' % (int(secs/60), secs % 60)
+        if self.reason:
+            result += ' %s' % self.reason.title()
+        return result
 
-
-def format_date(when):
-    days = (date.today() - when.date()).days
-    if days == 0:
-        return when.strftime("at %H:%M")
-    elif days == 1:
-        return when.strftime("Yesterday at %H:%M")
-    elif days < 7:
-        return when.strftime("on %A")
-    elif days < 365:
-        return when.strftime("on %B %d")
-    else:
-        return when.strftime("on %Y-%m-%d")
 
