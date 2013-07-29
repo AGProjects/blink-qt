@@ -131,13 +131,13 @@ class HistoryEntry(object):
             else:
                 result += self.call_time.strftime(" on %Y-%m-%d")
         if self.duration:
-            result += ' for '
-            if self.duration.days > 0 or self.duration.seconds > 3600:
-                result += '%i hours, ' % (self.duration.days*24 + int(self.duration.seconds/3600))
-            secs = self.duration.seconds % 3600
-            result += '%02i:%02i' % (int(secs/60), secs % 60)
-        if self.reason:
-            result += ' %s' % self.reason.title()
+            seconds = int(self.duration.total_seconds())
+            if seconds >= 3600:
+                result += """ (%dh%02d'%02d")""" % (seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+            else:
+                result += """ (%d'%02d")""" % (seconds / 60, seconds % 60)
+        elif self.reason:
+            result += ' (%s)' % self.reason.title()
         return result
 
 
