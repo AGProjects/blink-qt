@@ -119,14 +119,16 @@ class HistoryEntry(object):
     def __unicode__(self):
         result = unicode(self.remote_identity)
         if self.call_time:
-            days = (date.today() - self.call_time.date()).days
-            if days == 0:
+            call_date = self.call_time.date()
+            today = date.today()
+            days = (today - call_date).days
+            if call_date == today:
                 result += self.call_time.strftime(" at %H:%M")
             elif days == 1:
                 result += self.call_time.strftime(" Yesterday at %H:%M")
             elif days < 7:
                 result += self.call_time.strftime(" on %A")
-            elif days < 365:
+            elif call_date.year == today.year:
                 result += self.call_time.strftime(" on %B %d")
             else:
                 result += self.call_time.strftime(" on %Y-%m-%d")
