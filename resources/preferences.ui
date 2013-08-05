@@ -2573,6 +2573,9 @@
    </layout>
   </widget>
   <widget class="QToolBar" name="toolbar">
+   <property name="contextMenuPolicy">
+    <enum>Qt::PreventContextMenu</enum>
+   </property>
    <property name="windowTitle">
     <string>Blink Preferences</string>
    </property>
