@@ -1458,6 +1458,22 @@
            <item row="0" column="1">
             <widget class="QComboBox" name="audio_input_device_button"/>
            </item>
+           <item row="6" column="0" colspan="4">
+            <spacer name="audio_spacer_2">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
            <item row="1" column="0">
             <widget class="QLabel" name="audio_output_device_label">
              <property name="text">
@@ -1518,29 +1534,6 @@
              </item>
             </widget>
            </item>
-           <item row="4" column="1" colspan="2">
-            <widget class="QCheckBox" name="enable_echo_cancelling_button">
-             <property name="text">
-              <string>Enable Echo Cancelling</string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="0" colspan="4">
-            <spacer name="audio_spacer_2">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeType">
-              <enum>QSizePolicy::Expanding</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
            <item row="0" column="2">
             <spacer name="audio_spacer_1">
              <property name="orientation">
@@ -1553,6 +1546,46 @@
               </size>
              </property>
             </spacer>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="tail_length_label">
+             <property name="text">
+              <string>Tail Length:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QSlider" name="tail_length_slider">
+             <property name="maximum">
+              <number>30</number>
+             </property>
+             <property name="pageStep">
+              <number>5</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="tickPosition">
+              <enum>QSlider::TicksBelow</enum>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="2">
+            <widget class="QLabel" name="tail_length_value_label">
+             <property name="text">
+              <string>1</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1" colspan="2">
+            <widget class="QCheckBox" name="enable_echo_cancelling_button">
+             <property name="text">
+              <string>Enable Echo Cancelling</string>
+             </property>
+            </widget>
            </item>
           </layout>
          </widget>
@@ -2720,5 +2753,22 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>tail_length_slider</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>tail_length_value_label</receiver>
+   <slot>setNum(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>228</x>
+     <y>229</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>364</x>
+     <y>238</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>

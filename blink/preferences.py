@@ -234,6 +234,7 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_output_device_button.activated[int].connect(self._SH_AudioOutputDeviceButtonActivated)
         self.audio_sample_rate_button.activated[str].connect(self._SH_AudioSampleRateButtonActivated)
         self.enable_echo_cancelling_button.clicked.connect(self._SH_EnableEchoCancellingButtonClicked)
+        self.tail_length_slider.valueChanged.connect(self._SH_TailLengthSliderValueChanged)
 
         # Audio codecs
         self.audio_codecs_list.itemChanged.connect(self._SH_AudioCodecsListItemChanged)
@@ -293,6 +294,11 @@ class PreferencesWindow(base_class, ui_class):
 
     def setupUi(self):
         super(PreferencesWindow, self).setupUi(self)
+
+        # Hide the tail_length slider as it is only useful for debugging -Dan
+        self.tail_length_label.hide()
+        self.tail_length_slider.hide()
+        self.tail_length_value_label.hide()
 
         #self.rename_account_button.hide() # do not use this for the time being -Dan
 
@@ -489,6 +495,7 @@ class PreferencesWindow(base_class, ui_class):
         # Audio devices
         self.load_audio_devices()
         self.enable_echo_cancelling_button.setChecked(settings.audio.echo_canceller.enabled)
+        self.tail_length_slider.setValue(settings.audio.echo_canceller.tail_length)
         self.audio_sample_rate_button.clear()
         for rate in SIPSimpleSettings.audio.sample_rate.type.valid_values:
             self.audio_sample_rate_button.addItem(str(rate), rate)
@@ -1050,6 +1057,11 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_EnableEchoCancellingButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.audio.echo_canceller.enabled = checked
+        settings.save()
+
+    def _SH_TailLengthSliderValueChanged(self, value):
+        settings = SIPSimpleSettings()
+        settings.audio.echo_canceller.tail_length = value
         settings.save()
 
     # Audio codecs signal handlers
