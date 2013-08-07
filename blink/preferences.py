@@ -188,12 +188,7 @@ class PreferencesWindow(base_class, ui_class):
 
         # Account media settings
         self.account_audio_codecs_list.itemChanged.connect(self._SH_AccountAudioCodecsListItemChanged)
-        try:
-            self.account_audio_codecs_list.model().rowsMoved.connect(self._SH_AccountAudioCodecsListModelRowsMoved)
-        except AttributeError:
-            # Qt before 4.6 did not have the rowsMoved signal.
-            # To be removed when we drop support for the older QT versions. -Dan
-            self.account_audio_codecs_list.model().rowsInserted.connect(self._SH_AccountAudioCodecsListModelRowsInserted)
+        self.account_audio_codecs_list.model().rowsMoved.connect(self._SH_AccountAudioCodecsListModelRowsMoved)
         self.reset_account_audio_codecs_button.clicked.connect(self._SH_ResetAudioCodecsButtonClicked)
         self.inband_dtmf_button.clicked.connect(self._SH_InbandDTMFButtonClicked)
         self.srtp_encryption_button.activated[str].connect(self._SH_SRTPEncryptionButtonActivated)
@@ -238,12 +233,7 @@ class PreferencesWindow(base_class, ui_class):
 
         # Audio codecs
         self.audio_codecs_list.itemChanged.connect(self._SH_AudioCodecsListItemChanged)
-        try:
-            self.audio_codecs_list.model().rowsMoved.connect(self._SH_AudioCodecsListModelRowsMoved)
-        except AttributeError:
-            # Qt before 4.6 did not have the rowsMoved signal.
-            # To be removed when we drop support for the older QT versions. -Dan
-            self.audio_codecs_list.model().rowsInserted.connect(self._SH_AudioCodecsListModelRowsInserted)
+        self.audio_codecs_list.model().rowsMoved.connect(self._SH_AudioCodecsListModelRowsMoved)
 
         # Answering machine
         self.enable_answering_machine_button.clicked.connect(self._SH_EnableAnsweringMachineButtonClicked)
@@ -813,14 +803,6 @@ class PreferencesWindow(base_class, ui_class):
             account.rtp.audio_codec_order = [item.text() for item in items]
             account.save()
 
-    def _SH_AccountAudioCodecsListModelRowsInserted(self, parent, start, end):
-        if not self.load_in_progress:
-            account = self.selected_account
-            items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-            account.rtp.audio_codec_order = [item.text() for item in items]
-            account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
-            account.save()
-
     def _SH_AccountAudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
         items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
@@ -1068,14 +1050,6 @@ class PreferencesWindow(base_class, ui_class):
             settings = SIPSimpleSettings()
             item_iterator = (self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count()))
             settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState()==Qt.Checked]
-            settings.save()
-
-    def _SH_AudioCodecsListModelRowsInserted(self, parent, start, end):
-        if not self.load_in_progress:
-            settings = SIPSimpleSettings()
-            items = [self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count())]
-            settings.rtp.audio_codec_order = [item.text() for item in items]
-            settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
             settings.save()
 
     def _SH_AudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
