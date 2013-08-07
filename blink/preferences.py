@@ -300,8 +300,6 @@ class PreferencesWindow(base_class, ui_class):
         self.tail_length_slider.hide()
         self.tail_length_value_label.hide()
 
-        #self.rename_account_button.hide() # do not use this for the time being -Dan
-
         self.section_group = QActionGroup(self)
         self.section_group.setExclusive(True)
         for index, action in enumerate(action for action in self.toolbar.actions() if not action.isSeparator()):
