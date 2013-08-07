@@ -20,8 +20,7 @@ from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType, Singleton
 from application.python import Null
 from application.system import unlink
-from backports.collections import OrderedDict
-from collections import deque
+from collections import OrderedDict, deque
 from datetime import datetime
 from eventlib import coros, proc
 from eventlib.green import httplib, urllib2
