@@ -11,22 +11,18 @@ Upstream Author(s):
 
 Copyright:
 
-    Copyright (C) 2010 AG Projects
+    Copyright (C) 2010-2013 AG Projects
 
 License:
 
-    Blink is licensed under GNU General Public License version 3. A copy of the
-    license is available at http://www.gnu.org/licenses/gpl-3.0.html
+    Blink is licensed under GNU General Public License version 3. A copy of
+    the license is available at http://www.gnu.org/licenses/gpl-3.0.html
 
     The following restrictions apply:
         * You may not alter the name of the software (Blink)
         * You may not alter the Copyright and About notices
 
-The Debian packaging is:
-
-    Copyright (C) 2010 Saul Ibarra <saul@ag-projects.com>
-
-and is licensed under the GPL version 3,
+The Debian packaging is (C) 2010 AG Projects and is licensed under GPL v3.
 
 Blink contains the following 3rd party software packages:
 
