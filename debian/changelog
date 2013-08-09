@@ -1,3 +1,54 @@
+blink (0.5.0) unstable; urgency=low
+
+  * Adapted to changes in SIP SIMPLE Client SDK
+  * Enabled Opus codec
+  * Refactored PresencePublicationHandler in order to simplify it
+  * Set default sample rate to 32 kHz
+  * Fixed exception if Google contact has no name nor company
+  * Fixed handling file URLs on different platforms
+  * Fixed losing contact icons
+  * Fixed computing hours in history entries
+  * Fixed setting display name in history entry when URI is a phone number
+  * Avoid publishing presence state twice when xcap settings change
+  * Allow Ctrl+Delete/Backspace to hangup sessions because KDE steals Ctrl+Esc
+  * Raise and activate preferences window when triggered if already visible
+  * Do not allow toolbar to be hidden
+  * Removed compatibility with python 2.6
+
+ -- Saul Ibarra <saul@ag-projects.com>  Fri, 09 Aug 2013 12:51:58 +0200
+
+blink (0.4.0) unstable; urgency=low
+
+  * Added support for multiple URIs per contact
+  * Added support for Bonjour presence
+  * Added system tray
+  * Added text eliding using fading colors for labels with long texts
+  * Adjusted selected group background colors for better visibility
+  * Save and restore main window geometry across restarts
+  * Move contact when its name changes to keep contacts sorted
+  * Updated test contact icon files
+  * Strip URI domain in history if URI looks like a phone number
+  * Fixed creating offset-naive datetime for epoch
+  * Fixed exception when initial winfo document is not full
+  * Fixed publishing internal presence states
+  * Fixed icons from QAction not showing up in menus on Ubuntu
+  * Fixed losing presence state when contact is modified
+  * Fixed exception when restarting log manager
+
+ -- Saul Ibarra <saul@ag-projects.com>  Wed, 26 Jun 2013 16:56:04 +0200
+
+blink (0.3.1) unstable; urgency=low
+
+  * Added SIMPLE Presence (PUBLISH, RLS SUBSCRIBE/NOTIFY)
+  * Added XCAP storage for contacts, icon and and presence policy
+  * Added handing for presence, presence.winfo and xcap-diff events
+  * Added call history menu items (Missed, Received, Placed)
+  * Made sRTP optional by default
+  * Adjusted default timeouts for registration, subscription and publication
+  * Removed/diabled some GUI elements for not yet implemented features
+
+ -- Saul Ibarra <saul@ag-projects.com>  Wed, 24 Apr 2013 15:16:11 +0200
+
 blink (0.2.11) unstable; urgency=low
 
   * Adapted to changes in streams API
