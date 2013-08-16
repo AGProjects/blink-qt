@@ -951,7 +951,6 @@ padding: 2px;</string>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
-    <addaction name="donate_action"/>
     <addaction name="separator"/>
     <addaction name="preferences_action"/>
     <addaction name="quick_settings_menu"/>
@@ -1269,11 +1268,6 @@ padding: 2px;</string>
   <action name="manage_accounts_action">
    <property name="text">
     <string>&amp;Manage accounts...</string>
-   </property>
-  </action>
-  <action name="donate_action">
-   <property name="text">
-    <string>Donate if you like Blink</string>
    </property>
   </action>
   <action name="google_contacts_action">

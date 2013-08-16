@@ -164,7 +164,6 @@ class MainWindow(base_class, ui_class):
 
         # Blink menu actions
         self.about_action.triggered.connect(self.about_panel.show)
-        self.donate_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/payments.phtml')))
         self.add_account_action.triggered.connect(self.preferences_window.show_add_account_dialog)
         self.manage_accounts_action.triggered.connect(self.preferences_window.show_for_accounts)
         self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
