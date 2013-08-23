@@ -84,7 +84,7 @@
          </size>
         </property>
         <property name="text">
-         <string>Your credentials will be used once to authorize Blink to access your Google Contacts and will not be stored.</string>
+         <string>Your credentials will be used once to authorize access to your Google Contacts and will not be stored.</string>
         </property>
         <property name="textFormat">
          <enum>Qt::AutoText</enum>
