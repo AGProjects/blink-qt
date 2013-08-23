@@ -11,9 +11,8 @@ import sys
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QPointF, QPropertyAnimation, QRectF, QRect, QSize, pyqtSignal
-from PyQt4.QtGui  import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
-from PyQt4.QtGui  import QAction, QMenu, QKeyEvent, QMouseEvent, QSortFilterProxyModel, QItemDelegate, QStyledItemDelegate, QListView, QTableView, QComboBox, QRadioButton, QButtonGroup, QWidget, QHBoxLayout
-
+from PyQt4.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
+from PyQt4.QtGui import QAction, QApplication, QMenu, QKeyEvent, QMouseEvent, QSortFilterProxyModel, QItemDelegate, QStyledItemDelegate, QListView, QTableView, QComboBox, QRadioButton, QButtonGroup, QWidget, QHBoxLayout
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python.descriptor import WriteOnceAttribute
@@ -1336,8 +1335,9 @@ class GoogleContactsDialog(base_class, ui_class):
         username = self.username_editor.text()
         password = self.password_editor.text()
         client = ContactsClient()
+        application = QApplication.instance()
         try:
-            client.client_login(email=username, password=password, source='Blink', captcha_token=self.captcha_token, captcha_response=captcha_response)
+            client.client_login(email=username, password=password, source=application.applicationName(), captcha_token=self.captcha_token, captcha_response=captcha_response)
         except CaptchaChallenge, e:
             call_in_gui_thread(self.username_editor.setEnabled, False)
             call_in_gui_thread(setattr, self.status_label, 'value', Status('Error authenticating with Google', color=red))
