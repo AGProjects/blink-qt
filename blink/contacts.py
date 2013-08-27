@@ -1335,9 +1335,8 @@ class GoogleContactsDialog(base_class, ui_class):
         username = self.username_editor.text()
         password = self.password_editor.text()
         client = ContactsClient()
-        application = QApplication.instance()
         try:
-            client.client_login(email=username, password=password, source=application.applicationName(), captcha_token=self.captcha_token, captcha_response=captcha_response)
+            client.client_login(email=username, password=password, source=QApplication.applicationName(), captcha_token=self.captcha_token, captcha_response=captcha_response)
         except CaptchaChallenge, e:
             call_in_gui_thread(self.username_editor.setEnabled, False)
             call_in_gui_thread(setattr, self.status_label, 'value', Status('Error authenticating with Google', color=red))
