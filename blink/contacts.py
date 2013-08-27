@@ -1317,9 +1317,14 @@ class GoogleContactsDialog(base_class, ui_class):
 
     def open(self):
         settings = SIPSimpleSettings()
+        username = settings.google_contacts.username or u''
         self.username_editor.setEnabled(True)
-        self.username_editor.setText(settings.google_contacts.username or u'')
+        self.username_editor.setText(username)
         self.password_editor.setText(u'')
+        if username:
+            self.password_editor.setFocus()
+        else:
+            self.username_editor.setFocus()
         self.show()
 
     def open_for_incorrect_password(self):
@@ -1328,6 +1333,7 @@ class GoogleContactsDialog(base_class, ui_class):
         self.username_editor.setEnabled(False)
         self.username_editor.setText(settings.google_contacts.username)
         self.status_label.value = Status('Error authenticating with Google. Please enter your password:', color=red)
+        self.password_editor.setFocus()
         self.show()
 
     @run_in_green_thread
@@ -1353,10 +1359,12 @@ class GoogleContactsDialog(base_class, ui_class):
         except RequestError:
             self.captcha_token = None
             call_in_gui_thread(self.username_editor.setEnabled, True)
+            call_in_gui_thread(call_later, 0, self.password_editor.setFocus)
             call_in_gui_thread(setattr, self.status_label, 'value', Status('Error authenticating with Google', color=red))
         except Exception:
             self.captcha_token = None
             call_in_gui_thread(self.username_editor.setEnabled, True)
+            call_in_gui_thread(call_later, 0, self.password_editor.setFocus)
             call_in_gui_thread(setattr, self.status_label, 'value', Status('Error connecting with Google', color=red))
         else:
             self.captcha_token = None
