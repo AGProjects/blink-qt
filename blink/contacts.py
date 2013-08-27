@@ -42,7 +42,7 @@ from sipsimple.threading.green import Command, call_in_green_thread, run_in_gree
 from blink.configuration.datatypes import AuthorizationToken, InvalidToken, IconDescriptor, FileURL
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager
-from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread
+from blink.util import QSingleton, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.labels import Status
@@ -1281,6 +1281,19 @@ class ContactURI(object):
             notification.center.post_notification('BlinkContactURIDidChange', sender=self)
 
 
+class CaptchaRequired:    __metaclass__ = MarkerType
+class AuthorizationError: __metaclass__ = MarkerType
+class ConnectionError:    __metaclass__ = MarkerType
+class AuthorizationOk:    __metaclass__ = MarkerType
+
+
+class GoogleAuthorizationData(object):
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+    def __repr__(self):
+        return '%s(%s)' % (self.__class__.__name__, ', '.join('%s=%r' % (name, value) for name, value in self.__dict__.iteritems()))
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('google_contacts_dialog.ui'))
 
 class GoogleContactsDialog(base_class, ui_class):
@@ -1302,18 +1315,22 @@ class GoogleContactsDialog(base_class, ui_class):
         self.password_editor.regexp = re.compile('^.+$')
 
         self.captcha_token = None
-        self.enable_captcha(False)
 
-    def enable_captcha(self, visible):
-        self.captcha_label.setVisible(visible)
-        self.captcha_editor.setVisible(visible)
-        self.captcha_image_label.setVisible(visible)
-        inputs = [self.username_editor, self.password_editor]
-        if visible:
-            inputs.append(self.captcha_editor)
-            self.captcha_editor.setText(u'')
-            call_later(0, self.captcha_editor.setFocus)
-        self.authorize_button.setEnabled(all(input.text_valid for input in inputs))
+    def show_captcha(self, image_data):
+        pixmap = QPixmap()
+        if pixmap.loadFromData(image_data):
+            pixmap = pixmap.scaled(200, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.captcha_label.setVisible(True)
+        self.captcha_editor.setVisible(True)
+        self.captcha_image_label.setVisible(True)
+        self.captcha_image_label.setPixmap(pixmap)
+        self.captcha_editor.setText(u'')
+        self.captcha_editor.setFocus()
+
+    def hide_captcha(self):
+        self.captcha_label.setVisible(False)
+        self.captcha_editor.setVisible(False)
+        self.captcha_image_label.setVisible(False)
 
     def open(self):
         settings = SIPSimpleSettings()
@@ -1321,6 +1338,7 @@ class GoogleContactsDialog(base_class, ui_class):
         self.username_editor.setEnabled(True)
         self.username_editor.setText(username)
         self.password_editor.setText(u'')
+        self.hide_captcha()
         if username:
             self.password_editor.setFocus()
         else:
@@ -1333,12 +1351,12 @@ class GoogleContactsDialog(base_class, ui_class):
         self.username_editor.setEnabled(False)
         self.username_editor.setText(settings.google_contacts.username)
         self.status_label.value = Status('Error authenticating with Google. Please enter your password:', color=red)
+        self.hide_captcha()
         self.password_editor.setFocus()
         self.show()
 
     @run_in_green_thread
     def _authorize_google_account(self):
-        red = '#cc0000'
         captcha_response = self.captcha_editor.text() if self.captcha_token else None
         username = self.username_editor.text()
         password = self.password_editor.text()
@@ -1346,42 +1364,50 @@ class GoogleContactsDialog(base_class, ui_class):
         try:
             client.client_login(email=username, password=password, source=QApplication.applicationName(), captcha_token=self.captcha_token, captcha_response=captcha_response)
         except CaptchaChallenge, e:
-            call_in_gui_thread(self.username_editor.setEnabled, False)
-            call_in_gui_thread(setattr, self.status_label, 'value', Status('Error authenticating with Google', color=red))
             try:
                 captcha_data = urllib2.urlopen(e.captcha_url).read()
             except (urllib2.HTTPError, urllib2.URLError):
-                pass
+                self.captcha_token = None
+                self._process_authorization_reply(ConnectionError)
             else:
                 self.captcha_token = e.captcha_token
-                call_in_gui_thread(self._set_captcha_image, captcha_data)
-                call_in_gui_thread(self.enable_captcha, True)
+                self._process_authorization_reply(CaptchaRequired, data=GoogleAuthorizationData(captcha_image=captcha_data))
         except RequestError:
             self.captcha_token = None
-            call_in_gui_thread(self.username_editor.setEnabled, True)
-            call_in_gui_thread(call_later, 0, self.password_editor.setFocus)
-            call_in_gui_thread(setattr, self.status_label, 'value', Status('Error authenticating with Google', color=red))
+            self._process_authorization_reply(AuthorizationError)
         except Exception:
             self.captcha_token = None
-            call_in_gui_thread(self.username_editor.setEnabled, True)
-            call_in_gui_thread(call_later, 0, self.password_editor.setFocus)
-            call_in_gui_thread(setattr, self.status_label, 'value', Status('Error connecting with Google', color=red))
+            self._process_authorization_reply(ConnectionError)
         else:
             self.captcha_token = None
             settings = SIPSimpleSettings()
             settings.google_contacts.authorization_token = AuthorizationToken(client.auth_token.token_string)
             settings.google_contacts.username = username
             settings.save()
-            call_in_gui_thread(self.enable_captcha, False)
-            call_in_gui_thread(self.accept)
-        finally:
-            call_in_gui_thread(self.setEnabled, True)
+            self._process_authorization_reply(AuthorizationOk)
 
-    def _set_captcha_image(self, data):
-        pixmap = QPixmap()
-        if pixmap.loadFromData(data):
-            pixmap = pixmap.scaled(200, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.captcha_image_label.setPixmap(pixmap)
+    @run_in_gui_thread
+    def _process_authorization_reply(self, reply, data=GoogleAuthorizationData()):
+        red = '#cc0000'
+        self.setEnabled(True)
+        if reply is CaptchaRequired:
+            self.username_editor.setEnabled(False)
+            self.show_captcha(data.captcha_image)
+            self.status_label.value = Status('Answer captcha to confirm authentication', color=red)
+        elif reply is AuthorizationError:
+            self.username_editor.setEnabled(True)
+            self.hide_captcha()
+            self.status_label.value = Status('Error authenticating with Google', color=red)
+            self.password_editor.setFocus()
+        elif reply is ConnectionError:
+            self.username_editor.setEnabled(True)
+            self.hide_captcha()
+            self.status_label.value = Status('Error connecting with Google', color=red)
+            self.password_editor.setFocus()
+        elif reply is AuthorizationOk:
+            self.accept()
+        else:
+            raise ValueError("Unknown reply: %r" % reply)
 
     def _SH_AuthorizeButtonClicked(self):
         self.status_label.value = Status('Contacting Google server...')
@@ -1394,7 +1420,6 @@ class GoogleContactsDialog(base_class, ui_class):
         settings.google_contacts.authorization_token = None
         settings.save()
         self.captcha_token = None
-        call_in_gui_thread(self.enable_captcha, False)
 
     def _SH_ValidityStatusChanged(self):
         red = '#cc0000'
