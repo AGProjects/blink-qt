@@ -285,7 +285,7 @@
          </palette>
         </property>
         <property name="text">
-         <string extracomment="is offering to share his desktop">Wants to subscribe to your availability information</string>
+         <string>Wants to subscribe to your availability information</string>
         </property>
         <property name="indent">
          <number>3</number>
