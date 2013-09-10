@@ -685,7 +685,7 @@ padding: 2px;</string>
              </widget>
             </item>
             <item>
-             <widget class="ToolButton" name="ds_session_button">
+             <widget class="ToolButton" name="ss_session_button">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -699,7 +699,7 @@ padding: 2px;</string>
                </size>
               </property>
               <property name="toolTip">
-               <string>Start desktop sharing </string>
+               <string>Start screen sharing</string>
               </property>
               <property name="icon">
                <iconset>
@@ -1296,6 +1296,11 @@ padding: 2px;</string>
  </widget>
  <customwidgets>
   <customwidget>
+   <class>ToolButton</class>
+   <extends>QToolButton</extends>
+   <header>blink.widgets.buttons</header>
+  </customwidget>
+  <customwidget>
    <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
@@ -1319,11 +1324,6 @@ padding: 2px;</string>
    <class>AccountSelector</class>
    <extends>QComboBox</extends>
    <header>blink.accounts</header>
-  </customwidget>
-  <customwidget>
-   <class>ToolButton</class>
-   <extends>QToolButton</extends>
-   <header>blink.widgets.buttons</header>
   </customwidget>
   <customwidget>
    <class>SessionListView</class>
@@ -1360,7 +1360,7 @@ padding: 2px;</string>
   <tabstop>add_contact_button</tabstop>
   <tabstop>audio_call_button</tabstop>
   <tabstop>im_session_button</tabstop>
-  <tabstop>ds_session_button</tabstop>
+  <tabstop>ss_session_button</tabstop>
   <tabstop>silent_button</tabstop>
   <tabstop>session_list</tabstop>
   <tabstop>hangup_all_button</tabstop>

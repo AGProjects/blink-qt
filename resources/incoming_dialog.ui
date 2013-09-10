@@ -280,7 +280,7 @@
          </widget>
         </item>
         <item>
-         <widget class="StreamButton" name="desktopsharing_stream">
+         <widget class="StreamButton" name="screensharing_stream">
           <property name="minimumSize">
            <size>
             <width>26</width>
@@ -302,11 +302,11 @@
           </property>
           <property name="icon">
            <iconset>
-            <normaloff>icons/desktopsharing.png</normaloff>
-            <normalon>icons/desktopsharing-rejected.png</normalon>
-            <disabledoff>icons/desktopsharing.png</disabledoff>
-            <disabledon>icons/desktopsharing-rejected.png</disabledon>
-            <selectedon>icons/desktopsharing-auto-rejected.png</selectedon>icons/desktopsharing.png</iconset>
+            <normaloff>icons/screensharing.png</normaloff>
+            <normalon>icons/screensharing-rejected.png</normalon>
+            <disabledoff>icons/screensharing.png</disabledoff>
+            <disabledon>icons/screensharing-rejected.png</disabledon>
+            <selectedon>icons/screensharing-auto-rejected.png</selectedon>icons/screensharing.png</iconset>
           </property>
           <property name="iconSize">
            <size>
@@ -473,7 +473,7 @@
        </spacer>
       </item>
       <item row="3" column="0" colspan="3">
-       <widget class="QLabel" name="desktopsharing_label">
+       <widget class="QLabel" name="screensharing_label">
         <property name="palette">
          <palette>
           <active>
@@ -539,7 +539,7 @@
          </palette>
         </property>
         <property name="text">
-         <string extracomment="is offering to share his desktop">is asking to share your desktop</string>
+         <string extracomment="is offering to share his screen">is asking to share your screen</string>
         </property>
         <property name="indent">
          <number>3</number>

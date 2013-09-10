@@ -2068,7 +2068,7 @@
            <item row="1" column="0" colspan="5">
             <widget class="QCheckBox" name="trace_msrp_button">
              <property name="text">
-              <string>Trace MSRP (used for chat, file transfer and desktop sharing)</string>
+              <string>Trace MSRP (used for chat, file transfer and screen sharing)</string>
              </property>
             </widget>
            </item>

@@ -1525,8 +1525,8 @@ class IncomingDialog(base_class, ui_class):
             stream.toggled.connect(self._update_accept_button)
             stream.hidden.connect(self._update_streams_layout)
             stream.shown.connect(self._update_streams_layout)
-        self.desktopsharing_stream.hidden.connect(self.desktopsharing_label.hide)
-        self.desktopsharing_stream.shown.connect(self.desktopsharing_label.show)
+        self.screensharing_stream.hidden.connect(self.screensharing_label.hide)
+        self.screensharing_stream.shown.connect(self.screensharing_label.show)
         for stream in self.streams:
             stream.hide()
         self.position = None
@@ -1563,7 +1563,7 @@ class IncomingDialog(base_class, ui_class):
 
     @property
     def streams(self):
-        return (self.audio_stream, self.chat_stream, self.desktopsharing_stream, self.video_stream)
+        return (self.audio_stream, self.chat_stream, self.screensharing_stream, self.video_stream)
 
     @property
     def accepted_streams(self):
@@ -1585,13 +1585,13 @@ class IncomingDialog(base_class, ui_class):
         if len([stream for stream in self.streams if stream.in_use]) > 1:
             self.audio_stream.active = True
             self.chat_stream.active = True
-            self.desktopsharing_stream.active = True
+            self.screensharing_stream.active = True
             self.video_stream.active = True
             self.note_label.setText(u'To refuse a stream click its icon')
         else:
             self.audio_stream.active = False
             self.chat_stream.active = False
-            self.desktopsharing_stream.active = False
+            self.screensharing_stream.active = False
             self.video_stream.active = False
             if self.audio_stream.in_use:
                 self.note_label.setText(u'Audio call')
@@ -1599,8 +1599,8 @@ class IncomingDialog(base_class, ui_class):
                 self.note_label.setText(u'Chat session')
             elif self.video_stream.in_use:
                 self.note_label.setText(u'Video call')
-            elif self.desktopsharing_stream.in_use:
-                self.note_label.setText(u'Desktop sharing request')
+            elif self.screensharing_stream.in_use:
+                self.note_label.setText(u'Screen sharing request')
             else:
                 self.note_label.setText(u'')
         self._update_accept_button()
@@ -1612,7 +1612,7 @@ class IncomingSession(QObject):
     accepted = pyqtSignal()
     rejected = pyqtSignal(str)
 
-    def __init__(self, dialog, session, contact=None, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, desktopsharing_stream=None):
+    def __init__(self, dialog, session, contact=None, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, screensharing_stream=None):
         super(IncomingSession, self).__init__()
         self.dialog = dialog
         self.session = session
@@ -1621,7 +1621,7 @@ class IncomingSession(QObject):
         self.audio_stream = audio_stream
         self.video_stream = video_stream
         self.chat_stream = chat_stream
-        self.desktopsharing_stream = desktopsharing_stream
+        self.screensharing_stream = screensharing_stream
 
         if proposal:
             self.dialog.setWindowTitle(u'Incoming Session Update')
@@ -1644,13 +1644,13 @@ class IncomingSession(QObject):
         if self.chat_stream:
             self.dialog.chat_stream.accepted = False # Remove when implemented later -Luci
             self.dialog.chat_stream.show()
-        if self.desktopsharing_stream:
-            if self.desktopsharing_stream.handler.type == 'active':
-                self.dialog.desktopsharing_label.setText(u'is offering to share his desktop')
+        if self.screensharing_stream:
+            if self.screensharing_stream.handler.type == 'active':
+                self.dialog.screensharing_label.setText(u'is offering to share his screen')
             else:
-                self.dialog.desktopsharing_label.setText(u'is asking to share your desktop')
-            self.dialog.desktopsharing_stream.accepted = False # Remove when implemented later -Luci
-            self.dialog.desktopsharing_stream.show()
+                self.dialog.screensharing_label.setText(u'is asking to share your screen')
+            self.dialog.screensharing_stream.accepted = False # Remove when implemented later -Luci
+            self.dialog.screensharing_stream.show()
         self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 
         self.dialog.accepted.connect(self._SH_DialogAccepted)
@@ -1683,8 +1683,8 @@ class IncomingSession(QObject):
             streams.append(self.video_stream)
         if self.chat_accepted:
             streams.append(self.chat_stream)
-        if self.desktopsharing_accepted:
-            streams.append(self.desktopsharing_stream)
+        if self.screensharing_accepted:
+            streams.append(self.screensharing_stream)
         return streams
 
     @property
@@ -1700,8 +1700,8 @@ class IncomingSession(QObject):
         return self.dialog.chat_stream.in_use and self.dialog.chat_stream.accepted
 
     @property
-    def desktopsharing_accepted(self):
-        return self.dialog.desktopsharing_stream.in_use and self.dialog.desktopsharing_stream.accepted
+    def screensharing_accepted(self):
+        return self.dialog.screensharing_stream.in_use and self.dialog.screensharing_stream.accepted
 
     @property
     def priority(self):
@@ -1709,7 +1709,7 @@ class IncomingSession(QObject):
             return 0
         elif self.video_stream:
             return 1
-        elif self.desktopsharing_stream:
+        elif self.screensharing_stream:
             return 2
         elif self.chat_stream:
             return 3
@@ -1719,7 +1719,7 @@ class IncomingSession(QObject):
     @property
     def ringtone(self):
         if 'ringtone' not in self.__dict__:
-            if self.audio_stream or self.video_stream or self.desktopsharing_stream:
+            if self.audio_stream or self.video_stream or self.screensharing_stream:
                 sound_file = self.session.account.sounds.inbound_ringtone
                 if sound_file is not None and sound_file.path is DefaultPath:
                     settings = SIPSimpleSettings()
@@ -1963,8 +1963,8 @@ class SessionManager(object):
         accepted_streams = incoming_session.accepted_streams
         if incoming_session.chat_stream in accepted_streams:
             accepted_streams.remove(incoming_session.chat_stream)
-        if incoming_session.desktopsharing_stream in accepted_streams:
-            accepted_streams.remove(incoming_session.desktopsharing_stream)
+        if incoming_session.screensharing_stream in accepted_streams:
+            accepted_streams.remove(incoming_session.screensharing_stream)
         if incoming_session.proposal:
             session.accept_proposal(accepted_streams)
         else:
@@ -2023,12 +2023,12 @@ class SessionManager(object):
         audio_streams = [stream for stream in notification.data.streams if stream.type=='audio']
         video_streams = [stream for stream in notification.data.streams if stream.type=='video']
         chat_streams = [stream for stream in notification.data.streams if stream.type=='chat']
-        desktopsharing_streams = [stream for stream in notification.data.streams if stream.type=='desktop-sharing']
+        screensharing_streams = [stream for stream in notification.data.streams if stream.type=='screen-sharing']
         filetransfer_streams = [stream for stream in notification.data.streams if stream.type=='file-transfer']
-        if not audio_streams and not video_streams and not chat_streams and not desktopsharing_streams and not filetransfer_streams:
+        if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
             session.reject(488)
             return
-        if filetransfer_streams and (audio_streams or video_streams or chat_streams or desktopsharing_streams):
+        if filetransfer_streams and (audio_streams or video_streams or chat_streams or screensharing_streams):
             session.reject(488)
             return
         session.send_ring_indication()
@@ -2050,9 +2050,9 @@ class SessionManager(object):
             audio_stream = audio_streams[0] if audio_streams else None
             video_stream = video_streams[0] if video_streams else None
             chat_stream = chat_streams[0] if chat_streams else None
-            desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
+            screensharing_stream = screensharing_streams[0] if screensharing_streams else None
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one on which the main window resides.
-            incoming_session = IncomingSession(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
+            incoming_session = IncomingSession(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
@@ -2068,12 +2068,12 @@ class SessionManager(object):
         audio_streams = [stream for stream in notification.data.streams if stream.type=='audio']
         video_streams = [stream for stream in notification.data.streams if stream.type=='video']
         chat_streams = [stream for stream in notification.data.streams if stream.type=='chat']
-        desktopsharing_streams = [stream for stream in notification.data.streams if stream.type=='desktop-sharing']
+        screensharing_streams = [stream for stream in notification.data.streams if stream.type=='screen-sharing']
         filetransfer_streams = [stream for stream in notification.data.streams if stream.type=='file-transfer']
-        if not audio_streams and not video_streams and not chat_streams and not desktopsharing_streams and not filetransfer_streams:
+        if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
             session.reject_proposal(488)
             return
-        if filetransfer_streams and (audio_streams or video_streams or chat_streams or desktopsharing_streams):
+        if filetransfer_streams and (audio_streams or video_streams or chat_streams or screensharing_streams):
             session.reject_proposal(488)
             return
         session.send_ring_indication()
@@ -2089,9 +2089,9 @@ class SessionManager(object):
             audio_stream = audio_streams[0] if audio_streams else None
             video_stream = video_streams[0] if video_streams else None
             chat_stream = chat_streams[0] if chat_streams else None
-            desktopsharing_stream = desktopsharing_streams[0] if desktopsharing_streams else None
+            screensharing_stream = screensharing_streams[0] if screensharing_streams else None
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one on which the main window resides.
-            incoming_session = IncomingSession(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, desktopsharing_stream=desktopsharing_stream)
+            incoming_session = IncomingSession(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             bisect.insort_right(self.incoming_sessions, incoming_session)
             incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
             incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
