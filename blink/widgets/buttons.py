@@ -707,6 +707,14 @@ class AccountState(StateButton):
         if hasattr(action, 'state'):
             self.setState(action.state, action.note)
 
+    def mousePressEvent_no(self, event):
+        if event.button() == Qt.LeftButton and self.popupMode() == QToolButton.MenuButtonPopup:
+            option = QStyleOptionToolButton()
+            self.initStyleOption(option)
+            position = self.style().subControlRect(QStyle.CC_ToolButton, option, QStyle.SC_ToolButtonMenu, self).center()
+            event = event.__class__(event.type(), position, self.mapToGlobal(position), event.button(), event.buttons(), event.modifiers())
+        return super(AccountState, self).mousePressEvent(event)
+
     def setState(self, state, note=None):
         if state == self.state and note == self.note:
             return
