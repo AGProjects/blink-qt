@@ -23,8 +23,7 @@ from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
-from sipsimple.audio import WavePlayer
-from sipsimple.conference import AudioConference
+from sipsimple.audio import AudioConference, WavePlayer
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
