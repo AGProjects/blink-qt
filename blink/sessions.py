@@ -1607,12 +1607,12 @@ class IncomingDialog(base_class, ui_class):
 del ui_class, base_class
 
 
-class IncomingSession(QObject):
+class SessionRequest(QObject):
     accepted = pyqtSignal()
     rejected = pyqtSignal(str)
 
     def __init__(self, dialog, session, contact=None, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, screensharing_stream=None):
-        super(IncomingSession, self).__init__()
+        super(SessionRequest, self).__init__()
         self.dialog = dialog
         self.session = session
         self.contact = contact
@@ -1788,7 +1788,7 @@ class SessionManager(object):
     def __init__(self):
         self.main_window = None
         self.session_model = None
-        self.incoming_sessions = []
+        self.session_requests = []
         self.dialog_positions = range(1, 100)
         self.current_ringtone = Null
         self.last_dialed_uri = None
@@ -1841,12 +1841,12 @@ class SessionManager(object):
             session_item.connect()
 
     def update_ringtone(self):
-        if not self.incoming_sessions:
+        if not self.session_requests:
             self.current_ringtone = Null
         elif self.session_model.active_sessions:
             self.current_ringtone = self.beeping_ringtone
         else:
-            self.current_ringtone = self.incoming_sessions[0].ringtone
+            self.current_ringtone = self.session_requests[0].ringtone
 
     @property
     def beeping_ringtone(self):
@@ -1921,28 +1921,28 @@ class SessionManager(object):
         if not self.session_model.rowCount():
             self.main_window.switch_view_button.view = SwitchViewButton.ContactView
 
-    def _SH_IncomingSessionAccepted(self, incoming_session):
-        if incoming_session.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
-        self.incoming_sessions.remove(incoming_session)
+    def _SH_SessionRequestAccepted(self, session_request):
+        if session_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, session_request.dialog.position)
+        self.session_requests.remove(session_request)
         self.update_ringtone()
-        session = incoming_session.session
-        if incoming_session.audio_accepted and incoming_session.video_accepted:
-            session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, incoming_session.contact, audio_stream=incoming_session.audio_stream, video_stream=incoming_session.video_stream)
-        elif incoming_session.audio_accepted:
+        session = session_request.session
+        if session_request.audio_accepted and session_request.video_accepted:
+            session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, session_request.contact, audio_stream=session_request.audio_stream, video_stream=session_request.video_stream)
+        elif session_request.audio_accepted:
             try:
                 session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.audio_stream is None).next()
-                session_item.audio_stream = incoming_session.audio_stream
+                session_item.audio_stream = session_request.audio_stream
             except StopIteration:
-                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, incoming_session.contact, audio_stream=incoming_session.audio_stream)
-        elif incoming_session.video_accepted:
+                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, session_request.contact, audio_stream=session_request.audio_stream)
+        elif session_request.video_accepted:
             try:
                 session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.video_stream is None).next()
-                session_item.video_stream = incoming_session.video_stream
+                session_item.video_stream = session_request.video_stream
             except StopIteration:
-                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, incoming_session.contact, video_stream=incoming_session.video_stream)
+                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, session_request.contact, video_stream=session_request.video_stream)
         else: # Handle other streams -Luci
-            if incoming_session.proposal:
+            if session_request.proposal:
                 session.reject_proposal(488)
             else:
                 session.reject(488)
@@ -1959,29 +1959,29 @@ class SessionManager(object):
         self.main_window.switch_view_button.view = SwitchViewButton.SessionView
         self.session_model.session_list.setFocus()
         # Remove when implemented later -Luci
-        accepted_streams = incoming_session.accepted_streams
-        if incoming_session.chat_stream in accepted_streams:
-            accepted_streams.remove(incoming_session.chat_stream)
-        if incoming_session.screensharing_stream in accepted_streams:
-            accepted_streams.remove(incoming_session.screensharing_stream)
-        if incoming_session.proposal:
+        accepted_streams = session_request.accepted_streams
+        if session_request.chat_stream in accepted_streams:
+            accepted_streams.remove(session_request.chat_stream)
+        if session_request.screensharing_stream in accepted_streams:
+            accepted_streams.remove(session_request.screensharing_stream)
+        if session_request.proposal:
             session.accept_proposal(accepted_streams)
         else:
             session.accept(accepted_streams)
         self.main_window.activateWindow()
         self.main_window.raise_()
 
-    def _SH_IncomingSessionRejected(self, incoming_session, mode):
-        if incoming_session.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
-        self.incoming_sessions.remove(incoming_session)
+    def _SH_SessionRequestRejected(self, session_request, mode):
+        if session_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, session_request.dialog.position)
+        self.session_requests.remove(session_request)
         self.update_ringtone()
-        if incoming_session.proposal:
-            incoming_session.session.reject_proposal(488)
+        if session_request.proposal:
+            session_request.session.reject_proposal(488)
         elif mode == 'busy':
-            incoming_session.session.reject(486)
+            session_request.session.reject(486)
         elif mode == 'reject':
-            incoming_session.session.reject(603)
+            session_request.session.reject(603)
 
     def _SH_SessionActivated(self, session):
         item = session.conference if session.conference is not None else session
@@ -2051,15 +2051,15 @@ class SessionManager(object):
             chat_stream = chat_streams[0] if chat_streams else None
             screensharing_stream = screensharing_streams[0] if screensharing_streams else None
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-            incoming_session = IncomingSession(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
-            bisect.insort_right(self.incoming_sessions, incoming_session)
-            incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
-            incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
+            session_request = SessionRequest(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+            bisect.insort_right(self.session_requests, session_request)
+            session_request.accepted.connect(partial(self._SH_SessionRequestAccepted, session_request))
+            session_request.rejected.connect(partial(self._SH_SessionRequestRejected, session_request))
             try:
                 position = self.dialog_positions.pop(0)
             except IndexError:
                 position = None
-            incoming_session.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
+            session_request.dialog.show(activate=QApplication.activeWindow() is not None and self.session_requests.index(session_request)==0, position=position)
             self.update_ringtone()
 
     def _NH_SIPSessionGotProposal(self, notification):
@@ -2090,43 +2090,43 @@ class SessionManager(object):
             chat_stream = chat_streams[0] if chat_streams else None
             screensharing_stream = screensharing_streams[0] if screensharing_streams else None
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-            incoming_session = IncomingSession(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
-            bisect.insort_right(self.incoming_sessions, incoming_session)
-            incoming_session.accepted.connect(partial(self._SH_IncomingSessionAccepted, incoming_session))
-            incoming_session.rejected.connect(partial(self._SH_IncomingSessionRejected, incoming_session))
+            session_request = SessionRequest(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+            bisect.insort_right(self.session_requests, session_request)
+            session_request.accepted.connect(partial(self._SH_SessionRequestAccepted, session_request))
+            session_request.rejected.connect(partial(self._SH_SessionRequestRejected, session_request))
             try:
                 position = self.dialog_positions.pop(0)
             except IndexError:
                 position = None
-            incoming_session.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_sessions.index(incoming_session)==0, position=position)
+            session_request.dialog.show(activate=QApplication.activeWindow() is not None and self.session_requests.index(session_request)==0, position=position)
             self.update_ringtone()
 
     def _NH_SIPSessionDidFail(self, notification):
         if notification.data.code != 487:
             return
         try:
-            incoming_session = (incoming_session for incoming_session in self.incoming_sessions if incoming_session.session is notification.sender).next()
+            session_request = (session_request for session_request in self.session_requests if session_request.session is notification.sender).next()
         except StopIteration:
             pass
         else:
-            if incoming_session.dialog.position is not None:
-                bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
-            incoming_session.dialog.hide()
-            self.incoming_sessions.remove(incoming_session)
+            if session_request.dialog.position is not None:
+                bisect.insort_left(self.dialog_positions, session_request.dialog.position)
+            session_request.dialog.hide()
+            self.session_requests.remove(session_request)
             self.update_ringtone()
 
     def _NH_SIPSessionGotRejectProposal(self, notification):
         if notification.data.code != 487:
             return
         try:
-            incoming_session = (incoming_session for incoming_session in self.incoming_sessions if incoming_session.session is notification.sender).next()
+            session_request = (session_request for session_request in self.session_requests if session_request.session is notification.sender).next()
         except StopIteration:
             pass
         else:
-            if incoming_session.dialog.position is not None:
-                bisect.insort_left(self.dialog_positions, incoming_session.dialog.position)
-            incoming_session.dialog.hide()
-            self.incoming_sessions.remove(incoming_session)
+            if session_request.dialog.position is not None:
+                bisect.insort_left(self.dialog_positions, session_request.dialog.position)
+            session_request.dialog.hide()
+            self.session_requests.remove(session_request)
             self.update_ringtone()
 
 
