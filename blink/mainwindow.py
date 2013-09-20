@@ -157,6 +157,7 @@ class MainWindow(base_class, ui_class):
         self.server_tools_account_model.rowsRemoved.connect(self._SH_ServerToolsAccountModelChanged)
 
         self.session_model.sessionAdded.connect(self._SH_SessionModelAddedSession)
+        self.session_model.sessionRemoved.connect(self._SH_SessionModelRemovedSession)
         self.session_model.structureChanged.connect(self._SH_SessionModelChangedStructure)
 
         self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
@@ -562,6 +563,10 @@ class MainWindow(base_class, ui_class):
         if session_item.session.state is None:
             self.search_box.clear()
 
+    def _SH_SessionModelRemovedSession(self, session_item):
+        if not self.session_model.rowCount():
+            self.switch_view_button.view = SwitchViewButton.ContactView
+
     def _SH_SessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
         self.active_sessions_label.setText(u'There is 1 active call' if len(active_sessions)==1 else u'There are %d active calls' % len(active_sessions))
@@ -611,8 +616,8 @@ class MainWindow(base_class, ui_class):
             action = self.received_calls_menu.addAction(unicode(entry))
             action.entry = entry
 
-    def _SH_PendingWatcherDialogFinished(self, dialog, code):
-        self.pending_watcher_dialogs.remove(dialog)
+    def _SH_PendingWatcherDialogFinished(self, result):
+        self.pending_watcher_dialogs.remove(self.sender())
 
     def _SH_SystemTrayIconActivated(self, reason):
         if reason == QSystemTrayIcon.Trigger:
@@ -773,7 +778,7 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPAccountGotPendingWatcher(self, notification):
         dialog = PendingWatcherDialog(notification.sender, notification.data.uri, notification.data.display_name)
-        dialog.finished.connect(partial(self._SH_PendingWatcherDialogFinished, dialog))
+        dialog.finished.connect(self._SH_PendingWatcherDialogFinished)
         self.pending_watcher_dialogs.append(dialog)
         dialog.show()
 

@@ -961,6 +961,8 @@ class SessionDelegate(QStyledItemDelegate):
 
 
 class SessionModel(QAbstractListModel):
+    sessionAboutToBeAdded = pyqtSignal(SessionItem)
+    sessionAboutToBeRemoved = pyqtSignal(SessionItem)
     sessionAdded = pyqtSignal(SessionItem)
     sessionRemoved = pyqtSignal(SessionItem)
     structureChanged = pyqtSignal()
@@ -1137,6 +1139,21 @@ class SessionModel(QAbstractListModel):
             session_manager.start_call(contact.name, contact_uri.uri.uri, contact=contact, conference_sibling=session)
         return True
 
+    def _SH_SessionActivated(self):
+        session = self.sender()
+        item = session.conference if session.conference is not None else session
+        item.unhold()
+
+    def _SH_SessionDeactivated(self):
+        session = self.sender()
+        item = session.conference if session.conference is not None else session
+        item.hold()
+
+    def _SH_SessionEnded(self):
+        session = self.sender()
+        call_later(5, self.removeSession, session)
+        self.structureChanged.emit()
+
     def _add_session(self, session):
         position = len(self.sessions)
         self.beginInsertRows(QModelIndex(), position, position)
@@ -1153,8 +1170,13 @@ class SessionModel(QAbstractListModel):
     def addSession(self, session):
         if session in self.sessions:
             return
+        self.sessionAboutToBeAdded.emit(session)
         self._add_session(session)
-        session.ended.connect(self.structureChanged.emit)
+        session.activated.connect(self._SH_SessionActivated)
+        session.deactivated.connect(self._SH_SessionDeactivated)
+        session.ended.connect(self._SH_SessionEnded)
+        selection_model = self.session_list.selectionModel()
+        selection_model.select(self.index(self.rowCount()-1), selection_model.ClearAndSelect)
         self.sessionAdded.emit(session)
         self.structureChanged.emit()
 
@@ -1163,6 +1185,7 @@ class SessionModel(QAbstractListModel):
             return
         if sibling not in self.sessions:
             raise ValueError('sibling %r not in sessions list' % sibling)
+        self.sessionAboutToBeAdded.emit(session)
         self.ignore_selection_changes = True
         session_list = self.session_list
         selection_model = session_list.selectionModel()
@@ -1196,14 +1219,28 @@ class SessionModel(QAbstractListModel):
         session.active = sibling.active
         session_list.setSelectionMode(selection_mode)
         self.ignore_selection_changes = False
-        session.ended.connect(self.structureChanged.emit)
+        session.activated.connect(self._SH_SessionActivated)
+        session.deactivated.connect(self._SH_SessionDeactivated)
+        session.ended.connect(self._SH_SessionEnded)
         self.sessionAdded.emit(session)
         self.structureChanged.emit()
 
     def removeSession(self, session):
         if session not in self.sessions:
             return
+        self.sessionAboutToBeRemoved.emit(session)
+        session_list = self.session_list
+        selection_mode = session_list.selectionMode()
+        session_list.setSelectionMode(session_list.NoSelection)
+        if session.conference is not None:
+            sibling = (s for s in session.conference.sessions if s is not session).next()
+            session_index = self.index(self.sessions.index(session))
+            sibling_index = self.index(self.sessions.index(sibling))
+            selection_model = session_list.selectionModel()
+            if selection_model.isSelected(session_index):
+                selection_model.select(sibling_index, selection_model.ClearAndSelect)
         self._remove_session(session)
+        session_list.setSelectionMode(selection_mode)
         if session.conference is not None:
             if len(session.conference.sessions) == 2:
                 first, last = session.conference.sessions
@@ -1211,6 +1248,7 @@ class SessionModel(QAbstractListModel):
                 last.conference = None
             else:
                 session.conference = None
+        session.widget = Null
         self.sessionRemoved.emit(session)
         self.structureChanged.emit()
 
@@ -1608,8 +1646,8 @@ del ui_class, base_class
 
 
 class SessionRequest(QObject):
-    accepted = pyqtSignal()
-    rejected = pyqtSignal(str)
+    accepted = pyqtSignal(object)
+    rejected = pyqtSignal(object, str)
 
     def __init__(self, dialog, session, contact=None, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, screensharing_stream=None):
         super(SessionRequest, self).__init__()
@@ -1732,10 +1770,10 @@ class SessionRequest(QObject):
         return self.__dict__['ringtone']
 
     def _SH_DialogAccepted(self):
-        self.accepted.emit()
+        self.accepted.emit(self)
 
     def _SH_DialogRejected(self):
-        self.rejected.emit(self.dialog.reject_mode)
+        self.rejected.emit(self, self.dialog.reject_mode)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
@@ -1826,15 +1864,10 @@ class SessionManager(object):
             audio_stream = self.create_stream('audio') if audio else None
             video_stream = self.create_stream('video') if video else None
             session_item = SessionItem(name, remote_uri, session, contact, audio_stream=audio_stream, video_stream=video_stream)
-            session_item.activated.connect(partial(self._SH_SessionActivated, session_item))
-            session_item.deactivated.connect(partial(self._SH_SessionDeactivated, session_item))
-            session_item.ended.connect(partial(self._SH_SessionEnded, session_item))
             if conference_sibling is not None:
                 self.session_model.addSessionAndConference(session_item, conference_sibling)
             else:
                 self.session_model.addSession(session_item)
-                selection_model = self.session_model.session_list.selectionModel()
-                selection_model.select(self.session_model.index(self.session_model.rowCount()-1), selection_model.ClearAndSelect)
             self.main_window.switch_view_button.view = SwitchViewButton.SessionView
             self.session_model.session_list.setFocus()
             self.main_window.search_box.update()
@@ -1905,22 +1938,6 @@ class SessionManager(object):
                 address = account.pstn.prefix + address
         return address
 
-    def _remove_session(self, session):
-        session_list = self.session_model.session_list
-        selection_mode = session_list.selectionMode()
-        session_list.setSelectionMode(session_list.NoSelection)
-        if session.conference is not None:
-            sibling = (s for s in session.conference.sessions if s is not session).next()
-            session_index = self.session_model.index(self.session_model.sessions.index(session))
-            sibling_index = self.session_model.index(self.session_model.sessions.index(sibling))
-            selection_model = session_list.selectionModel()
-            if selection_model.isSelected(session_index):
-                selection_model.select(sibling_index, selection_model.ClearAndSelect)
-        self.session_model.removeSession(session)
-        session_list.setSelectionMode(selection_mode)
-        if not self.session_model.rowCount():
-            self.main_window.switch_view_button.view = SwitchViewButton.ContactView
-
     def _SH_SessionRequestAccepted(self, session_request):
         if session_request.dialog.position is not None:
             bisect.insort_left(self.dialog_positions, session_request.dialog.position)
@@ -1947,15 +1964,11 @@ class SessionManager(object):
             else:
                 session.reject(488)
             return
-        session_item.activated.connect(partial(self._SH_SessionActivated, session_item))
-        session_item.deactivated.connect(partial(self._SH_SessionDeactivated, session_item))
-        session_item.ended.connect(partial(self._SH_SessionEnded, session_item))
         selection_model = self.session_model.session_list.selectionModel()
         if session_item in self.session_model.sessions:
             selection_model.select(self.session_model.index(self.session_model.sessions.index(session_item)), selection_model.ClearAndSelect)
         else:
             self.session_model.addSession(session_item)
-            selection_model.select(self.session_model.index(self.session_model.rowCount()-1), selection_model.ClearAndSelect)
         self.main_window.switch_view_button.view = SwitchViewButton.SessionView
         self.session_model.session_list.setFocus()
         # Remove when implemented later -Luci
@@ -1982,17 +1995,6 @@ class SessionManager(object):
             session_request.session.reject(486)
         elif mode == 'reject':
             session_request.session.reject(603)
-
-    def _SH_SessionActivated(self, session):
-        item = session.conference if session.conference is not None else session
-        item.unhold()
-
-    def _SH_SessionDeactivated(self, session):
-        item = session.conference if session.conference is not None else session
-        item.hold()
-
-    def _SH_SessionEnded(self, session):
-        call_later(5, self._remove_session, session)
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         if self.session_model.ignore_selection_changes:
@@ -2053,8 +2055,8 @@ class SessionManager(object):
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
             session_request = SessionRequest(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             bisect.insort_right(self.session_requests, session_request)
-            session_request.accepted.connect(partial(self._SH_SessionRequestAccepted, session_request))
-            session_request.rejected.connect(partial(self._SH_SessionRequestRejected, session_request))
+            session_request.accepted.connect(self._SH_SessionRequestAccepted)
+            session_request.rejected.connect(self._SH_SessionRequestRejected)
             try:
                 position = self.dialog_positions.pop(0)
             except IndexError:
@@ -2092,8 +2094,8 @@ class SessionManager(object):
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
             session_request = SessionRequest(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             bisect.insort_right(self.session_requests, session_request)
-            session_request.accepted.connect(partial(self._SH_SessionRequestAccepted, session_request))
-            session_request.rejected.connect(partial(self._SH_SessionRequestRejected, session_request))
+            session_request.accepted.connect(self._SH_SessionRequestAccepted)
+            session_request.rejected.connect(self._SH_SessionRequestRejected)
             try:
                 position = self.dialog_positions.pop(0)
             except IndexError:
