@@ -223,7 +223,7 @@ class PresencePublicationHandler(object):
         blink_settings.presence.current_state = new_state
         if new_state.note:
             try:
-                state = next(state for state in blink_settings.presence.state_history if state==new_state)
+                next(state for state in blink_settings.presence.state_history if state==new_state)
             except StopIteration:
                 blink_settings.presence.state_history = [new_state] + blink_settings.presence.state_history
             else:
