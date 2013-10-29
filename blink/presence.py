@@ -335,6 +335,15 @@ class PresenceSubscriptionHandler(object):
     def _process_presence_data(self, uris=None):
         addressbook_manager = addressbook.AddressbookManager()
 
+        def service_sort_key(service):
+            timestamp = service.timestamp.value if service.timestamp else epoch
+            if service.status.extended is not None:
+                return (100, timestamp)
+            elif service.status.basic == 'open':
+                return (10, timestamp)
+            else:
+                return (0, timestamp)
+
         current_pidf_map = {}
         contact_pidf_map = {}
 
@@ -355,7 +364,7 @@ class PresenceSubscriptionHandler(object):
                 state = note = icon = None
             else:
                 services = list(chain(*(list(pidf_doc.services) for pidf_doc in pidf_list)))
-                services.sort(key=lambda obj: obj.timestamp.value if obj.timestamp else epoch, reverse=True)
+                services.sort(key=service_sort_key, reverse=True)
                 service = services[0]
                 if service.status.extended:
                     state = unicode(service.status.extended)
@@ -377,7 +386,6 @@ class PresenceSubscriptionHandler(object):
                         icon = ContactIcon.fetch(icon_url, etag=contact.icon.etag if contact.icon else None)
                 else:
                     icon = None
-
             self._update_presence_state(contact, state, note, icon)
 
     @run_in_gui_thread
