@@ -212,6 +212,10 @@ class AllContactsGroup(VirtualGroup):
         notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
 
 
+class BonjourNeighbourID(str):
+    pass
+
+
 class BonjourURI(unicode):
     def __new__(cls, value):
         instance = unicode.__new__(cls, unicode(value).partition(':')[2])
@@ -284,7 +288,7 @@ class BonjourNeighbour(object):
     id = WriteOnceAttribute()
 
     def __init__(self, id, name, hostname, uris=[], presence=None):
-        self.id = id
+        self.id = BonjourNeighbourID(id) if isinstance(id, basestring) else id
         self.name = name
         self.hostname = hostname
         self.uris = BonjourNeighbourURIList(uris)
@@ -975,7 +979,7 @@ class Contact(object):
             group = AllContactsGroup()
         elif isinstance(contact_id, GoogleContactID):
             group = GoogleContactsGroup()
-        elif isinstance(contact_id, BonjourServiceDescription):
+        elif isinstance(contact_id, (BonjourNeighbourID, BonjourServiceDescription)):
             group = BonjourNeighboursGroup()
         else:
             group = None
@@ -1115,7 +1119,7 @@ class ContactDetail(object):
             group = AllContactsGroup()
         elif isinstance(contact_id, GoogleContactID):
             group = GoogleContactsGroup()
-        elif isinstance(contact_id, BonjourServiceDescription):
+        elif isinstance(contact_id, (BonjourNeighbourID, BonjourServiceDescription)):
             group = BonjourNeighboursGroup()
         else:
             group = None
@@ -1258,7 +1262,7 @@ class ContactURI(object):
             group = AllContactsGroup()
         elif isinstance(contact_id, GoogleContactID):
             group = GoogleContactsGroup()
-        elif isinstance(contact_id, BonjourServiceDescription):
+        elif isinstance(contact_id, (BonjourNeighbourID, BonjourServiceDescription)):
             group = BonjourNeighboursGroup()
         else:
             group = None
