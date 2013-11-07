@@ -100,7 +100,7 @@ class Blink(QApplication):
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
         self.setAttribute(Qt.AA_DontShowIconsInMenus, False)
-        self.application = SIPApplication()
+        self.sip_application = SIPApplication()
         self.first_run = False
 
         self.setOrganizationDomain("ag-projects.com")
@@ -136,8 +136,8 @@ class Blink(QApplication):
         call_later(self._initialize_sipsimple) # initialize sipsimple after the qt event loop is started
         self.exec_()
         self.update_manager.shutdown()
-        self.application.stop()
-        self.application.thread.join()
+        self.sip_application.stop()
+        self.sip_application.thread.join()
         log_manager = LogManager()
         log_manager.stop()
 
@@ -259,7 +259,7 @@ class Blink(QApplication):
         if not os.path.exists(ApplicationData.get('config')):
             self.first_run = True
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=self.application)
-        self.application.start(FileStorage(ApplicationData.directory))
+        notification_center.add_observer(self, sender=self.sip_application)
+        self.sip_application.start(FileStorage(ApplicationData.directory))
 
 
