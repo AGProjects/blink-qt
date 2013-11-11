@@ -298,7 +298,7 @@ class StateColorMapping(dict):
 
 
 class ContactState(QLabel, ColorHelperMixin):
-    state = QtDynamicProperty('color', unicode)
+    state = QtDynamicProperty('state', unicode)
 
     def __init__(self, parent=None):
         super(ContactState, self).__init__(parent)
