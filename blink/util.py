@@ -3,7 +3,7 @@
 
 __all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread']
 
-from PyQt4.QtCore import QObject, QTimer
+from PyQt4.QtCore import QObject, QThread, QTimer
 from PyQt4.QtGui import QApplication
 from application.python.decorator import decorator, preserve_signature
 from application.python.types import Singleton
@@ -17,7 +17,10 @@ class QSingleton(Singleton, type(QObject)):
 
 def call_in_gui_thread(function, *args, **kw):
     application = QApplication.instance()
-    application.postEvent(application, CallFunctionEvent(function, args, kw))
+    if application.thread() is QThread.currentThread():
+        function(*args, **kw)
+    else:
+        application.postEvent(application, CallFunctionEvent(function, args, kw))
 
 
 def call_later(interval, function, *args, **kw):
@@ -26,11 +29,14 @@ def call_later(interval, function, *args, **kw):
 
 
 @decorator
-def run_in_gui_thread(func):
-    @preserve_signature(func)
+def run_in_gui_thread(function):
+    @preserve_signature(function)
     def wrapper(*args, **kw):
         application = QApplication.instance()
-        application.postEvent(application, CallFunctionEvent(func, args, kw))
+        if application.thread() is QThread.currentThread():
+            function(*args, **kw)
+        else:
+            application.postEvent(application, CallFunctionEvent(function, args, kw))
     return wrapper
 
 
