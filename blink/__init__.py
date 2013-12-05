@@ -129,17 +129,19 @@ class Blink(QApplication):
         session_manager = SessionManager()
         session_manager.initialize(self.main_window, self.main_window.session_model)
 
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=self.sip_application)
+
         branding.setup(self)
 
     def run(self):
-        from blink.util import call_in_gui_thread as call_later
-        call_later(self._initialize_sipsimple) # initialize sipsimple after the qt event loop is started
+        self.first_run = not os.path.exists(ApplicationData.get('config'))
+        self.sip_application.start(FileStorage(ApplicationData.directory))
         self.exec_()
         self.update_manager.shutdown()
         self.sip_application.stop()
         self.sip_application.thread.join()
-        log_manager = LogManager()
-        log_manager.stop()
+        self.log_manager.stop()
 
     def fetch_account(self):
         filename = os.path.expanduser('~/.blink_account')
@@ -254,12 +256,5 @@ class Blink(QApplication):
 
     def _NH_SIPApplicationDidEnd(self, notification):
         self.presence_manager.stop()
-
-    def _initialize_sipsimple(self):
-        if not os.path.exists(ApplicationData.get('config')):
-            self.first_run = True
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=self.sip_application)
-        self.sip_application.start(FileStorage(ApplicationData.directory))
 
 
