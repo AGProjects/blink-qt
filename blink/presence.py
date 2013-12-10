@@ -374,7 +374,7 @@ class PresenceSubscriptionHandler(object):
                 icon_url = unicode(service.icon) if service.icon else None
 
                 if icon_url:
-                    url, token, icon_hash = icon_url.partition('blink-icon')
+                    url, token, icon_hash = icon_url.partition('#blink-icon')
                     if token:
                         if contact.icon and icon_hash == contact.icon.etag:
                             # Fast path, icon hasn't changed
