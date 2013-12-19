@@ -91,7 +91,7 @@ class BlinkPresenceState(object):
             service.capabilities = caps.ServiceCapabilities()
             service.capabilities.audio = True
             service.capabilities.text = False
-            service.capabilities.message = False
+            service.capabilities.message = True
             service.capabilities.file_transfer = False
             service.capabilities.screen_sharing_server = False
             service.capabilities.screen_sharing_client = False
