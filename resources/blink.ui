@@ -654,7 +654,7 @@ padding: 2px;</string>
              </widget>
             </item>
             <item>
-             <widget class="ToolButton" name="im_session_button">
+             <widget class="ToolButton" name="chat_session_button">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -670,8 +670,9 @@ padding: 2px;</string>
               <property name="toolTip">
                <string>Start a chat session or send an SMS</string>
               </property>
-              <property name="text">
-               <string>IM</string>
+              <property name="icon">
+               <iconset>
+                <normaloff>icons/chat.svg</normaloff>icons/chat.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -685,7 +686,7 @@ padding: 2px;</string>
              </widget>
             </item>
             <item>
-             <widget class="ToolButton" name="ss_session_button">
+             <widget class="ToolButton" name="screen_sharing_button">
               <property name="minimumSize">
                <size>
                 <width>29</width>
@@ -780,7 +781,7 @@ padding: 2px;</string>
          <number>0</number>
         </property>
         <item>
-         <widget class="SessionListView" name="session_list">
+         <widget class="AudioSessionListView" name="session_list">
           <property name="horizontalScrollBarPolicy">
            <enum>Qt::ScrollBarAlwaysOff</enum>
           </property>
@@ -1326,11 +1327,6 @@ padding: 2px;</string>
    <header>blink.accounts</header>
   </customwidget>
   <customwidget>
-   <class>SessionListView</class>
-   <extends>QListView</extends>
-   <header>blink.sessions</header>
-  </customwidget>
-  <customwidget>
    <class>SwitchViewButton</class>
    <extends>QPushButton</extends>
    <header>blink.widgets.buttons</header>
@@ -1344,6 +1340,11 @@ padding: 2px;</string>
    <class>AccountState</class>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
+  </customwidget>
+  <customwidget>
+   <class>AudioSessionListView</class>
+   <extends>QListView</extends>
+   <header>blink.sessions</header>
   </customwidget>
  </customwidgets>
  <tabstops>
@@ -1359,8 +1360,8 @@ padding: 2px;</string>
   <tabstop>switch_view_button</tabstop>
   <tabstop>add_contact_button</tabstop>
   <tabstop>audio_call_button</tabstop>
-  <tabstop>im_session_button</tabstop>
-  <tabstop>ss_session_button</tabstop>
+  <tabstop>chat_session_button</tabstop>
+  <tabstop>screen_sharing_button</tabstop>
   <tabstop>silent_button</tabstop>
   <tabstop>session_list</tabstop>
   <tabstop>hangup_all_button</tabstop>

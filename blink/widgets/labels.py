@@ -13,11 +13,7 @@ from application.python.types import MarkerType
 
 from blink.resources import IconManager
 from blink.widgets.color import ColorHelperMixin
-from blink.widgets.util import QtDynamicProperty
-
-
-class ContextMenuActions(object):
-    pass
+from blink.widgets.util import QtDynamicProperty, ContextMenuActions
 
 
 class IconSelector(QLabel):

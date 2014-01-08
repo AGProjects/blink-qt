@@ -29,11 +29,6 @@ from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
-try:
-    from blink import branding
-except ImportError:
-    branding = Null
-
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
 from sipsimple.application import SIPApplication
@@ -42,6 +37,11 @@ from sipsimple.storage import FileStorage
 from sipsimple.threading import run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
 
+try:
+    from blink import branding
+except ImportError:
+    branding = Null
+from blink.chatwindow import ChatWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.addressbook import ContactExtension, GroupExtension
 from blink.configuration.datatypes import InvalidToken
@@ -109,15 +109,18 @@ class Blink(QApplication):
         self.setApplicationVersion(__version__)
 
         self.main_window = MainWindow()
+        self.chat_window = ChatWindow()
+
         self.ip_address_monitor = IPAddressMonitor()
         self.log_manager = LogManager()
         self.presence_manager = PresenceManager()
+        self.session_manager = SessionManager()
+        self.update_manager = UpdateManager()
 
         # Prevent application from exiting after last window is closed if system tray was initialized
         if self.main_window.system_tray_icon:
             self.setQuitOnLastWindowClosed(False)
 
-        self.update_manager = UpdateManager()
         self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
         self.main_window.check_for_updates_action.setVisible(self.update_manager != Null)
 
@@ -126,8 +129,6 @@ class Blink(QApplication):
         Contact.register_extension(ContactExtension)
         Group.register_extension(GroupExtension)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
-        session_manager = SessionManager()
-        session_manager.initialize(self.main_window, self.main_window.session_model)
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.sip_application)
@@ -142,6 +143,11 @@ class Blink(QApplication):
         self.sip_application.stop()
         self.sip_application.thread.join()
         self.log_manager.stop()
+
+    def quit(self):
+        self.chat_window.close()
+        self.main_window.close()
+        super(Blink, self).quit()
 
     def fetch_account(self):
         filename = os.path.expanduser('~/.blink_account')

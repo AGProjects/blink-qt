@@ -1,7 +1,7 @@
 # Copyright (c) 2010-2013 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['QtDynamicProperty']
+__all__ = ['QtDynamicProperty', 'ContextMenuActions']
 
 from PyQt4.QtCore import QPyNullVariant
 
@@ -23,5 +23,9 @@ class QtDynamicProperty(object):
         obj.setProperty(self.name, value)
     def __delete__(self, obj):
         raise AttributeError("attribute cannot be deleted")
+
+
+class ContextMenuActions(object):
+    pass
 
 

@@ -80,7 +80,7 @@ class SoundSettings(SettingsGroup):
 
 
 class TLSSettingsExtension(TLSSettings):
-    ca_list = Setting(type=ApplicationDataPath, default=None, nillable=True)
+    ca_list = Setting(type=ApplicationDataPath, default=ApplicationDataPath(Resources.get('tls/ca.crt')), nillable=True)
 
 
 class SIPSimpleSettingsExtension(SettingsObjectExtension):

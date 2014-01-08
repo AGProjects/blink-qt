@@ -1,7 +1,7 @@
 # Copyright (C) 2010-2013 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['Group', 'Contact', 'BonjourNeighbour', 'GoogleContact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'GoogleContactsDialog']
+__all__ = ['Group', 'Contact', 'BonjourNeighbour', 'GoogleContact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'GoogleContactsDialog', 'URIUtils']
 
 import cPickle as pickle
 import os
@@ -26,6 +26,8 @@ from datetime import datetime
 from eventlib import coros, proc
 from eventlib.green import httplib, urllib2
 from functools import partial
+from heapq import heappush
+from itertools import count
 from operator import attrgetter
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionLost
@@ -36,16 +38,18 @@ from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.account.bonjour import BonjourServiceDescription
 from sipsimple.configuration import ConfigurationManager, DefaultValue, Setting, SettingsState, SettingsObjectMeta, ObjectNotFoundError
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.core import BaseSIPURI, SIPURI
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
 from sipsimple.threading.green import Command, call_in_green_thread, run_in_green_thread
 
 from blink.configuration.datatypes import AuthorizationToken, InvalidToken, IconDescriptor, FileURL
 from blink.resources import ApplicationData, Resources, IconManager
-from blink.sessions import SessionManager
+from blink.sessions import SessionManager, StreamDescription
 from blink.util import QSingleton, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.labels import Status
+from blink.widgets.util import ContextMenuActions
 
 from blink.google.gdata.client import CaptchaChallenge, RequestError, Unauthorized
 from blink.google.gdata.contacts.client import ContactsClient
@@ -293,6 +297,7 @@ class BonjourNeighbour(object):
         self.hostname = hostname
         self.uris = BonjourNeighbourURIList(uris)
         self.presence = presence or BonjourPresence()
+        self.preferred_media = 'audio'
 
 
 class BonjourNeighboursList(object):
@@ -481,6 +486,7 @@ class GoogleContact(object):
         self.icon = icon
         self.uris = GoogleContactURIList(uris)
         self.presence = GooglePresence()
+        self.preferred_media = 'audio'
 
     def __reduce__(self):
         return (self.__class__, (self.id, self.name, self.company, self.icon, self.uris))
@@ -806,6 +812,63 @@ class GoogleContactsGroup(VirtualGroup):
         notification.center.post_notification('VirtualContactDidChange', sender=notification.data.contact)
 
 
+class DummyContactURI(object):
+    id = property(lambda self: self.uri)
+
+    def __init__(self, uri, type=u'', default=False):
+        self.uri = uri
+        self.type = type
+        self.default = default
+
+    def __repr__(self):
+        return "%s(%r, %r, %r)" % (self.__class__.__name__, self.uri, self.type, self.default)
+
+
+class DummyContactURIList(object):
+    def __init__(self, uris=[]):
+        self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
+    def __getitem__(self, id):
+        return self._uri_map[id]
+    def __contains__(self, id):
+        return id in self._uri_map
+    def __iter__(self):
+        return iter(self._uri_map.values())
+    def __len__(self):
+        return len(self._uri_map)
+    __hash__ = None
+    def get(self, key, default=None):
+        return self._item_map.get(key, default)
+    def add(self, uri):
+        self._uri_map[uri.id] = uri
+    def pop(self, id, *args):
+        return self._uri_map.pop(id, *args)
+    def remove(self, uri):
+        self._uri_map.pop(uri.id, None)
+    @property
+    def default(self):
+        try:
+            return next(uri for uri in self if uri.default)
+        except StopIteration:
+            return None
+
+
+class DummyPresence(object):
+    def __init__(self, state=None, note=None):
+        self.state = state
+        self.note = note
+
+
+class DummyContact(object):
+    def __init__(self, name, uris):
+        self.name = name
+        self.uris = DummyContactURIList(uris)
+        self.presence = DummyPresence()
+        self.preferred_media = 'audio'
+
+    def __reduce__(self):
+        return (self.__class__, (self.name, self.uris))
+
+
 class Group(object):
     implements(IObserver)
 
@@ -918,7 +981,8 @@ class ContactIconDescriptor(object):
         self.icon = None
     def __get__(self, obj, objtype):
         if self.icon is None:
-            self.icon = QIcon(ApplicationData.get(self.filename))
+            self.icon = QIcon(self.filename)
+            self.icon.filename = self.filename
         return self.icon
     def __set__(self, obj, value):
         raise AttributeError("attribute cannot be set")
@@ -983,7 +1047,7 @@ class Contact(object):
             group = BonjourNeighboursGroup()
         else:
             group = None
-        self.settings = group.contacts[contact_id]
+        self.settings = group.contacts[contact_id] # problem if group is None -Dan
         self.__dict__.update(state)
 
     def __unicode__(self):
@@ -1007,10 +1071,10 @@ class Contact(object):
 
     @property
     def info(self):
-        if isinstance(self.settings, BonjourNeighbour):
-            return self.note or '@' + self.uri.host
-        else:
-            return self.note or self.uri
+        try:
+            return self.note or ('@' + self.uri.uri.host if isinstance(self.settings, BonjourNeighbour) else self.uri.uri)
+        except AttributeError:
+            return u''
 
     @property
     def uris(self):
@@ -1018,12 +1082,10 @@ class Contact(object):
 
     @property
     def uri(self):
-        if self.settings.uris.default is not None:
-            return self.settings.uris.default.uri
         try:
-            return next(uri.uri for uri in self.settings.uris)
+            return self.settings.uris.default or next(iter(self.settings.uris))
         except StopIteration:
-            return u''
+            return None
 
     @property
     def state(self):
@@ -1032,6 +1094,10 @@ class Contact(object):
     @property
     def note(self):
         return self.settings.presence.note
+
+    @property
+    def preferred_media(self):
+        return self.settings.preferred_media
 
     @property
     def icon(self):
@@ -1045,6 +1111,7 @@ class Contact(object):
                 pixmap = QPixmap()
                 if pixmap.loadFromData(self.settings.icon.data):
                     icon = QIcon(pixmap)
+                    icon.filename = None  # TODO: cache icons to disk -Saul
                 else:
                     icon = self.default_user_icon
             else:
@@ -1123,7 +1190,7 @@ class ContactDetail(object):
             group = BonjourNeighboursGroup()
         else:
             group = None
-        self.settings = group.contacts[contact_id]
+        self.settings = group.contacts[contact_id] # problem if group is None -Dan
         self.__dict__.update(state)
 
     def __unicode__(self):
@@ -1147,10 +1214,10 @@ class ContactDetail(object):
 
     @property
     def info(self):
-        if isinstance(self.settings, BonjourNeighbour):
-            return self.note or '@' + self.uri.host
-        else:
-            return self.note or self.uri
+        try:
+            return self.note or ('@' + self.uri.uri.host if isinstance(self.settings, BonjourNeighbour) else self.uri.uri)
+        except AttributeError:
+            return u''
 
     @property
     def uris(self):
@@ -1158,12 +1225,10 @@ class ContactDetail(object):
 
     @property
     def uri(self):
-        if self.settings.uris.default is not None:
-            return self.settings.uris.default.uri
         try:
-            return next(uri.uri for uri in self.settings.uris)
+            return self.settings.uris.default or next(iter(self.settings.uris))
         except StopIteration:
-            return u''
+            return None
 
     @property
     def state(self):
@@ -1172,6 +1237,10 @@ class ContactDetail(object):
     @property
     def note(self):
         return self.settings.presence.note
+
+    @property
+    def preferred_media(self):
+        return self.settings.preferred_media
 
     @property
     def icon(self):
@@ -1266,7 +1335,7 @@ class ContactURI(object):
             group = BonjourNeighboursGroup()
         else:
             group = None
-        self.contact = group.contacts[contact_id]
+        self.contact = group.contacts[contact_id] # problem if group is None -Dan
         if uri_id is not None:
             self.uri = self.contact.uris[uri_id]
         self.__dict__.update(state)
@@ -1645,7 +1714,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         item = index.data(Qt.UserRole)
         if isinstance(item, Group):
             item.widget = GroupWidget(parent)
-            item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))
+            item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item)) # the partial still creates a memory cycle -Dan
             return item.widget
         else:
             return None
@@ -2056,7 +2125,6 @@ class ContactModel(QAbstractListModel):
         self.state = 'stopped'
         self.items = ItemList()
         self.deleted_items = []
-        self.main_window = parent
         self.contact_list = parent.contact_list
         self.virtual_group_manager = VirtualGroupManager()
 
@@ -2552,7 +2620,6 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def __init__(self, model, parent=None):
         super(ContactSearchModel, self).__init__(parent)
-        self.main_window = parent
         self.contact_list = parent.search_list
         self.setSourceModel(model)
         self.setDynamicSortFilter(True)
@@ -2776,10 +2843,6 @@ class ContactDetailModel(QAbstractListModel):
             self.dataChanged.emit(index, index)
 
 
-class ContextMenuActions(object):
-    pass
-
-
 class ContactListView(QListView):
     def __init__(self, parent=None):
         super(ContactListView, self).__init__(parent)
@@ -2797,7 +2860,7 @@ class ContactListView(QListView):
         self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
-        self.actions.start_audio_session = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
+        self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -2807,11 +2870,14 @@ class ContactListView(QListView):
         self.needs_restore = False
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
 
-    def setModel(self, model):
-        selection_model = self.selectionModel() or Null
-        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
-        super(ContactListView, self).setModel(model)
-        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+    def selectionChanged(self, selected, deselected):
+        super(ContactListView, self).selectionChanged(selected, deselected)
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
+        self.context_menu.hide()
 
     def contextMenuEvent(self, event):
         model = self.model()
@@ -2865,7 +2931,7 @@ class ContactListView(QListView):
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         else:
             contact = selected_items[0]
-            menu.addAction(self.actions.start_audio_session)
+            menu.addAction(self.actions.start_audio_call)
             menu.addAction(self.actions.start_chat_session)
             menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
@@ -2880,8 +2946,8 @@ class ContactListView(QListView):
             self.actions.undo_last_delete.setText(undo_delete_text)
             account_manager = AccountManager()
             default_account = account_manager.default_account
-            self.actions.start_audio_session.setEnabled(default_account is not None)
-            self.actions.start_chat_session.setEnabled(False)
+            self.actions.start_audio_call.setEnabled(default_account is not None)
+            self.actions.start_chat_session.setEnabled(default_account is not None)
             self.actions.send_sms.setEnabled(False)
             self.actions.send_files.setEnabled(False)
             self.actions.request_screen.setEnabled(False)
@@ -2900,7 +2966,7 @@ class ContactListView(QListView):
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
             if isinstance(item, Contact):
                 session_manager = SessionManager()
-                session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
+                session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
         elif event.key() == Qt.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
@@ -2950,7 +3016,7 @@ class ContactListView(QListView):
             for group in self.model().items[GroupList]:
                 group.restore_state()
             self.needs_restore = False
-        main_window = self.model().main_window
+        main_window = QApplication.instance().main_window
         main_window.switch_view_button.dnd_active = False
         if not main_window.session_model.sessions:
             main_window.switch_view_button.view = SwitchViewButton.ContactView
@@ -2979,7 +3045,7 @@ class ContactListView(QListView):
                         group.collapse()
                     self.needs_restore = True
             if has_blink_contacts:
-                model.main_window.switch_view_button.dnd_active = True
+                QApplication.instance().main_window.switch_view_button.dnd_active = True
             event.accept()
             self.setState(self.DraggingState)
 
@@ -3034,7 +3100,6 @@ class ContactListView(QListView):
         selection_model.select(model.index(model.items.index(group)), selection_model.ClearAndSelect)
 
     def _AH_AddContact(self):
-        model = self.model()
         groups = set()
         for index in self.selectionModel().selectedIndexes():
             item = index.data(Qt.UserRole)
@@ -3043,21 +3108,20 @@ class ContactListView(QListView):
             elif isinstance(item, Contact) and not item.group.virtual:
                 groups.add(item.group)
         preferred_group = groups.pop() if len(groups)==1 else None
-        model.main_window.contact_editor_dialog.open_for_add(model.main_window.search_box.text(), preferred_group)
+        main_window = QApplication.instance().main_window
+        main_window.contact_editor_dialog.open_for_add(main_window.search_box.text(), preferred_group)
 
     def _AH_EditItem(self):
-        model = self.model()
         index = self.selectionModel().selectedIndexes()[0]
         item = index.data(Qt.UserRole)
         if isinstance(item, Group):
             self.scrollTo(index)
             item.widget.edit()
         else:
-            model.main_window.contact_editor_dialog.open_for_edit(item.settings)
+            QApplication.instance().main_window.contact_editor_dialog.open_for_edit(item.settings)
 
     def _AH_DeleteSelection(self):
-        model = self.model()
-        model.removeItems(self.selectionModel().selectedIndexes())
+        self.model().removeItems(self.selectionModel().selectedIndexes())
         self.selectionModel().clearSelection()
 
     def _AH_UndoLastDelete(self):
@@ -3100,10 +3164,12 @@ class ContactListView(QListView):
     def _AH_StartAudioCall(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+        session_manager.create_session(contact, contact.uri, [StreamDescription('audio')])
 
     def _AH_StartChatSession(self):
-        pass
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self):
         pass
@@ -3185,15 +3251,7 @@ class ContactListView(QListView):
         item = index.data(Qt.UserRole)
         if isinstance(item, Contact):
             session_manager = SessionManager()
-            session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
-
-    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
-        selection_model = self.selectionModel()
-        selection = selection_model.selection()
-        if selection_model.currentIndex() not in selection:
-            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
-        self.context_menu.hide()
+            session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
 
 
 class ContactSearchListView(QListView):
@@ -3211,7 +3269,7 @@ class ContactSearchListView(QListView):
         self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
-        self.actions.start_audio_session = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
+        self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -3220,11 +3278,14 @@ class ContactSearchListView(QListView):
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
 
-    def setModel(self, model):
-        selection_model = self.selectionModel() or Null
-        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
-        super(ContactSearchListView, self).setModel(model)
-        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+    def selectionChanged(self, selected, deselected):
+        super(ContactSearchListView, self).selectionChanged(selected, deselected)
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
+        self.context_menu.hide()
 
     def contextMenuEvent(self, event):
         model = self.model()
@@ -3265,7 +3326,7 @@ class ContactSearchListView(QListView):
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         else:
             contact = selected_items[0]
-            menu.addAction(self.actions.start_audio_session)
+            menu.addAction(self.actions.start_audio_call)
             menu.addAction(self.actions.start_chat_session)
             menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
@@ -3278,8 +3339,8 @@ class ContactSearchListView(QListView):
             self.actions.undo_last_delete.setText(undo_delete_text)
             account_manager = AccountManager()
             default_account = account_manager.default_account
-            self.actions.start_audio_session.setEnabled(default_account is not None)
-            self.actions.start_chat_session.setEnabled(False)
+            self.actions.start_audio_call.setEnabled(default_account is not None)
+            self.actions.start_chat_session.setEnabled(default_account is not None)
             self.actions.send_sms.setEnabled(False)
             self.actions.send_files.setEnabled(False)
             self.actions.request_screen.setEnabled(False)
@@ -3305,9 +3366,9 @@ class ContactSearchListView(QListView):
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
             if isinstance(item, Contact):
                 session_manager = SessionManager()
-                session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
+                session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
         elif event.key() == Qt.Key_Escape:
-            self.model().main_window.search_box.clear()
+            QApplication.instance().main_window.search_box.clear()
         elif event.key() == Qt.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
@@ -3335,19 +3396,18 @@ class ContactSearchListView(QListView):
 
     def startDrag(self, supported_actions):
         super(ContactSearchListView, self).startDrag(supported_actions)
-        main_window = self.model().main_window
+        main_window = QApplication.instance().main_window
         main_window.switch_view_button.dnd_active = False
         if not main_window.session_model.sessions:
             main_window.switch_view_button.view = SwitchViewButton.ContactView
 
     def dragEnterEvent(self, event):
-        model = self.model()
-        accepted_mime_types = set(model.accepted_mime_types)
+        accepted_mime_types = set(self.model().accepted_mime_types)
         provided_mime_types = set(event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         if event.source() is self:
             event.ignore()
-            model.main_window.switch_view_button.dnd_active = True
+            QApplication.instance().main_window.switch_view_button.dnd_active = True
         elif not acceptable_mime_types:
             event.ignore()
         else:
@@ -3386,9 +3446,8 @@ class ContactSearchListView(QListView):
         self.drop_indicator_index = QModelIndex()
 
     def _AH_EditItem(self):
-        model = self.model()
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        model.main_window.contact_editor_dialog.open_for_edit(contact.settings)
+        QApplication.instance().main_window.contact_editor_dialog.open_for_edit(contact.settings)
 
     def _AH_DeleteSelection(self):
         model = self.model()
@@ -3434,10 +3493,12 @@ class ContactSearchListView(QListView):
     def _AH_StartAudioCall(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, contact.uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+        session_manager.create_session(contact, contact.uri, [StreamDescription('audio')])
 
     def _AH_StartChatSession(self):
-        pass
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self):
         pass
@@ -3465,15 +3526,7 @@ class ContactSearchListView(QListView):
         item = index.data(Qt.UserRole)
         if isinstance(item, Contact):
             session_manager = SessionManager()
-            session_manager.start_call(item.name, item.uri, contact=item, account=BonjourAccount() if isinstance(item.settings, BonjourNeighbour) else None)
-
-    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
-        selection_model = self.selectionModel()
-        selection = selection_model.selection()
-        if selection_model.currentIndex() not in selection:
-            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
-        self.context_menu.hide()
+            session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
 
 
 class ContactDetailView(QListView):
@@ -3500,7 +3553,7 @@ class ContactDetailView(QListView):
         self.actions.delete_contact = QAction("Delete Contact", self, triggered=self._AH_DeleteContact)
         self.actions.edit_contact = QAction("Edit Contact", self, triggered=self._AH_EditContact)
         self.actions.make_uri_default = QAction("Set Address As Default", self, triggered=self._AH_MakeURIDefault)
-        self.actions.start_audio_session = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
+        self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -3512,11 +3565,16 @@ class ContactDetailView(QListView):
     def setModel(self, model):
         old_model = self.model() or Null
         old_model.contactDeleted.disconnect(self._SH_ModelContactDeleted)
-        selection_model = self.selectionModel() or Null
-        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
         super(ContactDetailView, self).setModel(model)
         model.contactDeleted.connect(self._SH_ModelContactDeleted)
-        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+
+    def selectionChanged(self, selected, deselected):
+        super(ContactDetailView, self).selectionChanged(selected, deselected)
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
 
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Resize:
@@ -3540,7 +3598,7 @@ class ContactDetailView(QListView):
         contact_has_uris = model.rowCount() > 1
         menu = self.context_menu
         menu.clear()
-        menu.addAction(self.actions.start_audio_session)
+        menu.addAction(self.actions.start_audio_call)
         menu.addAction(self.actions.start_chat_session)
         menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.send_files)
@@ -3552,8 +3610,8 @@ class ContactDetailView(QListView):
             self.actions.make_uri_default.setEnabled(selected_item.uri is not model.contact.uris.default)
         menu.addAction(self.actions.edit_contact)
         menu.addAction(self.actions.delete_contact)
-        self.actions.start_audio_session.setEnabled(account_manager.default_account is not None and contact_has_uris)
-        self.actions.start_chat_session.setEnabled(False)
+        self.actions.start_audio_call.setEnabled(account_manager.default_account is not None and contact_has_uris)
+        self.actions.start_chat_session.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.send_sms.setEnabled(False)
         self.actions.send_files.setEnabled(False)
         self.actions.request_screen.setEnabled(False)
@@ -3576,14 +3634,14 @@ class ContactDetailView(QListView):
 
     def startDrag(self, supported_actions):
         super(ContactDetailView, self).startDrag(supported_actions)
-        main_window = self.contact_list.model().main_window
+        main_window = QApplication.instance().main_window
         main_window.switch_view_button.dnd_active = False
         if not main_window.session_model.sessions:
             main_window.switch_view_button.view = SwitchViewButton.ContactView
 
     def dragEnterEvent(self, event):
         if event.source() is self:
-            self.contact_list.model().main_window.switch_view_button.dnd_active = True
+            QApplication.instance().main_window.switch_view_button.dnd_active = True
         if set(event.mimeData().formats()).isdisjoint(self.model().accepted_mime_types):
             event.ignore()
         else:
@@ -3618,7 +3676,7 @@ class ContactDetailView(QListView):
         self.contact_list._AH_DeleteSelection()
 
     def _AH_EditContact(self):
-        self.contact_list.model().main_window.contact_editor_dialog.open_for_edit(self.model().contact)
+        QApplication.instance().main_window.contact_editor_dialog.open_for_edit(self.model().contact)
 
     def _AH_MakeURIDefault(self):
         model = self.model()
@@ -3631,14 +3689,22 @@ class ContactDetailView(QListView):
         selected_indexes = self.selectionModel().selectedIndexes()
         item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
-            selected_uri = item.uri.uri
+            selected_uri = item.uri
         else:
             selected_uri = contact.uri
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, selected_uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+        session_manager.create_session(contact, selected_uri, [StreamDescription('audio')])
 
     def _AH_StartChatSession(self):
-        pass
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = contact.uri
+        session_manager = SessionManager()
+        session_manager.create_session(contact, selected_uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self):
         pass
@@ -3679,18 +3745,11 @@ class ContactDetailView(QListView):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         item = index.data(Qt.UserRole)
         if isinstance(item, ContactURI):
-            selected_uri = item.uri.uri
+            selected_uri = item.uri
         else:
             selected_uri = contact.uri
         session_manager = SessionManager()
-        session_manager.start_call(contact.name, selected_uri, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
-
-    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
-        selection_model = self.selectionModel()
-        selection = selection_model.selection()
-        if selection_model.currentIndex() not in selection:
-            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
+        session_manager.create_session(contact, selected_uri, [StreamDescription(media) for media in contact.preferred_media.split('+')], connect=('audio' in contact.preferred_media))
 
 
 # The contact editor dialog
@@ -3960,11 +4019,13 @@ class ContactURITableView(QTableView):
         self.context_menu.addAction(QAction("Delete", self, triggered=self._AH_DeleteSelection))
         self.horizontalHeader().setResizeMode(self.horizontalHeader().ResizeToContents)
 
-    def setModel(self, model):
-        selection_model = self.selectionModel() or Null
-        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
-        super(ContactURITableView, self).setModel(model)
-        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+    def selectionChanged(self, selected, deselected):
+        super(ContactURITableView, self).selectionChanged(selected, deselected)
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
 
     def contextMenuEvent(self, event):
         selected_items = [item for item in (index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
@@ -3983,13 +4044,6 @@ class ContactURITableView(QTableView):
         model = self.model()
         model._remove_items([index for index in self.selectionModel().selectedIndexes() if not index.data(Qt.UserRole).ghost])
         self.selectionModel().clearSelection()
-
-    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
-        selection_model = self.selectionModel()
-        selection = selection_model.selection()
-        if selection_model.currentIndex() not in selection:
-            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
@@ -4127,5 +4181,64 @@ class ContactEditorDialog(base_class, ui_class):
             self.icon_selector.update_from_contact(contact)
 
 del ui_class, base_class
+
+
+class URIUtils(object):
+    number_trim_re = re.compile(r'\(\s?0\s?\)|[-()\s]')
+    number_re = re.compile(r'^\s*\+?[-\d\s()]+$')
+
+    @classmethod
+    def is_number(cls, token):
+        return cls.number_re.match(token) is not None
+
+    @classmethod
+    def trim_number(cls, token):
+        return cls.number_trim_re.sub('', token)
+
+    @classmethod
+    def find_contact(cls, uri, display_name=None, exact=True):
+        contact_model = QApplication.instance().main_window.contact_model
+        if isinstance(uri, BaseSIPURI):
+            uri = SIPURI.new(uri)
+        else:
+            if '@' not in uri:
+                uri += '@' + AccountManager().default_account.id.domain
+            if not uri.startswith(('sip:', 'sips:')):
+                uri = 'sip:' + uri
+            uri = SIPURI.parse(str(uri).translate(None, ' \t'))
+        if cls.is_number(uri.user):
+            uri.user = cls.trim_number(uri.user)
+            is_number = True
+        else:
+            is_number = False
+
+        # Exact URI matches
+        for contact in (contact for contact in contact_model.iter_contacts() if contact.group.virtual):
+            for contact_uri in contact.uris:
+                if uri.matches(contact_uri.uri):
+                    return contact, contact_uri
+
+        if not exact and is_number:
+            number = uri.user.lstrip('0')
+            counter = count()
+            matched_numbers = []
+            for contact in (contact for contact in contact_model.iter_contacts() if contact.group.virtual):
+                for contact_uri in contact.uris:
+                    uri_str = contact_uri.uri
+                    if uri_str.startswith(('sip:', 'sips:')):
+                        uri_str = uri_str.partition(':')[2]
+                    contact_user = uri_str.partition('@')[0]
+                    if cls.is_number(contact_user):
+                        contact_user = cls.trim_number(contact_user) # these could be expensive, maybe cache -Dan
+                        if contact_user.endswith(number):
+                            ratio = len(number) * 100 / len(contact_user)
+                            if ratio >= 50:
+                                heappush(matched_numbers, (100-ratio, next(counter), contact, contact_uri))
+            if matched_numbers:
+                return matched_numbers[0][2:] # ratio, index, contact, uri
+
+        display_name = display_name or "%s@%s" % (uri.user, uri.host)
+        contact = Contact(DummyContact(display_name, [DummyContactURI(str(uri).partition(':')[2], default=True)]), None)
+        return contact, contact.uri
 
 

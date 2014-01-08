@@ -1,0 +1,18 @@
+<div class="x-container {message_classes} {user_icons}" background="{user_icon_path}">
+	<img class="x-buddyicon" src="{user_icon_path}" />
+	<div class="x-iconoverlay"></div>
+	<div class="x-mentionicon" title="Mentioned!"></div>
+	<div class="x-header">
+		<div class="x-time" title="{date}">{time}</div>
+		<div class="x-sender">{sender}</div>
+	</div>
+	<div class="x-message x-filetext">
+		<div class="x-fileicon"><img src="{file_icon_path}" onclick="{save_file_handler}" /></div>
+		<div class="x-fileincoming">Incoming file:</div>
+		<div class="x-filename" onclick="{save_file_handler}"><a href="#">{file_name}</a></div>
+		<div class="x-filemessage">{message}</div>
+		<input type="button" value="Save As..." onclick="{save_file_as_handler}"></button>
+		<input type="button" value="Cancel" onclick="{cancel_request_handler}"></button>
+	</div>
+	<div id="insert"></div>
+</div>

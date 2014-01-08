@@ -1,0 +1,13 @@
+<div class="{message.css_classes} {user_icons}" user="{message.sender.name}" style="background-color: {message.sender.color};">
+	<img class="x-icon" src="{message.sender.iconpath}" />
+	<span class="x-iconmask" style="-webkit-mask-box-image: {message.sender.iconpath};"></span>
+	<span class="x-color" style="background-color: {message.sender.color};" src="{message.sender.iconpath}"></span>
+	<span class="x-wrap">
+		<span class="x-sender">{message.sender.name} </span>
+		<span class="x-rtime" title="{message.date}">{message.time} </span>
+		<span class="x-ltime" title="{message.date}">{message.time} </span>
+		<span class="x-mark"></span>
+		<span class="x-message" title="{message.time}">{message.message} </span>
+	</span>
+	<span id="insert"></span>
+</div>

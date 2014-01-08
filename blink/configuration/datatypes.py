@@ -63,7 +63,7 @@ class DefaultPath(object):
     def __repr__(self):
         return self.__class__.__name__
 
-class CustomSoundFile(object):
+class CustomSoundFile(object): # check if this data type is still needed -Dan
     def __init__(self, path=DefaultPath, volume=100):
         self.path = path
         self.volume = int(volume)

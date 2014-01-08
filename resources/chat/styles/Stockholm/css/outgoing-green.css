@@ -1,0 +1,84 @@
+.x-container.outgoing:not(.history) .x-header
+{
+	background: /* cornersx4, top dark border, left dark border, bottom dark border, right dark border, top light edge, bottom light edge, left light gradient, right light gradient, body */
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, .5)), to(hsla(95, 66%, 68%, .5))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, 1)), to(hsla(95, 66%, 68%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 45%, 1)), to(hsla(95, 66%, 45%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, 1)), color-stop(.5, hsla(95, 66%, 59%, 1)), to(hsla(95, 66%, 40%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, 1)), color-stop(.5, hsla(95, 66%, 59%, 1)), to(hsla(95, 66%, 40%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 59%, 1)), color-stop(.45, hsla(95, 66%, 43%, 1)), color-stop(.5, hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 43%, 1))) left top no-repeat;
+	-webkit-background-size: 2px 2px, 1px 3px, 3px 1px, 3px 3px, 100% 1px, 1px 100%, 100% 1px, 1px 100%, 100% 2px, 100% 2px, 2px 100%, 2px 100%, 100% 100%;
+}
+
+.x-container.outgoing.hide-icons:not(.mention):not(.history) .x-header
+{
+	background: /* cornersx8, top dark border, left dark border, bottom dark border, right dark border, top light edge, bottom light edge, left light gradient, right light gradient, body */
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, .5)), to(hsla(95, 66%, 68%, .5))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 40%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, .5)), to(hsla(95, 66%, 68%, .5))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 33%, 1)), to(hsla(95, 66%, 33%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, 1)), to(hsla(95, 66%, 68%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 45%, 1)), to(hsla(95, 66%, 45%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, 1)), color-stop(.5, hsla(95, 66%, 59%, 1)), to(hsla(95, 66%, 40%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 68%, 1)), color-stop(.5, hsla(95, 66%, 59%, 1)), to(hsla(95, 66%, 40%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 66%, 59%, 1)), color-stop(.45, hsla(95, 66%, 43%, 1)), color-stop(.5, hsla(95, 66%, 40%, 1)), to(hsla(95, 66%, 43%, 1))) left top no-repeat;
+	-webkit-background-size: 2px 2px, 1px 3px, 3px 1px, 3px 3px, 2px 2px, 1px 3px, 3px 1px, 3px 3px, 100% 1px, 1px 100%, 100% 1px, 1px 100%, 100% 2px, 100% 2px, 2px 100%, 2px 100%, 100% 100%;
+}
+
+.x-container.outgoing.history .x-header
+{
+	background: /* cornersx4, top dark border, left dark border, bottom dark border, right dark border, top light edge, bottom light edge, left light gradient, right light gradient, body */
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, .5)), to(hsla(95, 15%, 93%, .5))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, 1)), to(hsla(95, 15%, 93%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 78%, 1)), to(hsla(95, 15%, 78%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, 1)), color-stop(.5, hsla(95, 15%, 82%, 1)), to(hsla(95, 15%, 70%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, 1)), color-stop(.5, hsla(95, 15%, 82%, 1)), to(hsla(95, 15%, 70%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 78%, 1)), color-stop(.45, hsla(95, 15%, 65%, 1)), color-stop(.5, hsla(95, 15%, 60%, 1)), to(hsla(95, 15%, 75%, 1))) left top no-repeat;
+	-webkit-background-size: 2px 2px, 1px 3px, 3px 1px, 3px 3px, 100% 1px, 1px 100%, 100% 1px, 1px 100%, 100% 2px, 100% 2px, 2px 100%, 2px 100%, 100% 100%;
+}
+
+.x-container.outgoing.history.hide-icons:not(.mention) .x-header
+{
+	background: /* cornersx8, top dark border, left dark border, bottom dark border, right dark border, top light edge, bottom light edge, left light gradient, right light gradient, body */
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, .5)), to(hsla(95, 15%, 93%, .5))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, .5)), to(hsla(95, 15%, 93%, .5))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 53%, 1)), to(hsla(95, 15%, 53%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, 1)), to(hsla(95, 15%, 93%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 78%, 1)), to(hsla(95, 15%, 78%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, 1)), color-stop(.5, hsla(95, 15%, 82%, 1)), to(hsla(95, 15%, 70%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 93%, 1)), color-stop(.5, hsla(95, 15%, 82%, 1)), to(hsla(95, 15%, 70%, 1))) right bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(95, 15%, 78%, 1)), color-stop(.45, hsla(95, 15%, 65%, 1)), color-stop(.5, hsla(95, 15%, 60%, 1)), to(hsla(95, 15%, 75%, 1))) left top no-repeat;
+	-webkit-background-size: 2px 2px, 1px 3px, 3px 1px, 3px 3px, 2px 2px, 1px 3px, 3px 1px, 3px 3px, 100% 1px, 1px 100%, 100% 1px, 1px 100%, 100% 2px, 100% 2px, 2px 100%, 2px 100%, 100% 100%;
+}
+

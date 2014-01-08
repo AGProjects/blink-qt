@@ -10,11 +10,12 @@ from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtens
 from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, NonNegativeInteger, SIPTransportList, SRTPEncryption
 from sipsimple.util import user_info
 
-from blink.configuration.datatypes import ApplicationDataPath, CustomSoundFile, DefaultPath, HTTPURL, IconDescriptor
+from blink.configuration.datatypes import ApplicationDataPath, HTTPURL, IconDescriptor, SoundFile
+from blink.resources import Resources
 
 
 class BonjourMSRPSettingsExtension(BonjourMSRPSettings):
-    transport = Setting(type=MSRPTransport, default='tcp')
+    transport = Setting(type=MSRPTransport, default='tls')
 
 
 class BonjourSIPSettings(SettingsGroup):
@@ -27,6 +28,7 @@ class MessageSummarySettingsExtension(MessageSummarySettings):
 
 class MSRPSettingsExtension(MSRPSettings):
     connection_model = Setting(type=MSRPConnectionModel, default='relay')
+    transport = Setting(type=MSRPTransport, default='tls')
 
 
 class PresenceSettingsExtension(PresenceSettings):
@@ -59,11 +61,11 @@ class ServerSettings(SettingsGroup):
 
 
 class SoundSettings(SettingsGroup):
-    inbound_ringtone = Setting(type=CustomSoundFile, default=CustomSoundFile(DefaultPath), nillable=True)
+    inbound_ringtone = Setting(type=SoundFile, default=None, nillable=True)
 
 
 class TLSSettingsExtension(TLSSettings):
-    certificate = Setting(type=ApplicationDataPath, default=None, nillable=True)
+    certificate = Setting(type=ApplicationDataPath, default=ApplicationDataPath(Resources.get('tls/default.crt')), nillable=True)
 
 
 class XCAPSettingsExtension(XCAPSettings):
@@ -91,5 +93,6 @@ class BonjourAccountExtension(SettingsObjectExtension):
     rtp = RTPSettingsExtension
     sip = BonjourSIPSettings
     sounds = SoundSettings
+    tls = TLSSettingsExtension
 
 

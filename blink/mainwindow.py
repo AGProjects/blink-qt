@@ -11,7 +11,7 @@ from functools import partial
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QSettings, QUrl
 from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QMenu, QShortcut
-from PyQt4.QtGui  import QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2, QSystemTrayIcon
+from PyQt4.QtGui  import QApplication, QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2, QSystemTrayIcon
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -23,10 +23,10 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import BonjourNeighbour, Contact, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog
+from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog, URIUtils
 from blink.history import HistoryManager
 from blink.preferences import PreferencesWindow
-from blink.sessions import ConferenceDialog, SessionManager, SessionModel
+from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
 from blink.configuration.datatypes import IconDescriptor, FileURL, InvalidToken, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
@@ -49,6 +49,8 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='SIPAccountGotMessageSummary')
         notification_center.add_observer(self, name='SIPAccountGotPendingWatcher')
+        notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
+        notification_center.add_observer(self, name='BlinkSessionDidReinitializeForOutgoing')
         notification_center.add_observer(self, sender=AccountManager())
 
         icon_manager = IconManager()
@@ -64,8 +66,7 @@ class MainWindow(base_class, ui_class):
         self.setWindowTitle('Blink')
         self.setWindowIconText('Blink')
 
-        qt_settings = QSettings()
-        geometry = qt_settings.value("main_window/geometry")
+        geometry = QSettings().value("main_window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
 
@@ -110,10 +111,9 @@ class MainWindow(base_class, ui_class):
         self.contact_list.setModel(self.contact_model)
         self.search_list.setModel(self.contact_search_model)
 
-        # Sessions
-        self.session_model = SessionModel(self)
+        # Sessions (audio)
+        self.session_model = AudioSessionModel(self)
         self.session_list.setModel(self.session_model)
-
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
 
         # Windows, dialogs and panels
@@ -131,6 +131,7 @@ class MainWindow(base_class, ui_class):
         self.add_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
+        self.chat_session_button.clicked.connect(self._SH_ChatSessionButtonClicked)
         self.back_to_contacts_button.clicked.connect(self.search_box.clear) # this can be set in designer -Dan
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
@@ -156,9 +157,9 @@ class MainWindow(base_class, ui_class):
         self.server_tools_account_model.rowsInserted.connect(self._SH_ServerToolsAccountModelChanged)
         self.server_tools_account_model.rowsRemoved.connect(self._SH_ServerToolsAccountModelChanged)
 
-        self.session_model.sessionAdded.connect(self._SH_SessionModelAddedSession)
-        self.session_model.sessionRemoved.connect(self._SH_SessionModelRemovedSession)
-        self.session_model.structureChanged.connect(self._SH_SessionModelChangedStructure)
+        self.session_model.sessionAdded.connect(self._SH_AudioSessionModelAddedSession)
+        self.session_model.sessionRemoved.connect(self._SH_AudioSessionModelRemovedSession)
+        self.session_model.structureChanged.connect(self._SH_AudioSessionModelChangedStructure)
 
         self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
         self.switch_view_button.viewChanged.connect(self._SH_SwitchViewButtonChangedView)
@@ -226,8 +227,7 @@ class MainWindow(base_class, ui_class):
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
     def closeEvent(self, event):
-        qt_settings = QSettings()
-        qt_settings.setValue("main_window/geometry", self.saveGeometry())
+        QSettings().setValue("main_window/geometry", self.saveGeometry())
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
         self.conference_dialog.close()
@@ -243,8 +243,8 @@ class MainWindow(base_class, ui_class):
 
     def enable_call_buttons(self, enabled):
         self.audio_call_button.setEnabled(enabled)
-        self.im_session_button.setEnabled(False)
-        self.ss_session_button.setEnabled(False)
+        self.chat_session_button.setEnabled(enabled)
+        self.screen_sharing_button.setEnabled(False)
 
     def load_audio_devices(self):
         settings = SIPSimpleSettings()
@@ -344,7 +344,8 @@ class MainWindow(base_class, ui_class):
     def _AH_RedialActionTriggered(self):
         session_manager = SessionManager()
         if session_manager.last_dialed_uri is not None:
-            session_manager.start_call(None, unicode(session_manager.last_dialed_uri))
+            contact, contact_uri = URIUtils.find_contact(session_manager.last_dialed_uri)
+            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')]) # TODO: remember used media types and redial with them. -Saul
 
     def _AH_SIPServerSettings(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
@@ -368,7 +369,9 @@ class MainWindow(base_class, ui_class):
 
     def _AH_VoicemailActionTriggered(self, action, checked):
         account = action.data()
-        SessionManager().start_call("Voicemail", account.voicemail_uri, account=account)
+        contact, contact_uri = URIUtils.find_contact(account.voicemail_uri, display_name='Voicemail')
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account)
 
     def _AH_HistoryMenuTriggered(self, action):
         account_manager = AccountManager()
@@ -377,7 +380,8 @@ class MainWindow(base_class, ui_class):
             account = account_manager.get_account(action.entry.account_id)
         except KeyError:
             account = None
-        session_manager.start_call(None, action.entry.target_uri, account=account)
+        contact, contact_uri = URIUtils.find_contact(action.entry.target_uri)
+        session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account) # TODO: memorize media type and use it? -Saul (not sure about history in/out -Dan)
 
     def _AH_SystemTrayShowWindow(self, checked):
         self.show()
@@ -385,12 +389,9 @@ class MainWindow(base_class, ui_class):
         self.activateWindow()
 
     def _AH_QuitActionTriggered(self, checked):
-        self.close()
         if self.system_tray_icon is not None:
             self.system_tray_icon.hide()
-            from blink import Blink
-            blink = Blink()
-            blink.quit()
+        QApplication.instance().quit()
 
     def _SH_AccountStateChanged(self):
         self.activity_note.setText(self.account_state.note)
@@ -443,11 +444,27 @@ class MainWindow(base_class, ui_class):
             list_view.detail_view._AH_StartAudioCall()
         else:
             selected_indexes = list_view.selectionModel().selectedIndexes()
-            contact = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
-            address = contact.uri or self.search_box.text()
-            name = contact.name or None
+            if selected_indexes:
+                contact = selected_indexes[0].data(Qt.UserRole)
+                contact_uri = contact.uri
+            else:
+                contact, contact_uri = URIUtils.find_contact(self.search_box.text())
             session_manager = SessionManager()
-            session_manager.start_call(name, address, contact=contact, account=BonjourAccount() if isinstance(contact.settings, BonjourNeighbour) else None)
+            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')])
+
+    def _SH_ChatSessionButtonClicked(self):
+        list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
+        if list_view.detail_view.isVisible():
+            list_view.detail_view._AH_StartChatSession()
+        else:
+            selected_indexes = list_view.selectionModel().selectedIndexes()
+            if selected_indexes:
+                contact = selected_indexes[0].data(Qt.UserRole)
+                contact_uri = contact.uri
+            else:
+                contact, contact_uri = URIUtils.find_contact(self.search_box.text())
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact_uri, [StreamDescription('chat')], connect=False)
 
     def _SH_BreakConference(self):
         active_session = self.session_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -468,7 +485,7 @@ class MainWindow(base_class, ui_class):
         if not self.search_box.text():
             return
         if any(type(item) is Contact for item in items) and self.contact_search_model.rowCount() == 0:
-            self.search_box.clear()
+            self.search_box.clear() # check this. it is no longer be the correct behaviour as now contacts can be deleted from remote -Dan
         else:
             active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
             self.search_view.setCurrentWidget(active_widget)
@@ -509,15 +526,16 @@ class MainWindow(base_class, ui_class):
         self.session_model.conferenceSessions([session for session in self.session_model.active_sessions if session.conference is None])
 
     def _SH_MuteButtonClicked(self, muted):
-        self.mute_action.setChecked(muted)
-        self.mute_button.setChecked(muted)
-        SIPApplication.voice_audio_bridge.mixer.muted = muted
+        settings = SIPSimpleSettings()
+        settings.audio.muted = muted
+        settings.save()
 
     def _SH_SearchBoxReturnPressed(self):
         address = self.search_box.text()
         if address:
+            contact, contact_uri = URIUtils.find_contact(address)
             session_manager = SessionManager()
-            session_manager.start_call(None, address)
+            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')])
 
     def _SH_SearchBoxTextChanged(self, text):
         self.contact_search_model.setFilterFixedString(text)
@@ -559,15 +577,15 @@ class MainWindow(base_class, ui_class):
             self.conference_button.setEnabled(len([session for session in self.session_model.active_sessions if session.conference is None]) > 1)
             self.conference_button.setChecked(False)
 
-    def _SH_SessionModelAddedSession(self, session_item):
-        if session_item.session.state is None:
-            self.search_box.clear()
+    def _SH_AudioSessionModelAddedSession(self, session_item):
+        if len(session_item.blink_session.streams) == 1:
+            self.switch_view_button.view = SwitchViewButton.SessionView
 
-    def _SH_SessionModelRemovedSession(self, session_item):
-        if not self.session_model.rowCount():
+    def _SH_AudioSessionModelRemovedSession(self, session_item):
+        if self.session_model.rowCount() == 0:
             self.switch_view_button.view = SwitchViewButton.ContactView
 
-    def _SH_SessionModelChangedStructure(self):
+    def _SH_AudioSessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
         self.active_sessions_label.setText(u'There is 1 active call' if len(active_sessions)==1 else u'There are %d active calls' % len(active_sessions))
         self.active_sessions_label.setVisible(any(active_sessions))
@@ -684,6 +702,9 @@ class MainWindow(base_class, ui_class):
         blink_settings = BlinkSettings()
         icon_manager = IconManager()
         if notification.sender is settings:
+            if 'audio.muted' in notification.data.modified:
+                self.mute_action.setChecked(settings.audio.muted)
+                self.mute_button.setChecked(settings.audio.muted)
             if 'audio.silent' in notification.data.modified:
                 self.silent_action.setChecked(settings.audio.silent)
                 self.silent_button.setChecked(settings.audio.silent)
@@ -781,6 +802,12 @@ class MainWindow(base_class, ui_class):
         dialog.finished.connect(self._SH_PendingWatcherDialogFinished)
         self.pending_watcher_dialogs.append(dialog)
         dialog.show()
+
+    def _NH_BlinkSessionNewOutgoing(self, notification):
+        self.search_box.clear()
+
+    def _NH_BlinkSessionDidReinitializeForOutgoing(self, notification):
+        self.search_box.clear()
 
 
 del ui_class, base_class

@@ -132,13 +132,8 @@ class AccountListView(QListView):
         #self.setItemDelegate(AccountDelegate(self))
         #self.setDropIndicatorShown(False)
 
-    def setModel(self, model):
-        selection_model = self.selectionModel() or Null
-        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
-        super(AccountListView, self).setModel(model)
-        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
-
-    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
+    def selectionChanged(self, selected, deselected):
+        super(AccountListView, self).selectionChanged(selected, deselected)
         selection_model = self.selectionModel()
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:

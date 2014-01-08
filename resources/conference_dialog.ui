@@ -69,11 +69,11 @@
      </item>
      <item>
       <widget class="QCheckBox" name="chat_button">
-       <property name="enabled">
-        <bool>false</bool>
-       </property>
        <property name="text">
         <string>Chat</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
        </property>
       </widget>
      </item>

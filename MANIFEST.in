@@ -1,4 +1,8 @@
 include MANIFEST.in TODO run
 include bin/blink
-recursive-include resources *.ui *.png *.svg *.wav *.ico *.mng
-recursive-include doc     *.txt *.html install.*
+recursive-include resources *.ui
+recursive-include resources/chat style.xml *.style *.html *.css *.png *.svg *.jpg *.py
+recursive-include resources/icons *.png *.svg *.ico *.mng
+recursive-include resources/sounds *.wav
+recursive-include resources/tls *.crt
+recursive-include doc *.txt *.html install.*

@@ -1,24 +1,28 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['Conference', 'ConferenceDialog', 'SessionItem', 'SessionModel', 'SessionListView', 'SessionManager']
+__all__ = ['Conference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
 import bisect
 import cPickle as pickle
 import os
 import re
 import string
+
+from collections import defaultdict
 from datetime import datetime, timedelta
 from functools import partial
 from itertools import chain, izip, repeat
+from operator import attrgetter
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEvent, QMimeData, QModelIndex, QObject, QSize, QTimer, pyqtSignal
-from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QPainter, QPen, QPixmap, QShortcut, QStyledItemDelegate
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QPropertyAnimation, QRect, QSize, QTimer, pyqtSignal
+from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QIcon, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut, QStyle, QStyledItemDelegate
 
-from application.notification import IObserver, NotificationCenter
+from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null, limit
-from application.python.types import Singleton
+from application.python.types import MarkerType, Singleton
+from application.python.weakref import weakobjectmap
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
@@ -30,185 +34,890 @@ from sipsimple.lookup import DNSLookup
 from sipsimple.session import Session
 from sipsimple.streams import MediaStreamRegistry
 
-from blink.configuration.datatypes import DefaultPath
 from blink.resources import Resources
 from blink.util import call_later, run_in_gui_thread
-from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment, SwitchViewButton
+from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
+from blink.widgets.color import ColorHelperMixin
+from blink.widgets.util import ContextMenuActions
 
 
-class SessionItem(QObject):
-    implements(IObserver)
+class StreamDescription(object):
+    def __init__(self, type, **kw):
+        self.type = type
+        self.attributes = kw
 
-    activated = pyqtSignal()
-    deactivated = pyqtSignal()
-    ended = pyqtSignal()
+    def create_stream(self):
+        registry = MediaStreamRegistry()
+        cls = registry.get(self.type)
+        return cls(**self.attributes)
 
-    def __init__(self, name, uri, session, contact=None, audio_stream=None, video_stream=None):
-        # All of name, uri and contact need to be passed to determine what will be displayed in the
-        # SessionWidget because uri may not be exactly what contact holds due to fuzzy matching and
-        # the session may not have been connected (and thus session.remote_identity may be None).
-        super(SessionItem, self).__init__()
-        if (audio_stream, video_stream) == (None, None):
-            raise ValueError('SessionItem must represent at least one audio or video stream')
-        self.uri = uri
-        self.session = session
-        self.contact = contact
-        self.audio_stream = audio_stream
-        self.video_stream = video_stream
-        self.widget = Null
-        self.conference = None
-        self.type = 'Video' if video_stream else 'Audio'
-        self.codec_info = ''
-        self.tls = False
-        self.srtp = False
-        self.duration = timedelta(0)
-        self.latency = 0
-        self.packet_loss = 0
-        self.status = None
-        self.active = False
-        self.timer = QTimer()
-        self.offer_in_progress = False
-        self.local_hold = False
-        self.remote_hold = False
-        self.terminated = False
-        self.outbound_ringtone = Null
-        if self.audio_stream is None:
-            self.hold_tone = Null
-
-        if contact is not None and contact.name:
-            self.name = contact.name
-        elif name:
-            self.name = name
+    def __repr__(self):
+        if self.attributes:
+            return "%s(%r, %s)" % (self.__class__.__name__, self.type, ', '.join("%s=%r" % pair for pair in self.attributes.iteritems()))
         else:
-            address = '%s@%s' % (uri.user, uri.host)
-            match = re.match(r'^(?P<number>(\+|00)[1-9][0-9]\d{5,15})@(\d{1,3}\.){3}\d{1,3}$', address)
-            self.name = match.group('number') if match else address
+            return "%s(%r)" % (self.__class__.__name__, self.type)
 
-        self.timer.timeout.connect(self._SH_TimerFired)
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=session)
 
-    def __reduce__(self):
-        return (self.__class__, (self.name, self.uri, Null, Null, Null), None)
+class StreamInfo(object):
+    def __init__(self, status=None, ice_status=None, encryption=None, hd=False, codec=''):
+        self.status = status
+        self.ice_status = ice_status
+        self.encryption = encryption
+        self.hd = hd
+        self.codec = codec
 
-    def __unicode__(self):
-        return unicode(self.name)
+    @classmethod
+    def from_stream(cls, stream):
+        instance = cls()
+        instance.update(stream)
+        return instance
+
+    def update(self, stream):
+        if stream.type not in ('audio', 'video'):
+            raise ValueError('only audio and video streams are supported')
+        if stream.type == 'audio':
+            self.ice_status = 'Active' if stream.ice_active else 'Inactive'
+            self.encryption = 'SRTP' if stream.srtp_active else None
+            self.hd = stream.sample_rate/1000 >= 16
+            self.codec = '%s %dkHz' % (stream.codec, stream.sample_rate/1000)
+        elif stream.type == 'video':
+            self.ice_status = 'Active' if stream.ice_active else 'Inactive'
+            self.encryption = 'SRTP' if stream.srtp_active else None
+            self.hd = stream.clock_rate/1024 >= 512
+            self.codec = '%s %dkbit' % (stream.codec, stream.clock_rate/1024)
+
+    def __repr__(self):
+        return "{0.__class__.__name__}(status={0.status!r}, ice_status={0.ice_status!r}, encryption={0.encryption!r}, hd={0.hd!r}, codec={0.codec!r})".format(self)
+
+
+class StreamStatistics(object):
+    def __init__(self, audio=None, video=None):
+        self.audio = audio
+        self.video = video
+
+
+class RTPStatistics(object):
+    def __init__(self, latency=0, packet_loss=0, jitter=0, sent_bytes=0, received_bytes=0):
+        self.latency = latency
+        self.packet_loss = packet_loss
+        self.jitter = jitter
+        self.sent_bytes = sent_bytes
+        self.received_bytes = received_bytes
+
+    @classmethod
+    def load(cls, data):
+        latency = data['rtt']['last'] / 1000
+        packet_loss = int(data['rx']['packets_lost']*100.0/data['rx']['packets']) if data['rx']['packets'] else 0
+        jitter = data['rx']['jitter']['last'] / 1000
+        sent_bytes = data['tx']['bytes']
+        received_bytes = data['rx']['bytes']
+        return cls(latency, packet_loss, jitter, sent_bytes, received_bytes)
+
+    def __repr__(self):
+        return "{0.__class__.__name__}(latency={0.latency!r}, packet_loss={0.packet_loss!r}, jitter={0.jitter!r}, sent_bytes={0.sent_bytes!r}, received_bytes={0.received_bytes!r})".format(self)
+
+
+class StreamSet(object):
+    def __init__(self, streams):
+        self._stream_map = {stream.type: stream for stream in streams}
+
+    def __getitem__(self, key):
+        return self._stream_map[key]
+
+    def __contains__(self, key):
+        return key in self._stream_map or key in self._stream_map.values()
+
+    def __iter__(self):
+        return iter(sorted(self._stream_map.values(), key=attrgetter('type')))
+
+    def __reversed__(self):
+        return iter(sorted(self._stream_map.values(), key=attrgetter('type'), reverse=True))
+
+    __hash__ = None
+
+    def __len__(self):
+        return len(self._stream_map)
 
     @property
-    def pending_removal(self):
-        return self.audio_stream is None and self.video_stream is None
+    def types(self):
+        return set(self._stream_map)
 
-    def _get_audio_stream(self):
-        return self.__dict__['audio_stream']
+    def get(self, key, default=None):
+        return self._stream_map.get(key, default)
 
-    def _set_audio_stream(self, stream):
+
+class StreamContainer(object):
+    def __init__(self, session, stream_map):
+        self._session = session
+        self._stream_map = stream_map
+
+    def __getitem__(self, key):
+        return self._stream_map[key]
+
+    def __contains__(self, key):
+        return key in self._stream_map or key in self._stream_map.values()
+
+    def __iter__(self):
+        return iter(sorted(self._stream_map.values(), key=attrgetter('type')))
+
+    def __reversed__(self):
+        return iter(sorted(self._stream_map.values(), key=attrgetter('type'), reverse=True))
+
+    __hash__ = None
+
+    def __len__(self):
+        return len(self._stream_map)
+
+    @property
+    def types(self):
+        return set(self._stream_map)
+
+    def get(self, key, default=None):
+        return self._stream_map.get(key, default)
+
+    def add(self, stream):
         notification_center = NotificationCenter()
-        old_stream = self.__dict__.get('audio_stream', None)
-        self.__dict__['audio_stream'] = stream
+        old_stream = self._stream_map.get(stream.type, None)
         if old_stream is not None:
-            notification_center.remove_observer(self, sender=old_stream)
-            self.hold_tone = Null
-        if stream is not None:
-            notification_center.add_observer(self, sender=stream)
-            self.hold_tone = WavePlayer(stream.bridge.mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, pause_time=45, volume=30)
-            stream.bridge.add(self.hold_tone)
+            notification_center.remove_observer(self._session, sender=old_stream)
+        if stream.type in ('audio', 'video'):
+            stream.info = StreamInfo()
+        stream.blink_session = self._session
+        self._stream_map[stream.type] = stream
+        notification_center.add_observer(self._session, sender=stream)
 
-    audio_stream = property(_get_audio_stream, _set_audio_stream)
-    del _get_audio_stream, _set_audio_stream
+    def remove(self, stream):
+        # is it a good choice to silently ignore removing a stream that is not in the container? -Dan
+        if stream in self:
+            self._stream_map.pop(stream.type)
+            notification_center = NotificationCenter()
+            notification_center.remove_observer(self._session, sender=stream)
 
-    def _get_video_stream(self):
-        return self.__dict__['video_stream']
+    def extend(self, iterable):
+        for item in iterable:
+            self.add(item)
 
-    def _set_video_stream(self, stream):
-        notification_center = NotificationCenter()
-        old_stream = self.__dict__.get('video_stream', None)
-        self.__dict__['video_stream'] = stream
-        if old_stream is not None:
-            notification_center.remove_observer(self, sender=old_stream)
-        if stream is not None:
-            notification_center.add_observer(self, sender=stream)
+    def clear(self):
+        for stream in self._stream_map.values():
+            self.remove(stream)
 
-    video_stream = property(_get_video_stream, _set_video_stream)
-    del _get_video_stream, _set_video_stream
+
+class defaultweakobjectmap(weakobjectmap):
+    def __init__(self, factory, *args, **kw):
+        self.default_factory = factory
+        super(defaultweakobjectmap, self).__init__(*args, **kw)
+    def __missing__(self, key):
+        return self.setdefault(key.object, self.default_factory())
+
+
+class StreamListDescriptor(object):
+    def __init__(self):
+        self.values = defaultweakobjectmap(dict)
+
+    def __get__(self, obj, objtype):
+        if obj is None:
+            return self
+        return StreamContainer(obj, self.values[obj])
+
+    def __set__(self, obj, value):
+        raise AttributeError("Attribute cannot be set")
+
+    def __delete__(self, obj):
+        raise AttributeError("Attribute cannot be deleted")
+
+
+class BlinkSessionState(str):
+    state    = property(lambda self: str(self.partition('/')[0]) or None)
+    substate = property(lambda self: str(self.partition('/')[2]) or None)
+
+    def __eq__(self, other):
+        if isinstance(other, BlinkSessionState):
+            return self.state == other.state and self.substate == other.substate
+        elif isinstance(other, basestring):
+            state    = other.partition('/')[0] or None
+            substate = other.partition('/')[2] or None
+            if state == '*':
+                return substate in ('*', None) or self.substate == substate
+            elif substate == '*':
+                return self.state == state
+            else:
+                return self.state == state and self.substate == substate
+        return NotImplemented
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class SessionItemsDescriptor(object):
+    class SessionItems(object):
+        def __getattr__(self, name):
+            return None
+
+    def __init__(self):
+        self.values = defaultweakobjectmap(self.SessionItems)
+
+    def __get__(self, obj, objtype):
+        return self.values[obj] if obj is not None else None
+
+    def __set__(self, obj, value):
+        raise AttributeError("Attribute cannot be set")
+
+    def __delete__(self, obj):
+        raise AttributeError("Attribute cannot be deleted")
+
+
+class BlinkSession(QObject):
+    implements(IObserver)
+
+    # check what should be a signal and what a notification -Dan
+    streamInfoUpdated = pyqtSignal(object)
+    infoUpdated       = pyqtSignal(object, object) # duration, stream statistics
+    conferenceChanged = pyqtSignal(object, object) # old_conference, new_conference
+
+    streams = StreamListDescriptor()
+    items = SessionItemsDescriptor()
+
+    def __init__(self):
+        super(BlinkSession, self).__init__()
+        self._initialize()
+
+    def _initialize(self, reinitialize=False):
+        if not reinitialize:
+            self.state = None
+
+            self.account = None
+            self.contact = None
+            self.contact_uri = None
+            self.uri = None
+
+            self._delete_when_done = False
+            self._delete_requested = False
+
+            self.timer = QTimer()
+            self.timer.setInterval(1000)
+            self.timer.timeout.connect(self._SH_TimerFired)
+        else:
+            self.timer.stop()
+
+        self.direction = None
+        self.__dict__['active'] = False
+
+        self.conference = None
+        self.sip_session = None
+        self.stream_descriptions = None
+        self.streams.clear()
+
+        self.local_hold = False
+        self.remote_hold = False
+        self.recording = False
+
+        self.duration = timedelta(0)
+
+        self._sibling = None
+
+    def _get_state(self):
+        return self.__dict__['state']
+
+    def _set_state(self, value):
+        if value is not None and not isinstance(value, BlinkSessionState):
+            value = BlinkSessionState(value)
+        old_state = self.__dict__.get('state', None)
+        new_state = self.__dict__['state'] = value
+        if new_state != old_state:
+            NotificationCenter().post_notification('BlinkSessionDidChangeState', sender=self, data=NotificationData(old_state=old_state, new_state=new_state))
+
+    state = property(_get_state, _set_state)
+    del _get_state, _set_state
+
+    def _get_contact(self):
+        return self.__dict__['contact']
+
+    def _set_contact(self, value):
+        old_contact = self.__dict__.get('contact', None)
+        new_contact = self.__dict__['contact'] = value
+        if new_contact != old_contact:
+            notification_center = NotificationCenter()
+            if old_contact is not None:
+                notification_center.remove_observer(self, sender=old_contact)
+            if new_contact is not None:
+                notification_center.add_observer(self, sender=new_contact)
+
+    contact = property(_get_contact, _set_contact)
+    del _get_contact, _set_contact
+
+    def _get_sip_session(self):
+        return self.__dict__['sip_session']
+
+    def _set_sip_session(self, value):
+        old_session = self.__dict__.get('sip_session', None)
+        new_session = self.__dict__['sip_session'] = value
+        if new_session != old_session:
+            notification_center = NotificationCenter()
+            if old_session is not None:
+                notification_center.remove_observer(self, sender=old_session)
+            if new_session is not None:
+                notification_center.add_observer(self, sender=new_session)
+
+    sip_session = property(_get_sip_session, _set_sip_session)
+    del _get_sip_session, _set_sip_session
+
+    def _get_active(self):
+        return self.__dict__['active']
+
+    def _set_active(self, value):
+        value = bool(value)
+        if self.__dict__.get('active', None) == value:
+            return
+        self.__dict__['active'] = value
+        if self.state in ('connecting/*', 'connected/*') and self.streams.types.intersection({'audio', 'video'}):
+            entity = self.conference or self
+            if value:
+                entity.unhold()
+            else:
+                entity.hold()
+
+    active = property(_get_active, _set_active)
+    del _get_active, _set_active
+
+    def _get_account(self):
+        account_manager = AccountManager()
+        account_id = self.__dict__.get('account', None)
+        if account_id is not None:
+            try:
+                account = account_manager.get_account(account_id)
+                if account.enabled:
+                    return account
+            except KeyError:
+                pass
+        account = account_manager.default_account
+        self.__dict__['account'] = account.id
+        return account
+
+    def _set_account(self, account):
+        self.__dict__['account'] = account.id if account is not None else None
+
+    account = property(_get_account, _set_account)
+    del _get_account, _set_account
 
     def _get_conference(self):
         return self.__dict__['conference']
 
-    def _set_conference(self, conference):
-        old_conference = self.__dict__.get('conference', Null)
-        if old_conference is conference:
+    def _set_conference(self, value):
+        old_conference = self.__dict__.get('conference', None)
+        new_conference = self.__dict__['conference'] = value
+        if old_conference is new_conference:
             return
-        self.__dict__['conference'] = conference
         if old_conference is not None:
             old_conference.remove_session(self)
-        if conference is not None:
-            conference.add_session(self)
-        elif self.widget.mute_button.isChecked():
-            self.widget.mute_button.click()
+        if new_conference is not None:
+            new_conference.add_session(self)
+            self.unhold()
+        elif not self.active:
+            self.hold()
+        self.conferenceChanged.emit(old_conference, new_conference)
 
     conference = property(_get_conference, _set_conference)
     del _get_conference, _set_conference
 
-    def _get_type(self):
-        return self.__dict__['type']
+    @property
+    def transport(self):
+        return self.sip_session.transport if self.sip_session is not None else None
 
-    def _set_type(self, value):
-        if self.__dict__.get('type', Null) == value:
+    @property
+    def on_hold(self):
+        return self.local_hold or self.remote_hold
+
+    @property
+    def persistent(self):
+        return not self._delete_when_done and not self._delete_requested
+
+    @property
+    def reusable(self):
+        return self.persistent and self.state in (None, 'initialized', 'ended')
+
+    def init_incoming(self, sip_session, streams, contact, contact_uri, reinitialize=False):
+        assert self.state in (None, 'initialized', 'ended')
+        assert self.contact is None or contact.settings is self.contact.settings
+        notification_center = NotificationCenter()
+        if reinitialize:
+            notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
+            self._initialize(reinitialize=True)
+        else:
+            self._delete_when_done = len(streams)==1 and streams[0].type=='audio'
+        self.direction = 'incoming'
+        self.sip_session = sip_session
+        self.account = sip_session.account
+        self.contact = contact
+        self.contact_uri = contact_uri
+        self.uri = self._parse_uri(contact_uri.uri)
+        self.streams.extend(streams)
+        self.state = 'connecting'
+        if reinitialize:
+            notification_center.post_notification('BlinkSessionDidReinitializeForIncoming', sender=self)
+        else:
+            notification_center.post_notification('BlinkSessionNewIncoming', sender=self)
+        notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
+        self.sip_session.accept(streams)
+
+    def init_outgoing(self, account, contact, contact_uri, stream_descriptions, sibling=None, reinitialize=False):
+        assert self.state in (None, 'initialized', 'ended')
+        assert self.contact is None or contact.settings is self.contact.settings
+        notification_center = NotificationCenter()
+        if reinitialize:
+            notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
+            self._initialize(reinitialize=True)
+        else:
+            self._delete_when_done = len(stream_descriptions)==1 and stream_descriptions[0].type=='audio'
+        self.direction = 'outgoing'
+        self.account = account
+        self.contact = contact
+        self.contact_uri = contact_uri
+        self.uri = self._normalize_uri(contact_uri.uri)
+        # reevaluate later, after we add the .active/.proposed attributes to streams, if creating the sip session and the streams at this point is desirable -Dan
+        # note: creating the sip session early also need the test in hold/unhold/end to change from sip_session is (not) None to sip_session.state is (not) None -Dan
+        self.stream_descriptions = StreamSet(stream_descriptions)
+        self._sibling = sibling
+        self.state = 'initialized'
+        if reinitialize:
+            notification_center.post_notification('BlinkSessionDidReinitializeForOutgoing', sender=self)
+        else:
+            notification_center.post_notification('BlinkSessionNewOutgoing', sender=self)
+
+    def connect(self):
+        assert self.direction == 'outgoing' and self.state == 'initialized'
+        notification_center = NotificationCenter()
+        self.streams.extend(stream_description.create_stream() for stream_description in self.stream_descriptions)
+        self.state = 'connecting/dns_lookup'
+        notification_center.post_notification('BlinkSessionWillConnect', sender=self, data=NotificationData(sibling=self._sibling))
+        self.stream_descriptions = None
+        self._sibling = None
+        notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='dns_lookup'))
+        account = self.account
+        settings = SIPSimpleSettings()
+        if isinstance(account, Account):
+            if account.sip.outbound_proxy is not None:
+                proxy = account.sip.outbound_proxy
+                uri = SIPURI(host=proxy.host, port=proxy.port, parameters={'transport': proxy.transport})
+            elif account.sip.always_use_my_proxy:
+                uri = SIPURI(host=account.id.domain)
+            else:
+                uri = self.uri
+        else:
+            uri = self.uri
+        lookup = DNSLookup()
+        notification_center.add_observer(self, sender=lookup)
+        lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
+
+    def add_stream(self, stream_description):
+        assert self.state == 'connected'
+        if stream_description.type in self.streams:
+            raise RuntimeError('session already has a stream of type %s' % stream_description.type)
+        stream = stream_description.create_stream()
+        self.sip_session.add_stream(stream)
+        self.streams.add(stream)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
+
+    def remove_stream(self, stream):
+        assert self.state == 'connected'
+        if stream not in self.streams:
+            raise RuntimeError('stream is not part of the current session')
+        self.sip_session.remove_stream(stream)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionWillRemoveStream', sender=self, data=NotificationData(stream=stream))
+
+    def accept_proposal(self, streams):
+        assert self.state == 'connected/received_proposal'
+        duplicate_types = sorted(stream.type for stream in streams if stream.type in self.streams)
+        if duplicate_types:
+            raise RuntimeError('accepting proposal would result in duplicated streams for: %s' % ', '.join(duplicate_types))
+        self.sip_session.accept_proposal(streams)
+        notification_center = NotificationCenter()
+        for stream in streams:
+            self.streams.add(stream)
+            notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
+
+    def hold(self):
+        if self.sip_session is not None and not self.local_hold:
+            self.local_hold = True
+            self.sip_session.hold()
+            NotificationCenter().post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(local_hold=self.local_hold, remote_hold=self.remote_hold))
+
+    def unhold(self):
+        if self.sip_session is not None and self.local_hold:
+            self.local_hold = False
+            self.sip_session.unhold()
+            NotificationCenter().post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(local_hold=self.local_hold, remote_hold=self.remote_hold))
+
+    def send_dtmf(self, digit):
+        audio_stream = self.streams.get('audio')
+        if audio_stream is None:
             return
-        self.__dict__['type'] = value
-        self.widget.stream_info_label.session_type = value
+        try:
+            audio_stream.send_dtmf(digit)
+        except RuntimeError:
+            pass
+        else:
+            digit_map = {'*': 'star'}
+            filename = 'sounds/dtmf_%s_tone.wav' % digit_map.get(digit, digit)
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get(filename))
+            if self.account.rtp.inband_dtmf:
+                audio_stream.bridge.add(player)
+            SIPApplication.voice_audio_bridge.add(player)
+            player.start()
 
-    type = property(_get_type, _set_type)
-    del _get_type, _set_type
+    def start_recording(self):
+        # I'd like to start recording before the call starts -Dan
+        audio_stream = self.streams.get('audio')
+        if audio_stream is not None and not self.recording:
+            settings = SIPSimpleSettings()
+            direction = self.sip_session.direction
+            remote = "%s@%s" % (self.sip_session.remote_identity.uri.user, self.sip_session.remote_identity.uri.host)
+            filename = "%s-%s-%s.wav" % (datetime.now().strftime("%Y%m%d-%H%M%S"), remote, direction)
+            path = os.path.join(settings.audio.recordings_directory.normalized, self.account.id)
+            try:
+                audio_stream.start_recording(os.path.join(path, filename))
+            except (SIPCoreError, IOError, OSError), e:
+                print 'Failed to record: %s' % e
 
-    def _get_codec_info(self):
-        return self.__dict__['codec_info']
+    def stop_recording(self):
+        audio_stream = self.streams.get('audio')
+        if audio_stream is not None:
+            audio_stream.stop_recording()
 
-    def _set_codec_info(self, value):
-        if self.__dict__.get('codec_info', None) == value:
+    def end(self, delete=False):
+        if self.state == 'ending':
+            self._delete_requested = delete
+        elif self.state == 'ended':
+            self._delete_requested = delete
+            if delete:
+                self._delete()
+        elif self.state in ('initialized', 'connecting/*', 'connected/*'):
+            self._delete_requested = delete
+            self.state = 'ending'
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkSessionWillEnd', sender=self)
+            if self.sip_session is None:
+                self._terminate(reason='Call canceled')
+            else:
+                self.sip_session.end()
+
+    def _delete(self):
+        if self.state != 'ended':
             return
-        self.__dict__['codec_info'] = value
-        self.widget.stream_info_label.codec_info = value
+        self.state = 'deleted'
 
-    codec_info = property(_get_codec_info, _set_codec_info)
-    del _get_codec_info, _set_codec_info
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionWasDeleted', sender=self)
 
-    def _get_tls(self):
-        return self.__dict__['tls']
+        self.account = None
+        self.contact = None
+        self.contact_uri = None
 
-    def _set_tls(self, value):
-        if self.__dict__.get('tls', None) == value:
-            return
-        self.__dict__['tls'] = value
-        self.widget.tls_label.setVisible(bool(value))
+    def _terminate(self, reason, error=False):
+        notification_center = NotificationCenter()
 
-    tls = property(_get_tls, _set_tls)
-    del _get_tls, _set_tls
+        if self.state != 'ending':
+            self.state = 'ending'
+            notification_center.post_notification('BlinkSessionWillEnd', sender=self)
 
-    def _get_srtp(self):
-        return self.__dict__['srtp']
+        self.timer.stop()
+        self.streams.clear()
 
-    def _set_srtp(self, value):
-        if self.__dict__.get('srtp', None) == value:
-            return
-        self.__dict__['srtp'] = value
-        self.widget.srtp_label.setVisible(bool(value))
+        self.sip_session = None
+        self.stream_descriptions = None
+        self._sibling = None
 
-    srtp = property(_get_srtp, _set_srtp)
-    del _get_srtp, _set_srtp
+        self.local_hold = False
+        self.remote_hold = False
+        self.recording = False
 
-    def _get_duration(self):
-        return self.__dict__['duration']
-    
-    def _set_duration(self, value):
-        if self.__dict__.get('duration', None) == value:
-            return
-        self.__dict__['duration'] = value
-        self.widget.duration_label.value = value
+        self.state = 'ended'
+        notification_center.post_notification('BlinkSessionDidEnd', sender=self, data=NotificationData(reason=reason, error=error))
 
-    duration = property(_get_duration, _set_duration)
-    del _get_duration, _set_duration
+        if not self.persistent:
+            self._delete()
+
+    def _parse_uri(self, uri):
+        if '@' not in uri:
+            uri += '@' + self.account.id.domain
+        if not uri.startswith(('sip:', 'sips:')):
+            uri = 'sip:' + uri
+        return SIPURI.parse(str(uri))
+
+    def _normalize_uri(self, uri):
+        from blink.contacts import URIUtils
+
+        if '@' not in uri:
+            uri += '@' + self.account.id.domain
+        if not uri.startswith(('sip:', 'sips:')):
+            uri = 'sip:' + uri
+        uri = SIPURI.parse(str(uri).translate(None, ' \t'))
+        if URIUtils.is_number(uri.user):
+            uri.user = URIUtils.trim_number(uri.user)
+            if isinstance(self.account, Account):
+                if self.account.pstn.idd_prefix is not None:
+                    uri.user = re.sub(r'^\+', self.account.pstn.idd_prefix, uri.user)
+                if self.account.pstn.prefix is not None:
+                    uri.user = self.account.pstn.prefix + uri.user
+        return uri
+
+    def _SH_TimerFired(self):
+        self.duration += timedelta(seconds=1)
+        audio_stream = self.streams.get('audio')
+        if audio_stream is not None and audio_stream.statistics is not None:
+            audio_stats = RTPStatistics.load(audio_stream.statistics)
+        else:
+            audio_stats = None
+        video_stream = self.streams.get('video')
+        if video_stream is not None and video_stream.statistics is not None:
+            video_stats = RTPStatistics.load(video_stream.statistics)
+        else:
+            video_stats = None
+        self.infoUpdated.emit(self.duration, StreamStatistics(audio=audio_stats, video=video_stats))
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_DNSLookupDidSucceed(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        if self.state not in ('ending', 'ended', 'deleted'):
+            routes = notification.data.result
+            if routes:
+                self.sip_session = Session(self.account)
+                self.sip_session.connect(ToHeader(self.uri), routes, list(self.streams))
+            else:
+                self._terminate(reason='Destination not found', error=True)
+
+    def _NH_DNSLookupDidFail(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        if self.state not in ('ending', 'ended', 'deleted'):
+            self._terminate(reason='Destination not found', error=True)
+
+    def _NH_SIPSessionNewOutgoing(self, notification):
+        self.state = 'connecting'
+        notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
+
+    def _NH_SIPSessionGotProvisionalResponse(self, notification):
+        if notification.data.code == 180:
+            self.state = 'connecting/ringing'
+            notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='ringing'))
+        elif notification.data.code == 183:
+            self.state = 'connecting/early_media'
+            notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='early_media'))
+
+    def _NH_SIPSessionWillStart(self, notification):
+        self.state = 'connecting/starting'
+        notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='starting'))
+
+    def _NH_SIPSessionDidStart(self, notification):
+        for stream in set(self.streams).difference(notification.data.streams):
+            self.streams.remove(stream)
+        if self.state not in ('ending', 'ended', 'deleted'):
+            self.state = 'connected'
+            self.timer.start()
+            audio_stream = self.streams.get('audio')
+            if audio_stream is not None:
+                audio_stream.info.update(audio_stream)
+                self.streamInfoUpdated.emit(audio_stream)
+            video_stream = self.streams.get('video')
+            if video_stream is not None:
+                video_stream.info.update(video_stream)
+                self.streamInfoUpdated.emit(video_stream)
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkSessionDidConnect', sender=self)
+
+    def _NH_SIPSessionDidFail(self, notification):
+        if notification.data.failure_reason == 'user request':
+            if notification.data.code == 487:
+                reason = 'Call canceled'
+            else:
+                reason = notification.data.reason
+        else:
+            reason = notification.data.failure_reason
+        self._terminate(reason=reason, error=True)
+
+    def _NH_SIPSessionDidEnd(self, notification):
+        self._terminate('Call ended' if notification.data.originator=='local' else 'Call ended by remote')
+
+    def _NH_SIPSessionDidChangeHoldState(self, notification):
+        if notification.data.originator == 'remote':
+            self.remote_hold = notification.data.on_hold
+        notification.center.post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(local_hold=self.local_hold, remote_hold=self.remote_hold))
+
+    def _NH_SIPSessionNewProposal(self, notification):
+        if self.state not in ('ending', 'ended', 'deleted'):
+            if notification.data.originator == 'local':
+                self.state = 'connected/sent_proposal'
+            else:
+                self.state = 'connected/received_proposal'
+
+    def _NH_SIPSessionProposalAccepted(self, notification):
+        accepted_streams = notification.data.accepted_streams
+        proposed_streams = notification.data.proposed_streams
+        if self.state not in ('ending', 'ended', 'deleted'):
+            audio_stream = self.streams.get('audio')
+            if audio_stream is not None and audio_stream in accepted_streams:
+                audio_stream.info.update(audio_stream)
+                self.streamInfoUpdated.emit(audio_stream)
+            video_stream = self.streams.get('video')
+            if video_stream is not None and video_stream in accepted_streams:
+                video_stream.info.update.emit(video_stream)
+                self.streamInfoUpdated(video_stream)
+            self.state = 'connected'
+        for stream in proposed_streams:
+            if stream in accepted_streams:
+                notification.center.post_notification('BlinkSessionDidAddStream', sender=self, data=NotificationData(stream=stream))
+            else:
+                self.streams.remove(stream)
+                notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+
+    def _NH_SIPSessionProposalRejected(self, notification):
+        for stream in set(notification.data.proposed_streams).intersection(self.streams):
+            self.streams.remove(stream)
+            notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+        if self.state not in ('ending', 'ended', 'deleted'):
+            self.state = 'connected'
+
+    def _NH_SIPSessionHadProposalFailure(self, notification):
+        for stream in set(notification.data.proposed_streams).intersection(self.streams):
+            self.streams.remove(stream)
+            notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+        if self.state not in ('ending', 'ended', 'deleted'):
+            self.state = 'connected'
+
+    def _NH_SIPSessionDidRenegotiateStreams(self, notification):
+        if notification.data.added_streams:
+            self._delete_when_done = False
+        for stream in set(notification.data.removed_streams).intersection(self.streams):
+            self.streams.remove(stream)
+            notification.center.post_notification('BlinkSessionDidRemoveStream', sender=self, data=NotificationData(stream=stream))
+        if not self.streams:
+            self.end()
+        elif self.streams.types.isdisjoint({'audio', 'video'}):
+            self.unhold()
+
+    def _NH_AudioStreamICENegotiationStateDidChange(self, notification):
+        audio_stream = notification.sender
+        state = notification.data.state
+        if state == 'GATHERING':
+            audio_stream.info.status = 'Gathering ICE candidates'
+        elif state == 'NEGOTIATING':
+            audio_stream.info.status = 'Negotiating ICE'
+        elif state == 'RUNNING':
+            audio_stream.info.status = 'ICE negotiation succeeded'
+        elif state == 'FAILED':
+            audio_stream.info.status = 'ICE negotiation failed'
+        self.streamInfoUpdated.emit(audio_stream)
+
+    def _NH_AudioStreamGotDTMF(self, notification):
+        digit_map = {'*': 'star'}
+        filename = 'sounds/dtmf_%s_tone.wav' % digit_map.get(notification.data.digit, notification.data.digit)
+        player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get(filename))
+        SIPApplication.voice_audio_bridge.add(player)
+        player.start()
+
+    def _NH_AudioStreamDidStartRecordingAudio(self, notification):
+        self.recording = True
+        notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
+
+    def _NH_AudioStreamWillStopRecordingAudio(self, notification):
+        self.recording = False
+        notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
+
+    def _NH_BlinkContactDidChange(self, notification):
+        notification.center.post_notification('BlinkSessionContactDidChange', sender=self)
+
+
+class Conference(object):
+    def __init__(self):
+        self.sessions = []
+        self.stream_map = {}
+        self.audio_conference = AudioConference()
+        self.audio_conference.hold()
+
+    def add_session(self, session):
+        audio_stream = session.streams.get('audio')
+        self.sessions.append(session)
+        self.stream_map[session] = audio_stream
+        if audio_stream is not None:
+            self.audio_conference.add(audio_stream)
+
+    def remove_session(self, session):
+        self.sessions.remove(session)
+        audio_stream = self.stream_map.pop(session)
+        if audio_stream is not None:
+            self.audio_conference.remove(audio_stream)
+
+    def hold(self):
+        self.audio_conference.hold()
+
+    def unhold(self):
+        self.audio_conference.unhold()
+
+
+# Positions for sessions in conferences.
+#
+class Top(object): pass
+class Middle(object): pass
+class Bottom(object): pass
+
+
+# Audio sessions
+#
+
+class AudioSessionItem(object):
+    implements(IObserver)
+
+    def __init__(self, session):
+        assert session.items.audio is None
+        self.name = session.contact.name
+        self.uri = session.uri
+        self.blink_session = session
+        self.blink_session.items.audio = self
+
+        self.widget = Null
+        self.status = None
+        self.type = 'Audio'
+        self.codec_info = ''
+        self.tls = False
+        self.srtp = False
+        self.latency = 0
+        self.packet_loss = 0
+        self.pending_removal = False
+
+        self.__deleted__ = False
+
+        self.blink_session.infoUpdated.connect(self._SH_BlinkSessionInfoUpdated)
+        self.blink_session.streamInfoUpdated.connect(self._SH_BlinkSessionStreamInfoUpdated)
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=self.blink_session)
+
+    @property
+    def audio_stream(self):
+        return self.blink_session.streams.get('audio')
+
+    def _get_active(self):
+        return self.blink_session.active
+
+    def _set_active(self, value):
+        self.blink_session.active = bool(value)
+
+    active = property(_get_active, _set_active)
+    del _get_active, _set_active
+
+    def _get_conference(self):
+        return self.blink_session.conference
+
+    def _set_conference(self, value):
+        self.blink_session.conference = value
+
+    conference = property(_get_conference, _set_conference)
+    del _get_conference, _set_conference
 
     def _get_latency(self):
         return self.__dict__['latency']
@@ -246,23 +955,53 @@ class SessionItem(QObject):
     status = property(_get_status, _set_status)
     del _get_status, _set_status
 
-    def _get_active(self):
-        return self.__dict__['active']
+    def _get_type(self):
+        return self.__dict__['type']
 
-    def _set_active(self, value):
-        value = bool(value)
-        if self.__dict__.get('active', None) == value:
+    def _set_type(self, value):
+        if self.__dict__.get('type', Null) == value:
             return
-        self.__dict__['active'] = value
-        if self.audio_stream:
-            self.audio_stream.device.output_muted = not value
-        if value:
-            self.activated.emit()
-        else:
-            self.deactivated.emit()
+        self.__dict__['type'] = value
+        self.widget.stream_info_label.session_type = value
 
-    active = property(_get_active, _set_active)
-    del _get_active, _set_active
+    type = property(_get_type, _set_type)
+    del _get_type, _set_type
+
+    def _get_codec_info(self):
+        return self.__dict__['codec_info']
+
+    def _set_codec_info(self, value):
+        if self.__dict__.get('codec_info', None) == value:
+            return
+        self.__dict__['codec_info'] = value
+        self.widget.stream_info_label.codec_info = value
+
+    codec_info = property(_get_codec_info, _set_codec_info)
+    del _get_codec_info, _set_codec_info
+
+    def _get_srtp(self):
+        return self.__dict__['srtp']
+
+    def _set_srtp(self, value):
+        if self.__dict__.get('srtp', None) == value:
+            return
+        self.__dict__['srtp'] = value
+        self.widget.srtp_label.setVisible(bool(value))
+
+    srtp = property(_get_srtp, _set_srtp)
+    del _get_srtp, _set_srtp
+
+    def _get_tls(self):
+        return self.__dict__['tls']
+
+    def _set_tls(self, value):
+        if self.__dict__.get('tls', None) == value:
+            return
+        self.__dict__['tls'] = value
+        self.widget.tls_label.setVisible(bool(value))
+
+    tls = property(_get_tls, _set_tls)
+    del _get_tls, _set_tls
 
     def _get_widget(self):
         return self.__dict__['widget']
@@ -290,92 +1029,41 @@ class SessionItem(QObject):
     widget = property(_get_widget, _set_widget)
     del _get_widget, _set_widget
 
-    def connect(self):
-        self.offer_in_progress = True
-        account = self.session.account
-        settings = SIPSimpleSettings()
-        if isinstance(account, Account):
-            if account.sip.outbound_proxy is not None:
-                proxy = account.sip.outbound_proxy
-                uri = SIPURI(host=proxy.host, port=proxy.port, parameters={'transport': proxy.transport})
-            elif account.sip.always_use_my_proxy:
-                uri = SIPURI(host=account.id.domain)
-            else:
-                uri = self.uri
-        else:
-            uri = self.uri
-        self.status = Status('Looking up destination')
-        lookup = DNSLookup()
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=lookup)
-        lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
-
-    def hold(self):
-        if not self.pending_removal and not self.local_hold:
-            self.local_hold = True
-            self.session.hold()
-            self.hold_tone.start()
-            self.widget.hold_button.setChecked(True)
-            if not self.offer_in_progress:
-                self.status = Status('On hold', color='#000090')
-
-    def unhold(self):
-        if not self.pending_removal and self.local_hold:
-            self.local_hold = False
-            self.widget.hold_button.setChecked(False)
-            self.session.unhold()
-
-    def send_dtmf(self, digit):
-        if self.audio_stream is not None:
-            try:
-                self.audio_stream.send_dtmf(digit)
-            except RuntimeError:
-                pass
-            else:
-                digit_map = {'*': 'star'}
-                filename = 'sounds/dtmf_%s_tone.wav' % digit_map.get(digit, digit)
-                player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get(filename))
-                notification_center = NotificationCenter()
-                notification_center.add_observer(self, sender=player)
-                if self.session.account.rtp.inband_dtmf:
-                    self.audio_stream.bridge.add(player)
-                SIPApplication.voice_audio_bridge.add(player)
-                player.start()
+    @property
+    def duration(self):
+        return self.blink_session.duration
 
     def end(self):
-        if self.session.state is None:
-            self.audio_stream = None
-            self.video_stream = None
-            self.status = Status('Call canceled', color='#900000')
-            self._cleanup()
+        # this needs to consider the case where the audio stream is being added. in that case we need to cancel the proposal -Dan
+        # however that information is not yet available (need the proposed flag on the streams) -Dan
+        if len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
+            self.blink_session.remove_stream(self.audio_stream)
         else:
-            self.session.end()
+            self.blink_session.end()
+
+    def delete(self):
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self, sender=self.blink_session)
+        self.blink_session.items.audio = None
+        self.blink_session = None
+        self.widget = Null
+
+    def send_dtmf(self, digit):
+        self.blink_session.send_dtmf(digit)
 
     def _cleanup(self):
-        self.timer.stop()
+        if self.__deleted__:
+            return
+        self.__deleted__ = True
         self.widget.mute_button.setEnabled(False)
         self.widget.hold_button.setEnabled(False)
         self.widget.record_button.setEnabled(False)
         self.widget.hangup_button.setEnabled(False)
-
-        notification_center = NotificationCenter()
-        notification_center.remove_observer(self, sender=self.session)
-
-        player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=60)
-        notification_center.add_observer(self, sender=player)
-        SIPApplication.voice_audio_bridge.add(player)
-        player.start()
-
-        self.ended.emit()
+        self.blink_session.infoUpdated.disconnect(self._SH_BlinkSessionInfoUpdated)
+        self.blink_session.streamInfoUpdated.disconnect(self._SH_BlinkSessionStreamInfoUpdated)
 
     def _reset_status(self):
-        if self.pending_removal or self.offer_in_progress:
-            return
-        if self.local_hold:
-            self.status = Status('On hold', color='#000090')
-        elif self.remote_hold:
-            self.status = Status('Hold by remote', color='#000090')
-        else:
+        if not self.blink_session.on_hold:
             self.status = None
 
     def _SH_HangupButtonClicked(self):
@@ -383,316 +1071,127 @@ class SessionItem(QObject):
 
     def _SH_HoldButtonClicked(self, checked):
         if checked:
-            self.hold()
+            self.blink_session.hold()
         else:
-            self.unhold()
+            self.blink_session.unhold()
 
     def _SH_MuteButtonClicked(self, checked):
         if self.audio_stream is not None:
             self.audio_stream.muted = checked
 
     def _SH_RecordButtonClicked(self, checked):
-        if self.audio_stream is not None:
-            if checked:
-                settings = SIPSimpleSettings()
-                direction = self.session.direction
-                remote = "%s@%s" % (self.session.remote_identity.uri.user, self.session.remote_identity.uri.host)
-                filename = "%s-%s-%s.wav" % (datetime.now().strftime("%Y%m%d-%H%M%S"), remote, direction)
-                path = os.path.join(settings.audio.recordings_directory.normalized, self.session.account.id)
-                try:
-                    self.audio_stream.start_recording(os.path.join(path, filename))
-                except (SIPCoreError, IOError, OSError), e:
-                    print 'Failed to record: %s' % e
+        if checked:
+            self.blink_session.start_recording()
+        else:
+            self.blink_session.stop_recording()
+
+    def _SH_BlinkSessionInfoUpdated(self, duration, statistics):
+        self.widget.duration_label.value = duration
+        # TODO: compute packet loss and latency statistics -Saul
+
+    def _SH_BlinkSessionStreamInfoUpdated(self, stream):
+        if stream is self.audio_stream:
+            if stream.info.status:
+                self.status = Status(stream.info.status)
             else:
-                self.audio_stream.stop_recording()
+                self.status = None
+            self.type = 'HD Audio' if stream.info.hd else 'Audio'
+            self.codec_info = stream.info.codec
+            self.srtp = stream.info.encryption == 'SRTP'
 
-    def _SH_TimerFired(self):
-        stats = self.video_stream.statistics if self.video_stream else self.audio_stream.statistics
-        if stats is not None:
-            self.latency = stats['rtt']['avg'] / 1000
-            self.packet_loss = int(stats['rx']['packets_lost']*100.0/stats['rx']['packets']) if stats['rx']['packets'] else 0
-        self.duration += timedelta(seconds=1)
-
-    @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_AudioStreamICENegotiationStateDidChange(self, notification):
-        if notification.data.state == 'ICE Candidates Gathering':
-            self.status = Status('Gathering ICE candidates')
-        elif notification.data.state == 'ICE Session Initialized':
+    def _NH_BlinkSessionConnectionProgress(self, notification):
+        stage = notification.data.stage
+        if stage == 'dns_lookup':
+            self.status = Status('Looking up destination...')
+        elif stage == 'connecting':
+            self.tls = self.blink_session.transport=='tls'
             self.status = Status('Connecting...')
-        elif notification.data.state == 'ICE Negotiation In Progress':
-            self.status = Status('Negotiating ICE')
+        elif stage == 'ringing':
+            self.status = Status('Ringing...')
+        elif stage == 'starting':
+            self.status = Status('Starting media...')
+        else:
+            self.status = None
 
-    def _NH_AudioStreamGotDTMF(self, notification):
-        digit_map = {'*': 'star'}
-        filename = 'sounds/dtmf_%s_tone.wav' % digit_map.get(notification.data.digit, notification.data.digit)
-        player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get(filename))
-        notification.center.add_observer(self, sender=player)
-        SIPApplication.voice_audio_bridge.add(player)
-        player.start()
+    def _NH_BlinkSessionDidChangeHoldState(self, notification):
+        self.widget.hold_button.setChecked(notification.data.local_hold)
+        if self.blink_session.state == 'connected':
+            if notification.data.local_hold:
+                self.status = Status('On hold', color='#000090')
+            elif notification.data.remote_hold:
+                self.status = Status('Hold by remote', color='#000090')
+            else:
+                self.status = None
 
-    def _NH_AudioStreamDidStartRecordingAudio(self, notification):
-        self.widget.record_button.setChecked(True)
+    def _NH_BlinkSessionDidChangeRecordingState(self, notification):
+        self.widget.record_button.setChecked(notification.data.recording)
 
-    def _NH_AudioStreamWillStopRecordingAudio(self, notification):
-        self.widget.record_button.setChecked(False)
-
-    def _NH_DNSLookupDidSucceed(self, notification):
-        settings = SIPSimpleSettings()
-        notification.center.remove_observer(self, sender=notification.sender)
-        if self.pending_removal:
-            return
-        streams = []
-        if self.audio_stream:
-            streams.append(self.audio_stream)
-            outbound_ringtone = settings.sounds.outbound_ringtone
-            if outbound_ringtone:
-                self.outbound_ringtone = WavePlayer(self.audio_stream.mixer, outbound_ringtone.path, outbound_ringtone.volume, loop_count=0, pause_time=5)
-                self.audio_stream.bridge.add(self.outbound_ringtone)
-        if self.video_stream:
-            streams.append(self.video_stream)
-        routes = notification.data.result
-        self.tls = routes[0].transport=='tls' if routes else False
-        self.status = Status('Connecting...')
-        self.session.connect(ToHeader(self.uri), routes, streams)
-
-    def _NH_DNSLookupDidFail(self, notification):
-        notification.center.remove_observer(self, sender=notification.sender)
-        if self.pending_removal:
-            return
-        self.audio_stream = None
-        self.video_stream = None
-        self.status = Status('Destination not found', color='#900000')
-        self._cleanup()
-
-    def _NH_MediaStreamDidStart(self, notification):
-        if notification.sender is self.audio_stream:
+    def _NH_BlinkSessionDidConnect(self, notification):
+        session = notification.sender
+        self.tls = session.transport=='tls'
+        if 'audio' in session.streams:
             self.widget.mute_button.setEnabled(True)
             self.widget.hold_button.setEnabled(True)
             self.widget.record_button.setEnabled(True)
-
-    def _NH_SIPSessionGotRingIndication(self, notification):
-        self.status = Status('Ringing...')
-        self.outbound_ringtone.start()
-
-    def _NH_SIPSessionWillStart(self, notification):
-        self.outbound_ringtone.stop()
-
-    def _NH_SIPSessionDidStart(self, notification):
-        if self.audio_stream not in notification.data.streams:
-            self.audio_stream = None
-        if self.video_stream not in notification.data.streams:
-            self.video_stream = None
-        if not self.local_hold:
-            self.offer_in_progress = False
-        if not self.pending_removal:
-            self.timer.start(1000)
-            self.status = None
-            if self.video_stream is not None:
-                self.type = 'HD Video' if self.video_stream.bit_rate/1024 >= 512 else 'Video'
-            else:
-                self.type = 'HD Audio' if self.audio_stream.sample_rate/1000 >= 16 else 'Audio'
-            codecs = []
-            if self.video_stream is not None:
-                codecs.append('%s %dkbit' % (self.video_stream.codec, self.video_stream.bit_rate/1024))
-            if self.audio_stream is not None:
-                codecs.append('%s %dkHz' % (self.audio_stream.codec, self.audio_stream.sample_rate/1000))
-            self.codec_info = ', '.join(codecs)
+            self.widget.hangup_button.setEnabled(True)
             self.status = Status('Connected')
-            self.srtp = all(stream.srtp_active for stream in (self.audio_stream, self.video_stream) if stream is not None)
-            self.tls = self.session.transport == 'tls'
-            call_later(1, self._reset_status)
+            call_later(3, self._reset_status)
         else:
-            self.status = Status('%s refused' % self.type, color='#900000')
+            self.status = Status('Audio refused', color='#900000')
             self._cleanup()
 
-    def _NH_SIPSessionDidFail(self, notification):
-        self.audio_stream = None
-        self.video_stream = None
-        self.offer_in_progress = False
-        if notification.data.failure_reason == 'user request':
-            if notification.data.code == 487:
-                reason = 'Call canceled'
-            else:
-                reason = notification.data.reason
-        else:
-            reason = notification.data.failure_reason
-        self.status = Status(reason, color='#900000')
-        self.outbound_ringtone.stop()
-        self._cleanup()
-
-    def _NH_SIPSessionDidEnd(self, notification):
-        self.audio_stream = None
-        self.video_stream = None
-        self.offer_in_progress = False
-        self.status = Status('Call ended' if notification.data.originator=='local' else 'Call ended by remote')
-        self._cleanup()
-
-    def _NH_SIPSessionDidChangeHoldState(self, notification):
-        if notification.data.originator == 'remote':
-            self.remote_hold = notification.data.on_hold
-        if self.local_hold:
-            if not self.offer_in_progress:
-                self.status = Status('On hold', color='#000090')
-        elif self.remote_hold:
-            if not self.offer_in_progress:
-                self.status = Status('Hold by remote', color='#000090')
-            self.hold_tone.start()
-        else:
-            self.status = None
-            self.hold_tone.stop()
-        self.offer_in_progress = False
-
-    def _NH_SIPSessionGotAcceptProposal(self, notification):
-        if self.audio_stream not in notification.data.proposed_streams and self.video_stream not in notification.data.proposed_streams:
-            return
-        if self.audio_stream in notification.data.proposed_streams and self.audio_stream not in notification.data.streams:
-            self.audio_stream = None
-        if self.video_stream in notification.data.proposed_streams and self.video_stream not in notification.data.streams:
-            self.video_stream = None
-        self.offer_in_progress = False
-        if not self.pending_removal:
-            if not self.timer.isActive():
-                self.timer.start()
-            if self.video_stream is not None:
-                self.type = 'HD Video' if self.video_stream.bit_rate/1024 >= 512 else 'Video'
-            else:
-                self.type = 'HD Audio' if self.audio_stream.sample_rate/1000 >= 16 else 'Audio'
-            codecs = []
-            if self.video_stream is not None:
-                codecs.append('%s %dkbit' % (self.video_stream.codec, self.video_stream.bit_rate/1024))
-            if self.audio_stream is not None:
-                codecs.append('%s %dkHz' % (self.audio_stream.codec, self.audio_stream.sample_rate/1000))
-            self.codec_info = ', '.join(codecs)
+    def _NH_BlinkSessionDidAddStream(self, notification):
+        if notification.data.stream.type == 'audio':
+            self.widget.mute_button.setEnabled(True)
+            self.widget.hold_button.setEnabled(True)
+            self.widget.record_button.setEnabled(True)
+            self.widget.hangup_button.setEnabled(True)
             self.status = Status('Connected')
-            call_later(1, self._reset_status)
-        else:
-            self.status = Status('%s refused' % self.type, color='#900000')
+            call_later(3, self._reset_status)
+
+    def _NH_BlinkSessionDidNotAddStream(self, notification):
+        if notification.data.stream.type == 'audio':
+            self.status = Status('Audio refused', color='#900000') # where can we get the reason from? (rejected, cancelled, failed, ...) -Dan
             self._cleanup()
 
-    def _NH_SIPSessionGotRejectProposal(self, notification):
-        if self.audio_stream not in notification.data.streams and self.video_stream not in notification.data.streams:
-            return
-        if self.audio_stream in notification.data.streams:
-            self.audio_stream = None
-        if self.video_stream in notification.data.streams:
-            video_refused = True
-            self.video_stream = None
-        else:
-            video_refused = False
-        self.offer_in_progress = False
-        if not self.pending_removal:
-            if self.video_stream is not None:
-                self.type = 'HD Video' if self.video_stream.bit_rate/1024 >= 512 else 'Video'
+    def _NH_BlinkSessionWillRemoveStream(self, notification):
+        if notification.data.stream.type == 'audio':
+            self.widget.mute_button.setEnabled(False)
+            self.widget.hold_button.setEnabled(False)
+            self.widget.record_button.setEnabled(False)
+            self.widget.hangup_button.setEnabled(False)
+            self.status = Status('Ending...')
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        if notification.data.stream.type == 'audio':
+            self.status = Status('Call ended')
+            self._cleanup()
+
+    def _NH_BlinkSessionWillEnd(self, notification):
+        self.widget.mute_button.setEnabled(False)
+        self.widget.hold_button.setEnabled(False)
+        self.widget.record_button.setEnabled(False)
+        self.widget.hangup_button.setEnabled(False)
+        self.status = Status('Ending...')
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        if not self.__deleted__: # may have been removed by BlinkSessionDidRemoveStream less than 5 seconds before the session ended.
+            if notification.data.error:
+                self.status = Status(notification.data.reason, color='#900000')
             else:
-                self.type = 'HD Audio' if self.audio_stream.sample_rate/1000 >= 16 else 'Audio'
-            codecs = []
-            if self.video_stream is not None:
-                codecs.append('%s %dkbit' % (self.video_stream.codec, self.video_stream.bit_rate/1024))
-            if self.audio_stream is not None:
-                codecs.append('%s %dkHz' % (self.audio_stream.codec, self.audio_stream.sample_rate/1000))
-            self.codec_info = ', '.join(codecs)
-            self.status = Status('Video refused' if video_refused else 'Audio refused', color='#900000')
-            call_later(1, self._reset_status)
-        else:
-            self.status = Status('%s refused' % self.type, color='#900000')
+                self.status = Status(notification.data.reason)
             self._cleanup()
 
-    def _NH_SIPSessionDidRenegotiateStreams(self, notification):
-        if notification.data.action != 'remove':
-            return
-        if self.audio_stream not in notification.data.streams and self.video_stream not in notification.data.streams:
-            return
-        if self.audio_stream in notification.data.streams:
-            self.audio_stream = None
-        if self.video_stream in notification.data.streams:
-            video_removed = True
-            self.video_stream = None
-        else:
-            video_removed = False
-        self.offer_in_progress = False
-        if not self.pending_removal:
-            if self.video_stream is not None:
-                self.type = 'HD Video' if self.video_stream.bit_rate/1024 >= 512 else 'Video'
-            else:
-                self.type = 'HD Audio' if self.audio_stream.sample_rate/1000 >= 16 else 'Audio'
-            codecs = []
-            if self.video_stream is not None:
-                codecs.append('%s %dkbit' % (self.video_stream.codec, self.video_stream.bit_rate/1024))
-            if self.audio_stream is not None:
-                codecs.append('%s %dkHz' % (self.audio_stream.codec, self.audio_stream.sample_rate/1000))
-            self.codec_info = ', '.join(codecs)
-            self.status = Status('Video removed' if video_removed else 'Audio removed', color='#900000')
-            call_later(1, self._reset_status)
-        else:
-            self.status = Status('%s removed' % self.type, color='#900000')
-            self._cleanup()
 
-    def _NH_WavePlayerDidFail(self, notification):
-        notification.center.remove_observer(self, sender=notification.sender)
+ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
 
-    def _NH_WavePlayerDidEnd(self, notification):
-        notification.center.remove_observer(self, sender=notification.sender)
-
-
-class Conference(object):
-    def __init__(self):
-        self.sessions = []
-        self.audio_conference = AudioConference()
-        self.audio_conference.hold()
-
-    def add_session(self, session):
-        if self.sessions:
-            self.sessions[-1].widget.conference_position = Top if len(self.sessions)==1 else Middle
-            session.widget.conference_position = Bottom
-        else:
-            session.widget.conference_position = None
-        session.widget.mute_button.show()
-        self.sessions.append(session)
-        if session.audio_stream is not None:
-            self.audio_conference.add(session.audio_stream)
-        session.unhold()
-
-    def remove_session(self, session):
-        session.widget.conference_position = None
-        session.widget.mute_button.hide()
-        self.sessions.remove(session)
-        session_count = len(self.sessions)
-        if session_count == 1:
-            self.sessions[0].widget.conference_position = None
-            self.sessions[0].widget.mute_button.hide()
-        elif session_count > 1:
-            self.sessions[0].widget.conference_position = Top
-            self.sessions[-1].widget.conference_position = Bottom
-            for sessions in self.sessions[1:-1]:
-                session.widget.conference_position = Middle
-        if not session.active:
-            session.hold()
-        if session.audio_stream is not None:
-            self.audio_conference.remove(session.audio_stream)
-
-    def hold(self):
-        self.audio_conference.hold()
-
-    def unhold(self):
-        self.audio_conference.unhold()
-
-
-# Positions for sessions in conferences.
-#
-class Top(object): pass
-class Middle(object): pass
-class Bottom(object): pass
-
-
-ui_class, base_class = uic.loadUiType(Resources.get('session.ui'))
-
-class SessionWidget(base_class, ui_class):
+class AudioSessionWidget(base_class, ui_class):
     def __init__(self, session, parent=None):
-        super(SessionWidget, self).__init__(parent)
+        super(AudioSessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
         # add a left margin for the colored band
@@ -713,12 +1212,12 @@ class SessionWidget(base_class, ui_class):
         self.drop_indicator = False
         self.conference_position = None
         self._disable_dnd = False
-        self.mute_button.hidden.connect(self._mute_button_hidden)
-        self.mute_button.shown.connect(self._mute_button_shown)
-        self.mute_button.pressed.connect(self._tool_button_pressed)
-        self.hold_button.pressed.connect(self._tool_button_pressed)
-        self.record_button.pressed.connect(self._tool_button_pressed)
-        self.hangup_button.pressed.connect(self._tool_button_pressed)
+        self.mute_button.hidden.connect(self._SH_MuteButtonHidden)
+        self.mute_button.shown.connect(self._SH_MuteButtonShown)
+        self.mute_button.pressed.connect(self._SH_ToolButtonPressed)
+        self.hold_button.pressed.connect(self._SH_ToolButtonPressed)
+        self.record_button.pressed.connect(self._SH_ToolButtonPressed)
+        self.hangup_button.pressed.connect(self._SH_ToolButtonPressed)
         self.mute_button.hide()
         self.mute_button.setEnabled(False)
         self.hold_button.setEnabled(False)
@@ -769,23 +1268,23 @@ class SessionWidget(base_class, ui_class):
     conference_position = property(_get_conference_position, _set_conference_position)
     del _get_conference_position, _set_conference_position
 
-    def _mute_button_hidden(self):
+    def _SH_MuteButtonHidden(self):
         self.hold_button.type = LeftSegment
 
-    def _mute_button_shown(self):
+    def _SH_MuteButtonShown(self):
         self.hold_button.type = MiddleSegment
 
-    def _tool_button_pressed(self):
+    def _SH_ToolButtonPressed(self):
         self._disable_dnd = True
 
     def mousePressEvent(self, event):
         self._disable_dnd = False
-        super(SessionWidget, self).mousePressEvent(event)
+        super(AudioSessionWidget, self).mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self._disable_dnd:
             return
-        super(SessionWidget, self).mouseMoveEvent(event)
+        super(AudioSessionWidget, self).mouseMoveEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -864,13 +1363,13 @@ class SessionWidget(base_class, ui_class):
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
 
         painter.end()
-        super(SessionWidget, self).paintEvent(event)
+        super(AudioSessionWidget, self).paintEvent(event)
 
 
-class DraggedSessionWidget(base_class, ui_class):
+class DraggedAudioSessionWidget(base_class, ui_class):
     """Used to draw a dragged session item"""
     def __init__(self, session_widget, parent=None):
-        super(DraggedSessionWidget, self).__init__(parent)
+        super(DraggedAudioSessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
         # add a left margin for the colored band
@@ -922,21 +1421,21 @@ class DraggedSessionWidget(base_class, ui_class):
             painter.setPen(QPen(QBrush(QColor('#808080')), 2.0))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
         painter.end()
-        super(DraggedSessionWidget, self).paintEvent(event)
+        super(DraggedAudioSessionWidget, self).paintEvent(event)
 
 del ui_class, base_class
 
 
-class SessionDelegate(QStyledItemDelegate):
+class AudioSessionDelegate(QStyledItemDelegate):
     size_hint = QSize(200, 62)
 
     def __init__(self, parent=None):
-        super(SessionDelegate, self).__init__(parent)
+        super(AudioSessionDelegate, self).__init__(parent)
 
     def createEditor(self, parent, options, index):
         session = index.data(Qt.UserRole)
-        session.widget = SessionWidget(session, parent)
-        session.widget.hold_button.clicked.connect(partial(self._SH_HoldButtonClicked, session))
+        session.widget = AudioSessionWidget(session, parent)
+        session.widget.hold_button.clicked.connect(partial(self._SH_HoldButtonClicked, session)) # this partial still creates a memory cycle -Dan
         return session.widget
 
     def updateEditorGeometry(self, editor, option, index):
@@ -960,22 +1459,33 @@ class SessionDelegate(QStyledItemDelegate):
             selection_model.select(model.index(model.sessions.index(session)), selection_model.ClearAndSelect)
 
 
-class SessionModel(QAbstractListModel):
-    sessionAboutToBeAdded = pyqtSignal(SessionItem)
-    sessionAboutToBeRemoved = pyqtSignal(SessionItem)
-    sessionAdded = pyqtSignal(SessionItem)
-    sessionRemoved = pyqtSignal(SessionItem)
+class AudioSessionModel(QAbstractListModel):
+    implements(IObserver)
+
+    sessionAboutToBeAdded = pyqtSignal(AudioSessionItem)
+    sessionAboutToBeRemoved = pyqtSignal(AudioSessionItem)
+    sessionAdded = pyqtSignal(AudioSessionItem)
+    sessionRemoved = pyqtSignal(AudioSessionItem)
     structureChanged = pyqtSignal()
 
     # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['application/x-blink-session-list', 'application/x-blink-contact-list', 'application/x-blink-contact-uri-list']
 
     def __init__(self, parent=None):
-        super(SessionModel, self).__init__(parent)
+        super(AudioSessionModel, self).__init__(parent)
         self.sessions = []
-        self.main_window = parent
         self.session_list = parent.session_list
-        self.ignore_selection_changes = False
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkSessionNewIncoming')
+        notification_center.add_observer(self, name='BlinkSessionWillReinitialize')
+        notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
+        notification_center.add_observer(self, name='BlinkSessionWillConnect')
+        notification_center.add_observer(self, name='BlinkSessionDidConnect')
+        notification_center.add_observer(self, name='BlinkSessionWillAddStream')
+        notification_center.add_observer(self, name='BlinkSessionDidNotAddStream')
+        notification_center.add_observer(self, name='BlinkSessionDidRemoveStream')
+        notification_center.add_observer(self, name='BlinkSessionDidEnd')
 
     @property
     def active_sessions(self):
@@ -1010,7 +1520,8 @@ class SessionModel(QAbstractListModel):
         mime_data = QMimeData()
         sessions = [self.sessions[index.row()] for index in indexes if index.isValid()]
         if sessions:
-            mime_data.setData('application/x-blink-session-list', QByteArray(pickle.dumps(sessions)))
+            # TODO: pass a session id which can then be fetched from the SessionManager -Saul
+            mime_data.setData('application/x-blink-session-list', QByteArray())
         return mime_data
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
@@ -1033,82 +1544,78 @@ class SessionModel(QAbstractListModel):
     def _DH_ApplicationXBlinkSessionList(self, mime_data, action, index):
         session_list = self.session_list
         selection_model = session_list.selectionModel()
-        selection_mode = session_list.selectionMode()
-        session_list.setSelectionMode(session_list.NoSelection)
-        self.ignore_selection_changes = True
         source = session_list.dragged_session
         target = self.sessions[index.row()] if index.isValid() else None
-        if source.conference is None:
-            # the dragged session is not in a conference yet
-            source_selected = source.widget.selected
-            target_selected = target.widget.selected
+        if source.conference is None:  # the dragged session is not in a conference yet
             if target.conference is not None:
-                self._remove_session(source)
-                position = self.sessions.index(target.conference.sessions[-1]) + 1
-                self.beginInsertRows(QModelIndex(), position, position)
-                self.sessions.insert(position, source)
-                self.endInsertRows()
-                session_list.openPersistentEditor(self.index(position))
-                source.conference = target.conference
-                source_index = self.index(position)
-                if source_selected:
-                    selection_model.select(source_index, selection_model.Select)
-                elif target_selected:
-                    source.widget.selected = True
-                session_list.scrollTo(source_index, session_list.EnsureVisible) # or PositionAtBottom
-            else:
                 source_row = self.sessions.index(source)
-                target_row = index.row()
-                first, last = (source, target) if source_row < target_row else (target, source)
-                self._remove_session(source)
-                self._remove_session(target)
-                self.beginInsertRows(QModelIndex(), 0, 1)
-                self.sessions[0:0] = [first, last]
-                self.endInsertRows()
-                session_list.openPersistentEditor(self.index(0))
-                session_list.openPersistentEditor(self.index(1))
+                target_row = self.sessions.index(target.conference.sessions[-1].items.audio) + 1
+                if self.beginMoveRows(QModelIndex(), source_row, source_row, QModelIndex(), target_row):
+                    insert_point = target_row if source_row >= target_row else target_row-1
+                    self.sessions.remove(source)
+                    self.sessions.insert(insert_point, source)
+                    self.endMoveRows()
+                source.conference = target.conference
+                session_list.scrollTo(self.index(self.sessions.index(source)), session_list.EnsureVisible) # is this even needed? -Dan
+            else:
+                target_row = self.sessions.index(target)
+                if self.beginMoveRows(QModelIndex(), target_row, target_row, QModelIndex(), 0):
+                    self.sessions.remove(target)
+                    self.sessions.insert(0, target)
+                    self.endMoveRows()
+                source_row = self.sessions.index(source)
+                if self.beginMoveRows(QModelIndex(), source_row, source_row, QModelIndex(), 1):
+                    self.sessions.remove(source)
+                    self.sessions.insert(1, source)
+                    self.endMoveRows()
                 conference = Conference()
-                first.conference = conference
-                last.conference = conference
-                if source_selected:
-                    selection_model.select(self.index(self.sessions.index(source)), selection_model.Select)
-                    conference.unhold()
-                elif target_selected:
-                    selection_model.select(self.index(self.sessions.index(target)), selection_model.Select)
-                    conference.unhold()
+                target.conference = conference # must add them to the conference in the same order they are in the list (target is first, source is last)
+                source.conference = conference
                 session_list.scrollToTop()
-            active = source.active or target.active
             for session in source.conference.sessions:
-                session.active = active
-        else:
-            # the dragged session is in a conference
-            conference = source.conference
-            if len(conference.sessions) == 2:
-                conference_selected = source.widget.selected
-                first, last = conference.sessions
-                sibling = first if source is last else last
-                source.conference = None
+                session.items.audio.widget.selected = source.widget.selected or target.widget.selected
+                session.active = source.active or target.active
+            if source.active:
+                source.conference.unhold()
+        else:  # the dragged session is in a conference
+            dragged = source
+            sibling = next(session.items.audio for session in dragged.conference.sessions if session.items.audio is not dragged)
+            if selection_model.isSelected(self.index(self.sessions.index(dragged))):
+                selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
+            if len(dragged.conference.sessions) == 2:
+                dragged.conference = None
                 sibling.conference = None
-                self._remove_session(first)
-                self._remove_session(last)
-                self._add_session(first)
-                self._add_session(last)
-                if conference_selected:
-                    selection_model.select(self.index(self.sessions.index(sibling)), selection_model.Select)
+                ## eventually only move past the last conference to minimize movement. see how this feels during usage. (or sort them alphabetically with conferences at the top) -Dan
+                #for position, session in enumerate(self.sessions):
+                #    if session not in (dragged, sibling) and session.conference is None:
+                #        move_point = position
+                #        break
+                #else:
+                #    move_point = len(self.sessions)
+                move_point = len(self.sessions)
+                dragged_row = self.sessions.index(dragged)
+                if self.beginMoveRows(QModelIndex(), dragged_row, dragged_row, QModelIndex(), move_point):
+                    self.sessions.remove(dragged)
+                    self.sessions.insert(move_point-1, dragged)
+                    self.endMoveRows()
+                move_point -= 1
+                sibling_row = self.sessions.index(sibling)
+                if self.beginMoveRows(QModelIndex(), sibling_row, sibling_row, QModelIndex(), move_point):
+                    self.sessions.remove(sibling)
+                    self.sessions.insert(move_point-1, sibling)
+                    self.endMoveRows()
                 session_list.scrollToBottom()
             else:
-                selected_index = selection_model.selectedIndexes()[0]
-                if self.sessions[selected_index.row()] is source:
-                    sibling = (session for session in source.conference.sessions if session is not source).next()
-                    selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
-                source.conference = None
-                self._remove_session(source)
-                self._add_session(source)
-                position = self.sessions.index(conference.sessions[0])
-                session_list.scrollTo(self.index(position), session_list.PositionAtCenter)
-            source.active = False
-        self.ignore_selection_changes = False
-        session_list.setSelectionMode(selection_mode)
+                dragged.conference = None
+                move_point = len(self.sessions)
+                dragged_row = self.sessions.index(dragged)
+                if self.beginMoveRows(QModelIndex(), dragged_row, dragged_row, QModelIndex(), move_point):
+                    self.sessions.remove(dragged)
+                    self.sessions.append(dragged)
+                    self.endMoveRows()
+                session_list.scrollTo(self.index(self.sessions.index(sibling)), session_list.PositionAtCenter)
+            dragged.widget.selected = False
+            dragged.active = False
         self.structureChanged.emit()
         return True
 
@@ -1122,7 +1629,7 @@ class SessionModel(QAbstractListModel):
         session = self.sessions[index.row()]
         session_manager = SessionManager()
         for contact in contacts:
-            session_manager.start_call(contact.name, contact.uri, contact=contact, conference_sibling=session)
+            session_manager.create_session(contact, contact.uri, [StreamDescription('audio')], sibling=session.blink_session)
         return True
 
     def _DH_ApplicationXBlinkContactUriList(self, mime_data, action, index):
@@ -1136,23 +1643,8 @@ class SessionModel(QAbstractListModel):
         session_manager = SessionManager()
         for contact_uri in contact_uris:
             contact = contact_uri.contact
-            session_manager.start_call(contact.name, contact_uri.uri.uri, contact=contact, conference_sibling=session)
+            session_manager.create_session(contact, contact_uri.uri, [StreamDescription('audio')], sibling=session.blink_session)
         return True
-
-    def _SH_SessionActivated(self):
-        session = self.sender()
-        item = session.conference if session.conference is not None else session
-        item.unhold()
-
-    def _SH_SessionDeactivated(self):
-        session = self.sender()
-        item = session.conference if session.conference is not None else session
-        item.hold()
-
-    def _SH_SessionEnded(self):
-        session = self.sender()
-        call_later(5, self.removeSession, session)
-        self.structureChanged.emit()
 
     def _add_session(self, session):
         position = len(self.sessions)
@@ -1170,11 +1662,10 @@ class SessionModel(QAbstractListModel):
     def addSession(self, session):
         if session in self.sessions:
             return
+        session.blink_session.conferenceChanged.connect(self._SH_BlinkSessionConferenceChanged)
         self.sessionAboutToBeAdded.emit(session)
         self._add_session(session)
-        session.activated.connect(self._SH_SessionActivated)
-        session.deactivated.connect(self._SH_SessionDeactivated)
-        session.ended.connect(self._SH_SessionEnded)
+        # not the right place to do this. the list should do it (else the model needs a backreference to the list), however in addSessionAndConference we can't avoid doing it -Dan
         selection_model = self.session_list.selectionModel()
         selection_model.select(self.index(self.rowCount()-1), selection_model.ClearAndSelect)
         self.sessionAdded.emit(session)
@@ -1185,43 +1676,35 @@ class SessionModel(QAbstractListModel):
             return
         if sibling not in self.sessions:
             raise ValueError('sibling %r not in sessions list' % sibling)
+        session.blink_session.conferenceChanged.connect(self._SH_BlinkSessionConferenceChanged)
         self.sessionAboutToBeAdded.emit(session)
-        self.ignore_selection_changes = True
         session_list = self.session_list
-        selection_model = session_list.selectionModel()
-        selection_mode = session_list.selectionMode()
-        session_list.setSelectionMode(session_list.NoSelection)
-        sibling_selected = sibling.widget.selected
         if sibling.conference is not None:
-            position = self.sessions.index(sibling.conference.sessions[-1]) + 1
+            position = self.sessions.index(sibling.conference.sessions[-1].items.audio) + 1
             self.beginInsertRows(QModelIndex(), position, position)
             self.sessions.insert(position, session)
             self.endInsertRows()
             session_list.openPersistentEditor(self.index(position))
             session.conference = sibling.conference
-            if sibling_selected:
-                session.widget.selected = True
-            session_list.scrollTo(self.index(position), session_list.EnsureVisible) # or PositionAtBottom
+            session_list.scrollTo(self.index(position), session_list.EnsureVisible) # or PositionAtBottom (is this even needed? -Dan)
         else:
-            self._remove_session(sibling)
-            self.beginInsertRows(QModelIndex(), 0, 1)
-            self.sessions[0:0] = [sibling, session]
+            sibling_row = self.sessions.index(sibling)
+            if self.beginMoveRows(QModelIndex(), sibling_row, sibling_row, QModelIndex(), 0):
+                self.sessions.remove(sibling)
+                self.sessions.insert(0, sibling)
+                self.endMoveRows()
+            self.beginInsertRows(QModelIndex(), 1, 1)
+            self.sessions.insert(1, session)
             self.endInsertRows()
-            session_list.openPersistentEditor(self.index(0))
             session_list.openPersistentEditor(self.index(1))
             conference = Conference()
-            sibling.conference = conference
+            sibling.conference = conference # must add them to the conference in the same order they are in the list (sibling first, new session last)
             session.conference = conference
-            if sibling_selected:
-                selection_model.select(self.index(self.sessions.index(sibling)), selection_model.Select)
+            if sibling.active:
                 conference.unhold()
             session_list.scrollToTop()
+        session.widget.selected = sibling.widget.selected
         session.active = sibling.active
-        session_list.setSelectionMode(selection_mode)
-        self.ignore_selection_changes = False
-        session.activated.connect(self._SH_SessionActivated)
-        session.deactivated.connect(self._SH_SessionDeactivated)
-        session.ended.connect(self._SH_SessionEnded)
         self.sessionAdded.emit(session)
         self.structureChanged.emit()
 
@@ -1233,7 +1716,7 @@ class SessionModel(QAbstractListModel):
         selection_mode = session_list.selectionMode()
         session_list.setSelectionMode(session_list.NoSelection)
         if session.conference is not None:
-            sibling = (s for s in session.conference.sessions if s is not session).next()
+            sibling = next(s.items.audio for s in session.conference.sessions if s.items.audio is not session)
             session_index = self.index(self.sessions.index(session))
             sibling_index = self.index(self.sessions.index(sibling))
             selection_model = session_list.selectionModel()
@@ -1248,59 +1731,139 @@ class SessionModel(QAbstractListModel):
                 last.conference = None
             else:
                 session.conference = None
-        session.widget = Null
+
+        session.blink_session.conferenceChanged.disconnect(self._SH_BlinkSessionConferenceChanged)
+        session.delete()
+
         self.sessionRemoved.emit(session)
         self.structureChanged.emit()
 
     def conferenceSessions(self, sessions):
-        self.ignore_selection_changes = True
         session_list = self.session_list
-        selection_model = session_list.selectionModel()
-        selection_mode = session_list.selectionMode()
-        session_list.setSelectionMode(session_list.NoSelection)
         selected = any(session.widget.selected for session in sessions)
-        selected_session = selection_model.selectedIndexes()[0].data(Qt.UserRole) if selected else None
-        for session in sessions:
-            self._remove_session(session)
-        self.beginInsertRows(QModelIndex(), 0, len(sessions)-1)
-        self.sessions[0:0] = sessions
-        self.endInsertRows()
-        for row in xrange(len(sessions)):
-            session_list.openPersistentEditor(self.index(row))
+        active = any(session.active for session in sessions)
         conference = Conference()
-        for session in sessions:
+        for position, session in enumerate(sessions):
+            session_row = self.sessions.index(session)
+            if self.beginMoveRows(QModelIndex(), session_row, session_row, QModelIndex(), position):
+                self.sessions.remove(session)
+                self.sessions.insert(position, session)
+                self.endMoveRows()
             session.conference = conference
-            session.active = selected
-        if selected_session is not None:
-            selection_model.select(self.index(self.sessions.index(selected_session)), selection_model.Select)
+            session.widget.selected = selected
+            session.active = active
+        if active:
             conference.unhold()
         session_list.scrollToTop()
-        session_list.setSelectionMode(selection_mode)
-        self.ignore_selection_changes = False
         self.structureChanged.emit()
 
-    def breakConference(self, conference):
-        self.ignore_selection_changes = True
+    def breakConference(self, conference): # replace this by an endConference (or termninate/hangupConference) functionality -Dan
         sessions = [session for session in self.sessions if session.conference is conference]
         session_list = self.session_list
         selection_model = session_list.selectionModel()
-        selection_mode = session_list.selectionMode()
-        session_list.setSelectionMode(session_list.NoSelection)
-        active_session = sessions[0]
-        for session in sessions:
+        selection = selection_model.selection()
+        selected_session = selection[0].topLeft().data(Qt.UserRole) if selection else None
+        move_point = len(self.sessions)
+        for index, session in enumerate(reversed(sessions)):
+            session_row = self.sessions.index(session)
+            if self.beginMoveRows(QModelIndex(), session_row, session_row, QModelIndex(), move_point-index):
+                self.sessions.remove(session)
+                self.sessions.insert(move_point-index-1, session)
+                self.endMoveRows()
             session.conference = None
-            self._remove_session(session)
-            self._add_session(session)
-            session.active = session is active_session
-        selection_model.select(self.index(self.sessions.index(active_session)), selection_model.Select)
-        self.ignore_selection_changes = False
+            session.widget.selected = session is selected_session
+            session.active = session is selected_session
         session_list.scrollToBottom()
-        session_list.setSelectionMode(selection_mode)
         self.structureChanged.emit()
 
+    def _SH_BlinkSessionConferenceChanged(self, old_conference, new_conference): # would this better be handled by the audio session item itself? (apparently not) -Dan
+        blink_session = self.sender()
+        session = blink_session.items.audio
 
-class ContextMenuActions(object):
-    pass
+        if not new_conference:
+            session.widget.conference_position = None
+            session.widget.mute_button.hide()
+        if session.widget.mute_button.isChecked():
+            session.widget.mute_button.click()
+
+        for conference in (conference for conference in (old_conference, new_conference) if conference):
+            session_count = len(conference.sessions)
+            if session_count == 1:
+                blink_session = conference.sessions[0]
+                session = blink_session.items.audio
+                session.widget.conference_position = None
+                session.widget.mute_button.hide()
+            elif session_count > 1:
+                for blink_session in conference.sessions:
+                    session = blink_session.items.audio
+                    session.widget.conference_position = Top if blink_session is conference.sessions[0] else Bottom if blink_session is conference.sessions[-1] else Middle
+                    session.widget.mute_button.show()
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionNewIncoming(self, notification):
+        session = notification.sender
+        if 'audio' in session.streams:
+            session_item = AudioSessionItem(session)
+            self.addSession(session_item)
+
+    def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
+        session = notification.sender
+        if 'audio' in session.streams:
+            session_item = AudioSessionItem(session)
+            self.addSession(session_item)
+
+    def _NH_BlinkSessionWillConnect(self, notification):
+        session = notification.sender
+        if 'audio' in session.streams:
+            session_item = AudioSessionItem(session)
+            if notification.data.sibling is not None:
+                self.addSessionAndConference(session_item, notification.data.sibling.items.audio)
+            else:
+                self.addSession(session_item)
+
+    def _NH_BlinkSessionDidConnect(self, notification):
+        session = notification.sender
+        session_item = session.items.audio
+        if session_item is not None and 'audio' not in session.streams:
+            session_item.pending_removal = True
+            call_later(5, self.removeSession, session_item)
+            self.structureChanged.emit()
+
+    def _NH_BlinkSessionWillAddStream(self, notification):
+        if notification.data.stream.type == 'audio':
+            if notification.sender.items.audio is not None:
+                self.removeSession(notification.sender.items.audio)
+            session_item = AudioSessionItem(notification.sender)
+            self.addSession(session_item)
+
+    def _NH_BlinkSessionDidNotAddStream(self, notification):
+        if notification.data.stream.type == 'audio':
+            session_item = notification.sender.items.audio
+            session_item.pending_removal = True
+            call_later(5, self.removeSession, session_item)
+            self.structureChanged.emit()
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        if notification.data.stream.type == 'audio':
+            session_item = notification.sender.items.audio
+            session_item.pending_removal = True
+            call_later(5, self.removeSession, session_item)
+            self.structureChanged.emit()
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        session_item = notification.sender.items.audio
+        if session_item is not None and not session_item.pending_removal:
+            session_item.pending_removal = True
+            call_later(5, self.removeSession, session_item)
+            self.structureChanged.emit()
+
+    def _NH_BlinkSessionWillReinitialize(self, notification):
+        session_item = notification.sender.items.audio
+        if session_item is not None:
+            self.removeSession(session_item)
 
 
 # workaround class because passing context to the QShortcut constructor segfaults (fixed upstreams on 09-Apr-2013) -Dan
@@ -1310,13 +1873,17 @@ class QShortcut(QShortcut):
         self.setContext(context)
 
 
-class SessionListView(QListView):
+class AudioSessionListView(QListView):
+    implements(IObserver)
+
     def __init__(self, parent=None):
-        super(SessionListView, self).__init__(parent)
-        self.setItemDelegate(SessionDelegate(self))
+        super(AudioSessionListView, self).__init__(parent)
+        self.setItemDelegate(AudioSessionDelegate(self))
         self.setDropIndicatorShown(False)
+        self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.dragged_session = None
+        self.ignore_selection_changes = False
         self._pressed_position = None
         self._pressed_index = None
         self._hangup_shortcuts = []
@@ -1324,15 +1891,14 @@ class SessionListView(QListView):
         self._hangup_shortcuts.append(QShortcut('Ctrl+Delete', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
         self._hangup_shortcuts.append(QShortcut('Ctrl+Backspace', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
         self._hold_shortcut = QShortcut('Ctrl+Space', self, member=self._SH_HoldShortcutActivated, context=Qt.ApplicationShortcut)
-
-    def setModel(self, model):
-        selection_model = self.selectionModel() or Null
-        selection_model.selectionChanged.disconnect(self._SH_SelectionModelSelectionChanged)
-        super(SessionListView, self).setModel(model)
-        self.selectionModel().selectionChanged.connect(self._SH_SelectionModelSelectionChanged)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkActiveSessionDidChange')
 
     def contextMenuEvent(self, event):
         pass
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
 
     def keyPressEvent(self, event):
         digit = chr(event.key()) if event.key() < 256 else None
@@ -1353,12 +1919,12 @@ class SessionListView(QListView):
                 if new_index.isValid():
                     selection_model.select(new_index, selection_model.ClearAndSelect)
         else:
-            super(SessionListView, self).keyPressEvent(event)
+            super(AudioSessionListView, self).keyPressEvent(event)
 
     def mousePressEvent(self, event):
         self._pressed_position = event.pos()
         self._pressed_index = self.indexAt(self._pressed_position)
-        super(SessionListView, self).mousePressEvent(event)
+        super(AudioSessionListView, self).mousePressEvent(event)
         selection_model = self.selectionModel()
         selected_indexes = selection_model.selectedIndexes()
         if selected_indexes:
@@ -1369,7 +1935,7 @@ class SessionListView(QListView):
     def mouseReleaseEvent(self, event):
         self._pressed_position = None
         self._pressed_index = None
-        super(SessionListView, self).mouseReleaseEvent(event)
+        super(AudioSessionListView, self).mouseReleaseEvent(event)
 
     def selectionCommand(self, index, event=None):
         selection_model = self.selectionModel()
@@ -1384,22 +1950,51 @@ class SessionListView(QListView):
         elif event.type() == QEvent.MouseButtonRelease:
             return selection_model.ClearAndSelect
         else:
-            return super(SessionListView, self).selectionCommand(index, event)
+            return super(AudioSessionListView, self).selectionCommand(index, event)
+
+    def selectionChanged(self, selected, deselected):
+        super(AudioSessionListView, self).selectionChanged(selected, deselected)
+        selected_indexes = selected.indexes()
+        deselected_indexes = deselected.indexes()
+        for session in (index.data(Qt.UserRole) for index in deselected_indexes):
+            if session.conference is not None:
+                for sibling in session.conference.sessions:
+                    sibling.items.audio.widget.selected = False
+            else:
+                session.widget.selected = False
+        for session in (index.data(Qt.UserRole) for index in selected_indexes):
+            if session.conference is not None:
+                for sibling in session.conference.sessions:
+                    sibling.items.audio.widget.selected = True
+            else:
+                session.widget.selected = True
+        if selected_indexes:
+            self.setCurrentIndex(selected_indexes[0])
+        else:
+            self.setCurrentIndex(self.model().index(-1))
+        self.context_menu.hide()
+        #print "-- audio selection changed %s -> %s (ignore=%s)" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()], self.ignore_selection_changes)
+        if self.ignore_selection_changes:
+            return
+        notification_center = NotificationCenter()
+        selected_blink_session = selected[0].topLeft().data(Qt.UserRole).blink_session if selected else None
+        deselected_blink_session = deselected[0].topLeft().data(Qt.UserRole).blink_session if deselected else None
+        notification_data = NotificationData(selected_session=selected_blink_session, deselected_session=deselected_blink_session)
+        notification_center.post_notification('BlinkSessionListSelectionChanged', sender=self, data=notification_data)
 
     def startDrag(self, supported_actions):
         if self._pressed_index is not None and self._pressed_index.isValid():
-            model = self.model()
             self.dragged_session = self._pressed_index.data(Qt.UserRole)
             rect = self.visualRect(self._pressed_index)
             rect.adjust(1, 1, -1, -1)
             pixmap = QPixmap(rect.size())
             pixmap.fill(Qt.transparent)
-            widget = DraggedSessionWidget(self.dragged_session.widget, None)
+            widget = DraggedAudioSessionWidget(self.dragged_session.widget, None)
             widget.resize(rect.size())
             widget.render(pixmap)
             drag = QDrag(self)
             drag.setPixmap(pixmap)
-            drag.setMimeData(model.mimeData([self._pressed_index]))
+            drag.setMimeData(self.model().mimeData([self._pressed_index]))
             drag.setHotSpot(self._pressed_position - rect.topLeft())
             drag.exec_(supported_actions, Qt.CopyAction)
             self.dragged_session = None
@@ -1422,12 +2017,12 @@ class SessionListView(QListView):
             self.setState(self.DraggingState)
 
     def dragLeaveEvent(self, event):
-        super(SessionListView, self).dragLeaveEvent(event)
+        super(AudioSessionListView, self).dragLeaveEvent(event)
         for session in self.model().sessions:
             session.widget.drop_indicator = False
 
     def dragMoveEvent(self, event):
-        super(SessionListView, self).dragMoveEvent(event)
+        super(AudioSessionListView, self).dragMoveEvent(event)
         if event.source() is self:
             event.setDropAction(Qt.MoveAction)
 
@@ -1456,7 +2051,7 @@ class SessionListView(QListView):
             session.widget.drop_indicator = False
         if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
             event.accept()
-        super(SessionListView, self).dropEvent(event)
+        super(AudioSessionListView, self).dropEvent(event)
 
     def _DH_ApplicationXBlinkSessionList(self, event, index, rect, session):
         dragged_session = self.dragged_session
@@ -1470,13 +2065,13 @@ class SessionListView(QListView):
                 event.ignore(rect)
         else:
             conference = dragged_session.conference or Null
-            if dragged_session is session or session in conference.sessions:
+            if dragged_session is session or session.blink_session in conference.sessions:
                 event.ignore(rect)
             else:
                 if dragged_session.conference is None:
                     if session.conference is not None:
                         for sibling in session.conference.sessions:
-                            sibling.widget.drop_indicator = True
+                            sibling.items.audio.widget.drop_indicator = True
                     else:
                         session.widget.drop_indicator = True
                 event.accept(rect)
@@ -1491,7 +2086,7 @@ class SessionListView(QListView):
             event.accept(rect)
             if session.conference is not None:
                 for sibling in session.conference.sessions:
-                    sibling.widget.drop_indicator = True
+                    sibling.items.audio.widget.drop_indicator = True
             else:
                 session.widget.drop_indicator = True
 
@@ -1505,7 +2100,7 @@ class SessionListView(QListView):
             event.accept(rect)
             if session.conference is not None:
                 for sibling in session.conference.sessions:
-                    sibling.widget.drop_indicator = True
+                    sibling.items.audio.widget.drop_indicator = True
             else:
                 session.widget.drop_indicator = True
 
@@ -1519,25 +2114,677 @@ class SessionListView(QListView):
         if session.conference is None:
             session.widget.hold_button.click()
 
-    def _SH_SelectionModelSelectionChanged(self, selected, deselected):
-        model = self.model()
-        for session in (index.data(Qt.UserRole) for index in deselected.indexes()):
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
-                    sibling.widget.selected = False
-            else:
-                session.widget.selected = False
-        for session in (index.data(Qt.UserRole) for index in selected.indexes()):
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
-                    sibling.widget.selected = True
-            else:
-                session.widget.selected = True
-        if not selected.isEmpty():
-            self.setCurrentIndex(selected.indexes()[0])
-        else:
-            self.setCurrentIndex(model.index(-1))
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
 
+    def _NH_BlinkActiveSessionDidChange(self, notification):
+        self.ignore_selection_changes = True
+        selection_model = self.selectionModel()
+        if notification.data.active_session is None:
+            selection = selection_model.selection()
+            # check the code in this if branch if it's needed -Dan
+            #selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
+            #if notification.data.previous_active_session is selected_blink_session:
+            #    print "-- audio session list updating selection to None None"
+            #    selection_model.clearSelection()
+        else:
+            model = self.model()
+            position = model.sessions.index(notification.data.active_session.items.audio)
+            #print "-- audio session list updating selection to", position, notification.data.active_session
+            selection_model.select(model.index(position), selection_model.ClearAndSelect)
+        self.ignore_selection_changes = False
+
+
+# Chat sessions
+#
+
+class IconDescriptor(object):
+    def __init__(self, filename):
+        self.filename = filename
+        self.icon = None
+    def __get__(self, obj, objtype):
+        if self.icon is None:
+            self.icon = QIcon(self.filename)
+            self.icon.filename = self.filename
+        return self.icon
+    def __set__(self, obj, value):
+        raise AttributeError("attribute cannot be set")
+    def __delete__(self, obj):
+        raise AttributeError("attribute cannot be deleted")
+
+
+class ChatSessionItem(object):
+    implements(IObserver)
+
+    size_hint = QSize(200, 36)
+
+    default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
+
+    stylish_icons = True
+
+    def __init__(self, blink_session):
+        self.blink_session = blink_session
+        self.blink_session.items.chat = self
+        self.remote_composing = False
+        self.remote_composing_timer = QTimer()
+        self.remote_composing_timer.timeout.connect(self._SH_RemoteComposingTimerTimeout)
+        self.widget = ChatSessionWidget(None)
+        self.widget.update_content(self)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=blink_session)
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, self.blink_session)
+
+    @property
+    def name(self):
+        return self.blink_session.contact.name
+
+    @property
+    def info(self):
+        return self.blink_session.contact.note or self.blink_session.contact_uri.uri
+
+    @property
+    def state(self):
+        return self.blink_session.contact.state
+
+    @property
+    def icon(self):
+        return self.blink_session.contact.icon
+
+    @property
+    def pixmap(self):
+        return self.blink_session.contact.pixmap
+
+    @property
+    def chat_stream(self):
+        return self.blink_session.streams.get('chat')
+
+    def _get_remote_composing(self):
+        return self.__dict__['remote_composing']
+
+    def _set_remote_composing(self, value):
+        old_value = self.__dict__.get('remote_composing', False)
+        self.__dict__['remote_composing'] = value
+        if value != old_value and self.widget is not None:
+            self.widget.is_composing_icon.setVisible(value)
+            notification_center = NotificationCenter()
+            notification_center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    remote_composing = property(_get_remote_composing, _set_remote_composing)
+    del _get_remote_composing, _set_remote_composing
+
+    def end(self, delete=False):
+        self.blink_session.end(delete=delete)
+
+    def delete(self):
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self, sender=self.blink_session)
+        self.blink_session.items.chat = None
+        self.blink_session = None
+        self.widget = None
+
+    def update_composing_indication(self, data):
+        if data.state == 'active':
+            self.remote_composing = True
+            refresh_rate = data.refresh if data.refresh else 120
+            self.remote_composing_timer.start(refresh_rate*1000)
+        elif data.state == 'idle':
+            self.remote_composing = False
+            self.remote_composing_timer.stop()
+
+    def _SH_RemoteComposingTimerTimeout(self):
+        self.remote_composing_timer.stop()
+        self.remote_composing = False
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionContactDidChange(self, notification):
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidReinitializeForOutgoing(self, notification):
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionWillConnect(self, notification):
+        self.widget.chat_icon.setEnabled(False)
+        self.widget.audio_icon.setEnabled(False)
+        self.widget.video_icon.setEnabled(False)
+        self.widget.screen_sharing_icon.setEnabled(False)
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidConnect(self, notification):
+        self.widget.chat_icon.setEnabled(True)
+        self.widget.audio_icon.setEnabled(True)
+        self.widget.video_icon.setEnabled(True)
+        self.widget.screen_sharing_icon.setEnabled(True)
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionWillAddStream(self, notification):
+        icon_label = getattr(self.widget, "%s_icon" % notification.data.stream.type.replace('-', '_'))
+        icon_label.setEnabled(False)
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidAddStream(self, notification):
+        icon_label = getattr(self.widget, "%s_icon" % notification.data.stream.type.replace('-', '_'))
+        icon_label.setEnabled(True)
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidNotAddStream(self, notification):
+        icon_label = getattr(self.widget, "%s_icon" % notification.data.stream.type.replace('-', '_'))
+        icon_label.setEnabled(True)
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        if notification.data.stream.type == 'chat':
+            self.remote_composing = False
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self.remote_composing = False
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidChangeHoldState(self, notification):
+        self.widget.hold_icon.setVisible(self.blink_session.on_hold)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidChangeRecordingState(self, notification):
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+
+class Palettes(object):
+    pass
+
+ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
+
+class ChatSessionWidget(base_class, ui_class):
+    class StandardDisplayMode:  __metaclass__ = MarkerType
+    class AlternateDisplayMode: __metaclass__ = MarkerType
+    class SelectedDisplayMode:  __metaclass__ = MarkerType
+
+    def __init__(self, parent=None):
+        super(ChatSessionWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        self.palettes = Palettes()
+        self.palettes.standard = self.palette()
+        self.palettes.alternate = self.palette()
+        self.palettes.selected = self.palette()
+        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.display_mode = self.StandardDisplayMode
+        self.hold_icon.installEventFilter(self)
+        self.is_composing_icon.installEventFilter(self)
+        self.audio_icon.installEventFilter(self)
+        self.chat_icon.installEventFilter(self)
+        self.video_icon.installEventFilter(self)
+        self.screen_sharing_icon.installEventFilter(self)
+        self.widget_layout.invalidate()
+        self.widget_layout.activate()
+        #self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
+        #self.show()
+
+    def _get_display_mode(self):
+        return self.__dict__['display_mode']
+
+    def _set_display_mode(self, value):
+        if value not in (self.StandardDisplayMode, self.AlternateDisplayMode, self.SelectedDisplayMode):
+            raise ValueError("invalid display_mode: %r" % value)
+        old_mode = self.__dict__.get('display_mode', None)
+        new_mode = self.__dict__['display_mode'] = value
+        if new_mode == old_mode:
+            return
+        if new_mode is self.StandardDisplayMode:
+            self.setPalette(self.palettes.standard)
+            self.name_label.setForegroundRole(QPalette.WindowText)
+            self.info_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.AlternateDisplayMode:
+            self.setPalette(self.palettes.alternate)
+            self.name_label.setForegroundRole(QPalette.WindowText)
+            self.info_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.SelectedDisplayMode:
+            self.setPalette(self.palettes.selected)
+            self.name_label.setForegroundRole(QPalette.HighlightedText)
+            self.info_label.setForegroundRole(QPalette.HighlightedText)
+
+    display_mode = property(_get_display_mode, _set_display_mode)
+    del _get_display_mode, _set_display_mode
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QEvent.ShowToParent, QEvent.HideToParent):
+            self.widget_layout.invalidate()
+            self.widget_layout.activate()
+        return False
+
+    def update_content(self, session):
+        self.name_label.setText(session.name)
+        self.info_label.setText(session.info)
+        self.icon_label.setPixmap(session.pixmap)
+        self.state_label.state = session.state
+        self.hold_icon.setVisible(session.blink_session.on_hold)
+        self.is_composing_icon.setVisible(session.remote_composing)
+        self.chat_icon.setVisible('chat' in session.blink_session.streams)
+        self.video_icon.setVisible('video' in session.blink_session.streams)
+        self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
+        self.audio_icon.setVisible(session.blink_session.streams.types.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
+
+del ui_class, base_class
+
+
+class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
+    def __init__(self, parent=None):
+        super(ChatSessionDelegate, self).__init__(parent)
+
+    def editorEvent(self, event, model, option, index):
+        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
+            arrow_rect = option.rect.adjusted(option.rect.width()-14, option.rect.height()/2, 0, 0)  # bottom half of the rightmost 14 pixels
+            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2) # top half of the rightmost 14 pixels
+            if arrow_rect.contains(event.pos()):
+                session_list = self.parent()
+                session_list.animation.setDirection(QPropertyAnimation.Backward)
+                session_list.animation.start()
+                return True
+            elif cross_rect.contains(event.pos()):
+                session = index.data(Qt.UserRole)
+                session.end(delete=True)
+                return True
+        return super(ChatSessionDelegate, self).editorEvent(event, model, option, index)
+
+    def paint(self, painter, option, index):
+        session = index.data(Qt.UserRole)
+        if option.state & QStyle.State_Selected:
+            session.widget.display_mode = session.widget.SelectedDisplayMode
+        elif index.row() % 2 == 0:
+            session.widget.display_mode = session.widget.StandardDisplayMode
+        else:
+            session.widget.display_mode = session.widget.AlternateDisplayMode
+        session.widget.setFixedSize(option.rect.size())
+
+        painter.save()
+        painter.drawPixmap(option.rect, QPixmap.grabWidget(session.widget))
+        if option.state & QStyle.State_MouseOver:
+            self.drawSessionIndicators(session, option, painter, session.widget)
+        if 0 and (option.state & QStyle.State_MouseOver):
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            if option.state & QStyle.State_Selected:
+                painter.fillRect(option.rect, QColor(240, 244, 255, 40))
+            else:
+                painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+                painter.fillRect(option.rect, QColor(240, 244, 255, 230))
+        painter.restore()
+
+    def drawSessionIndicators(self, session, option, painter, widget):
+        pen_thickness = 1.6
+
+        color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+        if widget.state_label.state in ('available', 'away', 'busy', 'offline'):
+            window_color = widget.state_label.state_colors[widget.state_label.state]
+        else:
+            window_color = option.palette.color(QPalette.Window)
+        background_color = self.background_color(window_color, 0.5)
+
+        pen = QPen(self.deco_color(background_color, color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+
+        # draw the expansion indicator at the bottom (works best with a state_label of width 14)
+        arrow_rect = QRect(0, 0, 14, 14)
+        arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
+        arrow_rect.translate(option.rect.topLeft())
+
+        arrow = QPolygonF([QPointF(3, 1.5), QPointF(-0.5, -2.5), QPointF(-4, 1.5)])
+        arrow.translate(2, 1)
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.translate(arrow_rect.center())
+        painter.translate(0, +1)
+        painter.setPen(contrast_pen)
+        painter.drawPolyline(arrow)
+        painter.translate(0, -1)
+        painter.setPen(pen)
+        painter.drawPolyline(arrow)
+        painter.restore()
+
+        # draw the close indicator at the top (works best with a state_label of width 14)
+        cross_rect = QRect(0, 0, 14, 14)
+        cross_rect.moveTopRight(widget.state_label.geometry().topRight())
+        cross_rect.translate(option.rect.topLeft())
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.translate(cross_rect.center())
+        painter.translate(+1.5, +1)
+        painter.translate(0, +1)
+        painter.setPen(contrast_pen)
+        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
+        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.translate(0, -1)
+        painter.setPen(pen)
+        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
+        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return index.data(Qt.SizeHintRole)
+
+
+class ChatSessionModel(QAbstractListModel):
+    implements(IObserver)
+
+    sessionAboutToBeAdded = pyqtSignal(ChatSessionItem)
+    sessionAboutToBeRemoved = pyqtSignal(ChatSessionItem)
+    sessionAdded = pyqtSignal(ChatSessionItem)
+    sessionRemoved = pyqtSignal(ChatSessionItem)
+
+    # The MIME types we accept in drop operations, in the order they should be handled
+    accepted_mime_types = ['application/x-blink-contact-list', 'text/uri-list']
+
+    def __init__(self, parent=None):
+        super(ChatSessionModel, self).__init__(parent)
+        self.sessions = []
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkSessionNewIncoming')
+        notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
+        notification_center.add_observer(self, name='BlinkSessionWasDeleted')
+        notification_center.add_observer(self, name='ChatSessionItemDidChange')
+
+    def flags(self, index):
+        if index.isValid():
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+        else:
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.sessions)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        item = self.sessions[index.row()]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.SizeHintRole:
+            return item.size_hint
+        elif role == Qt.DisplayRole:
+            return unicode(item)
+        return None
+
+    def supportedDropActions(self):
+        return Qt.CopyAction# | Qt.MoveAction
+
+    def dropMimeData(self, mime_data, action, row, column, parent_index):
+        # this is here just to keep the default Qt DnD API happy
+        # the custom handler is in handleDroppedData
+        return False
+
+    def handleDroppedData(self, mime_data, action, index):
+        if action == Qt.IgnoreAction:
+            return True
+
+        for mime_type in self.accepted_mime_types:
+            if mime_data.hasFormat(mime_type):
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                return handler(mime_data, action, index)
+        else:
+            return False
+
+    def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
+        return True
+
+    def _DH_TextUriList(self, mime_data, action, index):
+        return False
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionNewIncoming(self, notification):
+        self.addSession(ChatSessionItem(notification.sender))
+
+    def _NH_BlinkSessionNewOutgoing(self, notification):
+        self.addSession(ChatSessionItem(notification.sender))
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        self.removeSession(notification.sender.items.chat)
+
+    def _NH_ChatSessionItemDidChange(self, notification):
+        index = self.index(self.sessions.index(notification.sender))
+        self.dataChanged.emit(index, index)
+
+    def _find_insertion_point(self, session):
+        for position, item in enumerate(self.sessions):
+            if item.name > session.name:
+                break
+        else:
+            position = len(self.sessions)
+        return position
+
+    def _add_session(self, session):
+        position = self._find_insertion_point(session)
+        self.beginInsertRows(QModelIndex(), position, position)
+        self.sessions.insert(position, session)
+        self.endInsertRows()
+
+    def _pop_session(self, session):
+        position = self.sessions.index(session)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.sessions[position]
+        self.endRemoveRows()
+        return session
+
+    def addSession(self, session):
+        if session in self.sessions:
+            return
+        self.sessionAboutToBeAdded.emit(session)
+        self._add_session(session)
+        self.sessionAdded.emit(session)
+
+    def removeSession(self, session):
+        if session not in self.sessions:
+            return
+        self.sessionAboutToBeRemoved.emit(session)
+        self._pop_session(session).delete()
+        self.sessionRemoved.emit(session)
+
+
+class ChatSessionListView(QListView):
+    implements(IObserver)
+
+    def __init__(self, chat_window):
+        super(ChatSessionListView, self).__init__(chat_window.session_panel)
+        self.chat_window = chat_window
+        self.setItemDelegate(ChatSessionDelegate(self))
+
+        self.setMouseTracking(True)
+        self.setAlternatingRowColors(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        #self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded) # default
+        self.setDragEnabled(False) # default
+        #self.setDropIndicatorShown(True)
+        self.setDragDropMode(QListView.DropOnly)
+        self.setSelectionMode(QListView.SingleSelection) # default
+
+        self.setStyleSheet("""QListView { border: 1px solid palette(dark); border-style: inset; border-radius: 3px; }""")
+        self.animation = QPropertyAnimation(self, 'geometry')
+        self.animation.setDuration(250)
+        self.animation.setEasingCurve(QEasingCurve.Linear)
+        self.animation.finished.connect(self._SH_AnimationFinished)
+        self.context_menu = QMenu(self)
+        self.actions = ContextMenuActions()
+        self.drop_indicator_index = QModelIndex()
+        self.ignore_selection_changes = False
+        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
+        chat_window.session_panel.installEventFilter(self)
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkActiveSessionDidChange')
+
+    def selectionChanged(self, selected, deselected):
+        super(ChatSessionListView, self).selectionChanged(selected, deselected)
+        selection_model = self.selectionModel()
+        selection = selection_model.selection()
+        if selection_model.currentIndex() not in selection:
+            index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
+            selection_model.setCurrentIndex(index, selection_model.Select)
+        self.context_menu.hide()
+        if self.ignore_selection_changes:
+            return
+        notification_center = NotificationCenter()
+        selected_blink_session = selected[0].topLeft().data(Qt.UserRole).blink_session if selected else None
+        deselected_blink_session = deselected[0].topLeft().data(Qt.UserRole).blink_session if deselected else None
+        notification_data = NotificationData(selected_session=selected_blink_session, deselected_session=deselected_blink_session)
+        notification_center.post_notification('BlinkSessionListSelectionChanged', sender=self, data=notification_data)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Resize:
+            new_size = event.size()
+            geometry = self.animation.endValue()
+            if geometry is not None:
+                old_size = geometry.size()
+                geometry.setSize(new_size)
+                self.animation.setEndValue(geometry)
+                geometry = self.animation.startValue()
+                geometry.setWidth(geometry.width() + new_size.width() - old_size.width())
+                self.animation.setStartValue(geometry)
+            self.resize(new_size)
+        return False
+
+    def contextMenuEvent(self, event):
+        pass
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape and self.selectionModel().selection():
+            self.animation.setDirection(QPropertyAnimation.Backward)
+            self.animation.start()
+        else:
+            super(ChatSessionListView, self).keyPressEvent(event)
+
+    def paintEvent(self, event):
+        super(ChatSessionListView, self).paintEvent(event)
+        if self.drop_indicator_index.isValid():
+            rect = self.visualRect(self.drop_indicator_index)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
+
+    def dragEnterEvent(self, event):
+        model = self.model()
+        accepted_mime_types = set(model.accepted_mime_types)
+        provided_mime_types = set(event.mimeData().formats())
+        acceptable_mime_types = accepted_mime_types & provided_mime_types
+        if not acceptable_mime_types:
+            event.ignore() # no acceptable mime types found
+        else:
+            event.accept()
+            self.setState(self.DraggingState)
+
+    def dragLeaveEvent(self, event):
+        super(ChatSessionListView, self).dragLeaveEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
+
+    def dragMoveEvent(self, event):
+        super(ChatSessionListView, self).dragMoveEvent(event)
+        model = self.model()
+        for mime_type in model.accepted_mime_types:
+            if event.provides(mime_type):
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
+                self.drop_indicator_index = QModelIndex()
+                index = self.indexAt(event.pos())
+                rect = self.visualRect(index)
+                item = index.data(Qt.UserRole)
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                handler(event, index, rect, item)
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
+                break
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        model = self.model()
+        if event.source() is self:
+            event.setDropAction(Qt.MoveAction)
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        super(ChatSessionListView, self).dropEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
+
+    def _DH_ApplicationXBlinkContactList(self, event, index, rect, item):
+        event.accept(rect)
+
+    def _DH_TextUriList(self, event, index, rect, item):
+        model = self.model()
+        if not index.isValid():
+            rect = self.viewport().rect()
+            rect.setTop(self.visualRect(model.index(len(model.sessions)-1)).bottom())
+        event.accept(rect)
+        self.drop_indicator_index = index
+
+    def _SH_AnimationFinished(self):
+        if self.animation.direction() == QPropertyAnimation.Forward:
+            self.setFocus(True)
+        else:
+            self.hide()
+            current_tab = self.chat_window.tab_widget.currentWidget()
+            current_tab.chat_input.setFocus(True)
+
+    def _SH_DoubleClicked(self, index):
+        self.animation.setDirection(QPropertyAnimation.Backward)
+        self.animation.start()
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkActiveSessionDidChange(self, notification):
+        self.ignore_selection_changes = True
+        selection_model = self.selectionModel()
+        if notification.data.active_session is None:
+            selection = selection_model.selection()
+            # check the code in this if branch if it's needed -Dan (if not also remove previous_active_session maybe)
+            #selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
+            #if notification.data.previous_active_session is selected_blink_session:
+            #    print "-- chat session list updating selection to None None"
+            #    selection_model.clearSelection()
+        else:
+            model = self.model()
+            position = model.sessions.index(notification.data.active_session.items.chat)
+            #print "-- chat session list updating selection to", position, notification.data.active_session
+            selection_model.select(model.index(position), selection_model.ClearAndSelect)
+        self.ignore_selection_changes = False
+
+
+# Session management
+#
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
 
@@ -1569,8 +2816,7 @@ class IncomingDialog(base_class, ui_class):
         self.position = None
 
     def show(self, activate=True, position=1):
-        from blink import Blink
-        blink = Blink()
+        blink = QApplication.instance()
         screen_geometry = blink.desktop().screenGeometry(self)
         available_geometry = blink.desktop().availableGeometry(self)
         main_window_geometry = blink.main_window.geometry()
@@ -1645,15 +2891,16 @@ class IncomingDialog(base_class, ui_class):
 del ui_class, base_class
 
 
-class SessionRequest(QObject):
+class IncomingRequest(QObject):
     accepted = pyqtSignal(object)
     rejected = pyqtSignal(object, str)
 
-    def __init__(self, dialog, session, contact=None, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, screensharing_stream=None):
-        super(SessionRequest, self).__init__()
+    def __init__(self, dialog, session, contact, contact_uri, proposal=False, audio_stream=None, video_stream=None, chat_stream=None, screensharing_stream=None):
+        super(IncomingRequest, self).__init__()
         self.dialog = dialog
         self.session = session
         self.contact = contact
+        self.contact_uri = contact_uri
         self.proposal = proposal
         self.audio_stream = audio_stream
         self.video_stream = video_stream
@@ -1669,17 +2916,14 @@ class SessionRequest(QObject):
             self.dialog.setWindowIconText(u'Incoming Session Request')
         address = u'%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
-        if self.contact:
-            self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
+        self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
+        if contact.pixmap:
             self.dialog.user_icon.setPixmap(contact.pixmap)
-        else:
-            self.dialog.username_label.setText(session.remote_identity.display_name or address)
         if self.audio_stream:
             self.dialog.audio_stream.show()
         if self.video_stream:
             self.dialog.video_stream.show()
         if self.chat_stream:
-            self.dialog.chat_stream.accepted = False # Remove when implemented later -Luci
             self.dialog.chat_stream.show()
         if self.screensharing_stream:
             if self.screensharing_stream.handler.type == 'active':
@@ -1753,22 +2997,6 @@ class SessionRequest(QObject):
         else:
             return 4
 
-    @property
-    def ringtone(self):
-        if 'ringtone' not in self.__dict__:
-            if self.audio_stream or self.video_stream or self.screensharing_stream:
-                sound_file = self.session.account.sounds.inbound_ringtone
-                if sound_file is not None and sound_file.path is DefaultPath:
-                    settings = SIPSimpleSettings()
-                    sound_file = settings.sounds.inbound_ringtone
-                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, sound_file.path, volume=sound_file.volume, loop_count=0, pause_time=2.7) if sound_file is not None else Null
-                ringtone.bridge = SIPApplication.alert_audio_bridge
-            else:
-                ringtone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=5)
-                ringtone.bridge = SIPApplication.alert_audio_bridge
-            self.__dict__['ringtone'] = ringtone
-        return self.__dict__['ringtone']
-
     def _SH_DialogAccepted(self):
         self.accepted.emit(self)
 
@@ -1797,22 +3025,52 @@ class ConferenceDialog(base_class, ui_class):
     def show(self):
         self.room_button.setCurrentIndex(-1)
         self.audio_button.setChecked(True)
-        self.chat_button.setChecked(False)
+        self.chat_button.setChecked(True)
         self.accept_button.setEnabled(False)
         super(ConferenceDialog, self).show()
 
     def join_conference(self):
+        from blink.contacts import URIUtils
+
         account_manager = AccountManager()
         session_manager = SessionManager()
         account = account_manager.default_account
         if account is not BonjourAccount():
-            conference_server = account.server.conference_server
+            conference_uri = u'%s@%s' % (self.room_button.currentText(), account.server.conference_server or 'conference.sip2sip.info')
         else:
-            conference_server = None
-        uri = u'%s@%s' % (self.room_button.currentText(), conference_server or 'conference.sip2sip.info')
-        session_manager.start_call(None, uri, account=account)
+            conference_uri = u'%s@%s' % (self.room_button.currentText(), 'conference.sip2sip.info')
+        contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')
+        streams = []
+        if self.audio_button.isChecked():
+            streams.append(StreamDescription('audio'))
+        if self.chat_button.isChecked():
+            streams.append(StreamDescription('chat'))
+        session_manager.create_session(contact, contact_uri, streams, account=account)
 
 del ui_class, base_class
+
+
+class RingtoneDescriptor(object):
+    def __init__(self):
+        self.values = weakobjectmap()
+
+    def __get__(self, obj, objtype):
+        if obj is None:
+            return self
+        return self.values[obj]
+
+    def __set__(self, obj, ringtone): # review this again -Dan
+        old_ringtone = self.values.get(obj, Null)
+        if ringtone is not Null and ringtone.type == old_ringtone.type:
+            return
+        old_ringtone.stop()
+        old_ringtone.bridge.remove(old_ringtone)
+        ringtone.bridge.add(ringtone)
+        ringtone.start()
+        self.values[obj] = ringtone
+
+    def __delete__(self, obj):
+        raise AttributeError("Attribute cannot be deleted")
 
 
 class SessionManager(object):
@@ -1820,199 +3078,181 @@ class SessionManager(object):
 
     implements(IObserver)
 
-    number_strip_re = re.compile(r'\(\s?0\s?\)|[-() ]')
-    number_re = re.compile(r'^\+?[-\d\s()]+$')
+    class PrimaryRingtone:   __metaclass__ = MarkerType
+    class SecondaryRingtone: __metaclass__ = MarkerType
+
+    inbound_ringtone  = RingtoneDescriptor()
+    outbound_ringtone = RingtoneDescriptor()
+    hold_tone         = RingtoneDescriptor()
+    # have the hangup tone also a descriptor that is not reset to Null when it ends playing, but after the cooldown period -Dan
 
     def __init__(self):
-        self.main_window = None
-        self.session_model = None
-        self.session_requests = []
+        self.sessions = []
+        self.incoming_requests = []
         self.dialog_positions = range(1, 100)
-        self.current_ringtone = Null
         self.last_dialed_uri = None
+        self.active_session = None
 
-    def initialize(self, main_window, session_model):
-        self.main_window = main_window
-        self.session_model = session_model
-        session_model.structureChanged.connect(self.update_ringtone)
-        session_model.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
+        self.inbound_ringtone = Null
+        self.outbound_ringtone = Null
+        self.hold_tone = Null
+
+        self._hangup_tone_timer = QTimer() # we should consider replacing this with a timestamp -Dan
+        self._hangup_tone_timer.setInterval(1000)
+        self._hangup_tone_timer.setSingleShot(True)
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
-        notification_center.add_observer(self, name='SIPSessionGotProposal')
+        notification_center.add_observer(self, name='SIPSessionNewProposal')
         notification_center.add_observer(self, name='SIPSessionDidFail')
-        notification_center.add_observer(self, name='SIPSessionGotRejectProposal')
-        notification_center.add_observer(self, name='SIPSessionDidRenegotiateStreams')
+        notification_center.add_observer(self, name='SIPSessionProposalRejected')
+        notification_center.add_observer(self, name='SIPSessionHadProposalFailure')
 
-    def start_call(self, name, address, contact=None, account=None, conference_sibling=None, audio=True, video=False):
-        account_manager = AccountManager()
-        account = account or account_manager.default_account
-        if account is None or not account.enabled:
-            return
-        try:
-            remote_uri = self.create_uri(account, address)
-        except Exception, e:
-            print 'Invalid URI: %s' % e # Replace with pop-up
-        else:
-            self.last_dialed_uri = remote_uri
-            session = Session(account)
-            if contact is None:
-                for contact in self.main_window.contact_model.iter_contacts():
-                    if any(remote_uri.matches(self.normalize_number(account, uri.uri)) for uri in contact.uris):
-                        break
-                else:
-                    contact = None
-            audio_stream = self.create_stream('audio') if audio else None
-            video_stream = self.create_stream('video') if video else None
-            session_item = SessionItem(name, remote_uri, session, contact, audio_stream=audio_stream, video_stream=video_stream)
-            if conference_sibling is not None:
-                self.session_model.addSessionAndConference(session_item, conference_sibling)
+        notification_center.add_observer(self, name='BlinkSessionNewIncoming')
+        notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
+        notification_center.add_observer(self, name='BlinkSessionDidEnd')
+        notification_center.add_observer(self, name='BlinkSessionWasDeleted')
+        notification_center.add_observer(self, name='BlinkSessionDidChangeState')
+        notification_center.add_observer(self, name='BlinkSessionDidChangeHoldState')
+
+        notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
+
+    def create_session(self, contact, contact_uri, streams, account=None, connect=True, sibling=None):
+        from blink.contacts import BonjourNeighbour
+
+        if account is None:
+            if isinstance(contact.settings, BonjourNeighbour):
+                account = BonjourAccount()
             else:
-                self.session_model.addSession(session_item)
-            self.main_window.switch_view_button.view = SwitchViewButton.SessionView
-            self.session_model.session_list.setFocus()
-            self.main_window.search_box.update()
-            session_item.connect()
+                account = AccountManager().default_account
+
+        assert account is not None
+
+        try:
+            session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
+            reinitialize = True
+        except StopIteration:
+            session = BlinkSession()
+            self.sessions.append(session)
+            reinitialize = False
+
+        session.init_outgoing(account, contact, contact_uri, streams, sibling=sibling, reinitialize=reinitialize)
+        self.last_dialed_uri = session.uri
+        if connect:
+            session.connect()
+
+        return session
 
     def update_ringtone(self):
-        if not self.session_requests:
-            self.current_ringtone = Null
-        elif self.session_model.active_sessions:
-            self.current_ringtone = self.beeping_ringtone
-        else:
-            self.current_ringtone = self.session_requests[0].ringtone
-
-    @property
-    def beeping_ringtone(self):
-        if 'beeping_ringtone' not in self.__dict__:
-            ringtone = WavePlayer(SIPApplication.voice_audio_mixer, Resources.get('sounds/beeping_ringtone.wav'), volume=70, loop_count=0, pause_time=10)
-            ringtone.bridge = SIPApplication.voice_audio_bridge
-            self.__dict__['beeping_ringtone'] = ringtone
-        return self.__dict__['beeping_ringtone']
-
-    def _get_current_ringtone(self):
-        return self.__dict__['current_ringtone']
-
-    def _set_current_ringtone(self, ringtone):
-        old_ringtone = self.__dict__.get('current_ringtone', Null)
-        if ringtone is not Null and ringtone is old_ringtone:
-            return
-        old_ringtone.stop()
-        old_ringtone.bridge.remove(old_ringtone)
-        ringtone.bridge.add(ringtone)
-        ringtone.start()
-        self.__dict__['current_ringtone'] = ringtone
-
-    current_ringtone = property(_get_current_ringtone, _set_current_ringtone)
-    del _get_current_ringtone, _set_current_ringtone
-
-    @staticmethod
-    def create_stream(type):
-        for cls in MediaStreamRegistry():
-            if cls.type == type:
-                return cls()
-        else:
-            raise ValueError('unknown stream type: %s' % type)
-
-    @classmethod
-    def create_uri(cls, account, address):
-        address = cls.normalize_number(account, address)
-        if not address.startswith('sip:') and not address.startswith('sips:'):
-            address = 'sip:' + address
-        username, separator, domain = address.partition('@')
-        if not domain and isinstance(account, Account):
-            domain = account.id.domain
-        elif '.' not in domain and isinstance(account, Account):
-            domain += '.' + account.id.domain
-        elif not domain:
-            raise ValueError('SIP address without domain')
-        address = username + '@' + domain
-        return SIPURI.parse(str(address))
-
-    @classmethod
-    def normalize_number(cls, account, address):
-        if cls.number_re.match(address):
-            address = cls.number_strip_re.sub('', address)
-            if isinstance(account, Account) and account.pstn.idd_prefix is not None:
-                address = re.sub(r'^\+', account.pstn.idd_prefix, address)
-            if isinstance(account, Account) and account.pstn.prefix is not None:
-                address = account.pstn.prefix + address
-        return address
-
-    def _SH_SessionRequestAccepted(self, session_request):
-        if session_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, session_request.dialog.position)
-        self.session_requests.remove(session_request)
-        self.update_ringtone()
-        session = session_request.session
-        if session_request.audio_accepted and session_request.video_accepted:
-            session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, session_request.contact, audio_stream=session_request.audio_stream, video_stream=session_request.video_stream)
-        elif session_request.audio_accepted:
-            try:
-                session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.audio_stream is None).next()
-                session_item.audio_stream = session_request.audio_stream
-            except StopIteration:
-                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, session_request.contact, audio_stream=session_request.audio_stream)
-        elif session_request.video_accepted:
-            try:
-                session_item = (session_item for session_item in self.session_model.active_sessions if session_item.session is session and session_item.video_stream is None).next()
-                session_item.video_stream = session_request.video_stream
-            except StopIteration:
-                session_item = SessionItem(session.remote_identity.display_name, session.remote_identity.uri, session, session_request.contact, video_stream=session_request.video_stream)
-        else: # Handle other streams -Luci
-            if session_request.proposal:
-                session.reject_proposal(488)
+        # Outgoing ringtone
+        outgoing_sessions_or_proposals = [session for session in self.sessions if session.state=='connecting/ringing' and session.direction=='outgoing' or session.state=='connected/sent_proposal']
+        if any(not session.on_hold for session in outgoing_sessions_or_proposals):
+            settings = SIPSimpleSettings()
+            outbound_ringtone = settings.sounds.outbound_ringtone
+            if outbound_ringtone:
+                if any('audio' in session.streams and not session.on_hold for session in outgoing_sessions_or_proposals):
+                    ringtone_path = outbound_ringtone.path
+                    ringtone_type = self.PrimaryRingtone
+                else:
+                    ringtone_path = Resources.get('sounds/beeping_ringtone.wav')
+                    ringtone_type = self.SecondaryRingtone
+                outbound_ringtone = WavePlayer(SIPApplication.voice_audio_mixer, ringtone_path, outbound_ringtone.volume, loop_count=0, pause_time=5)
+                outbound_ringtone.bridge = SIPApplication.voice_audio_bridge
+                outbound_ringtone.type = ringtone_type
             else:
-                session.reject(488)
-            return
-        selection_model = self.session_model.session_list.selectionModel()
-        if session_item in self.session_model.sessions:
-            selection_model.select(self.session_model.index(self.session_model.sessions.index(session_item)), selection_model.ClearAndSelect)
+                outbound_ringtone = Null
         else:
-            self.session_model.addSession(session_item)
-        self.main_window.switch_view_button.view = SwitchViewButton.SessionView
-        self.session_model.session_list.setFocus()
-        # Remove when implemented later -Luci
-        accepted_streams = session_request.accepted_streams
-        if session_request.chat_stream in accepted_streams:
-            accepted_streams.remove(session_request.chat_stream)
-        if session_request.screensharing_stream in accepted_streams:
-            accepted_streams.remove(session_request.screensharing_stream)
-        if session_request.proposal:
-            session.accept_proposal(accepted_streams)
-        else:
-            session.accept(accepted_streams)
-        self.main_window.activateWindow()
-        self.main_window.raise_()
+            outbound_ringtone = Null
 
-    def _SH_SessionRequestRejected(self, session_request, mode):
-        if session_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, session_request.dialog.position)
-        self.session_requests.remove(session_request)
+        if outbound_ringtone.type is self.PrimaryRingtone and self.inbound_ringtone.type is self.PrimaryRingtone:
+            self.inbound_ringtone = Null
+        if outbound_ringtone is not Null and self.hold_tone is not Null:
+            self.hold_tone = Null
+        self.outbound_ringtone = outbound_ringtone
+
+        # Incoming ringtone
+        if self.incoming_requests:
+            try:
+                request = next(req for req in self.incoming_requests if req.audio_stream or req.video_stream)
+                ringtone_type = self.PrimaryRingtone
+            except StopIteration:
+                request = self.incoming_requests[0]
+                ringtone_type = self.SecondaryRingtone
+
+            if self.active_session is not None and self.active_session.state in ('connecting/ringing', 'connected/*'):
+                ringtone_type = self.SecondaryRingtone
+                initial_delay = 1 # have a small delay to avoid sounds overlapping
+            else:
+                initial_delay = 0
+
+            settings = SIPSimpleSettings()
+            sound_file = request.session.account.sounds.inbound_ringtone or settings.sounds.inbound_ringtone
+            if sound_file:
+                if ringtone_type is self.PrimaryRingtone:
+                    ringtone_path = sound_file.path
+                else:
+                    ringtone_path = Resources.get('sounds/beeping_ringtone.wav')
+                inbound_ringtone = WavePlayer(SIPApplication.alert_audio_mixer, ringtone_path, volume=sound_file.volume, loop_count=0, pause_time=3, initial_delay=initial_delay)
+                inbound_ringtone.bridge = SIPApplication.alert_audio_bridge
+                inbound_ringtone.type = ringtone_type
+            else:
+                inbound_ringtone = Null
+        else:
+            inbound_ringtone = Null
+
+        if inbound_ringtone is not Null and self.hold_tone is not Null:
+            self.hold_tone = Null
+        self.inbound_ringtone = inbound_ringtone
+
+        # Hold tone
+        # we need to beep every 15 seconds only when we put all calls on hold. If all are on hold but not all by local, we ring at 45 seconds -Dan
+        connected_sessions = [session for session in self.sessions if session.state=='connected/*']
+        connected_on_hold_sessions = [session for session in connected_sessions if session.on_hold]
+        if self.outbound_ringtone is Null and self.inbound_ringtone is Null and connected_sessions:
+            if len(connected_sessions) == len(connected_on_hold_sessions):
+                hold_tone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, pause_time=15, volume=30, initial_delay=15)
+                hold_tone.bridge = SIPApplication.alert_audio_bridge
+                hold_tone.type = None
+            elif len(connected_on_hold_sessions) > 0:
+                hold_tone = WavePlayer(SIPApplication.voice_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, pause_time=45, volume=30, initial_delay=15)
+                hold_tone.bridge = SIPApplication.voice_audio_bridge
+                hold_tone.type = None
+            else:
+                hold_tone = Null
+        else:
+            hold_tone = Null
+        self.hold_tone = hold_tone
+
+    def _SH_IncomingRequestAccepted(self, incoming_request):
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
-        if session_request.proposal:
-            session_request.session.reject_proposal(488)
-        elif mode == 'busy':
-            session_request.session.reject(486)
-        elif mode == 'reject':
-            session_request.session.reject(603)
+        accepted_streams = incoming_request.accepted_streams
+        if incoming_request.proposal:
+            blink_session = next(session for session in self.sessions if session.sip_session is incoming_request.session)
+            blink_session.accept_proposal(accepted_streams)
+        else:
+            try:
+                blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is incoming_request.contact.settings)
+                reinitialize = True
+            except StopIteration:
+                blink_session = BlinkSession()
+                self.sessions.append(blink_session)
+                reinitialize = False
+            blink_session.init_incoming(incoming_request.session, accepted_streams, incoming_request.contact, incoming_request.contact_uri, reinitialize=reinitialize)
 
-    def _SH_SessionListSelectionChanged(self, selected, deselected):
-        if self.session_model.ignore_selection_changes:
-            return
-        selected_indexes = selected.indexes()
-        deselected_indexes = deselected.indexes()
-        old_active_session = deselected_indexes[0].data(Qt.UserRole) if deselected_indexes else Null
-        new_active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
-        if old_active_session.conference and old_active_session.conference is not new_active_session.conference:
-            for session in old_active_session.conference.sessions:
-                session.active = False
-        elif old_active_session.conference is None:
-            old_active_session.active = False
-        if new_active_session.conference and new_active_session.conference is not old_active_session.conference:
-            for session in new_active_session.conference.sessions:
-                session.active = True
-        elif new_active_session.conference is None:
-            new_active_session.active = True
+    def _SH_IncomingRequestRejected(self, incoming_request, mode):
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        self.incoming_requests.remove(incoming_request)
+        self.update_ringtone()
+        if incoming_request.proposal:
+            incoming_request.session.reject_proposal(488)
+        elif mode == 'busy':
+            incoming_request.session.reject(486)
+        elif mode == 'reject':
+            incoming_request.session.reject(603)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -2020,115 +3260,187 @@ class SessionManager(object):
         handler(notification)
 
     def _NH_SIPSessionNewIncoming(self, notification):
-        session = notification.sender
-        audio_streams = [stream for stream in notification.data.streams if stream.type=='audio']
-        video_streams = [stream for stream in notification.data.streams if stream.type=='video']
-        chat_streams = [stream for stream in notification.data.streams if stream.type=='chat']
-        screensharing_streams = [stream for stream in notification.data.streams if stream.type=='screen-sharing']
-        filetransfer_streams = [stream for stream in notification.data.streams if stream.type=='file-transfer']
-        if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
-            session.reject(488)
-            return
-        if filetransfer_streams and (audio_streams or video_streams or chat_streams or screensharing_streams):
-            session.reject(488)
-            return
-        session.send_ring_indication()
-        remote_uri = session.remote_identity.uri
-        for contact in self.main_window.contact_model.iter_contacts():
-            if any(remote_uri.matches(self.normalize_number(session.account, uri.uri)) for uri in contact.uris):
-                break
-        else:
-            matched_contacts = []
-            number = remote_uri.user.strip('0') if self.number_re.match(remote_uri.user) else Null
-            if len(number) > 7:
-                for contact in self.main_window.contact_model.iter_contacts():
-                    if any(self.number_re.match(uri.uri) and self.normalize_number(session.account, uri.uri).endswith(number) for uri in contact.uris):
-                        matched_contacts.append(contact)
-            contact = matched_contacts[0] if len(matched_contacts)==1 else None
-        if filetransfer_streams:
-            filetransfer_stream = filetransfer_streams[0]
-        else:
-            audio_stream = audio_streams[0] if audio_streams else None
-            video_stream = video_streams[0] if video_streams else None
-            chat_stream = chat_streams[0] if chat_streams else None
-            screensharing_stream = screensharing_streams[0] if screensharing_streams else None
-            dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-            session_request = SessionRequest(dialog, session, contact, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
-            bisect.insort_right(self.session_requests, session_request)
-            session_request.accepted.connect(self._SH_SessionRequestAccepted)
-            session_request.rejected.connect(self._SH_SessionRequestRejected)
-            try:
-                position = self.dialog_positions.pop(0)
-            except IndexError:
-                position = None
-            session_request.dialog.show(activate=QApplication.activeWindow() is not None and self.session_requests.index(session_request)==0, position=position)
-            self.update_ringtone()
+        from blink.contacts import URIUtils
 
-    def _NH_SIPSessionGotProposal(self, notification):
         session = notification.sender
-        audio_streams = [stream for stream in notification.data.streams if stream.type=='audio']
-        video_streams = [stream for stream in notification.data.streams if stream.type=='video']
-        chat_streams = [stream for stream in notification.data.streams if stream.type=='chat']
-        screensharing_streams = [stream for stream in notification.data.streams if stream.type=='screen-sharing']
-        filetransfer_streams = [stream for stream in notification.data.streams if stream.type=='file-transfer']
+
+        stream_map = defaultdict(list)
+        for stream in notification.data.streams:
+            stream_map[stream.type].append(stream)
+
+        audio_streams = stream_map['audio']
+        video_streams = stream_map['video']
+        chat_streams = stream_map['chat']
+        screensharing_streams = stream_map['screen-sharing']
+        filetransfer_streams = stream_map['file-transfer']
+
+        if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
+            session.reject(488)
+            return
+        if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
+            # TODO: add support for this with different type of session -Saul
+            session.reject(488)
+            return
+
+        session.send_ring_indication()
+
+        contact, contact_uri = URIUtils.find_contact(session.remote_identity.uri, display_name=session.remote_identity.display_name, exact=False)
+
+        audio_stream = audio_streams[0] if audio_streams else None
+        video_stream = video_streams[0] if video_streams else None
+        chat_stream = chat_streams[0] if chat_streams else None
+        screensharing_stream = screensharing_streams[0] if screensharing_streams else None
+
+        dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+        incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+        bisect.insort_right(self.incoming_requests, incoming_request)
+        incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
+        incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
+        try:
+            position = self.dialog_positions.pop(0)
+        except IndexError:
+            position = None
+        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
+        self.update_ringtone()
+
+    def _NH_SIPSessionNewProposal(self, notification):
+        if notification.data.originator != 'remote':
+            return
+
+        session = notification.sender
+
+        current_stream_types = set(stream.type for stream in session.streams)
+        stream_map = defaultdict(list)
+        for stream in (stream for stream in notification.data.proposed_streams if stream.type not in current_stream_types):
+            stream_map[stream.type].append(stream)
+
+        audio_streams = stream_map['audio']
+        video_streams = stream_map['video']
+        chat_streams = stream_map['chat']
+        screensharing_streams = stream_map['screen-sharing']
+        filetransfer_streams = stream_map['file-transfer']
+
         if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
             session.reject_proposal(488)
             return
-        if filetransfer_streams and (audio_streams or video_streams or chat_streams or screensharing_streams):
+        if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
             session.reject_proposal(488)
             return
+
         session.send_ring_indication()
-        remote_uri = session.remote_identity.uri
-        for contact in self.main_window.contact_model.iter_contacts():
-            if any(remote_uri.matches(self.normalize_number(session.account, uri.uri)) for uri in contact.uris):
-                break
-        else:
-            contact = None
-        if filetransfer_streams:
-            filetransfer_stream = filetransfer_streams[0]
-        else:
-            audio_stream = audio_streams[0] if audio_streams else None
-            video_stream = video_streams[0] if video_streams else None
-            chat_stream = chat_streams[0] if chat_streams else None
-            screensharing_stream = screensharing_streams[0] if screensharing_streams else None
-            dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-            session_request = SessionRequest(dialog, session, contact, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
-            bisect.insort_right(self.session_requests, session_request)
-            session_request.accepted.connect(self._SH_SessionRequestAccepted)
-            session_request.rejected.connect(self._SH_SessionRequestRejected)
-            try:
-                position = self.dialog_positions.pop(0)
-            except IndexError:
-                position = None
-            session_request.dialog.show(activate=QApplication.activeWindow() is not None and self.session_requests.index(session_request)==0, position=position)
-            self.update_ringtone()
+
+        blink_session = next(s for s in self.sessions if s.sip_session is session)
+        contact = blink_session.contact
+        contact_uri = blink_session.contact_uri
+
+        audio_stream = audio_streams[0] if audio_streams else None
+        video_stream = video_streams[0] if video_streams else None
+        chat_stream = chat_streams[0] if chat_streams else None
+        screensharing_stream = screensharing_streams[0] if screensharing_streams else None
+
+        dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+        incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+        bisect.insort_right(self.incoming_requests, incoming_request)
+        incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
+        incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
+        try:
+            position = self.dialog_positions.pop(0)
+        except IndexError:
+            position = None
+        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
+        self.update_ringtone()
 
     def _NH_SIPSessionDidFail(self, notification):
-        if notification.data.code != 487:
-            return
         try:
-            session_request = (session_request for session_request in self.session_requests if session_request.session is notification.sender).next()
+            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
         except StopIteration:
-            pass
-        else:
-            if session_request.dialog.position is not None:
-                bisect.insort_left(self.dialog_positions, session_request.dialog.position)
-            session_request.dialog.hide()
-            self.session_requests.remove(session_request)
-            self.update_ringtone()
+            return
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        incoming_request.dialog.hide()
+        self.incoming_requests.remove(incoming_request)
+        self.update_ringtone()
 
-    def _NH_SIPSessionGotRejectProposal(self, notification):
-        if notification.data.code != 487:
-            return
+    def _NH_SIPSessionProposalRejected(self, notification):
         try:
-            session_request = (session_request for session_request in self.session_requests if session_request.session is notification.sender).next()
+            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
         except StopIteration:
-            pass
-        else:
-            if session_request.dialog.position is not None:
-                bisect.insort_left(self.dialog_positions, session_request.dialog.position)
-            session_request.dialog.hide()
-            self.session_requests.remove(session_request)
+            return
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        incoming_request.dialog.hide()
+        self.incoming_requests.remove(incoming_request)
+        self.update_ringtone()
+
+    def _NH_SIPSessionHadProposalFailure(self, notification):
+        try:
+            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
+        except StopIteration:
+            return
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        incoming_request.dialog.hide()
+        self.incoming_requests.remove(incoming_request)
+        self.update_ringtone()
+
+    def _NH_BlinkSessionDidChangeState(self, notification):
+        new_state = notification.data.new_state
+        if new_state in ('connecting/ringing', 'connecting/early_media', 'connected/*'):
             self.update_ringtone()
+        elif new_state == 'ending':
+            notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*')
+
+    def _NH_BlinkSessionDidChangeHoldState(self, notification):
+        if notification.data.remote_hold and not notification.data.local_hold: # check if this could be integrated in update_ringtone -Dan
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hold_tone.wav'), loop_count=1, volume=30)
+            SIPApplication.voice_audio_bridge.add(player)
+            player.start()
+        self.update_ringtone()
+
+    def _NH_BlinkSessionNewIncoming(self, notification):
+        self.update_ringtone()
+
+    def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
+        self.update_ringtone()
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self.update_ringtone()
+        if notification.sender._play_hangup_tone and not self._hangup_tone_timer.isActive():
+            self._hangup_tone_timer.start()
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=60)
+            SIPApplication.voice_audio_bridge.add(player)
+            player.start()
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        self.sessions.remove(notification.sender)
+
+    def _NH_BlinkSessionListSelectionChanged(self, notification):
+        selected_session = notification.data.selected_session
+        deselected_session = notification.data.deselected_session
+        old_active_session = self.active_session
+
+        if selected_session is self.active_session: # both None or both the same session. nothing to do in either case.
+            return
+        elif selected_session is None and deselected_session is old_active_session is not None:
+            self.active_session = None
+            sessions = deselected_session.conference.sessions if deselected_session.conference is not None else [deselected_session]
+            for session in sessions:
+                session.active = False
+            notification.center.post_notification('BlinkActiveSessionDidChange', sender=self, data=NotificationData(previous_active_session=old_active_session, active_session=None))
+        elif selected_session is not None and selected_session.state in ('connecting/*', 'connected/*') and selected_session.streams.types.intersection({'audio', 'video'}):
+            old_active_session = old_active_session or Null
+            new_active_session = selected_session
+            if old_active_session.conference is not None and old_active_session.conference is not new_active_session.conference:
+                for session in old_active_session.conference.sessions:
+                    session.active = False
+            elif old_active_session.conference is None:
+                old_active_session.active = False
+            if new_active_session.conference is not None and new_active_session.conference is not old_active_session.conference:
+                for session in new_active_session.conference.sessions:
+                    session.active = True
+            elif new_active_session.conference is None:
+                new_active_session.active = True
+            self.active_session = selected_session
+            notification.center.post_notification('BlinkActiveSessionDidChange', sender=self, data=NotificationData(previous_active_session=old_active_session or None, active_session=selected_session))
 
 
