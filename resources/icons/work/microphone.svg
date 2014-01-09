@@ -1,0 +1,360 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="16px"
+   height="16px"
+   id="svg2985"
+   version="1.1"
+   inkscape:version="0.48.4 r9939"
+   sodipodi:docname="microphone.svg"
+   inkscape:export-filename="/home/dan/bell.png"
+   inkscape:export-xdpi="135"
+   inkscape:export-ydpi="135">
+  <defs
+     id="defs2987" />
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="32"
+     inkscape:cx="7.0876866"
+     inkscape:cy="7.3377976"
+     inkscape:current-layer="layer3"
+     showgrid="true"
+     inkscape:grid-bbox="true"
+     inkscape:document-units="px"
+     inkscape:window-width="1430"
+     inkscape:window-height="1064"
+     inkscape:window-x="143"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     showguides="true"
+     inkscape:guide-bbox="true"
+     inkscape:showpageshadow="true"
+     borderlayer="false"
+     showborder="true">
+    <sodipodi:guide
+       orientation="1,0"
+       position="7.0051981,8.2665842"
+       id="guide3988" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="9.0099011,8.8071783"
+       id="guide3990" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="5.7888614,2.004703"
+       id="guide3992" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="2.004703,2.5678218"
+       id="guide3998" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="14.010396,6.3519803"
+       id="guide4000" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="1.03125,1"
+       id="guide4002" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="5.6086634,10.42896"
+       id="guide4006" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="10.406436,9.2126238"
+       id="guide4008" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="11.284901,11.194802"
+       id="guide4010" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="8,9.6875"
+       id="guide3776" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="4.03125,9.78125"
+       id="guide4040" />
+    <sodipodi:guide
+       orientation="1,0"
+       position="11.96875,9.0625"
+       id="guide4044" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="-0.96875,5.15625"
+       id="guide4232" />
+    <inkscape:grid
+       type="xygrid"
+       id="grid3253"
+       empspacing="10"
+       visible="true"
+       enabled="true"
+       snapvisiblegridlinesonly="true"
+       spacingx="0.5px"
+       spacingy="0.5px" />
+    <sodipodi:guide
+       orientation="0,1"
+       position="14,8"
+       id="guide3255" />
+  </sodipodi:namedview>
+  <metadata
+     id="metadata2990">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="Microphone on"
+     style="display:inline">
+    <rect
+       style="fill:#505050;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:0.69999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="rect3003"
+       width="4.3000002"
+       height="8.8000002"
+       x="5.8499999"
+       y="1.3499998"
+       rx="2.1500001"
+       ry="2.2744994" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.94999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0"
+       d="m 11.959765,7.5375 c 0.0087,3.34375 -2.1384481,4.4875 -3.9506838,4.4875 -1.8122357,0 -3.9780665,-1.14375 -3.968843,-4.4875"
+       id="path3773"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="csc" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:none"
+       id="rect3821"
+       width="6.5"
+       height="1"
+       x="4.75"
+       y="14"
+       ry="0.48333335" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:none;display:inline"
+       id="rect3821-6"
+       width="3"
+       height="1"
+       x="12"
+       y="-8.4997644"
+       ry="0.48333335"
+       transform="matrix(0,1,-1,0,0,0)" />
+    <rect
+       transform="matrix(0.70470371,0.70950171,-0.77812826,0.62810541,0,0)"
+       ry="0.37242329"
+       y="-0.76523137"
+       x="2.5873456"
+       height="0.74484658"
+       width="16.662415"
+       id="rect4052-4-2"
+       style="fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;display:inline" />
+  </g>
+  <g
+     style="display:none"
+     inkscape:label="Microphone off"
+     id="g3168"
+     inkscape:groupmode="layer">
+    <rect
+       ry="2.2744994"
+       rx="2.1500001"
+       y="1.3499998"
+       x="5.8499999"
+       height="8.8000002"
+       width="4.3000002"
+       id="rect3170"
+       style="fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:#960000;stroke-width:0.69999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none" />
+    <path
+       sodipodi:nodetypes="csc"
+       inkscape:connector-curvature="0"
+       id="path3172"
+       d="m 11.959765,7.5375 c 0.0087,3.34375 -2.1384481,4.4875 -3.9506838,4.4875 -1.8122357,0 -3.9780665,-1.14375 -3.968843,-4.4875"
+       style="fill:none;stroke:#960000;stroke-width:0.94999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0" />
+    <rect
+       ry="0.48333335"
+       y="14"
+       x="4.75"
+       height="1"
+       width="6.5"
+       id="rect3174"
+       style="fill:#960000;fill-opacity:1;stroke:none" />
+    <rect
+       transform="matrix(0,1,-1,0,0,0)"
+       ry="0.48333335"
+       y="-8.4997644"
+       x="12"
+       height="1"
+       width="3"
+       id="rect3176"
+       style="fill:#960000;fill-opacity:1;stroke:none;display:inline" />
+    <rect
+       style="fill:#960000;fill-opacity:1;fill-rule:nonzero;stroke:none;display:inline"
+       id="rect3178"
+       width="16.662415"
+       height="0.74484658"
+       x="2.5873456"
+       y="-0.76523137"
+       ry="0.37242329"
+       transform="matrix(0.70470371,0.70950171,-0.77812826,0.62810541,0,0)" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer4"
+     inkscape:label="Microphone 2 on"
+     style="display:none">
+    <rect
+       ry="2.1452665"
+       rx="2.1500001"
+       y="1.3499998"
+       x="5.8499999"
+       height="8.3000002"
+       width="4.3000002"
+       id="rect3017-1"
+       style="fill:#505050;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:0.69999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none" />
+    <rect
+       ry="0.48333335"
+       y="13.5"
+       x="4.75"
+       height="1"
+       width="6.5"
+       id="rect3021"
+       style="fill:#000000;fill-opacity:1;stroke:none" />
+    <rect
+       transform="matrix(0,1,-1,0,0,0)"
+       ry="0.48333335"
+       y="-8.5"
+       x="11.5"
+       height="1"
+       width="3"
+       id="rect3023"
+       style="fill:#000000;fill-opacity:1;stroke:none;display:inline" />
+    <path
+       style="fill:none;stroke:#00000f;stroke-width:0.94999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:0.94117647;stroke-dasharray:none;stroke-dashoffset:0"
+       d="m 4.0952048,7.150125 c -0.296373,3.21875 2.1084638,4.374759 3.9125,4.374875 1.9375,1.25e-4 4.0830902,-1.156125 3.9125002,-4.374875"
+       id="path3797"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="csc" />
+    <rect
+       style="fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;display:inline"
+       id="rect3025"
+       width="15.968274"
+       height="0.71381801"
+       x="2.7388477"
+       y="-0.92676264"
+       ry="0.35690901"
+       transform="matrix(0.70470848,0.70949697,-0.7781324,0.62810029,0,0)" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="Microphone 3 on"
+     style="display:none">
+    <rect
+       ry="2.0160336"
+       rx="2.05"
+       y="1.3499998"
+       x="5.9499998"
+       height="7.8000002"
+       width="4.0999999"
+       id="rect3009"
+       style="fill:#505050;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:0.69999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none" />
+    <rect
+       style="fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;display:inline"
+       id="rect3017"
+       width="15.890983"
+       height="0.70963645"
+       x="2.6674216"
+       y="-1.0725543"
+       ry="0.35481822"
+       transform="matrix(0.70137037,0.71279703,-0.77523925,0.63166771,0,0)" />
+    <path
+       sodipodi:nodetypes="csc"
+       inkscape:connector-curvature="0"
+       id="path3011"
+       d="m 11.790295,6.8329497 c 0.0083,3.2006443 -2.046927,4.2954443 -3.7816026,4.2954443 -1.7346756,0 -3.8078131,-1.0948 -3.7989843,-4.2954443"
+       style="fill:none;stroke:#000000;stroke-width:0.94999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0" />
+    <rect
+       ry="0.48333338"
+       y="13"
+       x="4.75"
+       height="1"
+       width="6.5"
+       id="rect3013"
+       style="fill:#000000;fill-opacity:1;stroke:none" />
+    <rect
+       transform="matrix(0,1,-1,0,0,0)"
+       ry="0.48333338"
+       y="-8.5"
+       x="11"
+       height="1"
+       width="3"
+       id="rect3015"
+       style="fill:#000000;fill-opacity:1;stroke:none;display:inline" />
+  </g>
+  <g
+     inkscape:label="Microphone mini on"
+     id="g3241"
+     inkscape:groupmode="layer"
+     style="display:none">
+    <rect
+       transform="matrix(0.66645895,0.74554173,-0.74444897,0.66767936,0,0)"
+       ry="0.29195821"
+       y="-1.5915072"
+       x="3.9450495"
+       height="0.58391643"
+       width="13.214134"
+       id="rect3249"
+       style="fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;display:inline" />
+    <rect
+       style="fill:#505050;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:0.79999995;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="rect3243"
+       width="3.2"
+       height="7.2000003"
+       x="6.3499999"
+       y="1.8999997"
+       rx="1.6"
+       ry="1.8609543" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:none"
+       id="rect3245"
+       width="6"
+       height="1"
+       x="5"
+       y="13"
+       ry="0.48333335" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:none;display:inline"
+       id="rect3247"
+       width="2.5"
+       height="1"
+       x="11"
+       y="-8.5"
+       ry="0.48333335"
+       transform="matrix(0,1,-1,0,0,0)" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dashoffset:0"
+       d="M 11.249997,8.0035814 C 11.278746,10.067015 9.7903942,11.002305 7.9954704,10.999996 6.2025686,10.997686 4.781608,10.124067 4.75,7.9999984"
+       id="path4043"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="csc" />
+  </g>
+</svg>

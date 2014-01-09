@@ -13,3 +13,4 @@
 ^MANIFEST$
 (^|/)\.directory$
 (^|/)\.komodotools$
+(^|/)resources/icons/work/sandbox($|/)
