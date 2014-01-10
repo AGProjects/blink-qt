@@ -148,11 +148,11 @@ class LogManager(object):
         if notification.sender is settings:
             if 'logs.trace_sip' in notification.data.modified:
                 self.siptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'sip_trace.txt')) if settings.logs.trace_sip else Null
-            elif 'logs.trace_msrp' in notification.data.modified:
+            if 'logs.trace_msrp' in notification.data.modified:
                 self.msrptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'msrp_trace.txt')) if settings.logs.trace_msrp else Null
-            elif 'logs.trace_pjsip' in notification.data.modified:
+            if 'logs.trace_pjsip' in notification.data.modified:
                 self.pjsiptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'pjsip_trace.txt')) if settings.logs.trace_pjsip else Null
-            elif 'logs.trace_notifications' in notification.data.modified:
+            if 'logs.trace_notifications' in notification.data.modified:
                 self.notifications_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'notifications_trace.txt')) if settings.logs.trace_notifications else Null
 
     def _LH_SIPEngineSIPTrace(self, notification):
