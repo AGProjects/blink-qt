@@ -15,6 +15,7 @@ from PyQt4.QtGui  import QApplication, QFileDialog, QIcon, QStyle, QStyleOptionC
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
+from application.system import makedirs
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
@@ -30,7 +31,7 @@ from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, 
 from blink.configuration.datatypes import IconDescriptor, FileURL, InvalidToken, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
-from blink.resources import IconManager, Resources
+from blink.resources import ApplicationData, IconManager, Resources
 from blink.util import run_in_gui_thread
 from blink.widgets.buttons import AccountState, SwitchViewButton
 
@@ -201,6 +202,7 @@ class MainWindow(base_class, ui_class):
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.buy_pstn_access_action.triggered.connect(self._AH_PurchasePstnAccess)
+        self.logs_action.triggered.connect(self._AH_LogsActionTriggered)
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
@@ -366,6 +368,11 @@ class MainWindow(base_class, ui_class):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_buy_pstn_access_page(account)
+
+    def _AH_LogsActionTriggered(self, checked):
+        directory = ApplicationData.get('logs')
+        makedirs(directory)
+        QDesktopServices.openUrl(QUrl('file:///'+directory))
 
     def _AH_VoicemailActionTriggered(self, action, checked):
         account = action.data()
