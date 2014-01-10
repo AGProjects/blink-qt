@@ -1128,9 +1128,6 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="logs_action">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
     <string>&amp;Logs</string>
    </property>
