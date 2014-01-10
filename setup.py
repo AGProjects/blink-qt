@@ -13,6 +13,9 @@ def get_version():
 def find_packages(toplevel):
     return [directory.replace(os.path.sep, '.') for directory, subdirs, files in os.walk(toplevel) if '__init__.py' in files]
 
+def list_resources(directory, destination_directory):
+    return [(dir.replace(directory, destination_directory), [os.path.join(dir, file) for file in files]) for dir, subdirs, files in os.walk(directory)]
+
 setup(name         = "blink",
       version      = get_version(),
       author       = "AG Projects",
@@ -29,10 +32,7 @@ setup(name         = "blink",
           "Programming Language :: Python"
       ],
       packages     = find_packages('blink'),
-      data_files   = [('share/blink', glob.glob('resources/*.ui')),
-                      ('share/blink/icons', list(chain(*(glob.glob('resources/icons/*.%s' % ext) for ext in ('png', 'svg', 'mng', 'ico'))))),
-                      ('share/blink/sounds', glob.glob('resources/sounds/*.wav'))
-      ],
+      data_files   = list_resources('resources', destination_directory='share/blink'),
       scripts      = ['bin/blink']
 )
 
