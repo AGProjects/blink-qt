@@ -372,7 +372,7 @@ class MainWindow(base_class, ui_class):
     def _AH_LogsActionTriggered(self, checked):
         directory = ApplicationData.get('logs')
         makedirs(directory)
-        QDesktopServices.openUrl(QUrl('file:///'+directory))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def _AH_VoicemailActionTriggered(self, action, checked):
         account = action.data()
