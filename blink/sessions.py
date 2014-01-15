@@ -2625,7 +2625,7 @@ class ChatSessionListView(QListView):
         self.setDragDropMode(QListView.DropOnly)
         self.setSelectionMode(QListView.SingleSelection) # default
 
-        self.setStyleSheet("""QListView { border: 1px solid palette(dark); border-style: inset; border-radius: 3px; }""")
+        self.setStyleSheet("""QListView { border: 1px inset palette(dark); border-radius: 3px; }""")
         self.animation = QPropertyAnimation(self, 'geometry')
         self.animation.setDuration(250)
         self.animation.setEasingCurve(QEasingCurve.Linear)

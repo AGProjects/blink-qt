@@ -787,8 +787,7 @@ noQTabBar::tab:selected { background: palette(light); }
            <property name="styleSheet">
             <string notr="true">QTextEdit {
 	margin: 4px 5px 4px 5px;
-	border: 1px solid palette(dark);
-	border-style: inset;
+	border: 1px inset palette(dark);
 	border-radius: 3px;
 }
 </string>
