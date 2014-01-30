@@ -271,7 +271,7 @@ class ElidedLabel(QLabel):
             gradient.setColorAt(1-50.0/label_width, self.palette().color(self.foregroundRole()))
             gradient.setColorAt(1.0, Qt.transparent)
             painter.setPen(QPen(QBrush(gradient), 1.0))
-        painter.drawText(self.rect(), Qt.TextSingleLine | int(self.alignment()), self.text())
+        painter.drawText(self.contentsRect(), Qt.TextSingleLine | int(self.alignment()), self.text())
 
 
 class StateColor(QColor):
