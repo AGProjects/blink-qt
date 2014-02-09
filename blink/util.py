@@ -24,8 +24,7 @@ def call_in_gui_thread(function, *args, **kw):
 
 
 def call_later(interval, function, *args, **kw):
-    interval = int(interval*1000)
-    QTimer.singleShot(interval, lambda: function(*args, **kw))
+    QTimer.singleShot(int(interval*1000), lambda: function(*args, **kw))
 
 
 @decorator
