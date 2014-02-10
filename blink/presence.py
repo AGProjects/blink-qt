@@ -152,7 +152,6 @@ class PresencePublicationHandler(object):
         notification_center.add_observer(self, name='SIPAccountWillActivate')
         notification_center.add_observer(self, name='SIPAccountWillDeactivate')
         notification_center.add_observer(self, name='SIPAccountDidDiscoverXCAPSupport')
-        notification_center.add_observer(self, name='SystemDidWakeUpFromSleep')
         notification_center.add_observer(self, name='XCAPManagerDidReloadData')
         notification_center.add_observer(self, sender=BlinkSettings(), name='CFGSettingsObjectDidChange')
 
@@ -161,7 +160,6 @@ class PresencePublicationHandler(object):
         notification_center.remove_observer(self, name='SIPAccountWillActivate')
         notification_center.remove_observer(self, name='SIPAccountWillDeactivate')
         notification_center.remove_observer(self, name='SIPAccountDidDiscoverXCAPSupport')
-        notification_center.remove_observer(self, name='SystemDidWakeUpFromSleep')
         notification_center.remove_observer(self, name='XCAPManagerDidReloadData')
         notification_center.remove_observer(self, sender=BlinkSettings(), name='CFGSettingsObjectDidChange')
 
