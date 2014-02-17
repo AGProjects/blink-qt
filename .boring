@@ -10,7 +10,7 @@
 \.(pyc|pyo|o|so|orig|bak|BAK|prof|wpu|cvsignore)$
 (^|/)build($|/)
 (^|/)dist($|/)
-(^|/)work($|/)
+(^|/)work$
 ^MANIFEST$
 (^|/)\.directory$
 (^|/)\.komodotools$
