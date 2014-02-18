@@ -599,7 +599,7 @@ class BlinkSession(QObject):
             notification_center = NotificationCenter()
             notification_center.post_notification('BlinkSessionWillEnd', sender=self)
             if self.sip_session is None:
-                self._terminate(reason='Call canceled')
+                self._terminate(reason='Call cancelled', error=True)
             else:
                 self.sip_session.end()
 
@@ -733,7 +733,7 @@ class BlinkSession(QObject):
     def _NH_SIPSessionDidFail(self, notification):
         if notification.data.failure_reason == 'user request':
             if notification.data.code == 487:
-                reason = 'Call canceled'
+                reason = 'Call cancelled'
             else:
                 reason = notification.data.reason
         else:
