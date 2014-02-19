@@ -16,7 +16,12 @@ Code refactoring
 Issues
 ------
 
-- in Smooth Operator check if the src attribute is atill needed in elements
+- apply the default font/size from the theme to the input textbox?
+- do not ring when getting 180 after 183
+- the only case where the hold tone should be played at 15 seconds is if I
+  put calls on hold and all are on hold (if remote put me on hold it should
+  not).
+- in Smooth Operator check if the src attribute is still needed in elements
   that have the x-color class. there used to be a rule that matched elements
   with an x-color class which also had a src attribute pointing to a
   particular image, but since that was removed, no other rule matching
@@ -80,9 +85,37 @@ Ideas:
 - check the selectionCommand from the audio session model. it may be also
   useful for the chat session model to avoid selection on mouse press
   events (make it only happen on mouse release events).
+- chat window alternate minimum sizes:
+  900x550 (230 splitter), 925x550 (240 splitter), 950x550 (250 splitter)
 
 
 - exceptions:
+
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 824, in runUntilCurrent
+    call.func(*call.args, **call.kw)
+  File "/usr/lib/python2.7/dist-packages/eventlib/coros.py", line 253, in _do_acquire
+    waiter.switch()
+  File "/usr/lib/python2.7/dist-packages/eventlib/api.py", line 235, in _spawn_startup
+    return cb(*args, **kw)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 1809, in hold
+    self._send_hold()
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 1986, in _send_hold
+    notification = self._channel.wait()
+  File "/usr/lib/python2.7/dist-packages/eventlib/coros.py", line 478, in wait
+    api.getcurrent().throw(*exc)
+MediaStreamDidFailError
+Traceback (most recent call last):
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 1130, in _SH_HangupButtonClicked
+    self.end()
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 1102, in end
+    self.blink_session.remove_stream(self.audio_stream)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 592, in remove_stream
+    self.sip_session.remove_stream(stream)
+  File "<string>", line 1, in remove_stream
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 100, in wrapper
+    raise IllegalStateError('cannot call %s in %s state' % (func.__name__, obj.state))
+sipsimple.session.IllegalStateError: cannot call remove_stream in sending_proposal state
 
 
 Investigate this exception:
