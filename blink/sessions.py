@@ -303,6 +303,7 @@ class BlinkSession(QObject):
         self.direction = None
         self.__dict__['active'] = False
 
+        self.lookup = None
         self.conference = None
         self.sip_session = None
         self.stream_descriptions = None
@@ -505,9 +506,9 @@ class BlinkSession(QObject):
                 uri = self.uri
         else:
             uri = self.uri
-        lookup = DNSLookup()
-        notification_center.add_observer(self, sender=lookup)
-        lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
+        self.lookup = DNSLookup()
+        notification_center.add_observer(self, sender=self.lookup)
+        self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
 
     def add_stream(self, stream_description):
         assert self.state == 'connected'
@@ -625,6 +626,7 @@ class BlinkSession(QObject):
         self.timer.stop()
         self.streams.clear()
 
+        self.lookup = None
         self.sip_session = None
         self.stream_descriptions = None
         self._sibling = None
@@ -684,7 +686,7 @@ class BlinkSession(QObject):
 
     def _NH_DNSLookupDidSucceed(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
-        if self.state not in ('ending', 'ended', 'deleted'):
+        if notification.sender is self.lookup:
             routes = notification.data.result
             if routes:
                 self.sip_session = Session(self.account)
@@ -694,7 +696,7 @@ class BlinkSession(QObject):
 
     def _NH_DNSLookupDidFail(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
-        if self.state not in ('ending', 'ended', 'deleted'):
+        if notification.sender is self.lookup:
             self._terminate(reason='Destination not found', error=True)
 
     def _NH_SIPSessionNewOutgoing(self, notification):
