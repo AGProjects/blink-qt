@@ -248,8 +248,10 @@ class StatusLabel(QLabel):
         if value is not None:
             color = QColor(value.color)
             palette = self.palette()
-            palette.setColor(QPalette.WindowText, color)
-            palette.setColor(QPalette.Text, color)
+            palette.setColor(QPalette.Active, QPalette.WindowText, color)
+            palette.setColor(QPalette.Active, QPalette.Text, color)
+            palette.setColor(QPalette.Inactive, QPalette.WindowText, color)
+            palette.setColor(QPalette.Inactive, QPalette.Text, color)
             self.setPalette(palette)
             self.setText(unicode(value))
         else:
