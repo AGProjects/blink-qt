@@ -475,7 +475,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_BreakConference(self):
         active_session = self.session_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        self.session_model.breakConference(active_session.conference)
+        self.session_model.breakConference(active_session.client_conference)
 
     def _SH_ContactListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
@@ -530,7 +530,7 @@ class MainWindow(base_class, ui_class):
             self.saved_account_state = None
 
     def _SH_MakeConference(self):
-        self.session_model.conferenceSessions([session for session in self.session_model.active_sessions if session.conference is None])
+        self.session_model.conferenceSessions([session for session in self.session_model.active_sessions if session.client_conference is None])
 
     def _SH_MuteButtonClicked(self, muted):
         settings = SIPSimpleSettings()
@@ -577,11 +577,11 @@ class MainWindow(base_class, ui_class):
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         selected_indexes = selected.indexes()
         active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
-        if active_session.conference:
+        if active_session.client_conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
         else:
-            self.conference_button.setEnabled(len([session for session in self.session_model.active_sessions if session.conference is None]) > 1)
+            self.conference_button.setEnabled(len([session for session in self.session_model.active_sessions if session.client_conference is None]) > 1)
             self.conference_button.setChecked(False)
 
     def _SH_AudioSessionModelAddedSession(self, session_item):
@@ -599,11 +599,11 @@ class MainWindow(base_class, ui_class):
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
         active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
-        if active_session.conference:
+        if active_session.client_conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
         else:
-            self.conference_button.setEnabled(len([session for session in active_sessions if session.conference is None]) > 1)
+            self.conference_button.setEnabled(len([session for session in active_sessions if session.client_conference is None]) > 1)
             self.conference_button.setChecked(False)
         if active_sessions:
             if self.account_state.state is not AccountState.Invisible:

@@ -1290,7 +1290,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         print "state:   %r" % blink_session.state
         print "streams: %r" % [stream for stream in blink_session.streams]
         print "hold:    %r/%r" % (blink_session.local_hold, blink_session.remote_hold)
-        print "conf:    %r" % blink_session.conference
+        print "conf:    %r" % blink_session.client_conference
         print "active:  %r" % blink_session.active
 
     def _EH_CloseSession(self):

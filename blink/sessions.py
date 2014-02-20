@@ -1,7 +1,7 @@
 # Copyright (c) 2010 AG Projects. See LICENSE for details.
 #
 
-__all__ = ['Conference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
+__all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
 import bisect
 import cPickle as pickle
@@ -333,7 +333,7 @@ class BlinkSession(QObject):
     implements(IObserver)
 
     # check what should be a signal and what a notification -Dan
-    conferenceChanged = pyqtSignal(object, object) # old_conference, new_conference
+    clientConferenceChanged = pyqtSignal(object, object) # old_conference, new_conference
 
     streams = StreamListDescriptor()
     items = SessionItemsDescriptor()
@@ -364,7 +364,7 @@ class BlinkSession(QObject):
         self.__dict__['active'] = False
 
         self.lookup = None
-        self.conference = None
+        self.client_conference = None
         self.sip_session = None
         self.stream_descriptions = None
         self.streams.clear()
@@ -432,7 +432,7 @@ class BlinkSession(QObject):
             return
         self.__dict__['active'] = value
         if self.state in ('connecting/*', 'connected/*') and self.streams.types.intersection({'audio', 'video'}):
-            entity = self.conference or self
+            entity = self.client_conference or self
             if value:
                 entity.unhold()
             else:
@@ -461,12 +461,12 @@ class BlinkSession(QObject):
     account = property(_get_account, _set_account)
     del _get_account, _set_account
 
-    def _get_conference(self):
-        return self.__dict__['conference']
+    def _get_client_conference(self):
+        return self.__dict__['client_conference']
 
-    def _set_conference(self, value):
-        old_conference = self.__dict__.get('conference', None)
-        new_conference = self.__dict__['conference'] = value
+    def _set_client_conference(self, value):
+        old_conference = self.__dict__.get('client_conference', None)
+        new_conference = self.__dict__['client_conference'] = value
         if old_conference is new_conference:
             return
         if old_conference is not None:
@@ -476,10 +476,10 @@ class BlinkSession(QObject):
             self.unhold()
         elif not self.active:
             self.hold()
-        self.conferenceChanged.emit(old_conference, new_conference)
+        self.clientConferenceChanged.emit(old_conference, new_conference)
 
-    conference = property(_get_conference, _set_conference)
-    del _get_conference, _set_conference
+    client_conference = property(_get_client_conference, _set_client_conference)
+    del _get_client_conference, _set_client_conference
 
     @property
     def transport(self):
@@ -906,7 +906,7 @@ class BlinkSession(QObject):
         notification.center.post_notification('BlinkSessionContactDidChange', sender=self)
 
 
-class Conference(object):
+class ClientConference(object):
     def __init__(self):
         self.sessions = []
         self.stream_map = {}
@@ -981,14 +981,14 @@ class AudioSessionItem(object):
     active = property(_get_active, _set_active)
     del _get_active, _set_active
 
-    def _get_conference(self):
-        return self.blink_session.conference
+    def _get_client_conference(self):
+        return self.blink_session.client_conference
 
-    def _set_conference(self, value):
-        self.blink_session.conference = value
+    def _set_client_conference(self, value):
+        self.blink_session.client_conference = value
 
-    conference = property(_get_conference, _set_conference)
-    del _get_conference, _set_conference
+    client_conference = property(_get_client_conference, _set_client_conference)
+    del _get_client_conference, _set_client_conference
 
     def _get_latency(self):
         return self.__dict__['latency']
@@ -1275,7 +1275,7 @@ class AudioSessionWidget(base_class, ui_class):
         self.hangup_button.type = RightSegment
         self.selected = False
         self.drop_indicator = False
-        self.conference_position = None
+        self.position_in_conference = None
         self._disable_dnd = False
         self.mute_button.hidden.connect(self._SH_MuteButtonHidden)
         self.mute_button.shown.connect(self._SH_MuteButtonShown)
@@ -1321,17 +1321,17 @@ class AudioSessionWidget(base_class, ui_class):
     drop_indicator = property(_get_drop_indicator, _set_drop_indicator)
     del _get_drop_indicator, _set_drop_indicator
 
-    def _get_conference_position(self):
-        return self.__dict__['conference_position']
+    def _get_position_in_conference(self):
+        return self.__dict__['position_in_conference']
 
-    def _set_conference_position(self, value):
-        if self.__dict__.get('conference_position', Null) == value:
+    def _set_position_in_conference(self, value):
+        if self.__dict__.get('position_in_conference', Null) == value:
             return
-        self.__dict__['conference_position'] = value
+        self.__dict__['position_in_conference'] = value
         self.update()
 
-    conference_position = property(_get_conference_position, _set_conference_position)
-    del _get_conference_position, _set_conference_position
+    position_in_conference = property(_get_position_in_conference, _set_position_in_conference)
+    del _get_position_in_conference, _set_position_in_conference
 
     def _SH_MuteButtonHidden(self):
         self.hold_button.type = LeftSegment
@@ -1365,8 +1365,8 @@ class AudioSessionWidget(base_class, ui_class):
             background.setColorAt(0.99, QColor('#75c0ff'))
             background.setColorAt(1.00, QColor('#ffffff'))
             painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#606060' if self.conference_position is None else '#b0b0b0')), 2.0))
-        elif self.conference_position is not None:
+            painter.setPen(QPen(QBrush(QColor('#606060' if self.position_in_conference is None else '#b0b0b0')), 2.0))
+        elif self.position_in_conference is not None:
             background = QLinearGradient(0, 0, 10, 0)
             background.setColorAt(0.00, QColor('#95ff95'))
             background.setColorAt(0.99, QColor('#95ff95'))
@@ -1384,14 +1384,14 @@ class AudioSessionWidget(base_class, ui_class):
 
         # for conferences extend the left marker over the whole conference
         #
-        if self.conference_position is not None:
+        if self.position_in_conference is not None:
             painter.setPen(Qt.NoPen)
             left_rect = rect.adjusted(0, 0, 10-rect.width(), 0)
-            if self.conference_position is Top:
+            if self.position_in_conference is Top:
                 painter.drawRect(left_rect.adjusted(2, 5, 0, 5))
-            elif self.conference_position is Middle:
+            elif self.position_in_conference is Middle:
                 painter.drawRect(left_rect.adjusted(2, -5, 0, 5))
-            elif self.conference_position is Bottom:
+            elif self.position_in_conference is Bottom:
                 painter.drawRect(left_rect.adjusted(2, -5, 0, -5))
 
         # draw outer border
@@ -1403,26 +1403,26 @@ class AudioSessionWidget(base_class, ui_class):
             elif self.selected:
                 painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0)) # or #2070c0 (next best look) or gray: #606060
 
-            if self.conference_position is Top:
+            if self.position_in_conference is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, 5), 3, 3)
-            elif self.conference_position is Middle:
+            elif self.position_in_conference is Middle:
                 painter.drawRoundedRect(rect.adjusted(2, -5, -2, 5), 3, 3)
                 painter.drawRoundedRect(rect.adjusted(1, -5, -1, 5), 3, 3)
-            elif self.conference_position is Bottom:
+            elif self.position_in_conference is Bottom:
                 painter.drawRoundedRect(rect.adjusted(2, -5, -2, -2), 3, 3)
                 painter.drawRoundedRect(rect.adjusted(1, -5, -1, -1), 3, 3)
             else:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
-        elif self.conference_position is not None:
+        elif self.position_in_conference is not None:
             painter.setBrush(Qt.NoBrush)
             painter.setPen(QPen(QBrush(QColor('#309030')), 2.0)) # or 237523, #2b8f2b
-            if self.conference_position is Top:
+            if self.position_in_conference is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
-            elif self.conference_position is Middle:
+            elif self.position_in_conference is Middle:
                 painter.drawRoundedRect(rect.adjusted(2, -5, -2, 5), 3, 3)
-            elif self.conference_position is Bottom:
+            elif self.position_in_conference is Bottom:
                 painter.drawRoundedRect(rect.adjusted(2, -5, -2, -2), 3, 3)
             else:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
@@ -1453,7 +1453,7 @@ class DraggedAudioSessionWidget(base_class, ui_class):
         self.stream_info_label.setText(u'')
         self.address_label.setText(session_widget.address_label.text())
         self.selected = session_widget.selected
-        self.in_conference = session_widget.conference_position is not None
+        self.in_conference = session_widget.position_in_conference is not None
         if self.in_conference:
             self.status_label.setText(u'Drop outside the conference to detach')
         else:
@@ -1517,7 +1517,7 @@ class AudioSessionDelegate(QStyledItemDelegate):
         return self.size_hint
 
     def _SH_HoldButtonClicked(self, session, checked):
-        if session.conference is None and not session.active and not checked:
+        if session.client_conference is None and not session.active and not checked:
             session_list = self.parent()
             model = session_list.model()
             selection_model = session_list.selectionModel()
@@ -1611,16 +1611,16 @@ class AudioSessionModel(QAbstractListModel):
         selection_model = session_list.selectionModel()
         source = session_list.dragged_session
         target = self.sessions[index.row()] if index.isValid() else None
-        if source.conference is None:  # the dragged session is not in a conference yet
-            if target.conference is not None:
+        if source.client_conference is None:  # the dragged session is not in a conference yet
+            if target.client_conference is not None:
                 source_row = self.sessions.index(source)
-                target_row = self.sessions.index(target.conference.sessions[-1].items.audio) + 1
+                target_row = self.sessions.index(target.client_conference.sessions[-1].items.audio) + 1
                 if self.beginMoveRows(QModelIndex(), source_row, source_row, QModelIndex(), target_row):
                     insert_point = target_row if source_row >= target_row else target_row-1
                     self.sessions.remove(source)
                     self.sessions.insert(insert_point, source)
                     self.endMoveRows()
-                source.conference = target.conference
+                source.client_conference = target.client_conference
                 session_list.scrollTo(self.index(self.sessions.index(source)), session_list.EnsureVisible) # is this even needed? -Dan
             else:
                 target_row = self.sessions.index(target)
@@ -1633,26 +1633,26 @@ class AudioSessionModel(QAbstractListModel):
                     self.sessions.remove(source)
                     self.sessions.insert(1, source)
                     self.endMoveRows()
-                conference = Conference()
-                target.conference = conference # must add them to the conference in the same order they are in the list (target is first, source is last)
-                source.conference = conference
+                conference = ClientConference()
+                target.client_conference = conference # must add them to the conference in the same order they are in the list (target is first, source is last)
+                source.client_conference = conference
                 session_list.scrollToTop()
-            for session in source.conference.sessions:
+            for session in source.client_conference.sessions:
                 session.items.audio.widget.selected = source.widget.selected or target.widget.selected
                 session.active = source.active or target.active
             if source.active:
-                source.conference.unhold()
+                source.client_conference.unhold()
         else:  # the dragged session is in a conference
             dragged = source
-            sibling = next(session.items.audio for session in dragged.conference.sessions if session.items.audio is not dragged)
+            sibling = next(session.items.audio for session in dragged.client_conference.sessions if session.items.audio is not dragged)
             if selection_model.isSelected(self.index(self.sessions.index(dragged))):
                 selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
-            if len(dragged.conference.sessions) == 2:
-                dragged.conference = None
-                sibling.conference = None
+            if len(dragged.client_conference.sessions) == 2:
+                dragged.client_conference = None
+                sibling.client_conference = None
                 ## eventually only move past the last conference to minimize movement. see how this feels during usage. (or sort them alphabetically with conferences at the top) -Dan
                 #for position, session in enumerate(self.sessions):
-                #    if session not in (dragged, sibling) and session.conference is None:
+                #    if session not in (dragged, sibling) and session.client_conference is None:
                 #        move_point = position
                 #        break
                 #else:
@@ -1671,7 +1671,7 @@ class AudioSessionModel(QAbstractListModel):
                     self.endMoveRows()
                 session_list.scrollToBottom()
             else:
-                dragged.conference = None
+                dragged.client_conference = None
                 move_point = len(self.sessions)
                 dragged_row = self.sessions.index(dragged)
                 if self.beginMoveRows(QModelIndex(), dragged_row, dragged_row, QModelIndex(), move_point):
@@ -1727,7 +1727,7 @@ class AudioSessionModel(QAbstractListModel):
     def addSession(self, session):
         if session in self.sessions:
             return
-        session.blink_session.conferenceChanged.connect(self._SH_BlinkSessionConferenceChanged)
+        session.blink_session.clientConferenceChanged.connect(self._SH_BlinkSessionClientConferenceChanged)
         self.sessionAboutToBeAdded.emit(session)
         self._add_session(session)
         # not the right place to do this. the list should do it (else the model needs a backreference to the list), however in addSessionAndConference we can't avoid doing it -Dan
@@ -1741,16 +1741,16 @@ class AudioSessionModel(QAbstractListModel):
             return
         if sibling not in self.sessions:
             raise ValueError('sibling %r not in sessions list' % sibling)
-        session.blink_session.conferenceChanged.connect(self._SH_BlinkSessionConferenceChanged)
+        session.blink_session.clientConferenceChanged.connect(self._SH_BlinkSessionClientConferenceChanged)
         self.sessionAboutToBeAdded.emit(session)
         session_list = self.session_list
-        if sibling.conference is not None:
-            position = self.sessions.index(sibling.conference.sessions[-1].items.audio) + 1
+        if sibling.client_conference is not None:
+            position = self.sessions.index(sibling.client_conference.sessions[-1].items.audio) + 1
             self.beginInsertRows(QModelIndex(), position, position)
             self.sessions.insert(position, session)
             self.endInsertRows()
             session_list.openPersistentEditor(self.index(position))
-            session.conference = sibling.conference
+            session.client_conference = sibling.client_conference
             session_list.scrollTo(self.index(position), session_list.EnsureVisible) # or PositionAtBottom (is this even needed? -Dan)
         else:
             sibling_row = self.sessions.index(sibling)
@@ -1762,9 +1762,9 @@ class AudioSessionModel(QAbstractListModel):
             self.sessions.insert(1, session)
             self.endInsertRows()
             session_list.openPersistentEditor(self.index(1))
-            conference = Conference()
-            sibling.conference = conference # must add them to the conference in the same order they are in the list (sibling first, new session last)
-            session.conference = conference
+            conference = ClientConference()
+            sibling.client_conference = conference # must add them to the conference in the same order they are in the list (sibling first, new session last)
+            session.client_conference = conference
             if sibling.active:
                 conference.unhold()
             session_list.scrollToTop()
@@ -1780,8 +1780,8 @@ class AudioSessionModel(QAbstractListModel):
         session_list = self.session_list
         selection_mode = session_list.selectionMode()
         session_list.setSelectionMode(session_list.NoSelection)
-        if session.conference is not None:
-            sibling = next(s.items.audio for s in session.conference.sessions if s.items.audio is not session)
+        if session.client_conference is not None:
+            sibling = next(s.items.audio for s in session.client_conference.sessions if s.items.audio is not session)
             session_index = self.index(self.sessions.index(session))
             sibling_index = self.index(self.sessions.index(sibling))
             selection_model = session_list.selectionModel()
@@ -1789,15 +1789,15 @@ class AudioSessionModel(QAbstractListModel):
                 selection_model.select(sibling_index, selection_model.ClearAndSelect)
         self._remove_session(session)
         session_list.setSelectionMode(selection_mode)
-        if session.conference is not None:
-            if len(session.conference.sessions) == 2:
-                first, last = session.conference.sessions
-                first.conference = None
-                last.conference = None
+        if session.client_conference is not None:
+            if len(session.client_conference.sessions) == 2:
+                first, last = session.client_conference.sessions
+                first.client_conference = None
+                last.client_conference = None
             else:
-                session.conference = None
+                session.client_conference = None
 
-        session.blink_session.conferenceChanged.disconnect(self._SH_BlinkSessionConferenceChanged)
+        session.blink_session.clientConferenceChanged.disconnect(self._SH_BlinkSessionClientConferenceChanged)
         session.delete()
 
         self.sessionRemoved.emit(session)
@@ -1807,14 +1807,14 @@ class AudioSessionModel(QAbstractListModel):
         session_list = self.session_list
         selected = any(session.widget.selected for session in sessions)
         active = any(session.active for session in sessions)
-        conference = Conference()
+        conference = ClientConference()
         for position, session in enumerate(sessions):
             session_row = self.sessions.index(session)
             if self.beginMoveRows(QModelIndex(), session_row, session_row, QModelIndex(), position):
                 self.sessions.remove(session)
                 self.sessions.insert(position, session)
                 self.endMoveRows()
-            session.conference = conference
+            session.client_conference = conference
             session.widget.selected = selected
             session.active = active
         if active:
@@ -1835,18 +1835,18 @@ class AudioSessionModel(QAbstractListModel):
                 self.sessions.remove(session)
                 self.sessions.insert(move_point-index-1, session)
                 self.endMoveRows()
-            session.conference = None
+            session.client_conference = None
             session.widget.selected = session is selected_session
             session.active = session is selected_session
         session_list.scrollToBottom()
         self.structureChanged.emit()
 
-    def _SH_BlinkSessionConferenceChanged(self, old_conference, new_conference): # would this better be handled by the audio session item itself? (apparently not) -Dan
+    def _SH_BlinkSessionClientConferenceChanged(self, old_conference, new_conference): # would this better be handled by the audio session item itself? (apparently not) -Dan
         blink_session = self.sender()
         session = blink_session.items.audio
 
         if not new_conference:
-            session.widget.conference_position = None
+            session.widget.position_in_conference = None
             session.widget.mute_button.hide()
         if session.widget.mute_button.isChecked():
             session.widget.mute_button.click()
@@ -1856,12 +1856,12 @@ class AudioSessionModel(QAbstractListModel):
             if session_count == 1:
                 blink_session = conference.sessions[0]
                 session = blink_session.items.audio
-                session.widget.conference_position = None
+                session.widget.position_in_conference = None
                 session.widget.mute_button.hide()
             elif session_count > 1:
                 for blink_session in conference.sessions:
                     session = blink_session.items.audio
-                    session.widget.conference_position = Top if blink_session is conference.sessions[0] else Bottom if blink_session is conference.sessions[-1] else Middle
+                    session.widget.position_in_conference = Top if blink_session is conference.sessions[0] else Bottom if blink_session is conference.sessions[-1] else Middle
                     session.widget.mute_button.show()
 
     def handle_notification(self, notification):
@@ -1977,9 +1977,9 @@ class AudioSessionListView(QListView):
             current_index = selection_model.currentIndex()
             if current_index.isValid():
                 step = 1 if event.key() == Qt.Key_Down else -1
-                conference = current_index.data(Qt.UserRole).conference
+                conference = current_index.data(Qt.UserRole).client_conference
                 new_index = current_index.sibling(current_index.row()+step, current_index.column())
-                while conference is not None and new_index.isValid() and new_index.data(Qt.UserRole).conference is conference:
+                while conference is not None and new_index.isValid() and new_index.data(Qt.UserRole).client_conference is conference:
                     new_index = new_index.sibling(new_index.row()+step, new_index.column())
                 if new_index.isValid():
                     selection_model.select(new_index, selection_model.ClearAndSelect)
@@ -2022,14 +2022,14 @@ class AudioSessionListView(QListView):
         selected_indexes = selected.indexes()
         deselected_indexes = deselected.indexes()
         for session in (index.data(Qt.UserRole) for index in deselected_indexes):
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
+            if session.client_conference is not None:
+                for sibling in session.client_conference.sessions:
                     sibling.items.audio.widget.selected = False
             else:
                 session.widget.selected = False
         for session in (index.data(Qt.UserRole) for index in selected_indexes):
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
+            if session.client_conference is not None:
+                for sibling in session.client_conference.sessions:
                     sibling.items.audio.widget.selected = True
             else:
                 session.widget.selected = True
@@ -2124,18 +2124,18 @@ class AudioSessionListView(QListView):
             model = self.model()
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(len(model.sessions)-1)).bottom())
-            if dragged_session.conference is not None:
+            if dragged_session.client_conference is not None:
                 event.accept(rect)
             else:
                 event.ignore(rect)
         else:
-            conference = dragged_session.conference or Null
+            conference = dragged_session.client_conference or Null
             if dragged_session is session or session.blink_session in conference.sessions:
                 event.ignore(rect)
             else:
-                if dragged_session.conference is None:
-                    if session.conference is not None:
-                        for sibling in session.conference.sessions:
+                if dragged_session.client_conference is None:
+                    if session.client_conference is not None:
+                        for sibling in session.client_conference.sessions:
                             sibling.items.audio.widget.drop_indicator = True
                     else:
                         session.widget.drop_indicator = True
@@ -2149,8 +2149,8 @@ class AudioSessionListView(QListView):
             event.ignore(rect)
         else:
             event.accept(rect)
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
+            if session.client_conference is not None:
+                for sibling in session.client_conference.sessions:
                     sibling.items.audio.widget.drop_indicator = True
             else:
                 session.widget.drop_indicator = True
@@ -2163,20 +2163,20 @@ class AudioSessionListView(QListView):
             event.ignore(rect)
         else:
             event.accept(rect)
-            if session.conference is not None:
-                for sibling in session.conference.sessions:
+            if session.client_conference is not None:
+                for sibling in session.client_conference.sessions:
                     sibling.items.audio.widget.drop_indicator = True
             else:
                 session.widget.drop_indicator = True
 
     def _SH_HangupShortcutActivated(self):
         session = self.selectedIndexes()[0].data(Qt.UserRole)
-        if session.conference is None:
+        if session.client_conference is None:
             session.widget.hangup_button.click()
 
     def _SH_HoldShortcutActivated(self):
         session = self.selectedIndexes()[0].data(Qt.UserRole)
-        if session.conference is None:
+        if session.client_conference is None:
             session.widget.hold_button.click()
 
     def handle_notification(self, notification):
@@ -3489,22 +3489,22 @@ class SessionManager(object):
             return
         elif selected_session is None and deselected_session is old_active_session is not None:
             self.active_session = None
-            sessions = deselected_session.conference.sessions if deselected_session.conference is not None else [deselected_session]
+            sessions = deselected_session.client_conference.sessions if deselected_session.client_conference is not None else [deselected_session]
             for session in sessions:
                 session.active = False
             notification.center.post_notification('BlinkActiveSessionDidChange', sender=self, data=NotificationData(previous_active_session=old_active_session, active_session=None))
         elif selected_session is not None and selected_session.state in ('connecting/*', 'connected/*') and selected_session.streams.types.intersection({'audio', 'video'}):
             old_active_session = old_active_session or Null
             new_active_session = selected_session
-            if old_active_session.conference is not None and old_active_session.conference is not new_active_session.conference:
-                for session in old_active_session.conference.sessions:
+            if old_active_session.client_conference is not None and old_active_session.client_conference is not new_active_session.client_conference:
+                for session in old_active_session.client_conference.sessions:
                     session.active = False
-            elif old_active_session.conference is None:
+            elif old_active_session.client_conference is None:
                 old_active_session.active = False
-            if new_active_session.conference is not None and new_active_session.conference is not old_active_session.conference:
-                for session in new_active_session.conference.sessions:
+            if new_active_session.client_conference is not None and new_active_session.client_conference is not old_active_session.client_conference:
+                for session in new_active_session.client_conference.sessions:
                     session.active = True
-            elif new_active_session.conference is None:
+            elif new_active_session.client_conference is None:
                 new_active_session.active = True
             self.active_session = selected_session
             notification.center.post_notification('BlinkActiveSessionDidChange', sender=self, data=NotificationData(previous_active_session=old_active_session or None, active_session=selected_session))
