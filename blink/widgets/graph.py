@@ -106,7 +106,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
         self.boundary = None
         self.boundaryColor = None
         self.smoothEnvelope = True
-        self.smoothFactor = 0.1
+        self.smoothFactor = 0.15
         self.fillEnvelope = True
         self.fillTransparency = 50
         self.scaler = SoftScaler()
