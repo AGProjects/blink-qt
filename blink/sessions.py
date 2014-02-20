@@ -1823,7 +1823,7 @@ class AudioSessionModel(QAbstractListModel):
         self.structureChanged.emit()
 
     def breakConference(self, conference): # replace this by an endConference (or termninate/hangupConference) functionality -Dan
-        sessions = [session for session in self.sessions if session.conference is conference]
+        sessions = [blink_session.items.audio for blink_session in conference.sessions]
         session_list = self.session_list
         selection_model = session_list.selectionModel()
         selection = selection_model.selection()
