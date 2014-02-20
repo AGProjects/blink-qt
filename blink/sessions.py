@@ -9,7 +9,7 @@ import os
 import re
 import string
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from functools import partial
 from itertools import chain, izip, repeat
@@ -42,6 +42,129 @@ from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import ContextMenuActions
 
 
+class RTPStreamInfo(object):
+    dataset_size = 5000
+    average_interval = 10
+
+    def __init__(self):
+        self.ice_status = None
+        self.encryption = None
+        self.codec_name = None
+        self.sample_rate = None
+        self.local_address = None
+        self.remote_address = None
+        self.local_rtp_candidate = None
+        self.remote_rtp_candidate = None
+        self.latency = deque(maxlen=self.dataset_size)
+        self.packet_loss = deque(maxlen=self.dataset_size)
+        self.jitter = deque(maxlen=self.dataset_size)
+        self.incoming_traffic = deque(maxlen=self.dataset_size)
+        self.outgoing_traffic = deque(maxlen=self.dataset_size)
+        self.bytes_sent = 0
+        self.bytes_received = 0
+        self._total_packets = 0
+        self._total_packets_lost = 0
+        self._total_packets_discarded = 0
+        self._average_loss_queue = deque(maxlen=self.average_interval)
+
+    @property
+    def codec(self):
+        return '%s %dkHz' % (self.codec_name, self.sample_rate/1000) if self.codec_name else None
+
+    def _update(self, stream):
+        if stream is not None:
+            self.codec_name = stream.codec
+            self.sample_rate = stream.sample_rate
+            self.local_address = stream.local_rtp_address
+            self.remote_address = stream.remote_rtp_address
+            self.encryption = 'SRTP' if stream.srtp_active else None
+            if stream.session and not stream.session.account.nat_traversal.use_ice:
+                self.ice_status = 'disabled'
+
+    def _update_statistics(self, statistics):
+        if statistics:
+            packets = statistics['rx']['packets'] - self._total_packets
+            packets_lost = statistics['rx']['packets_lost'] - self._total_packets_lost
+            packets_discarded = statistics['rx']['packets_discarded'] - self._total_packets_discarded
+            self._average_loss_queue.append(100.0 * packets_lost / (packets + packets_lost - packets_discarded) if packets_lost else 0)
+            self._total_packets += packets
+            self._total_packets_lost += packets_lost
+            self._total_packets_discarded += packets_discarded
+            self.latency.append(statistics['rtt']['last'] / 1000 / 2)
+            self.jitter.append(statistics['rx']['jitter']['last'] / 1000)
+            self.incoming_traffic.append(float(statistics['rx']['bytes'] - self.bytes_received)) # bytes/second
+            self.outgoing_traffic.append(float(statistics['tx']['bytes'] - self.bytes_sent))     # bytes/second
+            self.bytes_sent = statistics['tx']['bytes']
+            self.bytes_received = statistics['rx']['bytes']
+            self.packet_loss.append(sum(self._average_loss_queue) / self.average_interval)
+
+    def _reset(self):
+        self.__init__()
+
+
+class MSRPStreamInfo(object):
+    def __init__(self):
+        self.local_address = None
+        self.remote_address = None
+        self.transport = None
+        self.full_local_path = []
+        self.full_remote_path = []
+
+    def _update(self, stream):
+        if stream is not None:
+            if stream.msrp:
+                self.transport = stream.transport
+                self.local_address = stream.msrp.local_uri.host
+                self.remote_address = stream.msrp.next_host().host
+                self.full_local_path = stream.msrp.full_local_path
+                self.full_remote_path = stream.msrp.full_remote_path
+            elif stream.session:
+                self.transport = stream.transport
+                self.local_address = stream.local_uri.host
+
+    def _reset(self):
+        self.__init__()
+
+
+class StreamsInfo(object):
+    __slots__ = 'audio', 'video', 'chat'
+
+    def __init__(self):
+        self.audio = RTPStreamInfo()
+        self.video = RTPStreamInfo()
+        self.chat = MSRPStreamInfo()
+
+    def __getitem__(self, key):
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(key)
+
+    def _update(self, streams):
+        self.audio._update(streams.get('audio'))
+        self.video._update(streams.get('video'))
+        self.chat._update(streams.get('chat'))
+
+
+class SessionInfo(object):
+    def __init__(self):
+        self.duration = timedelta(0)
+        self.local_address = None
+        self.remote_address = None
+        self.transport = None
+        self.remote_user_agent = None
+        self.streams = StreamsInfo()
+
+    def _update(self, session):
+        sip_session = session.sip_session
+        if sip_session is not None:
+            self.transport = sip_session.transport
+            self.local_address = session.account.contact[self.transport].host
+            self.remote_address = sip_session.peer_address # consider reading from sip_session.route if peer_address is None (route can also be None) -Dan
+            self.remote_user_agent = sip_session.remote_user_agent
+        self.streams._update(session.streams)
+
+
 class StreamDescription(object):
     def __init__(self, type, **kw):
         self.type = type
@@ -57,65 +180,6 @@ class StreamDescription(object):
             return "%s(%r, %s)" % (self.__class__.__name__, self.type, ', '.join("%s=%r" % pair for pair in self.attributes.iteritems()))
         else:
             return "%s(%r)" % (self.__class__.__name__, self.type)
-
-
-class StreamInfo(object):
-    def __init__(self, status=None, ice_status=None, encryption=None, hd=False, codec=''):
-        self.status = status
-        self.ice_status = ice_status
-        self.encryption = encryption
-        self.hd = hd
-        self.codec = codec
-
-    @classmethod
-    def from_stream(cls, stream):
-        instance = cls()
-        instance.update(stream)
-        return instance
-
-    def update(self, stream):
-        if stream.type not in ('audio', 'video'):
-            raise ValueError('only audio and video streams are supported')
-        if stream.type == 'audio':
-            self.ice_status = 'Active' if stream.ice_active else 'Inactive'
-            self.encryption = 'SRTP' if stream.srtp_active else None
-            self.hd = stream.sample_rate/1000 >= 16
-            self.codec = '%s %dkHz' % (stream.codec, stream.sample_rate/1000)
-        elif stream.type == 'video':
-            self.ice_status = 'Active' if stream.ice_active else 'Inactive'
-            self.encryption = 'SRTP' if stream.srtp_active else None
-            self.hd = stream.clock_rate/1024 >= 512
-            self.codec = '%s %dkbit' % (stream.codec, stream.clock_rate/1024)
-
-    def __repr__(self):
-        return "{0.__class__.__name__}(status={0.status!r}, ice_status={0.ice_status!r}, encryption={0.encryption!r}, hd={0.hd!r}, codec={0.codec!r})".format(self)
-
-
-class StreamStatistics(object):
-    def __init__(self, audio=None, video=None):
-        self.audio = audio
-        self.video = video
-
-
-class RTPStatistics(object):
-    def __init__(self, latency=0, packet_loss=0, jitter=0, sent_bytes=0, received_bytes=0):
-        self.latency = latency
-        self.packet_loss = packet_loss
-        self.jitter = jitter
-        self.sent_bytes = sent_bytes
-        self.received_bytes = received_bytes
-
-    @classmethod
-    def load(cls, data):
-        latency = data['rtt']['last'] / 1000
-        packet_loss = int(data['rx']['packets_lost']*100.0/data['rx']['packets']) if data['rx']['packets'] else 0
-        jitter = data['rx']['jitter']['last'] / 1000
-        sent_bytes = data['tx']['bytes']
-        received_bytes = data['rx']['bytes']
-        return cls(latency, packet_loss, jitter, sent_bytes, received_bytes)
-
-    def __repr__(self):
-        return "{0.__class__.__name__}(latency={0.latency!r}, packet_loss={0.packet_loss!r}, jitter={0.jitter!r}, sent_bytes={0.sent_bytes!r}, received_bytes={0.received_bytes!r})".format(self)
 
 
 class StreamSet(object):
@@ -181,8 +245,6 @@ class StreamContainer(object):
         old_stream = self._stream_map.get(stream.type, None)
         if old_stream is not None:
             notification_center.remove_observer(self._session, sender=old_stream)
-        if stream.type in ('audio', 'video'):
-            stream.info = StreamInfo()
         stream.blink_session = self._session
         self._stream_map[stream.type] = stream
         notification_center.add_observer(self._session, sender=stream)
@@ -271,8 +333,6 @@ class BlinkSession(QObject):
     implements(IObserver)
 
     # check what should be a signal and what a notification -Dan
-    streamInfoUpdated = pyqtSignal(object)
-    infoUpdated       = pyqtSignal(object, object) # duration, stream statistics
     conferenceChanged = pyqtSignal(object, object) # old_conference, new_conference
 
     streams = StreamListDescriptor()
@@ -313,7 +373,7 @@ class BlinkSession(QObject):
         self.remote_hold = False
         self.recording = False
 
-        self.duration = timedelta(0)
+        self.info = SessionInfo()
 
         self._sibling = None
 
@@ -437,6 +497,10 @@ class BlinkSession(QObject):
     def reusable(self):
         return self.persistent and self.state in (None, 'initialized', 'ended')
 
+    @property
+    def duration(self):
+        return self.info.duration
+
     def init_incoming(self, sip_session, streams, contact, contact_uri, reinitialize=False):
         assert self.state in (None, 'initialized', 'ended')
         assert self.contact is None or contact.settings is self.contact.settings
@@ -453,11 +517,13 @@ class BlinkSession(QObject):
         self.contact_uri = contact_uri
         self.uri = self._parse_uri(contact_uri.uri)
         self.streams.extend(streams)
+        self.info._update(self)
         self.state = 'connecting'
         if reinitialize:
             notification_center.post_notification('BlinkSessionDidReinitializeForIncoming', sender=self)
         else:
             notification_center.post_notification('BlinkSessionNewIncoming', sender=self)
+        notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media', 'statistics'}))
         notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
         self.sip_session.accept(streams)
 
@@ -480,10 +546,12 @@ class BlinkSession(QObject):
         self.stream_descriptions = StreamSet(stream_descriptions)
         self._sibling = sibling
         self.state = 'initialized'
+        self.info._update(self)
         if reinitialize:
             notification_center.post_notification('BlinkSessionDidReinitializeForOutgoing', sender=self)
         else:
             notification_center.post_notification('BlinkSessionNewOutgoing', sender=self)
+        notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media', 'statistics'}))
 
     def connect(self):
         assert self.direction == 'outgoing' and self.state == 'initialized'
@@ -514,11 +582,13 @@ class BlinkSession(QObject):
         assert self.state == 'connected'
         if stream_description.type in self.streams:
             raise RuntimeError('session already has a stream of type %s' % stream_description.type)
+        self.info.streams[stream_description.type]._reset()
         stream = stream_description.create_stream()
         self.sip_session.add_stream(stream)
         self.streams.add(stream)
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
+        notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
 
     def remove_stream(self, stream):
         assert self.state == 'connected'
@@ -536,8 +606,10 @@ class BlinkSession(QObject):
         self.sip_session.accept_proposal(streams)
         notification_center = NotificationCenter()
         for stream in streams:
+            self.info.streams[stream.type]._reset()
             self.streams.add(stream)
             notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
+        notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
 
     def hold(self):
         if self.sip_session is not None and not self.local_hold:
@@ -635,7 +707,11 @@ class BlinkSession(QObject):
         self.remote_hold = False
         self.recording = False
 
-        self.state = 'ended'
+        state = BlinkSessionState('ended')
+        state.reason = reason
+        state.error = error
+
+        self.state = state
         notification_center.post_notification('BlinkSessionDidEnd', sender=self, data=NotificationData(reason=reason, error=error))
 
         if not self.persistent:
@@ -666,18 +742,11 @@ class BlinkSession(QObject):
         return uri
 
     def _SH_TimerFired(self):
-        self.duration += timedelta(seconds=1)
-        audio_stream = self.streams.get('audio')
-        if audio_stream is not None and audio_stream.statistics is not None:
-            audio_stats = RTPStatistics.load(audio_stream.statistics)
-        else:
-            audio_stats = None
-        video_stream = self.streams.get('video')
-        if video_stream is not None and video_stream.statistics is not None:
-            video_stats = RTPStatistics.load(video_stream.statistics)
-        else:
-            video_stats = None
-        self.infoUpdated.emit(self.duration, StreamStatistics(audio=audio_stats, video=video_stats))
+        self.info.duration += timedelta(seconds=1)
+        self.info.streams.audio._update_statistics(self.streams.get('audio', Null).statistics)
+        self.info.streams.video._update_statistics(self.streams.get('video', Null).statistics)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'statistics'}))
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -701,7 +770,9 @@ class BlinkSession(QObject):
 
     def _NH_SIPSessionNewOutgoing(self, notification):
         self.state = 'connecting'
+        self.info._update(self)
         notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session'}))
 
     def _NH_SIPSessionGotProvisionalResponse(self, notification):
         if notification.data.code == 180:
@@ -710,10 +781,14 @@ class BlinkSession(QObject):
         elif notification.data.code == 183:
             self.state = 'connecting/early_media'
             notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='early_media'))
+        self.info._update(self)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media'}))
 
     def _NH_SIPSessionWillStart(self, notification):
         self.state = 'connecting/starting'
+        self.info._update(self)
         notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='starting'))
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media'}))
 
     def _NH_SIPSessionDidStart(self, notification):
         for stream in set(self.streams).difference(notification.data.streams):
@@ -721,16 +796,9 @@ class BlinkSession(QObject):
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
             self.timer.start()
-            audio_stream = self.streams.get('audio')
-            if audio_stream is not None:
-                audio_stream.info.update(audio_stream)
-                self.streamInfoUpdated.emit(audio_stream)
-            video_stream = self.streams.get('video')
-            if video_stream is not None:
-                video_stream.info.update(video_stream)
-                self.streamInfoUpdated.emit(video_stream)
-            notification_center = NotificationCenter()
-            notification_center.post_notification('BlinkSessionDidConnect', sender=self)
+            self.info._update(self)
+            notification.center.post_notification('BlinkSessionDidConnect', sender=self)
+            notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media'}))
 
     def _NH_SIPSessionDidFail(self, notification):
         if notification.data.failure_reason == 'user request':
@@ -761,14 +829,6 @@ class BlinkSession(QObject):
         accepted_streams = notification.data.accepted_streams
         proposed_streams = notification.data.proposed_streams
         if self.state not in ('ending', 'ended', 'deleted'):
-            audio_stream = self.streams.get('audio')
-            if audio_stream is not None and audio_stream in accepted_streams:
-                audio_stream.info.update(audio_stream)
-                self.streamInfoUpdated.emit(audio_stream)
-            video_stream = self.streams.get('video')
-            if video_stream is not None and video_stream in accepted_streams:
-                video_stream.info.update.emit(video_stream)
-                self.streamInfoUpdated(video_stream)
             self.state = 'connected'
         for stream in proposed_streams:
             if stream in accepted_streams:
@@ -776,6 +836,9 @@ class BlinkSession(QObject):
             else:
                 self.streams.remove(stream)
                 notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+        if accepted_streams:
+            self.info.streams._update(self.streams)
+            notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_SIPSessionProposalRejected(self, notification):
         for stream in set(notification.data.proposed_streams).intersection(self.streams):
@@ -803,17 +866,26 @@ class BlinkSession(QObject):
             self.unhold()
 
     def _NH_AudioStreamICENegotiationStateDidChange(self, notification):
-        audio_stream = notification.sender
         state = notification.data.state
         if state == 'GATHERING':
-            audio_stream.info.status = 'Gathering ICE candidates'
+            self.info.streams.audio.ice_status = 'gathering'
+            notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+        if state == 'GATHERING_COMPLETE':
+            self.info.streams.audio.ice_status = 'gathering_complete'
+            notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
         elif state == 'NEGOTIATING':
-            audio_stream.info.status = 'Negotiating ICE'
-        elif state == 'RUNNING':
-            audio_stream.info.status = 'ICE negotiation succeeded'
-        elif state == 'FAILED':
-            audio_stream.info.status = 'ICE negotiation failed'
-        self.streamInfoUpdated.emit(audio_stream)
+            self.info.streams.audio.ice_status = 'negotiating'
+            notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_AudioStreamICENegotiationDidSucceed(self, notification):
+        self.info.streams.audio.ice_status = 'succeeded'
+        self.info.streams.audio.local_rtp_candidate = notification.sender.local_rtp_candidate
+        self.info.streams.audio.remote_rtp_candidate = notification.sender.remote_rtp_candidate
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_AudioStreamICENegotiationDidFail(self, notification):
+        self.info.streams.audio.ice_status = 'failed'
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_AudioStreamGotDTMF(self, notification):
         digit_map = {'*': 'star'}
@@ -892,9 +964,6 @@ class AudioSessionItem(object):
         self.pending_removal = False
 
         self.__deleted__ = False
-
-        self.blink_session.infoUpdated.connect(self._SH_BlinkSessionInfoUpdated)
-        self.blink_session.streamInfoUpdated.connect(self._SH_BlinkSessionStreamInfoUpdated)
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.blink_session)
@@ -1033,7 +1102,7 @@ class AudioSessionItem(object):
 
     @property
     def duration(self):
-        return self.blink_session.duration
+        return self.blink_session.info.duration
 
     def end(self):
         # this needs to consider the case where the audio stream is being added. in that case we need to cancel the proposal -Dan
@@ -1061,8 +1130,6 @@ class AudioSessionItem(object):
         self.widget.hold_button.setEnabled(False)
         self.widget.record_button.setEnabled(False)
         self.widget.hangup_button.setEnabled(False)
-        self.blink_session.infoUpdated.disconnect(self._SH_BlinkSessionInfoUpdated)
-        self.blink_session.streamInfoUpdated.disconnect(self._SH_BlinkSessionStreamInfoUpdated)
 
     def _reset_status(self):
         if not self.blink_session.on_hold:
@@ -1087,20 +1154,6 @@ class AudioSessionItem(object):
         else:
             self.blink_session.stop_recording()
 
-    def _SH_BlinkSessionInfoUpdated(self, duration, statistics):
-        self.widget.duration_label.value = duration
-        # TODO: compute packet loss and latency statistics -Saul
-
-    def _SH_BlinkSessionStreamInfoUpdated(self, stream):
-        if stream is self.audio_stream:
-            if stream.info.status:
-                self.status = Status(stream.info.status)
-            else:
-                self.status = None
-            self.type = 'HD Audio' if stream.info.hd else 'Audio'
-            self.codec_info = stream.info.codec
-            self.srtp = stream.info.encryption == 'SRTP'
-
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
@@ -1118,6 +1171,16 @@ class AudioSessionItem(object):
             self.status = Status('Starting media...')
         else:
             self.status = None
+
+    def _NH_BlinkSessionInfoUpdated(self, notification):
+        if 'media' in notification.data.elements:
+            audio_info = self.blink_session.info.streams.audio
+            self.type = 'HD Audio' if audio_info.sample_rate >= 16000 else 'Audio'
+            self.codec_info = audio_info.codec
+            self.srtp = audio_info.encryption == 'SRTP'
+        if 'statistics' in notification.data.elements:
+            self.widget.duration_label.value = self.blink_session.info.duration
+            # TODO: compute packet loss and latency statistics -Saul
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
         self.widget.hold_button.setChecked(notification.data.local_hold)
@@ -2619,6 +2682,7 @@ class ChatSessionListView(QListView):
 
         self.setMouseTracking(True)
         self.setAlternatingRowColors(True)
+        self.setAutoFillBackground(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         #self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded) # default

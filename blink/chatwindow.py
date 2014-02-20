@@ -6,8 +6,8 @@ __all__ = ['ChatWindow']
 import os
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QDesktopServices, QIcon, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
+from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
+from PyQt4.QtGui  import QAction, QColor, QDesktopServices, QIcon, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
@@ -28,6 +28,7 @@ from blink.resources import IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, StreamDescription
 from blink.util import run_in_gui_thread
 from blink.widgets.color import ColorHelperMixin
+from blink.widgets.graph import Graph
 from blink.widgets.util import ContextMenuActions
 
 
@@ -604,30 +605,41 @@ ui_class, base_class = uic.loadUiType(Resources.get('chat_window.ui'))
 class ChatWindow(base_class, ui_class, ColorHelperMixin):
     implements(IObserver)
 
+    sliding_panels = True
+
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)
         with Resources.directory:
             self.setupUi()
+
         self.selected_item = None
         self.session_model = ChatSessionModel(self)
         self.session_list.setModel(self.session_model)
         self.session_widget.installEventFilter(self)
         self.state_label.installEventFilter(self)
+
         self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
         self.hold_button.clicked.connect(self._SH_HoldButtonClicked)
         self.record_button.clicked.connect(self._SH_RecordButtonClicked)
         self.control_button.clicked.connect(self._SH_ControlButtonClicked)
+        self.participants_panel_info_button.clicked.connect(self._SH_InfoButtonClicked)
+        self.participants_panel_files_button.clicked.connect(self._SH_FilesButtonClicked)
+        self.files_panel_info_button.clicked.connect(self._SH_InfoButtonClicked)
+        self.files_panel_participants_button.clicked.connect(self._SH_ParticipantsButtonClicked)
+        self.info_panel_files_button.clicked.connect(self._SH_FilesButtonClicked)
+        self.info_panel_participants_button.clicked.connect(self._SH_ParticipantsButtonClicked)
+        self.latency_graph.updated.connect(self._SH_LatencyGraphUpdated)
+        self.packet_loss_graph.updated.connect(self._SH_PacketLossGraphUpdated)
+        self.traffic_graph.updated.connect(self._SH_TrafficGraphUpdated)
         self.session_model.sessionAdded.connect(self._SH_SessionModelSessionAdded)
         self.session_model.sessionRemoved.connect(self._SH_SessionModelSessionRemoved)
         self.session_model.sessionAboutToBeRemoved.connect(self._SH_SessionModelSessionAboutToBeRemoved)
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
-        self.dummy_tab = ChatWidget(None, self.tab_widget)
-        self.dummy_tab.setDisabled(True)
-        self.tab_widget.addTab(self.dummy_tab, "Dummy")
-        self.tab_widget.setCurrentWidget(self.dummy_tab)
+
         geometry = QSettings().value("chat_window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
@@ -644,8 +656,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MediaStreamDidFail')
         notification_center.add_observer(self, name='MediaStreamDidEnd')
 
+        #self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
+
+    def _SH_SplitterMoved(self, pos, index):
+        print "-- splitter:", pos, index, self.splitter.sizes()
+
     def setupUi(self):
         super(ChatWindow, self).setupUi(self)
+
+        self.control_icon = QIcon(Resources.get('icons/cog.svg'))
+        self.cancel_icon = QIcon(Resources.get('icons/cancel.png'))
+        self.lock_grey_icon = QIcon(Resources.get('icons/lock-grey-12.svg'))
+        self.lock_green_icon = QIcon(Resources.get('icons/lock-green-12.svg'))
+
+        # re-apply the stylesheet for self.session_info_container_widget to account for all its subwidget role properties that were set after it
+        self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
 
         # fix the SVG icons as the generated code loads them as pixmaps, losing their ability to scale -Dan
         def svg_icon(filename_off, filename_on):
@@ -657,7 +682,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.mute_button.setIcon(svg_icon(Resources.get('icons/mic-on.svg'), Resources.get('icons/mic-off.svg')))
         self.hold_button.setIcon(svg_icon(Resources.get('icons/pause.svg'), Resources.get('icons/paused.svg')))
         self.record_button.setIcon(svg_icon(Resources.get('icons/record.svg'), Resources.get('icons/recording.svg')))
-        self.control_button.setIcon(QIcon(Resources.get('icons/cog.svg')))
+        self.control_button.setIcon(self.control_icon)
 
         self.control_menu = QMenu(self.control_button)
         self.control_button.setMenu(self.control_menu)
@@ -671,9 +696,41 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.session_list = ChatSessionListView(self)
         self.session_list.setObjectName('session_list')
+
+        self.slide_direction = self.session_details.RightToLeft # decide if we slide from one direction only -Dan
+        self.slide_direction = self.session_details.Automatic
+        self.session_details.animationDuration = 300
+        self.session_details.animationEasingCurve = QEasingCurve.OutCirc
+
+        self.audio_latency_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
+        self.video_latency_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0))
+        self.audio_packet_loss_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
+        self.video_packet_loss_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0))
+
+        self.incoming_traffic_graph = Graph([], color=QColor(255, 50, 50))
+        self.outgoing_traffic_graph = Graph([], color=QColor(0, 100, 215))
+
+        self.latency_graph.add_graph(self.audio_latency_graph)
+        self.latency_graph.add_graph(self.video_latency_graph)
+        self.packet_loss_graph.add_graph(self.audio_packet_loss_graph)
+        self.packet_loss_graph.add_graph(self.video_packet_loss_graph)
+
+        # the graph added 2nd will be displayed on top
+        self.traffic_graph.add_graph(self.incoming_traffic_graph)
+        self.traffic_graph.add_graph(self.outgoing_traffic_graph)
+
+        self.info_panel_files_button.hide()
+        self.info_panel_participants_button.hide()
+        self.participants_panel_files_button.hide()
+
         while self.tab_widget.count():
             self.tab_widget.removeTab(0) # remove the tab(s) added in designer
         self.tab_widget.tabBar().hide()
+        self.dummy_tab = ChatWidget(None, self.tab_widget)
+        self.dummy_tab.setDisabled(True)
+        self.tab_widget.addTab(self.dummy_tab, "Dummy")
+        self.tab_widget.setCurrentWidget(self.dummy_tab)
+
         self.session_list.hide()
         self.new_messages_button.hide()
 
@@ -699,6 +756,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 notification_center.add_observer(self, sender=new_session.blink_session)
                 self._update_widgets_for_session()
                 self._update_control_menu()
+                self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
 
     selected_session = property(_get_selected_session, _set_selected_session)
     del _get_selected_session, _set_selected_session
@@ -740,12 +798,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         state = blink_session.state
         if state=='connecting/*' and blink_session.direction=='outgoing' or state=='connected/sent_proposal':
             self.control_button.setMenu(None)
-            self.control_button.setIcon(QIcon(Resources.get('icons/cancel.png')))
+            self.control_button.setIcon(self.cancel_icon)
         elif state == 'connected/received_proposal':
             self.control_button.setEnabled(False)
         else:
             self.control_button.setEnabled(True)
-            self.control_button.setIcon(QIcon(Resources.get('icons/cog.svg')))
+            self.control_button.setIcon(self.control_icon)
             menu.clear()
             if state not in ('connecting/*', 'connected/*'):
                 menu.addAction(self.control_button.actions.connect)
@@ -756,6 +814,112 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     menu.addAction(self.control_button.actions.add_audio if 'audio' not in blink_session.streams else self.control_button.actions.remove_audio)
             #menu.addAction(self.control_button.actions.dump_session) # remove this later -Dan
             self.control_button.setMenu(menu)
+
+    def _update_session_info_panel(self, elements={}, update_visibility=False):
+        blink_session = self.selected_session.blink_session
+        have_session = blink_session.state in ('connecting/*', 'connected/*', 'ending')
+        have_audio = 'audio' in blink_session.streams
+        have_chat = 'chat' in blink_session.streams
+
+        if update_visibility:
+            self.status_value_label.setEnabled(have_session)
+            self.duration_value_label.setEnabled(have_session)
+            self.account_value_label.setEnabled(have_session)
+            self.remote_agent_value_label.setEnabled(have_session)
+            self.sip_addresses_value_label.setEnabled(have_session)
+            self.audio_value_widget.setEnabled(have_audio)
+            self.audio_addresses_value_label.setEnabled(have_audio)
+            self.audio_ice_status_value_label.setEnabled(have_audio)
+            self.chat_value_widget.setEnabled(have_chat)
+            self.chat_addresses_value_label.setEnabled(have_chat)
+
+        session_info = blink_session.info
+        audio_info = blink_session.info.streams.audio
+        video_info = blink_session.info.streams.video
+        chat_info = blink_session.info.streams.chat
+
+        if 'status' in elements and blink_session.state in ('initialized', 'connecting/*', 'connected/*', 'ended'):
+            state_map = {'initialized': 'Disconnected',
+                         'connecting/dns_lookup': 'Finding destination',
+                         'connecting': 'Connecting',
+                         'connecting/ringing': 'Ringing',
+                         'connecting/starting': 'Starting media',
+                         'connected': 'Connected'}
+
+            if blink_session.state == 'ended':
+                self.status_value_label.setForegroundRole(QPalette.AlternateBase if blink_session.state.error else QPalette.WindowText)
+                self.status_value_label.setText(blink_session.state.reason)
+            elif blink_session.state in state_map:
+                self.status_value_label.setForegroundRole(QPalette.WindowText)
+                self.status_value_label.setText(state_map[blink_session.state])
+
+            want_duration = blink_session.state == 'connected/*' or blink_session.state == 'ended' and not blink_session.state.error
+            self.status_title_label.setVisible(not want_duration)
+            self.status_value_label.setVisible(not want_duration)
+            self.duration_title_label.setVisible(want_duration)
+            self.duration_value_label.setVisible(want_duration)
+
+        if 'session' in elements:
+            self.account_value_label.setText(blink_session.account.id)
+            self.remote_agent_value_label.setText(session_info.remote_user_agent or u'N/A')
+            if session_info.local_address and session_info.remote_address:
+                self.sip_addresses_value_label.setText(u'%s \u21c4 %s:%s' % (session_info.local_address, session_info.transport, session_info.remote_address))
+            elif session_info.local_address:
+                self.sip_addresses_value_label.setText(u'%s \u21c4 N/A' % session_info.local_address)
+            else:
+                self.sip_addresses_value_label.setText(u'N/A')
+
+        if 'media' in elements:
+            self.audio_value_label.setText(audio_info.codec or 'N/A')
+            self.audio_encryption_label.setVisible(audio_info.encryption is not None)
+
+            if audio_info.local_address and audio_info.remote_address:
+                self.audio_addresses_value_label.setText(u'%s \u21c4 %s' % (audio_info.local_address, audio_info.remote_address))
+            else:
+                self.audio_addresses_value_label.setText(u'N/A')
+
+            if audio_info.ice_status == None:
+                self.audio_ice_status_value_label.setText(u'N/A')
+            elif audio_info.ice_status == 'disabled':
+                self.audio_ice_status_value_label.setText(u'Disabled')
+            elif audio_info.ice_status == 'gathering':
+                self.audio_ice_status_value_label.setText(u'Gathering candidates')
+            elif audio_info.ice_status == 'gathering_complete':
+                self.audio_ice_status_value_label.setText(u'Gathered candidates')
+            elif audio_info.ice_status == 'negotiating':
+                self.audio_ice_status_value_label.setText(u'Negotiating')
+            elif audio_info.ice_status == 'succeeded':
+                if 'relay' in {candidate.type.lower() for candidate in (audio_info.local_rtp_candidate, audio_info.remote_rtp_candidate)}:
+                    self.audio_ice_status_value_label.setText(u'Using relay')
+                else:
+                    self.audio_ice_status_value_label.setText(u'Peer to peer')
+            elif audio_info.ice_status == 'failed':
+                self.audio_ice_status_value_label.setText(u"Couldn't negotiate ICE")
+
+            if any(len(path) > 1 for path in (chat_info.full_local_path, chat_info.full_remote_path)):
+                self.chat_value_label.setText(u'Using relay')
+            elif chat_info.full_local_path and chat_info.full_remote_path:
+                self.chat_value_label.setText(u'Peer to peer')
+            else:
+                self.chat_value_label.setText(u'N/A')
+            self.chat_encryption_label.setVisible(chat_info.remote_address is not None and chat_info.transport=='tls')
+
+            if chat_info.local_address and chat_info.remote_address:
+                self.chat_addresses_value_label.setText(u'%s \u21c4 %s:%s' % (chat_info.local_address, chat_info.transport, chat_info.remote_address))
+            else:
+                self.chat_addresses_value_label.setText(u'N/A')
+
+        if 'statistics' in elements:
+            self.duration_value_label.value = session_info.duration
+            self.audio_latency_graph.data = audio_info.latency
+            self.video_latency_graph.data = video_info.latency
+            self.audio_packet_loss_graph.data = audio_info.packet_loss
+            self.video_packet_loss_graph.data = video_info.packet_loss
+            self.incoming_traffic_graph.data = audio_info.incoming_traffic
+            self.outgoing_traffic_graph.data = audio_info.outgoing_traffic
+            self.latency_graph.update()
+            self.packet_loss_graph.update()
+            self.traffic_graph.update()
 
     def show(self):
         super(ChatWindow, self).show()
@@ -782,7 +946,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     self._EH_CloseSession()
                 else:
                     self._EH_ShowSessions()
-            elif event_type == QEvent.Paint and self.session_widget.hovered:
+            elif event_type == QEvent.Paint: # and self.session_widget.hovered:
                 watched.event(event)
                 self.drawSessionWidgetIndicators()
                 return True
@@ -863,24 +1027,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkSessionNewIncoming(self, notification):
         if 'chat' in notification.sender.streams.types:
-            # temporary show the session list view until we have a detail view -Dan
-            if not self.session_list.isVisibleTo(self):
-                self.session_list.animation.setDirection(QPropertyAnimation.Forward)
-                self.session_list.animation.setStartValue(self.session_widget.geometry())
-                self.session_list.animation.setEndValue(self.session_panel.rect())
-                self.session_list.show()
-                self.session_list.animation.start()
             self.show()
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         if 'chat' in notification.sender.stream_descriptions.types:
-            # temporary show the session list view until we have a detail view -Dan
-            if not self.session_list.isVisibleTo(self):
-                self.session_list.animation.setDirection(QPropertyAnimation.Forward)
-                self.session_list.animation.setStartValue(self.session_widget.geometry())
-                self.session_list.animation.setEndValue(self.session_panel.rect())
-                self.session_list.show()
-                self.session_list.animation.start()
             self.show()
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
@@ -925,10 +1075,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         self._update_control_menu()
+        self._update_session_info_panel(update_visibility=True)
 
     def _NH_BlinkSessionDidChangeState(self, notification):
         # even if we use this, we also need to listen for BlinkSessionDidRemoveStream as that transition doesn't change the state at all -Dan
         self._update_control_menu()
+        self._update_session_info_panel(elements={'status'}, update_visibility=True)
+
+    def _NH_BlinkSessionInfoUpdated(self, notification):
+        self._update_session_info_panel(elements=notification.data.elements)
 
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
@@ -1015,6 +1170,37 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     # signal handlers
     #
+    def _SH_InfoButtonClicked(self, checked):
+        if self.sliding_panels:
+            self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
+        else:
+            self.session_details.setCurrentWidget(self.info_panel)
+
+    def _SH_FilesButtonClicked(self, checked):
+        if self.sliding_panels:
+            self.session_details.slideInWidget(self.files_panel, direction=self.slide_direction)
+        else:
+            self.session_details.setCurrentWidget(self.files_panel)
+
+    def _SH_ParticipantsButtonClicked(self, checked):
+        if self.sliding_panels:
+            self.session_details.slideInWidget(self.participants_panel, direction=self.slide_direction)
+        else:
+            self.session_details.setCurrentWidget(self.participants_panel)
+
+    def _SH_LatencyGraphUpdated(self):
+        self.latency_label.setText(u'Network Latency: %dms, max=%dms' % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
+
+    def _SH_PacketLossGraphUpdated(self):
+        self.packet_loss_label.setText(u'Packet Loss: %.1f%%, max=%.1f%%' % (max(self.audio_packet_loss_graph.last_value, self.video_packet_loss_graph.last_value), self.packet_loss_graph.max_value))
+
+    def _SH_TrafficGraphUpdated(self):
+        #incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value)
+        #outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value)
+        incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value*8, bits_per_second=True)
+        outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value*8, bits_per_second=True)
+        self.traffic_label.setText(u"""<p>Traffic: <span style="color: #d70000;">\u2193</span> %s <span style="color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
+
     def _SH_MuteButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.audio.muted = checked
@@ -1119,5 +1305,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.animation.start()
 
 del ui_class, base_class
+
+
+class TrafficNormalizer(object):
+    boundaries = [(             1024, '%d%ss',                   1),
+                  (          10*1024, '%.2fk%ss',           1024.0),  (        1024*1024, '%.1fk%ss',           1024.0),
+                  (     10*1024*1024, '%.2fM%ss',      1024*1024.0),  (   1024*1024*1024, '%.1fM%ss',      1024*1024.0),
+                  (10*1024*1024*1024, '%.2fG%ss', 1024*1024*1024.0),  (float('infinity'), '%.1fG%ss', 1024*1024*1024.0)]
+
+    @classmethod
+    def normalize(cls, value, bits_per_second=False):
+        for boundary, format, divisor in cls.boundaries:
+            if value < boundary:
+                return format % (value/divisor, 'bp' if bits_per_second else 'B/')
 
 
