@@ -453,9 +453,26 @@ class ChatTextInput(QTextEdit):
         self.setTextCursor(cursor)
 
 
+class IconDescriptor(object):
+    def __init__(self, filename):
+        self.filename = filename
+        self.icon = None
+    def __get__(self, obj, objtype):
+        if self.icon is None:
+            self.icon = QIcon(self.filename)
+            self.icon.filename = self.filename
+        return self.icon
+    def __set__(self, obj, value):
+        raise AttributeError("attribute cannot be set")
+    def __delete__(self, obj):
+        raise AttributeError("attribute cannot be deleted")
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
 class ChatWidget(base_class, ui_class):
+    default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
+
     def __init__(self, session, parent=None):
         super(ChatWidget, self).__init__(parent)
         with Resources.directory:
@@ -585,7 +602,7 @@ class ChatWidget(base_class, ui_class):
             account = chat_stream.blink_session.account
             display_name = account.display_name
             uri = account.id
-        icon = IconManager().get('avatar') or self.session.default_user_icon
+        icon = IconManager().get('avatar') or self.default_user_icon
         sender = ChatSender(display_name, uri, icon.filename)
         self.add_message(ChatMessage(text, sender, 'outgoing'))
 
