@@ -17,7 +17,7 @@ from operator import attrgetter
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QPropertyAnimation, QRect, QSize, QTimer, pyqtSignal
-from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QIcon, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut, QStyle, QStyledItemDelegate
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null, limit
@@ -2204,29 +2204,10 @@ class AudioSessionListView(QListView):
 # Chat sessions
 #
 
-class IconDescriptor(object):
-    def __init__(self, filename):
-        self.filename = filename
-        self.icon = None
-    def __get__(self, obj, objtype):
-        if self.icon is None:
-            self.icon = QIcon(self.filename)
-            self.icon.filename = self.filename
-        return self.icon
-    def __set__(self, obj, value):
-        raise AttributeError("attribute cannot be set")
-    def __delete__(self, obj):
-        raise AttributeError("attribute cannot be deleted")
-
-
 class ChatSessionItem(object):
     implements(IObserver)
 
     size_hint = QSize(200, 36)
-
-    default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
-
-    stylish_icons = True
 
     def __init__(self, blink_session):
         self.blink_session = blink_session
