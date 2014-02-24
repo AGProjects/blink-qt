@@ -1101,8 +1101,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         # TODO: if we are in a conference, find the contact and icon -Saul
         uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
-        icon = session.icon or session.default_user_icon
-        sender = ChatSender(message.sender.display_name, uri, icon.filename)
+        sender = ChatSender(message.sender.display_name, uri, session.icon.filename)
         content = message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml()
         session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
         session.remote_composing = False
