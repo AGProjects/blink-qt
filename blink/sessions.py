@@ -3165,10 +3165,8 @@ class SessionManager(object):
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
 
     def create_session(self, contact, contact_uri, streams, account=None, connect=True, sibling=None):
-        from blink.contacts import BonjourNeighbour
-
         if account is None:
-            if isinstance(contact.settings, BonjourNeighbour):
+            if contact.type == 'bonjour':
                 account = BonjourAccount()
             else:
                 account = AccountManager().default_account

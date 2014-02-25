@@ -995,11 +995,11 @@ class Contact(object):
 
     size_hint = QSize(200, 36)
 
-    native = property(lambda self: isinstance(self.settings, addressbook.Contact))
+    native = property(lambda self: self.type == 'addressbook')
 
-    movable = property(lambda self: isinstance(self.settings, addressbook.Contact))
-    editable = property(lambda self: isinstance(self.settings, addressbook.Contact))
-    deletable = property(lambda self: isinstance(self.settings, addressbook.Contact))
+    movable = property(lambda self: self.type == 'addressbook')
+    editable = property(lambda self: self.type == 'addressbook')
+    deletable = property(lambda self: self.type == 'addressbook')
 
     default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
 
@@ -1054,17 +1054,34 @@ class Contact(object):
         return self.name or u''
 
     @property
+    def type(self):
+        try:
+            return self.__dict__['type']
+        except KeyError:
+            if isinstance(self.settings, addressbook.Contact):
+                type = 'addressbook'
+            elif isinstance(self.settings, BonjourNeighbour):
+                type = 'bonjour'
+            elif isinstance(self.settings, GoogleContact):
+                type = 'google'
+            elif isinstance(self.settings, DummyContact):
+                type = 'dummy'
+            else:
+                type = 'unknown'
+            return self.__dict__.setdefault('type', type)
+
+    @property
     def name(self):
-        if isinstance(self.settings, BonjourNeighbour):
+        if self.type == 'bonjour':
             return '%s (%s)' % (self.settings.name, self.settings.hostname)
-        elif isinstance(self.settings, GoogleContact):
+        elif self.type == 'google':
             return self.settings.name or self.settings.company or u''
         else:
             return self.settings.name
 
     @property
     def location(self):
-        if isinstance(self.settings, BonjourNeighbour):
+        if self.type == 'bonjour':
             return self.settings.hostname
         else:
             return None
@@ -1072,7 +1089,7 @@ class Contact(object):
     @property
     def info(self):
         try:
-            return self.note or ('@' + self.uri.uri.host if isinstance(self.settings, BonjourNeighbour) else self.uri.uri)
+            return self.note or ('@' + self.uri.uri.host if self.type == 'bonjour' else self.uri.uri)
         except AttributeError:
             return u''
 
@@ -1104,10 +1121,10 @@ class Contact(object):
         try:
             return self.__dict__['icon']
         except KeyError:
-            if isinstance(self.settings, addressbook.Contact):
+            if self.type == 'addressbook':
                 icon_manager = IconManager()
                 icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
-            elif isinstance(self.settings, GoogleContact):
+            elif self.type == 'google':
                 pixmap = QPixmap()
                 if pixmap.loadFromData(self.settings.icon.data):
                     icon = QIcon(pixmap)
@@ -1160,10 +1177,10 @@ class ContactDetail(object):
 
     size_hint = QSize(200, 36)
 
-    native = property(lambda self: isinstance(self.settings, addressbook.Contact))
+    native = property(lambda self: self.type == 'addressbook')
 
-    editable = property(lambda self: isinstance(self.settings, addressbook.Contact))
-    deletable = property(lambda self: isinstance(self.settings, addressbook.Contact))
+    editable = property(lambda self: self.type == 'addressbook')
+    deletable = property(lambda self: self.type == 'addressbook')
 
     default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
 
@@ -1197,17 +1214,34 @@ class ContactDetail(object):
         return self.name or u''
 
     @property
+    def type(self):
+        try:
+            return self.__dict__['type']
+        except KeyError:
+            if isinstance(self.settings, addressbook.Contact):
+                type = 'addressbook'
+            elif isinstance(self.settings, BonjourNeighbour):
+                type = 'bonjour'
+            elif isinstance(self.settings, GoogleContact):
+                type = 'google'
+            elif isinstance(self.settings, DummyContact):
+                type = 'dummy'
+            else:
+                type = 'unknown'
+            return self.__dict__.setdefault('type', type)
+
+    @property
     def name(self):
-        if isinstance(self.settings, BonjourNeighbour):
+        if self.type == 'bonjour':
             return '%s (%s)' % (self.settings.name, self.settings.hostname)
-        elif isinstance(self.settings, GoogleContact):
+        elif self.type == 'google':
             return self.settings.name or self.settings.company
         else:
             return self.settings.name
 
     @property
     def location(self):
-        if isinstance(self.settings, BonjourNeighbour):
+        if self.type == 'bonjour':
             return self.settings.hostname
         else:
             return None
@@ -1215,7 +1249,7 @@ class ContactDetail(object):
     @property
     def info(self):
         try:
-            return self.note or ('@' + self.uri.uri.host if isinstance(self.settings, BonjourNeighbour) else self.uri.uri)
+            return self.note or ('@' + self.uri.uri.host if self.type == 'bonjour' else self.uri.uri)
         except AttributeError:
             return u''
 
@@ -1247,10 +1281,10 @@ class ContactDetail(object):
         try:
             return self.__dict__['icon']
         except KeyError:
-            if isinstance(self.settings, addressbook.Contact):
+            if self.type == 'addressbook':
                 icon_manager = IconManager()
                 icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
-            elif isinstance(self.settings, GoogleContact):
+            elif self.type == 'google':
                 pixmap = QPixmap()
                 if pixmap.loadFromData(self.settings.icon.data):
                     icon = QIcon(pixmap)
