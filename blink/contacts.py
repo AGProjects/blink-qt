@@ -3760,10 +3760,10 @@ class ContactDetailView(QListView):
 
     def _SH_AnimationFinished(self):
         if self.animation.direction() == QPropertyAnimation.Forward:
-            self.setFocus(True)
+            self.setFocus(Qt.OtherFocusReason)
         else:
             self.hide()
-            self.contact_list.setFocus(True)
+            self.contact_list.setFocus(Qt.OtherFocusReason)
 
     def _SH_ModelContactDeleted(self):
         if self.isVisible():
