@@ -1701,13 +1701,12 @@ class AudioSessionModel(QAbstractListModel):
         if not index.isValid():
             return
         try:
-            contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
+            contact, contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
         except Exception:
             return False
         session = self.sessions[index.row()]
         session_manager = SessionManager()
         for contact_uri in contact_uris:
-            contact = contact_uri.contact
             session_manager.create_session(contact, contact_uri.uri, [StreamDescription('audio')], sibling=session.blink_session)
         return True
 

@@ -2798,7 +2798,7 @@ class ContactDetailModel(QAbstractListModel):
         if contact_list:
             mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contact_list)))
         if contact_uris:
-            mime_data.setData('application/x-blink-contact-uri-list', QByteArray(pickle.dumps(contact_uris)))
+            mime_data.setData('application/x-blink-contact-uri-list', QByteArray(pickle.dumps((self.contact_detail, contact_uris))))
         return mime_data
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
