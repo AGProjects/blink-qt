@@ -19,7 +19,7 @@ from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QPropertyAnimation, QRect, QSize, QTimer, pyqtSignal
 from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut, QStyle, QStyledItemDelegate
 
-from application.notification import IObserver, NotificationCenter, NotificationData
+from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
 from application.python.weakref import weakobjectmap
@@ -350,6 +350,7 @@ class BlinkSession(QObject):
             self.contact = None
             self.contact_uri = None
             self.uri = None
+            self.server_conference = ServerConference(self)
 
             self._delete_when_done = False
             self._delete_requested = False
@@ -482,14 +483,6 @@ class BlinkSession(QObject):
     del _get_client_conference, _set_client_conference
 
     @property
-    def transport(self):
-        return self.sip_session.transport if self.sip_session is not None else None
-
-    @property
-    def on_hold(self):
-        return self.local_hold or self.remote_hold
-
-    @property
     def persistent(self):
         return not self._delete_when_done and not self._delete_requested
 
@@ -500,6 +493,18 @@ class BlinkSession(QObject):
     @property
     def duration(self):
         return self.info.duration
+
+    @property
+    def transport(self):
+        return self.sip_session.transport if self.sip_session is not None else None
+
+    @property
+    def on_hold(self):
+        return self.local_hold or self.remote_hold
+
+    @property
+    def remote_focus(self):
+        return self.sip_session is not None and self.sip_session.remote_focus
 
     def init_incoming(self, sip_session, streams, contact, contact_uri, reinitialize=False):
         assert self.state in (None, 'initialized', 'ended')
@@ -933,7 +938,681 @@ class ClientConference(object):
         self.audio_conference.unhold()
 
 
-# Positions for sessions in conferences.
+class ConferenceParticipant(object):
+    implements(IObserver)
+
+    def __init__(self, contact, contact_uri):
+        self.contact = contact
+        self.contact_uri = contact_uri
+        self.uri = contact_uri.uri
+
+        self.active_media = set()
+        self.display_name = None
+        self.on_hold = False
+        self.is_composing = False    # TODO: set this from the chat stream -Saul
+        self.request_status = None
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
+
+    def __repr__(self):
+        return '%s(%r, %r)' % (self.__class__.__name__, self.contact, self.contact_uri)
+
+    @property
+    def pending_request(self):
+        return self.request_status is not None
+
+    def _get_is_composing(self):
+        return self.__dict__['is_composing']
+
+    def _set_is_composing(self, value):
+        old_value = self.__dict__.get('is_composing', False)
+        self.__dict__['is_composing'] = value
+        if old_value != value:
+            NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
+
+    is_composing = property(_get_is_composing, _set_is_composing)
+    del _get_is_composing, _set_is_composing
+
+    def _get_request_status(self):
+        return self.__dict__['request_status']
+
+    def _set_request_status(self, value):
+        old_value = self.__dict__.get('request_status', None)
+        self.__dict__['request_status'] = value
+        if old_value != value:
+            NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
+
+    request_status = property(_get_request_status, _set_request_status)
+    del _get_request_status, _set_request_status
+
+    def _update(self, data):
+        old_values = dict(active_media=self.active_media.copy(), display_name=self.display_name, on_hold=self.on_hold)
+        self.display_name = data.display_text.value if data.display_text else None
+        self.active_media.clear()
+        for media in chain(*data):
+            if media.media_type.value == 'message':
+                self.active_media.add('chat')
+            else:
+                self.active_media.add(media.media_type.value)
+        audio_endpoints = [endpt for endpt in data if any(media.media_type=='audio' for media in endpt)]
+        self.on_hold = all(endpt.status=='on-hold' for endpt in audio_endpoints) if audio_endpoints else False
+        for attr, value in old_values.iteritems():
+            if value != getattr(self, attr):
+                NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
+                break
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkContactDidChange(self, notification):
+        notification.center.post_notification('ConferenceParticipantDidChange', sender=self)
+
+
+class ServerConference(object):
+    implements(IObserver)
+
+    sip_prefix_re = re.compile('^sips?:')
+
+    def __init__(self, session):
+        self.session = session
+        self.sip_session = None
+
+        self.participants = {}
+        self.pending_additions = set()
+        self.pending_removals = set()
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=session)
+
+    def add_participant(self, contact, contact_uri):
+        if contact_uri.uri in self.participants:
+            raise ValueError('%r is already part of the conference' % contact_uri.uri)
+        participant = ConferenceParticipant(contact, contact_uri)
+        participant.request_status = 'Joining...'
+        self.session.sip_session.conference.add_participant(participant.uri)
+        self.participants[participant.uri] = participant
+        self.pending_additions.add(participant)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
+
+    def remove_participant(self, participant):
+        if participant.uri not in self.participants:
+            raise ValueError('participant %r is not part of the conference' % participant)
+        if participant in self.pending_removals:
+            return
+        participant.request_status = 'Leaving...'
+        self.session.sip_session.conference.remove_participant(participant.uri)
+        self.pending_removals.add(participant)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionWillRemoveParticipant', sender=self.session, data=NotificationData(participant=participant))
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidConnect(self, notification):
+        self.sip_session = notification.sender.sip_session
+        notification.center.add_observer(self, sender=self.sip_session)
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        if self.sip_session is not None:
+            notification.center.remove_observer(self, sender=self.sip_session)
+        self.sip_session = None
+        self.participants.clear()
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        self.session = None
+
+    def _NH_SIPSessionGotConferenceInfo(self, notification):
+        from blink.contacts import URIUtils
+        users = dict((self.sip_prefix_re.sub('', str(user.entity)), user) for user in notification.data.conference_info.users)
+
+        removed_participants = [participant for participant in self.participants.itervalues() if participant.uri not in users and participant not in self.pending_additions]
+        confirmed_participants = [participant for participant in self.participants.itervalues() if participant in self.pending_additions and participant.uri in users]
+        updated_participants = [self.participants[uri] for uri in users if uri in self.participants]
+        added_users = set(users.keys()).difference(self.participants.keys())
+
+        for participant in removed_participants:
+            self.participants.pop(participant.uri)
+            if participant in self.pending_removals:
+                self.pending_removals.remove(participant)
+            else:
+                notification.center.post_notification('BlinkSessionWillRemoveParticipant', sender=self.session, data=NotificationData(participant=participant))
+            notification.center.post_notification('BlinkSessionDidRemoveParticipant', sender=self.session, data=NotificationData(participant=participant))
+            participant.request_status = None
+
+        for participant in confirmed_participants:
+            participant.request_status = None
+            participant._update(users[participant.uri])
+            self.pending_additions.remove(participant)
+            notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
+
+        for participant in updated_participants:
+            participant._update(users[participant.uri])
+
+        for uri in added_users:
+            contact, contact_uri = URIUtils.find_contact(uri)
+            participant = ConferenceParticipant(contact, contact_uri)
+            participant._update(users[participant.uri])
+            self.participants[participant.uri] = participant
+            notification.center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
+            notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
+
+    def _NH_SIPConferenceDidNotAddParticipant(self, notification):
+        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
+        try:
+            participant = self.participants[uri]
+        except KeyError:
+            return
+        if participant not in self.pending_additions:
+            return
+        participant.request_status = None
+        del self.participants[uri]
+        self.pending_additions.remove(participant)
+        notification.center.post_notification('BlinkSessionDidNotAddParticipant', sender=self.session, data=NotificationData(participant=participant, reason=notification.data.reason))
+
+    def _NH_SIPConferenceDidNotRemoveParticipant(self, notification):
+        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
+        try:
+            participant = self.participants[uri]
+        except KeyError:
+            return
+        if participant not in self.pending_removals:
+            return
+        participant.request_status = None
+        self.pending_removals.remove(participant)
+        notification.center.post_notification('BlinkSessionDidNotRemoveParticipant', sender=self.session, data=NotificationData(participant=participant, reason=notification.data.reason))
+
+    def _NH_SIPConferenceGotAddParticipantProgress(self, notification):
+        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
+        try:
+            participant = self.participants[uri]
+        except KeyError:
+            return
+        if participant not in self.pending_additions:
+            return
+        participant.request_status = notification.data.reason
+
+    def _NH_SIPConferenceGotRemoveParticipantProgress(self, notification):
+        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
+        try:
+            participant = self.participants[uri]
+        except KeyError:
+            return
+        if participant not in self.pending_removals:
+            return
+        participant.request_status = notification.data.reason
+
+
+class ConferenceParticipantItem(object):
+    implements(IObserver)
+
+    size_hint = QSize(200, 36)
+
+    def __init__(self, participant):
+        self.participant = participant
+        self.widget = ConferenceParticipantWidget(None)
+        self.widget.update_content(self)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=participant)
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, self.participant)
+
+    @property
+    def pending_request(self):
+        return self.participant.pending_request
+
+    @property
+    def name(self):
+        if self.participant.contact.type == 'dummy':
+            return self.participant.display_name or self.participant.contact.name
+        else:
+            return self.participant.contact.name
+
+    @property
+    def info(self):
+        return self.participant.request_status or self.participant.contact.info
+
+    @property
+    def state(self):
+        return self.participant.contact.state
+
+    @property
+    def on_hold(self):
+        return self.participant.on_hold
+
+    @property
+    def is_composing(self):
+        return self.participant.is_composing
+
+    @property
+    def active_media(self):
+        return self.participant.active_media
+
+    @property
+    def icon(self):
+        return self.participant.contact.icon
+
+    @property
+    def pixmap(self):
+        return self.participant.contact.pixmap
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_ConferenceParticipantDidChange(self, notification):
+        self.widget.update_content(self)
+        notification.center.post_notification('ConferenceParticipantItemDidChange', sender=self)
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
+
+class ConferenceParticipantWidget(base_class, ui_class):
+    class StandardDisplayMode:  __metaclass__ = MarkerType
+    class AlternateDisplayMode: __metaclass__ = MarkerType
+    class SelectedDisplayMode:  __metaclass__ = MarkerType
+
+    def __init__(self, parent=None):
+        super(ConferenceParticipantWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        self.palettes = Palettes()
+        self.palettes.standard = self.palette()
+        self.palettes.alternate = self.palette()
+        self.palettes.selected = self.palette()
+        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.display_mode = self.StandardDisplayMode
+        self.hold_icon.installEventFilter(self)
+        self.is_composing_icon.installEventFilter(self)
+        self.audio_icon.installEventFilter(self)
+        self.chat_icon.installEventFilter(self)
+        self.video_icon.installEventFilter(self)
+        self.screen_sharing_icon.installEventFilter(self)
+        self.widget_layout.invalidate()
+        self.widget_layout.activate()
+        #self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
+        #self.show()
+
+    def _get_display_mode(self):
+        return self.__dict__['display_mode']
+
+    def _set_display_mode(self, value):
+        if value not in (self.StandardDisplayMode, self.AlternateDisplayMode, self.SelectedDisplayMode):
+            raise ValueError("invalid display_mode: %r" % value)
+        old_mode = self.__dict__.get('display_mode', None)
+        new_mode = self.__dict__['display_mode'] = value
+        if new_mode == old_mode:
+            return
+        if new_mode is self.StandardDisplayMode:
+            self.setPalette(self.palettes.standard)
+            self.name_label.setForegroundRole(QPalette.WindowText)
+            self.info_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.AlternateDisplayMode:
+            self.setPalette(self.palettes.alternate)
+            self.name_label.setForegroundRole(QPalette.WindowText)
+            self.info_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.SelectedDisplayMode:
+            self.setPalette(self.palettes.selected)
+            self.name_label.setForegroundRole(QPalette.HighlightedText)
+            self.info_label.setForegroundRole(QPalette.HighlightedText)
+
+    display_mode = property(_get_display_mode, _set_display_mode)
+    del _get_display_mode, _set_display_mode
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QEvent.ShowToParent, QEvent.HideToParent):
+            self.widget_layout.invalidate()
+            self.widget_layout.activate()
+        return False
+
+    def update_content(self, participant):
+        self.setDisabled(participant.pending_request)
+        self.name_label.setText(participant.name)
+        self.info_label.setText(participant.info)
+        self.icon_label.setPixmap(participant.pixmap)
+        self.state_label.state = participant.state
+        self.hold_icon.setVisible(participant.on_hold)
+        self.is_composing_icon.setVisible(participant.is_composing)
+        self.chat_icon.setVisible('chat' in participant.active_media)
+        self.video_icon.setVisible('video' in participant.active_media)
+        self.screen_sharing_icon.setVisible('screen-sharing' in participant.active_media)
+        self.audio_icon.setVisible(participant.active_media.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
+
+del ui_class, base_class
+
+
+class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
+    def __init__(self, parent=None):
+        super(ConferenceParticipantDelegate, self).__init__(parent)
+
+    def editorEvent(self, event, model, option, index):
+        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
+            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2) # top half of the rightmost 14 pixels
+            if cross_rect.contains(event.pos()):
+                item = index.data(Qt.UserRole)
+                model.session.server_conference.remove_participant(item.participant)
+                return True
+        return super(ConferenceParticipantDelegate, self).editorEvent(event, model, option, index)
+
+    def paint(self, painter, option, index):
+        participant = index.data(Qt.UserRole)
+        if option.state & QStyle.State_Selected:
+            participant.widget.display_mode = participant.widget.SelectedDisplayMode
+        elif index.row() % 2 == 0:
+            participant.widget.display_mode = participant.widget.StandardDisplayMode
+        else:
+            participant.widget.display_mode = participant.widget.AlternateDisplayMode
+        participant.widget.setFixedSize(option.rect.size())
+
+        painter.save()
+        painter.drawPixmap(option.rect, QPixmap.grabWidget(participant.widget))
+        if option.state & QStyle.State_MouseOver:
+            self.drawRemoveIndicator(participant, option, painter, participant.widget)
+        if 0 and (option.state & QStyle.State_MouseOver):
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            if option.state & QStyle.State_Selected:
+                painter.fillRect(option.rect, QColor(240, 244, 255, 40))
+            else:
+                painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+                painter.fillRect(option.rect, QColor(240, 244, 255, 230))
+        painter.restore()
+
+    def drawRemoveIndicator(self, participant, option, painter, widget):
+        pen_thickness = 1.6
+
+        color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+        if widget.state_label.state in ('available', 'away', 'busy', 'offline'):
+            window_color = widget.state_label.state_colors[widget.state_label.state]
+        else:
+            window_color = option.palette.color(QPalette.Window)
+        background_color = self.background_color(window_color, 0.5)
+
+        pen = QPen(self.deco_color(background_color, color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+
+        # draw the remove indicator at the top (works best with a state_label of width 14)
+        cross_rect = QRect(0, 0, 14, 14)
+        cross_rect.moveTopRight(widget.state_label.geometry().topRight())
+        cross_rect.translate(option.rect.topLeft())
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.translate(cross_rect.center())
+        painter.translate(+1.5, +1)
+        painter.translate(0, +1)
+        painter.setPen(contrast_pen)
+        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
+        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.translate(0, -1)
+        painter.setPen(pen)
+        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
+        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return index.data(Qt.SizeHintRole)
+
+
+class ConferenceParticipantModel(QAbstractListModel):
+    implements(IObserver)
+
+    participantAboutToBeAdded = pyqtSignal(ConferenceParticipantItem)
+    participantAboutToBeRemoved = pyqtSignal(ConferenceParticipantItem)
+    participantAdded = pyqtSignal(ConferenceParticipantItem)
+    participantRemoved = pyqtSignal(ConferenceParticipantItem)
+
+    # The MIME types we accept in drop operations, in the order they should be handled
+    accepted_mime_types = ['application/x-blink-contact-list', 'application/x-blink-contact-uri-list', 'text/uri-list']
+
+    def __init__(self, session, parent=None):
+        super(ConferenceParticipantModel, self).__init__(parent)
+        self.session = session
+        self.participants = []
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=session)
+
+    def flags(self, index):
+        if index.isValid():
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+        else:
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.participants)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        item = self.participants[index.row()]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.SizeHintRole:
+            return item.size_hint
+        elif role == Qt.DisplayRole:
+            return unicode(item)
+        return None
+
+    def supportedDropActions(self):
+        return Qt.CopyAction# | Qt.MoveAction
+
+    def dropMimeData(self, mime_data, action, row, column, parent_index):
+        # this is here just to keep the default Qt DnD API happy
+        # the custom handler is in handleDroppedData
+        return False
+
+    def handleDroppedData(self, mime_data, action, index):
+        if action == Qt.IgnoreAction:
+            return True
+
+        for mime_type in self.accepted_mime_types:
+            if mime_data.hasFormat(mime_type):
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                return handler(mime_data, action, index)
+        else:
+            return False
+
+    def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
+        try:
+            contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
+        except Exception:
+            return False
+        for contact in contacts:
+            self.session.server_conference.add_participant(contact, contact.uri)
+        return True
+
+    def _DH_ApplicationXBlinkContactUriList(self, mime_data, action, index):
+        try:
+            contact, contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
+        except Exception:
+            return False
+        for contact_uri in contact_uris:
+            self.session.server_conference.add_participant(contact, contact_uri.uri)
+        return True
+
+    def _DH_TextUriList(self, mime_data, action, index):
+        return False
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self.clear()
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        notification.center.remove_observer(self, sender=self.session)
+        self.session = None
+
+    def _NH_BlinkSessionWillAddParticipant(self, notification):
+        self.addParticipant(ConferenceParticipantItem(notification.data.participant))
+
+    def _NH_BlinkSessionDidRemoveParticipant(self, notification):
+        try:
+            participant = next(item for item in self.participants if item.participant is notification.data.participant) # review this (check if it's worth keeping a mapping) -Dan
+        except StopIteration:
+            return
+        self.removeParticipant(participant)
+
+    def _NH_ConferenceParticipantItemDidChange(self, notification):
+        index = self.index(self.participants.index(notification.sender))
+        self.dataChanged.emit(index, index)
+
+    def _find_insertion_point(self, participant):
+        for position, item in enumerate(self.participants):
+            if item.name > participant.name:
+                break
+        else:
+            position = len(self.participants)
+        return position
+
+    def _add_participant(self, participant):
+        position = self._find_insertion_point(participant)
+        self.beginInsertRows(QModelIndex(), position, position)
+        self.participants.insert(position, participant)
+        self.endInsertRows()
+
+    def _pop_participant(self, participant):
+        position = self.participants.index(participant)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.participants[position]
+        self.endRemoveRows()
+        return participant
+
+    def addParticipant(self, participant):
+        if participant in self.participants:
+            return
+        self.participantAboutToBeAdded.emit(participant)
+        self._add_participant(participant)
+        self.participantAdded.emit(participant)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=participant)
+
+    def removeParticipant(self, participant):
+        if participant not in self.participants:
+            return
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self, sender=participant)
+        self.participantAboutToBeRemoved.emit(participant)
+        self._pop_participant(participant)
+        self.participantRemoved.emit(participant)
+
+    def clear(self):
+        notification_center = NotificationCenter()
+        self.beginResetModel()
+        for participant in self.participants:
+            notification_center.remove_observer(self, sender=participant)
+        self.participants = []
+        self.endResetModel()
+
+
+class ConferenceParticipantListView(QListView, ColorHelperMixin):
+    def __init__(self, parent=None):
+        super(ConferenceParticipantListView, self).__init__(parent)
+        self.setItemDelegate(ConferenceParticipantDelegate(self))
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.context_menu = QMenu(self)
+        self.actions = ContextMenuActions()
+        self.paint_drop_indicator = False
+
+    def setModel(self, model):
+        selection_model = self.selectionModel()
+        if selection_model is not None:
+            selection_model.deleteLater()
+        super(ConferenceParticipantListView, self).setModel(model)
+
+    def contextMenuEvent(self, event):
+        pass
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
+
+    def paintEvent(self, event):
+        super(ConferenceParticipantListView, self).paintEvent(event)
+        if self.paint_drop_indicator:
+            rect = self.viewport().rect() # or should this be self.contentsRect() ? -Dan
+            #color = QColor('#b91959')
+            #color = QColor('#00aaff')
+            #color = QColor('#55aaff')
+            #color = QColor('#00aa00')
+            #color = QColor('#aa007f')
+            #color = QColor('#dd44aa')
+            color = QColor('#aa007f')
+            pen_color = self.color_with_alpha(color, 120)
+            brush_color = self.color_with_alpha(color, 10)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(brush_color)
+            painter.setPen(QPen(pen_color, 1.6))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
+
+    def dragEnterEvent(self, event):
+        model = self.model()
+        accepted_mime_types = set(model.accepted_mime_types)
+        provided_mime_types = set(event.mimeData().formats())
+        acceptable_mime_types = accepted_mime_types & provided_mime_types
+        if not acceptable_mime_types:
+            event.ignore()
+        else:
+            event.accept()
+            self.setState(self.DraggingState)
+
+    def dragLeaveEvent(self, event):
+        super(ConferenceParticipantListView, self).dragLeaveEvent(event)
+        self.paint_drop_indicator = False
+        self.viewport().update()
+
+    def dragMoveEvent(self, event):
+        super(ConferenceParticipantListView, self).dragMoveEvent(event)
+        model = self.model()
+        for mime_type in model.accepted_mime_types:
+            if event.provides(mime_type):
+                handler = getattr(self, '_DH_%s' % mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', ''))
+                handler(event)
+                self.viewport().update()
+                break
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        model = self.model()
+        if event.source() is self:
+            event.setDropAction(Qt.MoveAction)
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        super(ConferenceParticipantListView, self).dropEvent(event)
+        self.paint_drop_indicator = False
+        self.viewport().update()
+
+    def _DH_ApplicationXBlinkContactList(self, event):
+        event.accept(self.viewport().rect())
+        self.paint_drop_indicator = True
+
+    def _DH_ApplicationXBlinkContactUriList(self, event):
+        event.accept(self.viewport().rect())
+        self.paint_drop_indicator = True
+
+    def _DH_TextUriList(self, event):
+        event.ignore(self.viewport().rect())
+        #event.accept(self.viewport().rect())
+        #self.paint_drop_indicator = True
+
+
+# Positions for sessions in a client conference.
 #
 class Top(object): pass
 class Middle(object): pass
@@ -2214,6 +2893,7 @@ class ChatSessionItem(object):
         self.remote_composing = False
         self.remote_composing_timer = QTimer()
         self.remote_composing_timer.timeout.connect(self._SH_RemoteComposingTimerTimeout)
+        self.participants_model = ConferenceParticipantModel(blink_session)
         self.widget = ChatSessionWidget(None)
         self.widget.update_content(self)
         notification_center = NotificationCenter()
@@ -2266,6 +2946,7 @@ class ChatSessionItem(object):
     def delete(self):
         notification_center = NotificationCenter()
         notification_center.remove_observer(self, sender=self.blink_session)
+        self.participants_model = None
         self.blink_session.items.chat = None
         self.blink_session = None
         self.widget = None

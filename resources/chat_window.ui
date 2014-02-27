@@ -681,9 +681,24 @@ QToolButton:pressed {
                 </widget>
                </item>
                <item>
-                <widget class="QListView" name="participants_list">
+                <widget class="ConferenceParticipantListView" name="participants_list">
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="autoFillBackground">
+                  <bool>true</bool>
+                 </property>
                  <property name="styleSheet">
                   <string notr="true">QListView { border: 1px inset palette(dark); border-radius: 3px; }</string>
+                 </property>
+                 <property name="dragDropMode">
+                  <enum>QAbstractItemView::DropOnly</enum>
+                 </property>
+                 <property name="alternatingRowColors">
+                  <bool>true</bool>
+                 </property>
+                 <property name="selectionMode">
+                  <enum>QAbstractItemView::NoSelection</enum>
                  </property>
                 </widget>
                </item>
@@ -2169,6 +2184,11 @@ QToolButton:hover {
    <class>DurationLabel</class>
    <extends>QLabel</extends>
    <header>blink.widgets.labels</header>
+  </customwidget>
+  <customwidget>
+   <class>ConferenceParticipantListView</class>
+   <extends>QListView</extends>
+   <header>blink.sessions</header>
   </customwidget>
  </customwidgets>
  <tabstops>

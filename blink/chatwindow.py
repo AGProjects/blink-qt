@@ -24,6 +24,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.configuration.datatypes import FileURL
 from blink.configuration.settings import BlinkSettings
+from blink.contacts import URIUtils
 from blink.resources import IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, StreamDescription
 from blink.util import run_in_gui_thread
@@ -771,8 +772,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if new_session is not None:
                 notification_center.add_observer(self, sender=new_session)
                 notification_center.add_observer(self, sender=new_session.blink_session)
-                self._update_widgets_for_session()
+                self._update_widgets_for_session() # clean this up -Dan (too many functions called in 3 different places: on selection changed, here and on notifications handlers)
                 self._update_control_menu()
+                self._update_panel_buttons()
                 self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
 
     selected_session = property(_get_selected_session, _set_selected_session)
@@ -831,6 +833,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     menu.addAction(self.control_button.actions.add_audio if 'audio' not in blink_session.streams else self.control_button.actions.remove_audio)
             #menu.addAction(self.control_button.actions.dump_session) # remove this later -Dan
             self.control_button.setMenu(menu)
+
+    def _update_panel_buttons(self):
+        self.info_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
+        self.files_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
 
     def _update_session_info_panel(self, elements={}, update_visibility=False):
         blink_session = self.selected_session.blink_session
@@ -1097,16 +1103,34 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionDidChangeState(self, notification):
         # even if we use this, we also need to listen for BlinkSessionDidRemoveStream as that transition doesn't change the state at all -Dan
         self._update_control_menu()
+        self._update_panel_buttons()
         self._update_session_info_panel(elements={'status'}, update_visibility=True)
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        if self.selected_session.active_panel is not self.info_panel:
+            if self.sliding_panels:
+                self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
+            else:
+                self.session_details.setCurrentWidget(self.info_panel)
+            self.selected_session.active_panel = self.info_panel
 
     def _NH_BlinkSessionInfoUpdated(self, notification):
         self._update_session_info_panel(elements=notification.data.elements)
+
+    def _NH_BlinkSessionWillAddParticipant(self, notification):
+        if len(notification.sender.server_conference.participants) == 1 and self.selected_session.active_panel is not self.participants_panel:
+            if self.sliding_panels:
+                self.session_details.slideInWidget(self.participants_panel, direction=self.slide_direction)
+            else:
+                self.session_details.setCurrentWidget(self.participants_panel)
+            self.selected_session.active_panel = self.participants_panel
 
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
 
     def _NH_ChatStreamGotMessage(self, notification):
-        session = notification.sender.blink_session.items.chat
+        blink_session = notification.sender.blink_session
+        session = blink_session.items.chat
         if session is None:
             return
         message = notification.data.message
@@ -1116,9 +1140,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if message.body.startswith('?OTRv2?'):
             # TODO: add support for OTR -Saul
             return
-        # TODO: if we are in a conference, find the contact and icon -Saul
         uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
-        sender = ChatSender(message.sender.display_name, uri, session.icon.filename)
+        if blink_session.account.id == uri:
+            icon = IconManager().get('avatar') or session.chat_widget.default_user_icon
+            icon_filename = icon.filename
+        elif blink_session.remote_focus:
+            contact, contact_uri = URIUtils.find_contact(uri)
+            icon_filename = contact.icon.filename
+        else:
+            icon_filename = session.icon.filename
+        sender = ChatSender(message.sender.display_name, uri, icon_filename)
         content = message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml()
         session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
         session.remote_composing = False
@@ -1191,18 +1222,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
         else:
             self.session_details.setCurrentWidget(self.info_panel)
+        self.selected_session.active_panel = self.info_panel
 
     def _SH_FilesButtonClicked(self, checked):
         if self.sliding_panels:
             self.session_details.slideInWidget(self.files_panel, direction=self.slide_direction)
         else:
             self.session_details.setCurrentWidget(self.files_panel)
+        self.selected_session.active_panel = self.files_panel
 
     def _SH_ParticipantsButtonClicked(self, checked):
         if self.sliding_panels:
             self.session_details.slideInWidget(self.participants_panel, direction=self.slide_direction)
         else:
             self.session_details.setCurrentWidget(self.participants_panel)
+        self.selected_session.active_panel = self.participants_panel
 
     def _SH_LatencyGraphUpdated(self):
         self.latency_label.setText(u'Network Latency: %dms, max=%dms' % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
@@ -1245,14 +1279,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         model = self.session_model
         position = model.sessions.index(session)
         session.chat_widget = ChatWidget(session, self.tab_widget)
+        session.active_panel = self.info_panel
         self.tab_widget.insertTab(position, session.chat_widget, session.name)
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
+        session.chat_widget.chat_input.setFocus(Qt.OtherFocusReason)
 
     def _SH_SessionModelSessionRemoved(self, session):
         self.tab_widget.removeTab(self.tab_widget.indexOf(session.chat_widget))
         session.chat_widget = None
+        session.active_panel = None
         if not self.session_model.sessions:
             self.close()
         elif not self.session_list.isVisibleTo(self):
@@ -1272,12 +1309,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         #print "-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()])
         self.selected_session = selected[0].topLeft().data(Qt.UserRole) if selected else None
         if self.selected_session is not None:
-            self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)
+            self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
+            self.session_details.setCurrentWidget(self.selected_session.active_panel)
+            self.participants_list.setModel(self.selected_session.participants_model)
             # start animation to show list? -Dan
         elif self.session_model.sessions:
             self.tab_widget.setCurrentWidget(self.dummy_tab)
+            self.session_details.setCurrentWidget(self.info_panel)
+            self.participants_list.setModel(None)
             # start animation to show list? -Dan
         else:
+            self.session_details.setCurrentWidget(self.info_panel)
+            self.participants_list.setModel(None)
             self.hide()
 
     def _AH_Connect(self):
