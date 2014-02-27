@@ -1690,7 +1690,7 @@ class AudioSessionModel(QAbstractListModel):
         try:
             contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
         except Exception:
-            return
+            return False
         session = self.sessions[index.row()]
         session_manager = SessionManager()
         for contact in contacts:
@@ -1703,7 +1703,7 @@ class AudioSessionModel(QAbstractListModel):
         try:
             contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
         except Exception:
-            return
+            return False
         session = self.sessions[index.row()]
         session_manager = SessionManager()
         for contact_uri in contact_uris:
