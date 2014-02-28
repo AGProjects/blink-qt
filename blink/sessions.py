@@ -3830,7 +3830,6 @@ class SessionManager(object):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
-        notification_center.add_observer(self, name='SIPSessionNewProposal')
         notification_center.add_observer(self, name='SIPSessionDidFail')
         notification_center.add_observer(self, name='SIPSessionProposalRejected')
         notification_center.add_observer(self, name='SIPSessionHadProposalFailure')
@@ -3948,6 +3947,50 @@ class SessionManager(object):
             hold_tone = Null
         self.hold_tone = hold_tone
 
+    def _process_remote_proposal(self, blink_session):
+        sip_session = blink_session.sip_session
+
+        current_stream_types = set(stream.type for stream in sip_session.streams)
+        stream_map = defaultdict(list)
+        # TODO: we should have the proposed_streams in the BlinkSession -Saul
+        for stream in (stream for stream in sip_session.proposed_streams if stream.type not in current_stream_types):
+            stream_map[stream.type].append(stream)
+        proposed_stream_types = set(stream_map)
+
+        audio_streams = stream_map['audio']
+        video_streams = stream_map['video']
+        chat_streams = stream_map['chat']
+        screensharing_streams = stream_map['screen-sharing']
+
+        if not proposed_stream_types or proposed_stream_types == {'file-transfer'}:
+            session.reject_proposal(488)
+            return
+
+        if proposed_stream_types == {'chat'}:
+            blink_session.accept_proposal([chat_streams[0]])
+            return
+
+        sip_session.send_ring_indication()
+
+        contact = blink_session.contact
+        contact_uri = blink_session.contact_uri
+
+        audio_stream = audio_streams[0] if audio_streams else None
+        video_stream = video_streams[0] if video_streams else None
+        chat_stream = chat_streams[0] if chat_streams else None
+        screensharing_stream = screensharing_streams[0] if screensharing_streams else None
+
+        dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+        incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+        bisect.insort_right(self.incoming_requests, incoming_request)
+        incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
+        incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
+        try:
+            position = self.dialog_positions.pop(0)
+        except IndexError:
+            position = None
+        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
+
     def _SH_IncomingRequestAccepted(self, incoming_request):
         if incoming_request.dialog.position is not None:
             bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
@@ -4028,53 +4071,6 @@ class SessionManager(object):
         incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
         self.update_ringtone()
 
-    def _NH_SIPSessionNewProposal(self, notification):
-        if notification.data.originator != 'remote':
-            return
-
-        session = notification.sender
-
-        current_stream_types = set(stream.type for stream in session.streams)
-        stream_map = defaultdict(list)
-        for stream in (stream for stream in notification.data.proposed_streams if stream.type not in current_stream_types):
-            stream_map[stream.type].append(stream)
-
-        audio_streams = stream_map['audio']
-        video_streams = stream_map['video']
-        chat_streams = stream_map['chat']
-        screensharing_streams = stream_map['screen-sharing']
-        filetransfer_streams = stream_map['file-transfer']
-
-        if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
-            session.reject_proposal(488)
-            return
-        if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
-            session.reject_proposal(488)
-            return
-
-        session.send_ring_indication()
-
-        blink_session = next(s for s in self.sessions if s.sip_session is session)
-        contact = blink_session.contact
-        contact_uri = blink_session.contact_uri
-
-        audio_stream = audio_streams[0] if audio_streams else None
-        video_stream = video_streams[0] if video_streams else None
-        chat_stream = chat_streams[0] if chat_streams else None
-        screensharing_stream = screensharing_streams[0] if screensharing_streams else None
-
-        dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-        incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
-        bisect.insort_right(self.incoming_requests, incoming_request)
-        incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
-        incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
-        try:
-            position = self.dialog_positions.pop(0)
-        except IndexError:
-            position = None
-        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
-        self.update_ringtone()
-
     def _NH_SIPSessionDidFail(self, notification):
         try:
             incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
@@ -4110,6 +4106,8 @@ class SessionManager(object):
 
     def _NH_BlinkSessionDidChangeState(self, notification):
         new_state = notification.data.new_state
+        if new_state == 'connected/received_proposal':
+            self._process_remote_proposal(notification.sender)
         if new_state in ('connecting/ringing', 'connecting/early_media', 'connected/*'):
             self.update_ringtone()
         elif new_state == 'ending':
