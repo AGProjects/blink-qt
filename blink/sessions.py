@@ -3965,7 +3965,7 @@ class SessionManager(object):
         screensharing_streams = stream_map['screen-sharing']
 
         if not proposed_stream_types or proposed_stream_types == {'file-transfer'}:
-            session.reject_proposal(488)
+            sip_session.reject_proposal(488) # maybe add a reject_proposal on blink_session for symmetry? -Dan
             return
 
         if proposed_stream_types == {'chat'}:
