@@ -1460,11 +1460,7 @@ class ConferenceParticipantModel(QAbstractListModel):
         self.addParticipant(ConferenceParticipantItem(notification.data.participant))
 
     def _NH_BlinkSessionDidRemoveParticipant(self, notification):
-        try:
-            participant = next(item for item in self.participants if item.participant is notification.data.participant) # review this (check if it's worth keeping a mapping) -Dan
-        except StopIteration:
-            return
-        self.removeParticipant(participant)
+        self.removeParticipant(notification.data.participant.participant_item)
 
     def _NH_ConferenceParticipantItemDidChange(self, notification):
         index = self.index(self.participants.index(notification.sender))
@@ -1494,6 +1490,7 @@ class ConferenceParticipantModel(QAbstractListModel):
     def addParticipant(self, participant):
         if participant in self.participants:
             return
+        participant.participant.participant_item = participant # add a back reference to this item so we can find it later without iterating all participants
         self.participantAboutToBeAdded.emit(participant)
         self._add_participant(participant)
         self.participantAdded.emit(participant)
@@ -1505,6 +1502,7 @@ class ConferenceParticipantModel(QAbstractListModel):
             return
         notification_center = NotificationCenter()
         notification_center.remove_observer(self, sender=participant)
+        del participant.participant.participant_item
         self.participantAboutToBeRemoved.emit(participant)
         self._pop_participant(participant)
         self.participantRemoved.emit(participant)
@@ -1513,6 +1511,7 @@ class ConferenceParticipantModel(QAbstractListModel):
         notification_center = NotificationCenter()
         self.beginResetModel()
         for participant in self.participants:
+            del participant.participant.participant_item
             notification_center.remove_observer(self, sender=participant)
         self.participants = []
         self.endResetModel()
