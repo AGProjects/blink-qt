@@ -1028,7 +1028,7 @@ class ServerConference(object):
 
     def add_participant(self, contact, contact_uri):
         if contact_uri.uri in self.participants:
-            raise ValueError('%r is already part of the conference' % contact_uri.uri)
+            return
         participant = ConferenceParticipant(contact, contact_uri)
         participant.request_status = 'Joining'
         self.session.sip_session.conference.add_participant(participant.uri)
@@ -1039,7 +1039,7 @@ class ServerConference(object):
 
     def remove_participant(self, participant):
         if participant.uri not in self.participants:
-            raise ValueError('participant %r is not part of the conference' % participant)
+            return
         if participant in self.pending_removals:
             return
         participant.request_status = 'Leaving'
