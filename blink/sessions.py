@@ -3952,7 +3952,7 @@ class SessionManager(object):
 
         current_stream_types = set(stream.type for stream in sip_session.streams)
         stream_map = defaultdict(list)
-        # TODO: we should have the proposed_streams in the BlinkSession -Saul
+        # TODO: we should fetch the proposed streams from the BlinkSession -Saul
         for stream in (stream for stream in sip_session.proposed_streams if stream.type not in current_stream_types):
             stream_map[stream.type].append(stream)
         proposed_stream_types = set(stream_map)
