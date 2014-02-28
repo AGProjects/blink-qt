@@ -1315,7 +1315,7 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
 
         painter.save()
         painter.drawPixmap(option.rect, QPixmap.grabWidget(participant.widget))
-        if option.state & QStyle.State_MouseOver:
+        if (option.state & QStyle.State_MouseOver) and participant.widget.isEnabled():
             self.drawRemoveIndicator(participant, option, painter, participant.widget)
         if 0 and (option.state & QStyle.State_MouseOver):
             painter.setRenderHint(QPainter.Antialiasing, True)
