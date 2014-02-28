@@ -1459,6 +1459,9 @@ class ConferenceParticipantModel(QAbstractListModel):
     def _NH_BlinkSessionWillAddParticipant(self, notification):
         self.addParticipant(ConferenceParticipantItem(notification.data.participant))
 
+    def _NH_BlinkSessionDidNotAddParticipant(self, notification):
+        self.removeParticipant(notification.data.participant.participant_item)
+
     def _NH_BlinkSessionDidRemoveParticipant(self, notification):
         self.removeParticipant(notification.data.participant.participant_item)
 
