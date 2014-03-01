@@ -1176,7 +1176,7 @@ class ConferenceParticipantItem(object):
 
     @property
     def info(self):
-        return self.participant.request_status or self.participant.contact.info
+        return self.participant.request_status or self.participant.contact.note or self.participant.uri
 
     @property
     def state(self):
