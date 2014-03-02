@@ -1553,6 +1553,20 @@ class ContactWidget(base_class, ui_class):
         self.info_label.setForegroundRole(QPalette.Dark)
         # AlternateBase set to #f0f4ff or #e0e9ff
 
+    def paintEvent(self, event):
+        super(ContactWidget, self).paintEvent(event)
+        if self.backgroundRole() == QPalette.Highlight and self.state_label.state is not None:
+            rect = self.state_label.geometry()
+            rect.setWidth(self.width() - rect.x())
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, Qt.transparent)
+            gradient.setColorAt(1.0, Qt.white)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.fillRect(rect, QBrush(gradient))
+            painter.end()
+
     def init_from_contact(self, contact):
         self.name_label.setText(contact.name)
         self.info_label.setText(contact.info)

@@ -3100,6 +3100,20 @@ class ChatSessionWidget(base_class, ui_class):
             self.widget_layout.activate()
         return False
 
+    def paintEvent(self, event):
+        super(ChatSessionWidget, self).paintEvent(event)
+        if self.display_mode == self.SelectedDisplayMode and self.state_label.state is not None:
+            rect = self.state_label.geometry()
+            rect.setWidth(self.width() - rect.x())
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, Qt.transparent)
+            gradient.setColorAt(1.0, Qt.white)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.fillRect(rect, QBrush(gradient))
+            painter.end()
+
     def update_content(self, session):
         self.name_label.setText(session.name)
         self.info_label.setText(session.info)
