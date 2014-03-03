@@ -429,9 +429,10 @@ class PresenceSubscriptionHandler(object):
     def _NH_SIPAccountGotPresenceState(self, notification):
         account = notification.sender
         new_pidf_map = dict((self.sip_prefix_re.sub('', uri), resource.pidf_list) for uri, resource in notification.data.resource_map.iteritems())
+        account_map = self._pidf_map.setdefault(account.id, {})
         if notification.data.full_state:
-            self._pidf_map.setdefault(account.id, {}).clear()
-        self._pidf_map[account.id].update(new_pidf_map)
+            account_map.clear()
+        account_map.update(new_pidf_map)
         self._process_presence_data(new_pidf_map.keys())
 
     def _NH_SIPAccountGotPresenceWinfo(self, notification):
