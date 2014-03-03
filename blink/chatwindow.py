@@ -7,7 +7,7 @@ import os
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QColor, QDesktopServices, QIcon, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
+from PyQt4.QtGui  import QAction, QBrush, QColor, QDesktopServices, QIcon, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
@@ -982,15 +982,22 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         pen_thickness = 1.6
 
-        color = palette.color(QPalette.Normal, QPalette.WindowText)
-        if self.state_label.state in ('available', 'away', 'busy', 'offline'):
-            window_color = self.state_label.state_colors[self.state_label.state]
+        if self.state_label.state is not None:
+            background_color = self.state_label.state_colors[self.state_label.state]
+            base_contrast_color = self.calc_light_color(background_color)
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            contrast_color = QBrush(gradient)
         else:
-            window_color = palette.color(QPalette.Window)
-        background_color = self.background_color(window_color, 0.5)
+            background_color = palette.color(QPalette.Window)
+            contrast_color = self.calc_light_color(background_color)
+        foreground_color = palette.color(QPalette.Normal, QPalette.WindowText)
+        line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(self.deco_color(background_color, color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
 
         # draw the expansion indicator at the bottom (works best with a state_label of width 14)
         arrow_rect = QRect(0, 0, 14, 14)

@@ -1732,8 +1732,11 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         self.contact_selected_widget = ContactWidget(None)
 
         self.contact_oddline_widget.setBackgroundRole(QPalette.Base)
+        self.contact_oddline_widget.setForegroundRole(QPalette.WindowText)
         self.contact_evenline_widget.setBackgroundRole(QPalette.AlternateBase)
+        self.contact_evenline_widget.setForegroundRole(QPalette.WindowText)
         self.contact_selected_widget.setBackgroundRole(QPalette.Highlight)
+        self.contact_selected_widget.setForegroundRole(QPalette.HighlightedText)
         self.contact_selected_widget.name_label.setForegroundRole(QPalette.HighlightedText)
         self.contact_selected_widget.info_label.setForegroundRole(QPalette.HighlightedText)
 
@@ -1815,31 +1818,45 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.restore()
 
     def drawExpansionIndicator(self, contact, option, painter, widget):
+        pen_thickness = 1.6
+
+        if contact.state is not None:
+            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            background_color = widget.state_label.state_colors[contact.state]
+            base_contrast_color = self.calc_light_color(background_color)
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            contrast_color = QBrush(gradient)
+        else:
+            #foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            #background_color = option.palette.color(QPalette.Window)
+            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            background_color = widget.palette().color(widget.backgroundRole())
+            contrast_color = self.calc_light_color(background_color)
+        line_color = self.deco_color(background_color, foreground_color)
+
+        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+
         # this fits best with a state_label of width 14
         arrow_rect = QRect(0, 0, 14, 14)
         arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
         arrow_rect.translate(option.rect.topLeft())
 
-        text_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-        if contact.state in ('available', 'away', 'busy'):
-            window_color = widget.state_label.state_colors[contact.state]
-        else:
-            window_color = option.palette.color(QPalette.Window)
-        background_color = self.background_color(window_color, 0.5)
-
         arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
         arrow.translate(1, 1)
-        pen_thickness = 1.6
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
         painter.translate(arrow_rect.center())
         painter.translate(0, +1)
-        painter.setPen(QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.setPen(contrast_pen)
         painter.drawPolyline(arrow)
         painter.translate(0, -1)
-        painter.setPen(QPen(self.deco_color(background_color, text_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.setPen(pen)
         painter.drawPolyline(arrow)
         painter.restore()
 
@@ -1946,31 +1963,43 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.restore()
 
     def drawCollapseIndicator(self, contact, option, painter, widget):
+        pen_thickness = 1.6
+
+        if contact.state is not None:
+            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            background_color = widget.state_label.state_colors[contact.state]
+            base_contrast_color = self.calc_light_color(background_color)
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            contrast_color = QBrush(gradient)
+        else:
+            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            background_color = widget.palette().color(widget.backgroundRole())
+            contrast_color = self.calc_light_color(background_color)
+        line_color = self.deco_color(background_color, foreground_color)
+
+        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+
         # this fits best with a state_label of width 14
         arrow_rect = QRect(0, 0, 14, 14)
         arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
         arrow_rect.translate(option.rect.topLeft())
 
-        text_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-        if contact.state in ('available', 'away', 'busy'):
-            window_color = widget.state_label.state_colors[contact.state]
-        else:
-            window_color = option.palette.color(QPalette.Window)
-        background_color = self.background_color(window_color, 0.5)
-
         arrow = QPolygonF([QPointF(3, 1.5), QPointF(-0.5, -2.5), QPointF(-4, 1.5)])
         arrow.translate(2, 1)
-        pen_thickness = 1.6
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
         painter.translate(arrow_rect.center())
         painter.translate(0, +1)
-        painter.setPen(QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.setPen(contrast_pen)
         painter.drawPolyline(arrow)
         painter.translate(0, -1)
-        painter.setPen(QPen(self.deco_color(background_color, text_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.setPen(pen)
         painter.drawPolyline(arrow)
         painter.restore()
 

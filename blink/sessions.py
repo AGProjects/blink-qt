@@ -1230,6 +1230,7 @@ class ConferenceParticipantWidget(base_class, ui_class):
         self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
         self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
         self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.setBackgroundRole(QPalette.Window)
         self.display_mode = self.StandardDisplayMode
         self.hold_icon.installEventFilter(self)
         self.is_composing_icon.installEventFilter(self)
@@ -1254,14 +1255,17 @@ class ConferenceParticipantWidget(base_class, ui_class):
             return
         if new_mode is self.StandardDisplayMode:
             self.setPalette(self.palettes.standard)
+            self.setForegroundRole(QPalette.WindowText)
             self.name_label.setForegroundRole(QPalette.WindowText)
             self.info_label.setForegroundRole(QPalette.Dark)
         elif new_mode is self.AlternateDisplayMode:
             self.setPalette(self.palettes.alternate)
+            self.setForegroundRole(QPalette.WindowText)
             self.name_label.setForegroundRole(QPalette.WindowText)
             self.info_label.setForegroundRole(QPalette.Dark)
         elif new_mode is self.SelectedDisplayMode:
             self.setPalette(self.palettes.selected)
+            self.setForegroundRole(QPalette.HighlightedText)
             self.name_label.setForegroundRole(QPalette.HighlightedText)
             self.info_label.setForegroundRole(QPalette.HighlightedText)
 
@@ -1329,15 +1333,23 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
     def drawRemoveIndicator(self, participant, option, painter, widget):
         pen_thickness = 1.6
 
-        color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-        if widget.state_label.state in ('available', 'away', 'busy', 'offline'):
-            window_color = widget.state_label.state_colors[widget.state_label.state]
+        if widget.state_label.state is not None:
+            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            background_color = widget.state_label.state_colors[widget.state_label.state]
+            base_contrast_color = self.calc_light_color(background_color)
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            contrast_color = QBrush(gradient)
         else:
-            window_color = option.palette.color(QPalette.Window)
-        background_color = self.background_color(window_color, 0.5)
+            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            background_color = widget.palette().color(widget.backgroundRole())
+            contrast_color = self.calc_light_color(background_color)
+        line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(self.deco_color(background_color, color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
 
         # draw the remove indicator at the top (works best with a state_label of width 14)
         cross_rect = QRect(0, 0, 14, 14)
@@ -3056,6 +3068,7 @@ class ChatSessionWidget(base_class, ui_class):
         self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
         self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
         self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.setBackgroundRole(QPalette.Window)
         self.display_mode = self.StandardDisplayMode
         self.hold_icon.installEventFilter(self)
         self.is_composing_icon.installEventFilter(self)
@@ -3080,14 +3093,17 @@ class ChatSessionWidget(base_class, ui_class):
             return
         if new_mode is self.StandardDisplayMode:
             self.setPalette(self.palettes.standard)
+            self.setForegroundRole(QPalette.WindowText)
             self.name_label.setForegroundRole(QPalette.WindowText)
             self.info_label.setForegroundRole(QPalette.Dark)
         elif new_mode is self.AlternateDisplayMode:
             self.setPalette(self.palettes.alternate)
+            self.setForegroundRole(QPalette.WindowText)
             self.name_label.setForegroundRole(QPalette.WindowText)
             self.info_label.setForegroundRole(QPalette.Dark)
         elif new_mode is self.SelectedDisplayMode:
             self.setPalette(self.palettes.selected)
+            self.setForegroundRole(QPalette.HighlightedText)
             self.name_label.setForegroundRole(QPalette.HighlightedText)
             self.info_label.setForegroundRole(QPalette.HighlightedText)
 
@@ -3174,15 +3190,25 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
     def drawSessionIndicators(self, session, option, painter, widget):
         pen_thickness = 1.6
 
-        color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-        if widget.state_label.state in ('available', 'away', 'busy', 'offline'):
-            window_color = widget.state_label.state_colors[widget.state_label.state]
+        if widget.state_label.state is not None:
+            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            background_color = widget.state_label.state_colors[widget.state_label.state]
+            base_contrast_color = self.calc_light_color(background_color)
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            contrast_color = QBrush(gradient)
         else:
-            window_color = option.palette.color(QPalette.Window)
-        background_color = self.background_color(window_color, 0.5)
+            #foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            #background_color = option.palette.color(QPalette.Window)
+            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            background_color = widget.palette().color(widget.backgroundRole())
+            contrast_color = self.calc_light_color(background_color)
+        line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(self.deco_color(background_color, color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(self.calc_light_color(background_color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
 
         # draw the expansion indicator at the bottom (works best with a state_label of width 14)
         arrow_rect = QRect(0, 0, 14, 14)
