@@ -2441,7 +2441,7 @@ class ChatSessionWidget(base_class, ui_class):
         self.setBackgroundRole(QPalette.Window)
         self.display_mode = self.StandardDisplayMode
         self.hold_icon.installEventFilter(self)
-        self.is_composing_icon.installEventFilter(self)
+        self.composing_icon.installEventFilter(self)
         self.audio_icon.installEventFilter(self)
         self.chat_icon.installEventFilter(self)
         self.video_icon.installEventFilter(self)
@@ -2506,7 +2506,7 @@ class ChatSessionWidget(base_class, ui_class):
         self.icon_label.setPixmap(session.pixmap)
         self.state_label.state = session.state
         self.hold_icon.setVisible(session.blink_session.on_hold)
-        self.is_composing_icon.setVisible(session.remote_composing)
+        self.composing_icon.setVisible(session.remote_composing)
         self.chat_icon.setVisible('chat' in session.blink_session.streams)
         self.video_icon.setVisible('video' in session.blink_session.streams)
         self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
@@ -2566,7 +2566,7 @@ class ChatSessionItem(object):
         old_value = self.__dict__.get('remote_composing', False)
         self.__dict__['remote_composing'] = value
         if value != old_value and self.widget is not None:
-            self.widget.is_composing_icon.setVisible(value)
+            self.widget.composing_icon.setVisible(value)
             notification_center = NotificationCenter()
             notification_center.post_notification('ChatSessionItemDidChange', sender=self)
 
@@ -3084,7 +3084,7 @@ class ConferenceParticipantWidget(ChatSessionWidget):
         self.icon_label.setPixmap(participant.pixmap)
         self.state_label.state = participant.state
         self.hold_icon.setVisible(participant.on_hold)
-        self.is_composing_icon.setVisible(participant.is_composing)
+        self.composing_icon.setVisible(participant.is_composing)
         self.chat_icon.setVisible('chat' in participant.active_media)
         self.video_icon.setVisible('video' in participant.active_media)
         self.screen_sharing_icon.setVisible('screen-sharing' in participant.active_media)

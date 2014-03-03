@@ -316,7 +316,7 @@ QWidget#session_widget_no:hover {
                       <number>0</number>
                      </property>
                      <item>
-                      <widget class="QLabel" name="is_composing_icon">
+                      <widget class="QLabel" name="composing_icon">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>

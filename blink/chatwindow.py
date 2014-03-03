@@ -789,7 +789,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.icon_label.setPixmap(widget.icon_label.pixmap())
         self.state_label.state = widget.state_label.state or 'offline'
         self.hold_icon.setVisible(widget.hold_icon.isVisibleTo(widget))
-        self.is_composing_icon.setVisible(widget.is_composing_icon.isVisibleTo(widget))
+        self.composing_icon.setVisible(widget.composing_icon.isVisibleTo(widget))
         self.audio_icon.setVisible(widget.audio_icon.isVisibleTo(widget))
         self.audio_icon.setEnabled(widget.audio_icon.isEnabledTo(widget))
         self.chat_icon.setVisible(widget.chat_icon.isVisibleTo(widget))
