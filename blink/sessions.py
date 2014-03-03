@@ -1148,493 +1148,253 @@ class ServerConference(object):
         participant.request_status = notification.data.reason
 
 
-class ConferenceParticipantItem(object):
-    implements(IObserver)
-
-    size_hint = QSize(200, 36)
-
-    def __init__(self, participant):
-        self.participant = participant
-        self.widget = ConferenceParticipantWidget(None)
-        self.widget.update_content(self)
-        notification_center = NotificationCenter()
-        notification_center.add_observer(ObserverWeakrefProxy(self), sender=participant)
-
-    def __repr__(self):
-        return '%s(%r)' % (self.__class__.__name__, self.participant)
-
-    @property
-    def pending_request(self):
-        return self.participant.pending_request
-
-    @property
-    def name(self):
-        if self.participant.contact.type == 'dummy':
-            return self.participant.display_name or self.participant.contact.name
-        else:
-            return self.participant.contact.name
-
-    @property
-    def info(self):
-        return self.participant.request_status or self.participant.contact.note or self.participant.uri
-
-    @property
-    def state(self):
-        return self.participant.contact.state
-
-    @property
-    def on_hold(self):
-        return self.participant.on_hold
-
-    @property
-    def is_composing(self):
-        return self.participant.is_composing
-
-    @property
-    def active_media(self):
-        return self.participant.active_media
-
-    @property
-    def icon(self):
-        return self.participant.contact.icon
-
-    @property
-    def pixmap(self):
-        return self.participant.contact.pixmap
-
-    @run_in_gui_thread
-    def handle_notification(self, notification):
-        handler = getattr(self, '_NH_%s' % notification.name, Null)
-        handler(notification)
-
-    def _NH_ConferenceParticipantDidChange(self, notification):
-        self.widget.update_content(self)
-        notification.center.post_notification('ConferenceParticipantItemDidChange', sender=self)
-
-
-ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
-
-class ConferenceParticipantWidget(base_class, ui_class):
-    class StandardDisplayMode:  __metaclass__ = MarkerType
-    class AlternateDisplayMode: __metaclass__ = MarkerType
-    class SelectedDisplayMode:  __metaclass__ = MarkerType
-
-    def __init__(self, parent=None):
-        super(ConferenceParticipantWidget, self).__init__(parent)
-        with Resources.directory:
-            self.setupUi(self)
-        self.palettes = Palettes()
-        self.palettes.standard = self.palette()
-        self.palettes.alternate = self.palette()
-        self.palettes.selected = self.palette()
-        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
-        self.setBackgroundRole(QPalette.Window)
-        self.display_mode = self.StandardDisplayMode
-        self.hold_icon.installEventFilter(self)
-        self.is_composing_icon.installEventFilter(self)
-        self.audio_icon.installEventFilter(self)
-        self.chat_icon.installEventFilter(self)
-        self.video_icon.installEventFilter(self)
-        self.screen_sharing_icon.installEventFilter(self)
-        self.widget_layout.invalidate()
-        self.widget_layout.activate()
-        #self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
-        #self.show()
-
-    def _get_display_mode(self):
-        return self.__dict__['display_mode']
-
-    def _set_display_mode(self, value):
-        if value not in (self.StandardDisplayMode, self.AlternateDisplayMode, self.SelectedDisplayMode):
-            raise ValueError("invalid display_mode: %r" % value)
-        old_mode = self.__dict__.get('display_mode', None)
-        new_mode = self.__dict__['display_mode'] = value
-        if new_mode == old_mode:
-            return
-        if new_mode is self.StandardDisplayMode:
-            self.setPalette(self.palettes.standard)
-            self.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.WindowText)
-            self.info_label.setForegroundRole(QPalette.Dark)
-        elif new_mode is self.AlternateDisplayMode:
-            self.setPalette(self.palettes.alternate)
-            self.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.WindowText)
-            self.info_label.setForegroundRole(QPalette.Dark)
-        elif new_mode is self.SelectedDisplayMode:
-            self.setPalette(self.palettes.selected)
-            self.setForegroundRole(QPalette.HighlightedText)
-            self.name_label.setForegroundRole(QPalette.HighlightedText)
-            self.info_label.setForegroundRole(QPalette.HighlightedText)
-
-    display_mode = property(_get_display_mode, _set_display_mode)
-    del _get_display_mode, _set_display_mode
-
-    def eventFilter(self, watched, event):
-        if event.type() in (QEvent.ShowToParent, QEvent.HideToParent):
-            self.widget_layout.invalidate()
-            self.widget_layout.activate()
-        return False
-
-    def update_content(self, participant):
-        self.setDisabled(participant.pending_request)
-        self.name_label.setText(participant.name)
-        self.info_label.setText(participant.info)
-        self.icon_label.setPixmap(participant.pixmap)
-        self.state_label.state = participant.state
-        self.hold_icon.setVisible(participant.on_hold)
-        self.is_composing_icon.setVisible(participant.is_composing)
-        self.chat_icon.setVisible('chat' in participant.active_media)
-        self.video_icon.setVisible('video' in participant.active_media)
-        self.screen_sharing_icon.setVisible('screen-sharing' in participant.active_media)
-        self.audio_icon.setVisible(participant.active_media.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
-
-del ui_class, base_class
-
-
-class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
-    def __init__(self, parent=None):
-        super(ConferenceParticipantDelegate, self).__init__(parent)
-
-    def editorEvent(self, event, model, option, index):
-        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
-            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2) # top half of the rightmost 14 pixels
-            if cross_rect.contains(event.pos()):
-                item = index.data(Qt.UserRole)
-                model.session.server_conference.remove_participant(item.participant)
-                return True
-        return super(ConferenceParticipantDelegate, self).editorEvent(event, model, option, index)
-
-    def paint(self, painter, option, index):
-        participant = index.data(Qt.UserRole)
-        if option.state & QStyle.State_Selected:
-            participant.widget.display_mode = participant.widget.SelectedDisplayMode
-        elif index.row() % 2 == 0:
-            participant.widget.display_mode = participant.widget.StandardDisplayMode
-        else:
-            participant.widget.display_mode = participant.widget.AlternateDisplayMode
-        participant.widget.setFixedSize(option.rect.size())
-
-        painter.save()
-        painter.drawPixmap(option.rect, QPixmap.grabWidget(participant.widget))
-        if (option.state & QStyle.State_MouseOver) and participant.widget.isEnabled():
-            self.drawRemoveIndicator(participant, option, painter, participant.widget)
-        if 0 and (option.state & QStyle.State_MouseOver):
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            if option.state & QStyle.State_Selected:
-                painter.fillRect(option.rect, QColor(240, 244, 255, 40))
-            else:
-                painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
-                painter.fillRect(option.rect, QColor(240, 244, 255, 230))
-        painter.restore()
-
-    def drawRemoveIndicator(self, participant, option, painter, widget):
-        pen_thickness = 1.6
-
-        if widget.state_label.state is not None:
-            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-            background_color = widget.state_label.state_colors[widget.state_label.state]
-            base_contrast_color = self.calc_light_color(background_color)
-            gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
-            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
-            contrast_color = QBrush(gradient)
-        else:
-            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
-            background_color = widget.palette().color(widget.backgroundRole())
-            contrast_color = self.calc_light_color(background_color)
-        line_color = self.deco_color(background_color, foreground_color)
-
-        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-
-        # draw the remove indicator at the top (works best with a state_label of width 14)
-        cross_rect = QRect(0, 0, 14, 14)
-        cross_rect.moveTopRight(widget.state_label.geometry().topRight())
-        cross_rect.translate(option.rect.topLeft())
-
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
-        painter.translate(cross_rect.center())
-        painter.translate(+1.5, +1)
-        painter.translate(0, +1)
-        painter.setPen(contrast_pen)
-        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
-        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
-        painter.translate(0, -1)
-        painter.setPen(pen)
-        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
-        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
-        painter.restore()
-
-    def sizeHint(self, option, index):
-        return index.data(Qt.SizeHintRole)
-
-
-class ConferenceParticipantModel(QAbstractListModel):
-    implements(IObserver)
-
-    participantAboutToBeAdded = pyqtSignal(ConferenceParticipantItem)
-    participantAboutToBeRemoved = pyqtSignal(ConferenceParticipantItem)
-    participantAdded = pyqtSignal(ConferenceParticipantItem)
-    participantRemoved = pyqtSignal(ConferenceParticipantItem)
-
-    # The MIME types we accept in drop operations, in the order they should be handled
-    accepted_mime_types = ['application/x-blink-contact-list', 'application/x-blink-contact-uri-list', 'text/uri-list']
-
-    def __init__(self, session, parent=None):
-        super(ConferenceParticipantModel, self).__init__(parent)
-        self.session = session
-        self.participants = []
-
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=session)
-
-    def flags(self, index):
-        if index.isValid():
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
-        else:
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
-
-    def rowCount(self, parent=QModelIndex()):
-        return len(self.participants)
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-        item = self.participants[index.row()]
-        if role == Qt.UserRole:
-            return item
-        elif role == Qt.SizeHintRole:
-            return item.size_hint
-        elif role == Qt.DisplayRole:
-            return unicode(item)
-        return None
-
-    def supportedDropActions(self):
-        return Qt.CopyAction# | Qt.MoveAction
-
-    def dropMimeData(self, mime_data, action, row, column, parent_index):
-        # this is here just to keep the default Qt DnD API happy
-        # the custom handler is in handleDroppedData
-        return False
-
-    def handleDroppedData(self, mime_data, action, index):
-        if action == Qt.IgnoreAction:
-            return True
-
-        for mime_type in self.accepted_mime_types:
-            if mime_data.hasFormat(mime_type):
-                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
-                handler = getattr(self, '_DH_%s' % name)
-                return handler(mime_data, action, index)
-        else:
-            return False
-
-    def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
-        try:
-            contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
-        except Exception:
-            return False
-        for contact in contacts:
-            self.session.server_conference.add_participant(contact, contact.uri)
-        return True
-
-    def _DH_ApplicationXBlinkContactUriList(self, mime_data, action, index):
-        try:
-            contact, contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
-        except Exception:
-            return False
-        for contact_uri in contact_uris:
-            self.session.server_conference.add_participant(contact, contact_uri.uri)
-        return True
-
-    def _DH_TextUriList(self, mime_data, action, index):
-        return False
-
-    @run_in_gui_thread
-    def handle_notification(self, notification):
-        handler = getattr(self, '_NH_%s' % notification.name, Null)
-        handler(notification)
-
-    def _NH_BlinkSessionDidEnd(self, notification):
-        self.clear()
-
-    def _NH_BlinkSessionWasDeleted(self, notification):
-        notification.center.remove_observer(self, sender=self.session)
-        self.session = None
-
-    def _NH_BlinkSessionWillAddParticipant(self, notification):
-        self.addParticipant(ConferenceParticipantItem(notification.data.participant))
-
-    def _NH_BlinkSessionDidNotAddParticipant(self, notification):
-        self.removeParticipant(notification.data.participant.participant_item)
-
-    def _NH_BlinkSessionDidRemoveParticipant(self, notification):
-        self.removeParticipant(notification.data.participant.participant_item)
-
-    def _NH_ConferenceParticipantItemDidChange(self, notification):
-        index = self.index(self.participants.index(notification.sender))
-        self.dataChanged.emit(index, index)
-
-    def _find_insertion_point(self, participant):
-        for position, item in enumerate(self.participants):
-            if item.name > participant.name:
-                break
-        else:
-            position = len(self.participants)
-        return position
-
-    def _add_participant(self, participant):
-        position = self._find_insertion_point(participant)
-        self.beginInsertRows(QModelIndex(), position, position)
-        self.participants.insert(position, participant)
-        self.endInsertRows()
-
-    def _pop_participant(self, participant):
-        position = self.participants.index(participant)
-        self.beginRemoveRows(QModelIndex(), position, position)
-        del self.participants[position]
-        self.endRemoveRows()
-        return participant
-
-    def addParticipant(self, participant):
-        if participant in self.participants:
-            return
-        participant.participant.participant_item = participant # add a back reference to this item so we can find it later without iterating all participants
-        self.participantAboutToBeAdded.emit(participant)
-        self._add_participant(participant)
-        self.participantAdded.emit(participant)
-        notification_center = NotificationCenter()
-        notification_center.add_observer(self, sender=participant)
-
-    def removeParticipant(self, participant):
-        if participant not in self.participants:
-            return
-        notification_center = NotificationCenter()
-        notification_center.remove_observer(self, sender=participant)
-        del participant.participant.participant_item
-        self.participantAboutToBeRemoved.emit(participant)
-        self._pop_participant(participant)
-        self.participantRemoved.emit(participant)
-
-    def clear(self):
-        notification_center = NotificationCenter()
-        self.beginResetModel()
-        for participant in self.participants:
-            del participant.participant.participant_item
-            notification_center.remove_observer(self, sender=participant)
-        self.participants = []
-        self.endResetModel()
-
-
-class ConferenceParticipantListView(QListView, ColorHelperMixin):
-    def __init__(self, parent=None):
-        super(ConferenceParticipantListView, self).__init__(parent)
-        self.setItemDelegate(ConferenceParticipantDelegate(self))
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.context_menu = QMenu(self)
-        self.actions = ContextMenuActions()
-        self.paint_drop_indicator = False
-
-    def setModel(self, model):
-        selection_model = self.selectionModel()
-        if selection_model is not None:
-            selection_model.deleteLater()
-        super(ConferenceParticipantListView, self).setModel(model)
-
-    def contextMenuEvent(self, event):
-        pass
-
-    def hideEvent(self, event):
-        self.context_menu.hide()
-
-    def paintEvent(self, event):
-        super(ConferenceParticipantListView, self).paintEvent(event)
-        if self.paint_drop_indicator:
-            rect = self.viewport().rect() # or should this be self.contentsRect() ? -Dan
-            #color = QColor('#b91959')
-            #color = QColor('#00aaff')
-            #color = QColor('#55aaff')
-            #color = QColor('#00aa00')
-            #color = QColor('#aa007f')
-            #color = QColor('#dd44aa')
-            color = QColor('#aa007f')
-            pen_color = self.color_with_alpha(color, 120)
-            brush_color = self.color_with_alpha(color, 10)
-            painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setBrush(brush_color)
-            painter.setPen(QPen(pen_color, 1.6))
-            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
-            painter.end()
-
-    def dragEnterEvent(self, event):
-        model = self.model()
-        accepted_mime_types = set(model.accepted_mime_types)
-        provided_mime_types = set(event.mimeData().formats())
-        acceptable_mime_types = accepted_mime_types & provided_mime_types
-        if not acceptable_mime_types:
-            event.ignore()
-        else:
-            event.accept()
-            self.setState(self.DraggingState)
-
-    def dragLeaveEvent(self, event):
-        super(ConferenceParticipantListView, self).dragLeaveEvent(event)
-        self.paint_drop_indicator = False
-        self.viewport().update()
-
-    def dragMoveEvent(self, event):
-        super(ConferenceParticipantListView, self).dragMoveEvent(event)
-        model = self.model()
-        for mime_type in model.accepted_mime_types:
-            if event.provides(mime_type):
-                handler = getattr(self, '_DH_%s' % mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', ''))
-                handler(event)
-                self.viewport().update()
-                break
-        else:
-            event.ignore()
-
-    def dropEvent(self, event):
-        model = self.model()
-        if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
-            event.accept()
-        super(ConferenceParticipantListView, self).dropEvent(event)
-        self.paint_drop_indicator = False
-        self.viewport().update()
-
-    def _DH_ApplicationXBlinkContactList(self, event):
-        event.accept(self.viewport().rect())
-        self.paint_drop_indicator = True
-
-    def _DH_ApplicationXBlinkContactUriList(self, event):
-        event.accept(self.viewport().rect())
-        self.paint_drop_indicator = True
-
-    def _DH_TextUriList(self, event):
-        event.ignore(self.viewport().rect())
-        #event.accept(self.viewport().rect())
-        #self.paint_drop_indicator = True
-
-
-# Positions for sessions in a client conference.
+# Audio sessions
 #
+
+# positions for sessions in a client conference.
 class Top(object): pass
 class Middle(object): pass
 class Bottom(object): pass
 
 
-# Audio sessions
-#
+ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
+
+class AudioSessionWidget(base_class, ui_class):
+    def __init__(self, session, parent=None):
+        super(AudioSessionWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        # add a left margin for the colored band
+        self.address_layout.setContentsMargins(8, -1, -1, -1)
+        self.stream_layout.setContentsMargins(8, -1, -1, -1)
+        self.bottom_layout.setContentsMargins(8, -1, -1, -1)
+        font = self.latency_label.font()
+        font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
+        self.latency_label.setFont(font)
+        font = self.packet_loss_label.font()
+        font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
+        self.packet_loss_label.setFont(font)
+        self.mute_button.type = LeftSegment
+        self.hold_button.type = MiddleSegment
+        self.record_button.type = MiddleSegment
+        self.hangup_button.type = RightSegment
+        self.selected = False
+        self.drop_indicator = False
+        self.position_in_conference = None
+        self._disable_dnd = False
+        self.mute_button.hidden.connect(self._SH_MuteButtonHidden)
+        self.mute_button.shown.connect(self._SH_MuteButtonShown)
+        self.mute_button.pressed.connect(self._SH_ToolButtonPressed)
+        self.hold_button.pressed.connect(self._SH_ToolButtonPressed)
+        self.record_button.pressed.connect(self._SH_ToolButtonPressed)
+        self.hangup_button.pressed.connect(self._SH_ToolButtonPressed)
+        self.mute_button.hide()
+        self.mute_button.setEnabled(False)
+        self.hold_button.setEnabled(False)
+        self.record_button.setEnabled(False)
+        self.address_label.setText(session.name)
+        self.stream_info_label.session_type = session.type
+        self.stream_info_label.codec_info = session.codec_info
+        self.duration_label.value = session.duration
+        self.latency_label.value = session.latency
+        self.packet_loss_label.value = session.packet_loss
+        self.status_label.value = session.status
+        self.tls_label.setVisible(bool(session.tls))
+        self.srtp_label.setVisible(bool(session.srtp))
+
+    def _get_selected(self):
+        return self.__dict__['selected']
+
+    def _set_selected(self, value):
+        if self.__dict__.get('selected', None) == value:
+            return
+        self.__dict__['selected'] = value
+        self.update()
+
+    selected = property(_get_selected, _set_selected)
+    del _get_selected, _set_selected
+
+    def _get_drop_indicator(self):
+        return self.__dict__['drop_indicator']
+
+    def _set_drop_indicator(self, value):
+        if self.__dict__.get('drop_indicator', None) == value:
+            return
+        self.__dict__['drop_indicator'] = value
+        self.update()
+
+    drop_indicator = property(_get_drop_indicator, _set_drop_indicator)
+    del _get_drop_indicator, _set_drop_indicator
+
+    def _get_position_in_conference(self):
+        return self.__dict__['position_in_conference']
+
+    def _set_position_in_conference(self, value):
+        if self.__dict__.get('position_in_conference', Null) == value:
+            return
+        self.__dict__['position_in_conference'] = value
+        self.update()
+
+    position_in_conference = property(_get_position_in_conference, _set_position_in_conference)
+    del _get_position_in_conference, _set_position_in_conference
+
+    def _SH_MuteButtonHidden(self):
+        self.hold_button.type = LeftSegment
+
+    def _SH_MuteButtonShown(self):
+        self.hold_button.type = MiddleSegment
+
+    def _SH_ToolButtonPressed(self):
+        self._disable_dnd = True
+
+    def mousePressEvent(self, event):
+        self._disable_dnd = False
+        super(AudioSessionWidget, self).mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._disable_dnd:
+            return
+        super(AudioSessionWidget, self).mouseMoveEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        rect = self.rect()
+
+        # draw inner rect and border
+        #
+        if self.selected:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#75c0ff'))
+            background.setColorAt(0.99, QColor('#75c0ff'))
+            background.setColorAt(1.00, QColor('#ffffff'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#606060' if self.position_in_conference is None else '#b0b0b0')), 2.0))
+        elif self.position_in_conference is not None:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#95ff95'))
+            background.setColorAt(0.99, QColor('#95ff95'))
+            background.setColorAt(1.00, QColor('#ffffff'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
+        else:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#d0d0d0'))
+            background.setColorAt(0.99, QColor('#d0d0d0'))
+            background.setColorAt(1.00, QColor('#ffffff'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
+        painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
+
+        # for conferences extend the left marker over the whole conference
+        #
+        if self.position_in_conference is not None:
+            painter.setPen(Qt.NoPen)
+            left_rect = rect.adjusted(0, 0, 10-rect.width(), 0)
+            if self.position_in_conference is Top:
+                painter.drawRect(left_rect.adjusted(2, 5, 0, 5))
+            elif self.position_in_conference is Middle:
+                painter.drawRect(left_rect.adjusted(2, -5, 0, 5))
+            elif self.position_in_conference is Bottom:
+                painter.drawRect(left_rect.adjusted(2, -5, 0, -5))
+
+        # draw outer border
+        #
+        if self.selected or self.drop_indicator:
+            painter.setBrush(Qt.NoBrush)
+            if self.drop_indicator:
+                painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+            elif self.selected:
+                painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0)) # or #2070c0 (next best look) or gray: #606060
+
+            if self.position_in_conference is Top:
+                painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
+                painter.drawRoundedRect(rect.adjusted(1, 1, -1, 5), 3, 3)
+            elif self.position_in_conference is Middle:
+                painter.drawRoundedRect(rect.adjusted(2, -5, -2, 5), 3, 3)
+                painter.drawRoundedRect(rect.adjusted(1, -5, -1, 5), 3, 3)
+            elif self.position_in_conference is Bottom:
+                painter.drawRoundedRect(rect.adjusted(2, -5, -2, -2), 3, 3)
+                painter.drawRoundedRect(rect.adjusted(1, -5, -1, -1), 3, 3)
+            else:
+                painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
+                painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+        elif self.position_in_conference is not None:
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0)) # or 237523, #2b8f2b
+            if self.position_in_conference is Top:
+                painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
+            elif self.position_in_conference is Middle:
+                painter.drawRoundedRect(rect.adjusted(2, -5, -2, 5), 3, 3)
+            elif self.position_in_conference is Bottom:
+                painter.drawRoundedRect(rect.adjusted(2, -5, -2, -2), 3, 3)
+            else:
+                painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
+
+        painter.end()
+        super(AudioSessionWidget, self).paintEvent(event)
+
+
+class DraggedAudioSessionWidget(base_class, ui_class):
+    """Used to draw a dragged session item"""
+    def __init__(self, session_widget, parent=None):
+        super(DraggedAudioSessionWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        # add a left margin for the colored band
+        self.address_layout.setContentsMargins(8, -1, -1, -1)
+        self.stream_layout.setContentsMargins(8, -1, -1, -1)
+        self.bottom_layout.setContentsMargins(8, -1, -1, -1)
+        self.mute_button.hide()
+        self.hold_button.hide()
+        self.record_button.hide()
+        self.hangup_button.hide()
+        self.tls_label.hide()
+        self.srtp_label.hide()
+        self.latency_label.hide()
+        self.packet_loss_label.hide()
+        self.duration_label.hide()
+        self.stream_info_label.setText(u'')
+        self.address_label.setText(session_widget.address_label.text())
+        self.selected = session_widget.selected
+        self.in_conference = session_widget.position_in_conference is not None
+        if self.in_conference:
+            self.status_label.setText(u'Drop outside the conference to detach')
+        else:
+            self.status_label.setText(u'Drop over a session to conference them')
+        self.status_label.show()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        if self.in_conference:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#95ff95'))
+            background.setColorAt(0.99, QColor('#95ff95'))
+            background.setColorAt(1.00, QColor('#f8f8f8'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0))
+        elif self.selected:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#75c0ff'))
+            background.setColorAt(0.99, QColor('#75c0ff'))
+            background.setColorAt(1.00, QColor('#f8f8f8'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0))
+        else:
+            background = QLinearGradient(0, 0, 10, 0)
+            background.setColorAt(0.00, QColor('#d0d0d0'))
+            background.setColorAt(0.99, QColor('#d0d0d0'))
+            background.setColorAt(1.00, QColor('#f8f8f8'))
+            painter.setBrush(QBrush(background))
+            painter.setPen(QPen(QBrush(QColor('#808080')), 2.0))
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
+        painter.end()
+        super(DraggedAudioSessionWidget, self).paintEvent(event)
+
+del ui_class, base_class
+
 
 class AudioSessionItem(object):
     implements(IObserver)
@@ -1943,245 +1703,6 @@ class AudioSessionItem(object):
             else:
                 self.status = Status(notification.data.reason)
             self._cleanup()
-
-
-ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
-
-class AudioSessionWidget(base_class, ui_class):
-    def __init__(self, session, parent=None):
-        super(AudioSessionWidget, self).__init__(parent)
-        with Resources.directory:
-            self.setupUi(self)
-        # add a left margin for the colored band
-        self.address_layout.setContentsMargins(8, -1, -1, -1)
-        self.stream_layout.setContentsMargins(8, -1, -1, -1)
-        self.bottom_layout.setContentsMargins(8, -1, -1, -1)
-        font = self.latency_label.font()
-        font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
-        self.latency_label.setFont(font)
-        font = self.packet_loss_label.font()
-        font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
-        self.packet_loss_label.setFont(font)
-        self.mute_button.type = LeftSegment
-        self.hold_button.type = MiddleSegment
-        self.record_button.type = MiddleSegment
-        self.hangup_button.type = RightSegment
-        self.selected = False
-        self.drop_indicator = False
-        self.position_in_conference = None
-        self._disable_dnd = False
-        self.mute_button.hidden.connect(self._SH_MuteButtonHidden)
-        self.mute_button.shown.connect(self._SH_MuteButtonShown)
-        self.mute_button.pressed.connect(self._SH_ToolButtonPressed)
-        self.hold_button.pressed.connect(self._SH_ToolButtonPressed)
-        self.record_button.pressed.connect(self._SH_ToolButtonPressed)
-        self.hangup_button.pressed.connect(self._SH_ToolButtonPressed)
-        self.mute_button.hide()
-        self.mute_button.setEnabled(False)
-        self.hold_button.setEnabled(False)
-        self.record_button.setEnabled(False)
-        self.address_label.setText(session.name)
-        self.stream_info_label.session_type = session.type
-        self.stream_info_label.codec_info = session.codec_info
-        self.duration_label.value = session.duration
-        self.latency_label.value = session.latency
-        self.packet_loss_label.value = session.packet_loss
-        self.status_label.value = session.status
-        self.tls_label.setVisible(bool(session.tls))
-        self.srtp_label.setVisible(bool(session.srtp))
-
-    def _get_selected(self):
-        return self.__dict__['selected']
-
-    def _set_selected(self, value):
-        if self.__dict__.get('selected', None) == value:
-            return
-        self.__dict__['selected'] = value
-        self.update()
-
-    selected = property(_get_selected, _set_selected)
-    del _get_selected, _set_selected
-
-    def _get_drop_indicator(self):
-        return self.__dict__['drop_indicator']
-
-    def _set_drop_indicator(self, value):
-        if self.__dict__.get('drop_indicator', None) == value:
-            return
-        self.__dict__['drop_indicator'] = value
-        self.update()
-
-    drop_indicator = property(_get_drop_indicator, _set_drop_indicator)
-    del _get_drop_indicator, _set_drop_indicator
-
-    def _get_position_in_conference(self):
-        return self.__dict__['position_in_conference']
-
-    def _set_position_in_conference(self, value):
-        if self.__dict__.get('position_in_conference', Null) == value:
-            return
-        self.__dict__['position_in_conference'] = value
-        self.update()
-
-    position_in_conference = property(_get_position_in_conference, _set_position_in_conference)
-    del _get_position_in_conference, _set_position_in_conference
-
-    def _SH_MuteButtonHidden(self):
-        self.hold_button.type = LeftSegment
-
-    def _SH_MuteButtonShown(self):
-        self.hold_button.type = MiddleSegment
-
-    def _SH_ToolButtonPressed(self):
-        self._disable_dnd = True
-
-    def mousePressEvent(self, event):
-        self._disable_dnd = False
-        super(AudioSessionWidget, self).mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._disable_dnd:
-            return
-        super(AudioSessionWidget, self).mouseMoveEvent(event)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-
-        rect = self.rect()
-
-        # draw inner rect and border
-        #
-        if self.selected:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#75c0ff'))
-            background.setColorAt(0.99, QColor('#75c0ff'))
-            background.setColorAt(1.00, QColor('#ffffff'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#606060' if self.position_in_conference is None else '#b0b0b0')), 2.0))
-        elif self.position_in_conference is not None:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#95ff95'))
-            background.setColorAt(0.99, QColor('#95ff95'))
-            background.setColorAt(1.00, QColor('#ffffff'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
-        else:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#d0d0d0'))
-            background.setColorAt(0.99, QColor('#d0d0d0'))
-            background.setColorAt(1.00, QColor('#ffffff'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
-        painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
-
-        # for conferences extend the left marker over the whole conference
-        #
-        if self.position_in_conference is not None:
-            painter.setPen(Qt.NoPen)
-            left_rect = rect.adjusted(0, 0, 10-rect.width(), 0)
-            if self.position_in_conference is Top:
-                painter.drawRect(left_rect.adjusted(2, 5, 0, 5))
-            elif self.position_in_conference is Middle:
-                painter.drawRect(left_rect.adjusted(2, -5, 0, 5))
-            elif self.position_in_conference is Bottom:
-                painter.drawRect(left_rect.adjusted(2, -5, 0, -5))
-
-        # draw outer border
-        #
-        if self.selected or self.drop_indicator:
-            painter.setBrush(Qt.NoBrush)
-            if self.drop_indicator:
-                painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
-            elif self.selected:
-                painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0)) # or #2070c0 (next best look) or gray: #606060
-
-            if self.position_in_conference is Top:
-                painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
-                painter.drawRoundedRect(rect.adjusted(1, 1, -1, 5), 3, 3)
-            elif self.position_in_conference is Middle:
-                painter.drawRoundedRect(rect.adjusted(2, -5, -2, 5), 3, 3)
-                painter.drawRoundedRect(rect.adjusted(1, -5, -1, 5), 3, 3)
-            elif self.position_in_conference is Bottom:
-                painter.drawRoundedRect(rect.adjusted(2, -5, -2, -2), 3, 3)
-                painter.drawRoundedRect(rect.adjusted(1, -5, -1, -1), 3, 3)
-            else:
-                painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
-                painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
-        elif self.position_in_conference is not None:
-            painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0)) # or 237523, #2b8f2b
-            if self.position_in_conference is Top:
-                painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
-            elif self.position_in_conference is Middle:
-                painter.drawRoundedRect(rect.adjusted(2, -5, -2, 5), 3, 3)
-            elif self.position_in_conference is Bottom:
-                painter.drawRoundedRect(rect.adjusted(2, -5, -2, -2), 3, 3)
-            else:
-                painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
-
-        painter.end()
-        super(AudioSessionWidget, self).paintEvent(event)
-
-
-class DraggedAudioSessionWidget(base_class, ui_class):
-    """Used to draw a dragged session item"""
-    def __init__(self, session_widget, parent=None):
-        super(DraggedAudioSessionWidget, self).__init__(parent)
-        with Resources.directory:
-            self.setupUi(self)
-        # add a left margin for the colored band
-        self.address_layout.setContentsMargins(8, -1, -1, -1)
-        self.stream_layout.setContentsMargins(8, -1, -1, -1)
-        self.bottom_layout.setContentsMargins(8, -1, -1, -1)
-        self.mute_button.hide()
-        self.hold_button.hide()
-        self.record_button.hide()
-        self.hangup_button.hide()
-        self.tls_label.hide()
-        self.srtp_label.hide()
-        self.latency_label.hide()
-        self.packet_loss_label.hide()
-        self.duration_label.hide()
-        self.stream_info_label.setText(u'')
-        self.address_label.setText(session_widget.address_label.text())
-        self.selected = session_widget.selected
-        self.in_conference = session_widget.position_in_conference is not None
-        if self.in_conference:
-            self.status_label.setText(u'Drop outside the conference to detach')
-        else:
-            self.status_label.setText(u'Drop over a session to conference them')
-        self.status_label.show()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        if self.in_conference:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#95ff95'))
-            background.setColorAt(0.99, QColor('#95ff95'))
-            background.setColorAt(1.00, QColor('#f8f8f8'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0))
-        elif self.selected:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#75c0ff'))
-            background.setColorAt(0.99, QColor('#75c0ff'))
-            background.setColorAt(1.00, QColor('#f8f8f8'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0))
-        else:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#d0d0d0'))
-            background.setColorAt(0.99, QColor('#d0d0d0'))
-            background.setColorAt(1.00, QColor('#f8f8f8'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#808080')), 2.0))
-        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
-        painter.end()
-        super(DraggedAudioSessionWidget, self).paintEvent(event)
-
-del ui_class, base_class
 
 
 class AudioSessionDelegate(QStyledItemDelegate):
@@ -2764,7 +2285,7 @@ class AudioSessionListView(QListView):
         provided_mime_types = set(event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         if not acceptable_mime_types:
-            event.ignore() # no acceptable mime types found
+            event.ignore()
         elif event_source is not self and 'application/x-blink-session-list' in provided_mime_types:
             event.ignore() # we don't handle drops for blink sessions from other sources
         else:
@@ -2895,6 +2416,104 @@ class AudioSessionListView(QListView):
 
 # Chat sessions
 #
+
+class Palettes(object):
+    pass
+
+ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
+
+class ChatSessionWidget(base_class, ui_class):
+    class StandardDisplayMode:  __metaclass__ = MarkerType
+    class AlternateDisplayMode: __metaclass__ = MarkerType
+    class SelectedDisplayMode:  __metaclass__ = MarkerType
+
+    def __init__(self, parent=None):
+        super(ChatSessionWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        self.palettes = Palettes()
+        self.palettes.standard = self.palette()
+        self.palettes.alternate = self.palette()
+        self.palettes.selected = self.palette()
+        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.setBackgroundRole(QPalette.Window)
+        self.display_mode = self.StandardDisplayMode
+        self.hold_icon.installEventFilter(self)
+        self.is_composing_icon.installEventFilter(self)
+        self.audio_icon.installEventFilter(self)
+        self.chat_icon.installEventFilter(self)
+        self.video_icon.installEventFilter(self)
+        self.screen_sharing_icon.installEventFilter(self)
+        self.widget_layout.invalidate()
+        self.widget_layout.activate()
+        #self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
+        #self.show()
+
+    def _get_display_mode(self):
+        return self.__dict__['display_mode']
+
+    def _set_display_mode(self, value):
+        if value not in (self.StandardDisplayMode, self.AlternateDisplayMode, self.SelectedDisplayMode):
+            raise ValueError("invalid display_mode: %r" % value)
+        old_mode = self.__dict__.get('display_mode', None)
+        new_mode = self.__dict__['display_mode'] = value
+        if new_mode == old_mode:
+            return
+        if new_mode is self.StandardDisplayMode:
+            self.setPalette(self.palettes.standard)
+            self.setForegroundRole(QPalette.WindowText)
+            self.name_label.setForegroundRole(QPalette.WindowText)
+            self.info_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.AlternateDisplayMode:
+            self.setPalette(self.palettes.alternate)
+            self.setForegroundRole(QPalette.WindowText)
+            self.name_label.setForegroundRole(QPalette.WindowText)
+            self.info_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.SelectedDisplayMode:
+            self.setPalette(self.palettes.selected)
+            self.setForegroundRole(QPalette.HighlightedText)
+            self.name_label.setForegroundRole(QPalette.HighlightedText)
+            self.info_label.setForegroundRole(QPalette.HighlightedText)
+
+    display_mode = property(_get_display_mode, _set_display_mode)
+    del _get_display_mode, _set_display_mode
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QEvent.ShowToParent, QEvent.HideToParent):
+            self.widget_layout.invalidate()
+            self.widget_layout.activate()
+        return False
+
+    def paintEvent(self, event):
+        super(ChatSessionWidget, self).paintEvent(event)
+        if self.display_mode == self.SelectedDisplayMode and self.state_label.state is not None:
+            rect = self.state_label.geometry()
+            rect.setWidth(self.width() - rect.x())
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, Qt.transparent)
+            gradient.setColorAt(1.0, Qt.white)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.fillRect(rect, QBrush(gradient))
+            painter.end()
+
+    def update_content(self, session):
+        self.name_label.setText(session.name)
+        self.info_label.setText(session.info)
+        self.icon_label.setPixmap(session.pixmap)
+        self.state_label.state = session.state
+        self.hold_icon.setVisible(session.blink_session.on_hold)
+        self.is_composing_icon.setVisible(session.remote_composing)
+        self.chat_icon.setVisible('chat' in session.blink_session.streams)
+        self.video_icon.setVisible('video' in session.blink_session.streams)
+        self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
+        self.audio_icon.setVisible(session.blink_session.streams.types.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
+
+del ui_class, base_class
+
 
 class ChatSessionItem(object):
     implements(IObserver)
@@ -3045,104 +2664,6 @@ class ChatSessionItem(object):
 
     def _NH_BlinkSessionDidChangeRecordingState(self, notification):
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
-
-
-class Palettes(object):
-    pass
-
-ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
-
-class ChatSessionWidget(base_class, ui_class):
-    class StandardDisplayMode:  __metaclass__ = MarkerType
-    class AlternateDisplayMode: __metaclass__ = MarkerType
-    class SelectedDisplayMode:  __metaclass__ = MarkerType
-
-    def __init__(self, parent=None):
-        super(ChatSessionWidget, self).__init__(parent)
-        with Resources.directory:
-            self.setupUi(self)
-        self.palettes = Palettes()
-        self.palettes.standard = self.palette()
-        self.palettes.alternate = self.palette()
-        self.palettes.selected = self.palette()
-        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
-        self.setBackgroundRole(QPalette.Window)
-        self.display_mode = self.StandardDisplayMode
-        self.hold_icon.installEventFilter(self)
-        self.is_composing_icon.installEventFilter(self)
-        self.audio_icon.installEventFilter(self)
-        self.chat_icon.installEventFilter(self)
-        self.video_icon.installEventFilter(self)
-        self.screen_sharing_icon.installEventFilter(self)
-        self.widget_layout.invalidate()
-        self.widget_layout.activate()
-        #self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
-        #self.show()
-
-    def _get_display_mode(self):
-        return self.__dict__['display_mode']
-
-    def _set_display_mode(self, value):
-        if value not in (self.StandardDisplayMode, self.AlternateDisplayMode, self.SelectedDisplayMode):
-            raise ValueError("invalid display_mode: %r" % value)
-        old_mode = self.__dict__.get('display_mode', None)
-        new_mode = self.__dict__['display_mode'] = value
-        if new_mode == old_mode:
-            return
-        if new_mode is self.StandardDisplayMode:
-            self.setPalette(self.palettes.standard)
-            self.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.WindowText)
-            self.info_label.setForegroundRole(QPalette.Dark)
-        elif new_mode is self.AlternateDisplayMode:
-            self.setPalette(self.palettes.alternate)
-            self.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.WindowText)
-            self.info_label.setForegroundRole(QPalette.Dark)
-        elif new_mode is self.SelectedDisplayMode:
-            self.setPalette(self.palettes.selected)
-            self.setForegroundRole(QPalette.HighlightedText)
-            self.name_label.setForegroundRole(QPalette.HighlightedText)
-            self.info_label.setForegroundRole(QPalette.HighlightedText)
-
-    display_mode = property(_get_display_mode, _set_display_mode)
-    del _get_display_mode, _set_display_mode
-
-    def eventFilter(self, watched, event):
-        if event.type() in (QEvent.ShowToParent, QEvent.HideToParent):
-            self.widget_layout.invalidate()
-            self.widget_layout.activate()
-        return False
-
-    def paintEvent(self, event):
-        super(ChatSessionWidget, self).paintEvent(event)
-        if self.display_mode == self.SelectedDisplayMode and self.state_label.state is not None:
-            rect = self.state_label.geometry()
-            rect.setWidth(self.width() - rect.x())
-            gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, Qt.transparent)
-            gradient.setColorAt(1.0, Qt.white)
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.fillRect(rect, QBrush(gradient))
-            painter.end()
-
-    def update_content(self, session):
-        self.name_label.setText(session.name)
-        self.info_label.setText(session.info)
-        self.icon_label.setPixmap(session.pixmap)
-        self.state_label.state = session.state
-        self.hold_icon.setVisible(session.blink_session.on_hold)
-        self.is_composing_icon.setVisible(session.remote_composing)
-        self.chat_icon.setVisible('chat' in session.blink_session.streams)
-        self.video_icon.setVisible('video' in session.blink_session.streams)
-        self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
-        self.audio_icon.setVisible(session.blink_session.streams.types.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
-
-del ui_class, base_class
 
 
 class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
@@ -3469,7 +2990,7 @@ class ChatSessionListView(QListView):
         provided_mime_types = set(event.mimeData().formats())
         acceptable_mime_types = accepted_mime_types & provided_mime_types
         if not acceptable_mime_types:
-            event.ignore() # no acceptable mime types found
+            event.ignore()
         else:
             event.accept()
             self.setState(self.DraggingState)
@@ -3550,6 +3071,420 @@ class ChatSessionListView(QListView):
             #print "-- chat session list updating selection to", position, notification.data.active_session
             selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.ignore_selection_changes = False
+
+
+# Conference participants
+#
+
+class ConferenceParticipantWidget(ChatSessionWidget):
+    def update_content(self, participant):
+        self.setDisabled(participant.pending_request)
+        self.name_label.setText(participant.name)
+        self.info_label.setText(participant.info)
+        self.icon_label.setPixmap(participant.pixmap)
+        self.state_label.state = participant.state
+        self.hold_icon.setVisible(participant.on_hold)
+        self.is_composing_icon.setVisible(participant.is_composing)
+        self.chat_icon.setVisible('chat' in participant.active_media)
+        self.video_icon.setVisible('video' in participant.active_media)
+        self.screen_sharing_icon.setVisible('screen-sharing' in participant.active_media)
+        self.audio_icon.setVisible(participant.active_media.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
+
+
+class ConferenceParticipantItem(object):
+    implements(IObserver)
+
+    size_hint = QSize(200, 36)
+
+    def __init__(self, participant):
+        self.participant = participant
+        self.widget = ConferenceParticipantWidget(None)
+        self.widget.update_content(self)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=participant)
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, self.participant)
+
+    @property
+    def pending_request(self):
+        return self.participant.pending_request
+
+    @property
+    def name(self):
+        if self.participant.contact.type == 'dummy':
+            return self.participant.display_name or self.participant.contact.name
+        else:
+            return self.participant.contact.name
+
+    @property
+    def info(self):
+        return self.participant.request_status or self.participant.contact.note or self.participant.uri
+
+    @property
+    def state(self):
+        return self.participant.contact.state
+
+    @property
+    def on_hold(self):
+        return self.participant.on_hold
+
+    @property
+    def is_composing(self):
+        return self.participant.is_composing
+
+    @property
+    def active_media(self):
+        return self.participant.active_media
+
+    @property
+    def icon(self):
+        return self.participant.contact.icon
+
+    @property
+    def pixmap(self):
+        return self.participant.contact.pixmap
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_ConferenceParticipantDidChange(self, notification):
+        self.widget.update_content(self)
+        notification.center.post_notification('ConferenceParticipantItemDidChange', sender=self)
+
+
+class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
+    def __init__(self, parent=None):
+        super(ConferenceParticipantDelegate, self).__init__(parent)
+
+    def editorEvent(self, event, model, option, index):
+        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
+            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2) # top half of the rightmost 14 pixels
+            if cross_rect.contains(event.pos()):
+                item = index.data(Qt.UserRole)
+                model.session.server_conference.remove_participant(item.participant)
+                return True
+        return super(ConferenceParticipantDelegate, self).editorEvent(event, model, option, index)
+
+    def paint(self, painter, option, index):
+        participant = index.data(Qt.UserRole)
+        if option.state & QStyle.State_Selected:
+            participant.widget.display_mode = participant.widget.SelectedDisplayMode
+        elif index.row() % 2 == 0:
+            participant.widget.display_mode = participant.widget.StandardDisplayMode
+        else:
+            participant.widget.display_mode = participant.widget.AlternateDisplayMode
+        participant.widget.setFixedSize(option.rect.size())
+
+        painter.save()
+        painter.drawPixmap(option.rect, QPixmap.grabWidget(participant.widget))
+        if (option.state & QStyle.State_MouseOver) and participant.widget.isEnabled():
+            self.drawRemoveIndicator(participant, option, painter, participant.widget)
+        if 0 and (option.state & QStyle.State_MouseOver):
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            if option.state & QStyle.State_Selected:
+                painter.fillRect(option.rect, QColor(240, 244, 255, 40))
+            else:
+                painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+                painter.fillRect(option.rect, QColor(240, 244, 255, 230))
+        painter.restore()
+
+    def drawRemoveIndicator(self, participant, option, painter, widget):
+        pen_thickness = 1.6
+
+        if widget.state_label.state is not None:
+            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            background_color = widget.state_label.state_colors[widget.state_label.state]
+            base_contrast_color = self.calc_light_color(background_color)
+            gradient = QLinearGradient(0, 0, 1, 0)
+            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            contrast_color = QBrush(gradient)
+        else:
+            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            background_color = widget.palette().color(widget.backgroundRole())
+            contrast_color = self.calc_light_color(background_color)
+        line_color = self.deco_color(background_color, foreground_color)
+
+        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+
+        # draw the remove indicator at the top (works best with a state_label of width 14)
+        cross_rect = QRect(0, 0, 14, 14)
+        cross_rect.moveTopRight(widget.state_label.geometry().topRight())
+        cross_rect.translate(option.rect.topLeft())
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.translate(cross_rect.center())
+        painter.translate(+1.5, +1)
+        painter.translate(0, +1)
+        painter.setPen(contrast_pen)
+        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
+        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.translate(0, -1)
+        painter.setPen(pen)
+        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
+        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        return index.data(Qt.SizeHintRole)
+
+
+class ConferenceParticipantModel(QAbstractListModel):
+    implements(IObserver)
+
+    participantAboutToBeAdded = pyqtSignal(ConferenceParticipantItem)
+    participantAboutToBeRemoved = pyqtSignal(ConferenceParticipantItem)
+    participantAdded = pyqtSignal(ConferenceParticipantItem)
+    participantRemoved = pyqtSignal(ConferenceParticipantItem)
+
+    # The MIME types we accept in drop operations, in the order they should be handled
+    accepted_mime_types = ['application/x-blink-contact-list', 'application/x-blink-contact-uri-list', 'text/uri-list']
+
+    def __init__(self, session, parent=None):
+        super(ConferenceParticipantModel, self).__init__(parent)
+        self.session = session
+        self.participants = []
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=session)
+
+    def flags(self, index):
+        if index.isValid():
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+        else:
+            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.participants)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        item = self.participants[index.row()]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.SizeHintRole:
+            return item.size_hint
+        elif role == Qt.DisplayRole:
+            return unicode(item)
+        return None
+
+    def supportedDropActions(self):
+        return Qt.CopyAction# | Qt.MoveAction
+
+    def dropMimeData(self, mime_data, action, row, column, parent_index):
+        # this is here just to keep the default Qt DnD API happy
+        # the custom handler is in handleDroppedData
+        return False
+
+    def handleDroppedData(self, mime_data, action, index):
+        if action == Qt.IgnoreAction:
+            return True
+
+        for mime_type in self.accepted_mime_types:
+            if mime_data.hasFormat(mime_type):
+                name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
+                handler = getattr(self, '_DH_%s' % name)
+                return handler(mime_data, action, index)
+        else:
+            return False
+
+    def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
+        try:
+            contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
+        except Exception:
+            return False
+        for contact in contacts:
+            self.session.server_conference.add_participant(contact, contact.uri)
+        return True
+
+    def _DH_ApplicationXBlinkContactUriList(self, mime_data, action, index):
+        try:
+            contact, contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
+        except Exception:
+            return False
+        for contact_uri in contact_uris:
+            self.session.server_conference.add_participant(contact, contact_uri.uri)
+        return True
+
+    def _DH_TextUriList(self, mime_data, action, index):
+        return False
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self.clear()
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        notification.center.remove_observer(self, sender=self.session)
+        self.session = None
+
+    def _NH_BlinkSessionWillAddParticipant(self, notification):
+        self.addParticipant(ConferenceParticipantItem(notification.data.participant))
+
+    def _NH_BlinkSessionDidNotAddParticipant(self, notification):
+        self.removeParticipant(notification.data.participant.participant_item)
+
+    def _NH_BlinkSessionDidRemoveParticipant(self, notification):
+        self.removeParticipant(notification.data.participant.participant_item)
+
+    def _NH_ConferenceParticipantItemDidChange(self, notification):
+        index = self.index(self.participants.index(notification.sender))
+        self.dataChanged.emit(index, index)
+
+    def _find_insertion_point(self, participant):
+        for position, item in enumerate(self.participants):
+            if item.name > participant.name:
+                break
+        else:
+            position = len(self.participants)
+        return position
+
+    def _add_participant(self, participant):
+        position = self._find_insertion_point(participant)
+        self.beginInsertRows(QModelIndex(), position, position)
+        self.participants.insert(position, participant)
+        self.endInsertRows()
+
+    def _pop_participant(self, participant):
+        position = self.participants.index(participant)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.participants[position]
+        self.endRemoveRows()
+        return participant
+
+    def addParticipant(self, participant):
+        if participant in self.participants:
+            return
+        participant.participant.participant_item = participant # add a back reference to this item so we can find it later without iterating all participants
+        self.participantAboutToBeAdded.emit(participant)
+        self._add_participant(participant)
+        self.participantAdded.emit(participant)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=participant)
+
+    def removeParticipant(self, participant):
+        if participant not in self.participants:
+            return
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self, sender=participant)
+        del participant.participant.participant_item
+        self.participantAboutToBeRemoved.emit(participant)
+        self._pop_participant(participant)
+        self.participantRemoved.emit(participant)
+
+    def clear(self):
+        notification_center = NotificationCenter()
+        self.beginResetModel()
+        for participant in self.participants:
+            del participant.participant.participant_item
+            notification_center.remove_observer(self, sender=participant)
+        self.participants = []
+        self.endResetModel()
+
+
+class ConferenceParticipantListView(QListView, ColorHelperMixin):
+    def __init__(self, parent=None):
+        super(ConferenceParticipantListView, self).__init__(parent)
+        self.setItemDelegate(ConferenceParticipantDelegate(self))
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.context_menu = QMenu(self)
+        self.actions = ContextMenuActions()
+        self.paint_drop_indicator = False
+
+    def setModel(self, model):
+        selection_model = self.selectionModel()
+        if selection_model is not None:
+            selection_model.deleteLater()
+        super(ConferenceParticipantListView, self).setModel(model)
+
+    def contextMenuEvent(self, event):
+        pass
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
+
+    def paintEvent(self, event):
+        super(ConferenceParticipantListView, self).paintEvent(event)
+        if self.paint_drop_indicator:
+            rect = self.viewport().rect() # or should this be self.contentsRect() ? -Dan
+            #color = QColor('#b91959')
+            #color = QColor('#00aaff')
+            #color = QColor('#55aaff')
+            #color = QColor('#00aa00')
+            #color = QColor('#aa007f')
+            #color = QColor('#dd44aa')
+            color = QColor('#aa007f')
+            pen_color = self.color_with_alpha(color, 120)
+            brush_color = self.color_with_alpha(color, 10)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(brush_color)
+            painter.setPen(QPen(pen_color, 1.6))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
+
+    def dragEnterEvent(self, event):
+        model = self.model()
+        accepted_mime_types = set(model.accepted_mime_types)
+        provided_mime_types = set(event.mimeData().formats())
+        acceptable_mime_types = accepted_mime_types & provided_mime_types
+        if not acceptable_mime_types:
+            event.ignore()
+        else:
+            event.accept()
+            self.setState(self.DraggingState)
+
+    def dragLeaveEvent(self, event):
+        super(ConferenceParticipantListView, self).dragLeaveEvent(event)
+        self.paint_drop_indicator = False
+        self.viewport().update()
+
+    def dragMoveEvent(self, event):
+        super(ConferenceParticipantListView, self).dragMoveEvent(event)
+        model = self.model()
+        for mime_type in model.accepted_mime_types:
+            if event.provides(mime_type):
+                handler = getattr(self, '_DH_%s' % mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', ''))
+                handler(event)
+                self.viewport().update()
+                break
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        model = self.model()
+        if event.source() is self:
+            event.setDropAction(Qt.MoveAction)
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        super(ConferenceParticipantListView, self).dropEvent(event)
+        self.paint_drop_indicator = False
+        self.viewport().update()
+
+    def _DH_ApplicationXBlinkContactList(self, event):
+        event.accept(self.viewport().rect())
+        self.paint_drop_indicator = True
+
+    def _DH_ApplicationXBlinkContactUriList(self, event):
+        event.accept(self.viewport().rect())
+        self.paint_drop_indicator = True
+
+    def _DH_TextUriList(self, event):
+        event.ignore(self.viewport().rect())
+        #event.accept(self.viewport().rect())
+        #self.paint_drop_indicator = True
 
 
 # Session management
