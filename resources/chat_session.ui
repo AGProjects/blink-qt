@@ -184,7 +184,7 @@
            <number>0</number>
           </property>
           <item>
-           <widget class="QLabel" name="composing_icon">
+           <widget class="ChatSessionIconLabel" name="composing_icon">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -200,10 +200,21 @@
             <property name="alignment">
              <set>Qt::AlignCenter</set>
             </property>
+            <property name="icon" stdset="0">
+             <iconset>
+              <normaloff>icons/composing12.svg</normaloff>icons/composing12.svg</iconset>
+            </property>
+            <property name="selectedCompositionColor" stdset="0">
+             <color>
+              <red>0</red>
+              <green>255</green>
+              <blue>0</blue>
+             </color>
+            </property>
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="hold_icon">
+           <widget class="ChatSessionIconLabel" name="hold_icon">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -218,6 +229,17 @@
             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>
+            </property>
+            <property name="icon" stdset="0">
+             <iconset>
+              <normaloff>icons/paused12.svg</normaloff>icons/paused12.svg</iconset>
+            </property>
+            <property name="selectedCompositionColor" stdset="0">
+             <color alpha="90">
+              <red>138</red>
+              <green>192</green>
+              <blue>255</blue>
+             </color>
             </property>
            </widget>
           </item>
@@ -269,7 +291,7 @@
            <number>0</number>
           </property>
           <item>
-           <widget class="QLabel" name="screen_sharing_icon">
+           <widget class="ChatSessionIconLabel" name="screen_sharing_icon">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -285,10 +307,21 @@
             <property name="alignment">
              <set>Qt::AlignCenter</set>
             </property>
+            <property name="icon" stdset="0">
+             <iconset>
+              <normaloff>icons/screen12.svg</normaloff>icons/screen12.svg</iconset>
+            </property>
+            <property name="selectedCompositionColor" stdset="0">
+             <color alpha="90">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </property>
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="video_icon">
+           <widget class="ChatSessionIconLabel" name="video_icon">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -304,10 +337,21 @@
             <property name="alignment">
              <set>Qt::AlignCenter</set>
             </property>
+            <property name="icon" stdset="0">
+             <iconset>
+              <normaloff>icons/camera12.svg</normaloff>icons/camera12.svg</iconset>
+            </property>
+            <property name="selectedCompositionColor" stdset="0">
+             <color alpha="90">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </property>
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="audio_icon">
+           <widget class="ChatSessionIconLabel" name="audio_icon">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -323,10 +367,21 @@
             <property name="alignment">
              <set>Qt::AlignCenter</set>
             </property>
+            <property name="icon" stdset="0">
+             <iconset>
+              <normaloff>icons/speaker12.svg</normaloff>icons/speaker12.svg</iconset>
+            </property>
+            <property name="selectedCompositionColor" stdset="0">
+             <color alpha="90">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </property>
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="chat_icon">
+           <widget class="ChatSessionIconLabel" name="chat_icon">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -341,6 +396,17 @@
             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>
+            </property>
+            <property name="icon" stdset="0">
+             <iconset>
+              <normaloff>icons/chat12.svg</normaloff>icons/chat12.svg</iconset>
+            </property>
+            <property name="selectedCompositionColor" stdset="0">
+             <color alpha="90">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
             </property>
            </widget>
           </item>
@@ -385,6 +451,11 @@
    <class>ContactState</class>
    <extends>QLabel</extends>
    <header>blink.widgets.labels</header>
+  </customwidget>
+  <customwidget>
+   <class>ChatSessionIconLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.sessions</header>
   </customwidget>
  </customwidgets>
  <resources/>

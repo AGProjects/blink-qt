@@ -17,7 +17,8 @@ from operator import attrgetter
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QPropertyAnimation, QRect, QSize, QTimer, pyqtSignal
-from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut, QStyle, QStyledItemDelegate
+from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut
+from PyQt4.QtGui  import QStyle, QStyledItemDelegate, QStyleOption
 
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python import Null, limit
@@ -39,7 +40,7 @@ from blink.util import call_later, run_in_gui_thread
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
 from blink.widgets.color import ColorHelperMixin
-from blink.widgets.util import ContextMenuActions
+from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 
 
 class RTPStreamInfo(object):
@@ -2417,8 +2418,52 @@ class AudioSessionListView(QListView):
 # Chat sessions
 #
 
-class Palettes(object):
-    pass
+class Container(object): pass
+class Palettes(Container): pass
+class PixmapContainer(Container): pass
+
+
+class ChatSessionIconLabel(QLabel):
+    icon = QtDynamicProperty('icon', type=QIcon)
+    selectedCompositionColor = QtDynamicProperty('selectedCompositionColor', type=QColor)
+
+    def __init__(self, parent=None):
+        super(ChatSessionIconLabel, self).__init__(parent)
+        self.pixmaps = PixmapContainer()
+        self.icon_size = 12
+        self.selectedCompositionColor = Qt.transparent
+        self.icon = None
+
+    def event(self, event):
+        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() in ('icon', 'selectedCompositionColor') and getattr(self, 'icon', None) is not None:
+            self.pixmaps.standard = self.icon.pixmap(self.icon_size)
+            self.pixmaps.selected = QPixmap(self.pixmaps.standard)
+            painter = QPainter(self.pixmaps.selected)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+            painter.fillRect(self.pixmaps.selected.rect(), self.selectedCompositionColor)
+            painter.end()
+        return super(ChatSessionIconLabel, self).event(event)
+
+    def paintEvent(self, event):
+        if self.icon is None or self.icon.isNull():
+            return
+        session_widget = self.parent().parent()
+        style = self.style()
+        painter = QPainter(self)
+        margin = self.margin()
+        rect = self.contentsRect().adjusted(margin, margin, -margin, -margin)
+        if not self.isEnabled():
+            option = QStyleOption()
+            option.initFrom(self)
+            pixmap = style.generatedIconPixmap(QIcon.Disabled, self.pixmaps.standard, option)
+        elif session_widget.display_mode is session_widget.SelectedDisplayMode:
+            pixmap = self.pixmaps.selected
+        else:
+            pixmap = self.pixmaps.standard
+        align = style.visualAlignment(self.layoutDirection(), self.alignment())
+        style.drawItemPixmap(painter, rect, align, pixmap)
+
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
 

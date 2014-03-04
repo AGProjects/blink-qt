@@ -50,7 +50,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="68.916667"
-     inkscape:cx="6.0665502"
+     inkscape:cx="6"
      inkscape:cy="6"
      inkscape:current-layer="g4482"
      showgrid="true"
@@ -101,7 +101,7 @@
        sodipodi:cy="4.0193472"
        sodipodi:cx="2.7279322"
        id="path4484"
-       style="fill:#55d400;fill-opacity:1;fill-rule:nonzero;stroke:none"
+       style="fill:#00cc00;fill-opacity:1;fill-rule:nonzero;stroke:none"
        sodipodi:type="arc" />
     <path
        sodipodi:end="10.995574"
@@ -113,7 +113,7 @@
        sodipodi:cy="4.0193472"
        sodipodi:cx="2.7279322"
        id="path4486"
-       style="fill:#55d400;fill-opacity:1;fill-rule:nonzero;stroke:none"
+       style="fill:#00cc00;fill-opacity:1;fill-rule:nonzero;stroke:none"
        sodipodi:type="arc" />
     <path
        sodipodi:end="10.995574"
@@ -125,7 +125,7 @@
        sodipodi:cy="4.0193472"
        sodipodi:cx="2.7279322"
        id="path4488"
-       style="fill:#55d400;fill-opacity:1;fill-rule:nonzero;stroke:none"
+       style="fill:#00cc00;fill-opacity:1;fill-rule:nonzero;stroke:none"
        sodipodi:type="arc" />
   </g>
 </svg>
