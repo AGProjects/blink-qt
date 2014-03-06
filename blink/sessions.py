@@ -2991,6 +2991,26 @@ class ChatSessionListView(QListView):
         notification_data = NotificationData(selected_session=selected_blink_session, deselected_session=deselected_blink_session)
         notification_center.post_notification('BlinkSessionListSelectionChanged', sender=self, data=notification_data)
 
+    def selectionCommand(self, index, event=None):
+        # in case we implement DnD later, we might consider selecting the item on mouse press if there is nothing else selected (except maybe if mouse press was on the buttons area?)
+        # this would allow the dragged item to be selected before DnD starts, in case it is needed for the session to be active when dragged -Dan
+        selection_model = self.selectionModel()
+        if self.selectionMode() == self.NoSelection:
+            return selection_model.NoUpdate
+        elif not index.isValid() or event is None:
+            return selection_model.NoUpdate
+        elif event.type() in (QEvent.MouseButtonPress, QEvent.MouseMove):
+            return selection_model.NoUpdate
+        elif event.type() == QEvent.MouseButtonRelease:
+            index_rect = self.visualRect(index)
+            cross_rect = index_rect.adjusted(index_rect.width()-14, 0, 0, -index_rect.height()/2) # the top half of the rightmost 14 pixels
+            if cross_rect.contains(event.pos()):
+                return selection_model.NoUpdate
+            else:
+                return selection_model.ClearAndSelect
+        else:
+            return super(ChatSessionListView, self).selectionCommand(index, event)
+
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Resize:
             new_size = event.size()
