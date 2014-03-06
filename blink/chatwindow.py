@@ -1319,11 +1319,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
             self.session_details.setCurrentWidget(self.selected_session.active_panel)
             self.participants_list.setModel(self.selected_session.participants_model)
+            self.control_button.setEnabled(True)
             # start animation to show list? -Dan
         elif self.session_model.sessions:
             self.tab_widget.setCurrentWidget(self.dummy_tab)
             self.session_details.setCurrentWidget(self.info_panel)
             self.participants_list.setModel(None)
+            self.control_button.setEnabled(False)
             # start animation to show list? -Dan
         else:
             self.session_details.setCurrentWidget(self.info_panel)
