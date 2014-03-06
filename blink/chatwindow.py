@@ -804,12 +804,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.hold_button.setChecked(session.blink_session.local_hold)
         self.record_button.setVisible('audio' in session.blink_session.streams)
         self.record_button.setChecked(session.blink_session.recording)
-        # fixme: also update their enabled/disabled state (maybe not here though as this is called everytime the session changes) -Dan
-        # possible fix: have flags on the chat session item to indicate if it can be hold/recorded and have the chat session item listen to session notifications
-        # and when it changes these flags it will post a ChatSessionItemDidChange notification, which will end up calling this function
-        # and updating the window widgets. the ChatWindow will then not listen to session notifications anymore to change the state.
-        # this will also help fix issues with changes for other sessions (non-selected) being leaked into the selected session and
-        # changing its hold/record state -Dan
 
     def _update_control_menu(self):
         menu = self.control_menu
@@ -1087,22 +1081,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     # they do not check if the session is in the model. maybe the right approach is to always have BlinkSessions in the model and if we need any other kind of sessions we create a
     # different class for them that posts different notifications. in that case we can do in in NewIncoming/Outgoing -Dan
 
-    def _NH_BlinkSessionWillConnect(self, notification):
-        self.hold_button.setEnabled(False)
-
-    def _NH_BlinkSessionDidConnect(self, notification):
-        self.hold_button.setEnabled(True)
-
     def _NH_BlinkSessionWillAddStream(self, notification):
-        self.hold_button.setEnabled(False)
         if notification.data.stream.type == 'chat':
             self.show()
-
-    def _NH_BlinkSessionDidAddStream(self, notification):
-        self.hold_button.setEnabled(True)
-
-    def _NH_BlinkSessionDidNotAddStream(self, notification):
-        self.hold_button.setEnabled(True)
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         self._update_control_menu()
