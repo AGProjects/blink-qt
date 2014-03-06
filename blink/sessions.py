@@ -2222,7 +2222,7 @@ class AudioSessionListView(QListView):
             return selection_model.NoUpdate
         elif not index.isValid() or event is None:
             return selection_model.NoUpdate
-        elif event.type() == QEvent.MouseButtonPress and not selection_model.selectedIndexes():
+        elif event.type() == QEvent.MouseButtonPress and not selection_model.selection():
             return selection_model.ClearAndSelect
         elif event.type() in (QEvent.MouseButtonPress, QEvent.MouseMove):
             return selection_model.NoUpdate
