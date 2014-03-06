@@ -3086,6 +3086,10 @@ class ChatSessionListView(QListView):
 
     def _SH_AnimationFinished(self):
         if self.animation.direction() == QPropertyAnimation.Forward:
+            try:
+                self.scrollTo(self.selectedIndexes()[0], self.EnsureVisible)
+            except IndexError:
+                pass
             self.setFocus(Qt.OtherFocusReason)
         else:
             self.hide()

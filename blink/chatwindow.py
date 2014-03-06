@@ -1367,6 +1367,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.animation.setDirection(QPropertyAnimation.Forward)
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.animation.setEndValue(self.session_panel.rect())
+        self.session_list.scrollToTop()
         self.session_list.show()
         self.session_list.animation.start()
 
