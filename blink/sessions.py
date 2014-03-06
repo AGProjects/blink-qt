@@ -659,10 +659,13 @@ class BlinkSession(QObject):
                 audio_stream.start_recording(os.path.join(path, filename))
             except (SIPCoreError, IOError, OSError), e:
                 print 'Failed to record: %s' % e
+            else:
+                self.recording = True
 
     def stop_recording(self):
         audio_stream = self.streams.get('audio')
         if audio_stream is not None:
+            self.recording = False
             audio_stream.stop_recording()
 
     def end(self, delete=False):
