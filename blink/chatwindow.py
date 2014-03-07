@@ -20,6 +20,7 @@ from lxml import etree
 from weakref import proxy
 from zope.interface import implements
 
+from sipsimple.account import AccountManager
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.configuration.datatypes import FileURL
@@ -1148,15 +1149,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             # TODO: add support for OTR -Saul
             return
         uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
-        if blink_session.account.id == uri:
+        account_manager = AccountManager()
+        if account_manager.has_account(uri):
+            account = account_manager.get_account(uri)
             icon = IconManager().get('avatar') or session.chat_widget.default_user_icon
-            icon_filename = icon.filename
+            sender = ChatSender(message.sender.display_name or account.display_name, uri, icon.filename)
         elif blink_session.remote_focus:
             contact, contact_uri = URIUtils.find_contact(uri)
-            icon_filename = contact.icon.filename
+            sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
         else:
-            icon_filename = session.icon.filename
-        sender = ChatSender(message.sender.display_name, uri, icon_filename)
+            sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
         content = message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml()
         session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
         session.remote_composing = False
