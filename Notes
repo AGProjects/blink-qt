@@ -17,7 +17,6 @@ Issues
 ------
 
 - apply the default font/size from the theme to the input textbox?
-- do not ring when getting 180 after 183
 - the only case where the hold tone should be played at 15 seconds is if I
   put calls on hold and all are on hold (if remote put me on hold it should
   not).
@@ -39,18 +38,10 @@ Issues
   Also when a connection is ended voluntarily it should not care if there
   is a failure while stopping the streams.
 - 1 session active and aother on hold, it beeps every 15 seconds.
-- new problem introduced: because we create streams early, now the session
-  tiles show the stream icons before we even attempt to connect.
 - decide what to do about having keyboard shortcuts for hold/hangup in the
   chat window (list may not be visible all the time and here we also
   differentiate between hangup and delete session)
-- modify the conferencing code to use move inside the model instead of
-  remove+add, to avoid/minimize selection changes
 - move tray icon from the main window to Blink?
-- find out what messes up the selection while dragging a contact into a
-  conference if ignore_selection_changes is not set.
-- find a way to not have a chat session item selected when we press over
-  the close/expand indicators on the session tile.
 - if I have an audio only session and I add chat, it rings using the audio
   outgoing ringtone. to fix maybe add a proposed_streams to BlinkSession
   and put the proposed streams in there until they are accepted. this way
@@ -60,11 +51,6 @@ Issues
   state to sent/received_proposal and back. this means that one cannot
   rely on BlinkSessionDidChangeState alone to handle session transitions,
   but instead needs to also listed to BlinkSessionDidRemoveStream.
-- If an audio+chat session is on hold and the audio stream is removed while
-  on hold, it remains showing it being on hold until a new audio stream is
-  added. (this is not true anymore. it only shows on hold until it is
-  removed from the audio session list. maybe we should reset the active flag
-  early?)
 - I got an incoming call and the contact was found as a google contact, but
   in history I have no name and the original uri. if I dial back, it doesn't
   find the contact and says number@domain for the name.
@@ -79,12 +65,6 @@ Issues
 Ideas:
 ------
 
-- On sessionAboutToBeRemoved, we should preselect the next item we want
-  selected, so when it is actually removed, we do not flip.flop the
-  selection (may also need the ignore_selection_changes flag to be set)
-- check the selectionCommand from the audio session model. it may be also
-  useful for the chat session model to avoid selection on mouse press
-  events (make it only happen on mouse release events).
 - chat window alternate minimum sizes:
   900x550 (230 splitter), 925x550 (240 splitter), 950x550 (250 splitter)
 
