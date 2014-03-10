@@ -3902,6 +3902,7 @@ class SessionManager(object):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
+        notification_center.add_observer(self, name='SIPSessionDidEnd')
         notification_center.add_observer(self, name='SIPSessionDidFail')
         notification_center.add_observer(self, name='SIPSessionProposalRejected')
         notification_center.add_observer(self, name='SIPSessionHadProposalFailure')
@@ -4141,6 +4142,17 @@ class SessionManager(object):
         incoming_request.dialog.hide()
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
+
+    def _NH_SIPSessionDidEnd(self, notification):
+        try:
+            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
+        except StopIteration:
+            return
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        incoming_request.dialog.hide()
+        self.incoming_requests.remove(incoming_request)
+        # Ringtone is updated in BlinkSessionDidEnd
 
     def _NH_SIPSessionProposalRejected(self, notification):
         try:
