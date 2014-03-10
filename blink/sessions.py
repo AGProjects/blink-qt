@@ -4001,7 +4001,6 @@ class SessionManager(object):
         self.inbound_ringtone = inbound_ringtone
 
         # Hold tone
-        # we need to beep every 15 seconds only when we put all calls on hold. If all are on hold but not all by local, we ring at 45 seconds -Dan
         connected_sessions = [session for session in self.sessions if session.state=='connected/*']
         connected_on_hold_sessions = [session for session in connected_sessions if session.on_hold]
         if self.outbound_ringtone is Null and self.inbound_ringtone is Null and connected_sessions:
