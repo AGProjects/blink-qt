@@ -17,9 +17,6 @@ Issues
 ------
 
 - apply the default font/size from the theme to the input textbox?
-- the only case where the hold tone should be played at 15 seconds is if I
-  put calls on hold and all are on hold (if remote put me on hold it should
-  not).
 - in Smooth Operator check if the src attribute is still needed in elements
   that have the x-color class. there used to be a rule that matched elements
   with an x-color class which also had a src attribute pointing to a
@@ -37,15 +34,10 @@ Issues
   the connection is ended normally and show the failure reason if not.
   Also when a connection is ended voluntarily it should not care if there
   is a failure while stopping the streams.
-- 1 session active and aother on hold, it beeps every 15 seconds.
 - decide what to do about having keyboard shortcuts for hold/hangup in the
   chat window (list may not be visible all the time and here we also
   differentiate between hangup and delete session)
 - move tray icon from the main window to Blink?
-- if I have an audio only session and I add chat, it rings using the audio
-  outgoing ringtone. to fix maybe add a proposed_streams to BlinkSession
-  and put the proposed streams in there until they are accepted. this way
-  we know what is proposed even when handling BlinkSessionDidChangeState
 - there are session transitions that do not change the state (for example
   a stream that is removed, either by local or remote, never switches the
   state to sent/received_proposal and back. this means that one cannot
@@ -54,7 +46,6 @@ Issues
 - I got an incoming call and the contact was found as a google contact, but
   in history I have no name and the original uri. if I dial back, it doesn't
   find the contact and says number@domain for the name.
-- is the ringtone for incoming chat only sessions appropriate?
 - not sure about passing a Contact object to the session instead of
   contact.settings.
 - the DummyContact should follow the other contact APIs (have an id, ...)
@@ -97,25 +88,6 @@ Traceback (most recent call last):
     raise IllegalStateError('cannot call %s in %s state' % (func.__name__, obj.state))
 sipsimple.session.IllegalStateError: cannot call remove_stream in sending_proposal state
 
-
-Investigate this exception:
-
-sip:nwpsefvl@10.0.0.1:52067 52067
-sip:nwpsefvl@10.0.0.1:52067 52067
-sip:nwpsefvl@10.0.0.1;transport=tcp None
-Traceback (most recent call last):
-  File "/usr/lib/python2.5/site-packages/twisted/internet/base.py", line 778, in runUntilCurrent
-    call.func(*call.args, **call.kw)
-  File "/usr/lib/pymodules/python2.5/eventlet/hubs/twistedr.py", line 158, in call_if_greenlet_alive
-    return func(*args1, **kwargs1)
-  File "/usr/lib/pymodules/python2.5/eventlet/proc.py", line 571, in _run
-    result = function(*args, **kwargs)
-  File "/home/dan/work/voip/python-sipsimple/sipsimple/account.py", line 683, in _handle_commands
-    handler(command)
-  File "/home/dan/work/voip/python-sipsimple/sipsimple/account.py", line 720, in _CH_register
-    txtRecord=bonjour.TXTRecord(items=txtdata))
-  File "/home/dan/work/voip/blink-qt/sipsimple/bonjour.py", line 1125, in DNSServiceRegister
-TypeError: an integer is required
 
 Presence
 --------
