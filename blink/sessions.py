@@ -626,14 +626,10 @@ class BlinkSession(QObject):
 
     def accept_proposal(self, streams):
         assert self.state == 'connected/received_proposal'
-        duplicate_types = sorted(stream.type for stream in streams if stream.type in self.streams)
-        if duplicate_types:
-            raise RuntimeError('accepting proposal would result in duplicated streams for: %s' % ', '.join(duplicate_types))
         self.sip_session.accept_proposal(streams)
         notification_center = NotificationCenter()
         for stream in streams:
             self.info.streams[stream.type]._reset()
-            self.streams.add(stream)
             notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
         notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
 
@@ -854,6 +850,8 @@ class BlinkSession(QObject):
             if notification.data.originator == 'local':
                 self.state = 'connected/sent_proposal'
             else:
+                for stream in (stream for stream in notification.data.proposed_streams if stream.type not in self.streams):
+                    self.streams.add(stream)
                 self.state = 'connected/received_proposal'
 
     def _NH_SIPSessionProposalAccepted(self, notification):
@@ -867,7 +865,8 @@ class BlinkSession(QObject):
                 notification.center.post_notification('BlinkSessionDidAddStream', sender=self, data=NotificationData(stream=stream))
             else:
                 self.streams.remove(stream)
-                notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+                if notification.data.originator == 'local':
+                    notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
         if accepted_streams:
             self.info.streams._update(self.streams)
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
@@ -875,7 +874,8 @@ class BlinkSession(QObject):
     def _NH_SIPSessionProposalRejected(self, notification):
         for stream in set(notification.data.proposed_streams).intersection(self.streams):
             self.streams.remove(stream)
-            notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+            if notification.data.originator == 'local':
+                notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
 
@@ -4021,25 +4021,14 @@ class SessionManager(object):
 
     def _process_remote_proposal(self, blink_session):
         sip_session = blink_session.sip_session
+        proposed_streams = blink_session.streams.proposed
 
-        current_stream_types = set(stream.type for stream in sip_session.streams)
-        stream_map = defaultdict(list)
-        # TODO: we should fetch the proposed streams from the BlinkSession -Saul
-        for stream in (stream for stream in sip_session.proposed_streams if stream.type not in current_stream_types):
-            stream_map[stream.type].append(stream)
-        proposed_stream_types = set(stream_map)
-
-        audio_streams = stream_map['audio']
-        video_streams = stream_map['video']
-        chat_streams = stream_map['chat']
-        screensharing_streams = stream_map['screen-sharing']
-
-        if not proposed_stream_types or proposed_stream_types == {'file-transfer'}:
-            sip_session.reject_proposal(488) # maybe add a reject_proposal on blink_session for symmetry? -Dan
+        if not proposed_streams or proposed_streams.types == {'file-transfer'}:
+            sip_session.reject_proposal(488)
             return
 
-        if proposed_stream_types == {'chat'}:
-            blink_session.accept_proposal([chat_streams[0]])
+        if proposed_streams.types == {'chat'}:
+            blink_session.accept_proposal(list(proposed_streams))
             return
 
         sip_session.send_ring_indication()
@@ -4047,10 +4036,10 @@ class SessionManager(object):
         contact = blink_session.contact
         contact_uri = blink_session.contact_uri
 
-        audio_stream = audio_streams[0] if audio_streams else None
-        video_stream = video_streams[0] if video_streams else None
-        chat_stream = chat_streams[0] if chat_streams else None
-        screensharing_stream = screensharing_streams[0] if screensharing_streams else None
+        audio_stream = proposed_streams.get('audio')
+        video_stream = proposed_streams.get('video')
+        chat_stream = proposed_streams.get('chat')
+        screensharing_stream = proposed_streams.get('screen-sharing')
 
         dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
         incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
