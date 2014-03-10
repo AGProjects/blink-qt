@@ -637,13 +637,13 @@ class BlinkSession(QObject):
         if self.sip_session is not None and not self.local_hold:
             self.local_hold = True
             self.sip_session.hold()
-            NotificationCenter().post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(local_hold=self.local_hold, remote_hold=self.remote_hold))
+            NotificationCenter().post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(originator='local', local_hold=self.local_hold, remote_hold=self.remote_hold))
 
     def unhold(self):
         if self.sip_session is not None and self.local_hold:
             self.local_hold = False
             self.sip_session.unhold()
-            NotificationCenter().post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(local_hold=self.local_hold, remote_hold=self.remote_hold))
+            NotificationCenter().post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(originator='local', local_hold=self.local_hold, remote_hold=self.remote_hold))
 
     def send_dtmf(self, digit):
         audio_stream = self.streams.get('audio')
@@ -843,7 +843,7 @@ class BlinkSession(QObject):
     def _NH_SIPSessionDidChangeHoldState(self, notification):
         if notification.data.originator == 'remote':
             self.remote_hold = notification.data.on_hold
-        notification.center.post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(local_hold=self.local_hold, remote_hold=self.remote_hold))
+        notification.center.post_notification('BlinkSessionDidChangeHoldState', sender=self, data=NotificationData(originator=notification.data.originator, local_hold=self.local_hold, remote_hold=self.remote_hold))
 
     def _NH_SIPSessionNewProposal(self, notification):
         if self.state not in ('ending', 'ended', 'deleted'):
@@ -4186,7 +4186,7 @@ class SessionManager(object):
             notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*') and notification.sender.streams.types.intersection({'audio', 'video'})
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
-        if notification.data.remote_hold and not notification.data.local_hold:
+        if notification.sender is self.active_session and notification.data.originator == 'remote' and notification.data.remote_hold and not notification.data.local_hold:
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hold_tone.wav'), loop_count=1, volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
