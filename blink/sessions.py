@@ -212,7 +212,14 @@ class StreamSet(object):
         return self._stream_map.get(key, default)
 
 
-class StreamContainer(object):
+class StreamMap(dict):
+    def __init__(self):
+        super(StreamMap, self).__init__()
+        self.active_map = {}
+        self.proposed_map = {}
+
+
+class StreamContainerView(object):
     def __init__(self, session, stream_map):
         self._session = session
         self._stream_map = stream_map
@@ -241,21 +248,34 @@ class StreamContainer(object):
     def get(self, key, default=None):
         return self._stream_map.get(key, default)
 
+
+class StreamContainer(StreamContainerView):
+    @property
+    def active(self):
+        return StreamContainerView(self._session, self._stream_map.active_map)
+
+    @property
+    def proposed(self):
+        return StreamContainerView(self._session, self._stream_map.proposed_map)
+
     def add(self, stream):
-        notification_center = NotificationCenter()
-        old_stream = self._stream_map.get(stream.type, None)
-        if old_stream is not None:
-            notification_center.remove_observer(self._session, sender=old_stream)
+        assert stream not in self
         stream.blink_session = self._session
-        self._stream_map[stream.type] = stream
+        self._stream_map[stream.type] = self._stream_map.proposed_map[stream.type] = stream
+        notification_center = NotificationCenter()
         notification_center.add_observer(self._session, sender=stream)
 
     def remove(self, stream):
-        # is it a good choice to silently ignore removing a stream that is not in the container? -Dan
-        if stream in self:
-            self._stream_map.pop(stream.type)
-            notification_center = NotificationCenter()
-            notification_center.remove_observer(self._session, sender=stream)
+        assert stream in self
+        self._stream_map.pop(stream.type)
+        self._stream_map.active_map.pop(stream.type, None)
+        self._stream_map.proposed_map.pop(stream.type, None)
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self._session, sender=stream)
+
+    def set_active(self, stream):
+        assert stream in self
+        self._stream_map.active_map[stream.type] = self._stream_map.proposed_map.pop(stream.type)
 
     def extend(self, iterable):
         for item in iterable:
@@ -276,7 +296,7 @@ class defaultweakobjectmap(weakobjectmap):
 
 class StreamListDescriptor(object):
     def __init__(self):
-        self.values = defaultweakobjectmap(dict)
+        self.values = defaultweakobjectmap(StreamMap)
 
     def __get__(self, obj, objtype):
         if obj is None:
@@ -802,6 +822,8 @@ class BlinkSession(QObject):
     def _NH_SIPSessionDidStart(self, notification):
         for stream in set(self.streams).difference(notification.data.streams):
             self.streams.remove(stream)
+        for stream in self.streams:
+            self.streams.set_active(stream)
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
             self.timer.start()
@@ -841,6 +863,7 @@ class BlinkSession(QObject):
             self.state = 'connected'
         for stream in proposed_streams:
             if stream in accepted_streams:
+                self.streams.set_active(stream)
                 notification.center.post_notification('BlinkSessionDidAddStream', sender=self, data=NotificationData(stream=stream))
             else:
                 self.streams.remove(stream)
