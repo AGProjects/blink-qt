@@ -4006,11 +4006,11 @@ class SessionManager(object):
         connected_on_hold_sessions = [session for session in connected_sessions if session.on_hold]
         if self.outbound_ringtone is Null and self.inbound_ringtone is Null and connected_sessions:
             if len(connected_sessions) == len(connected_on_hold_sessions):
-                hold_tone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, pause_time=15, volume=30, initial_delay=15)
+                hold_tone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, volume=30, initial_delay=45, pause_time=45)
                 hold_tone.bridge = SIPApplication.alert_audio_bridge
                 hold_tone.type = None
             elif len(connected_on_hold_sessions) > 0:
-                hold_tone = WavePlayer(SIPApplication.voice_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, pause_time=45, volume=30, initial_delay=15)
+                hold_tone = WavePlayer(SIPApplication.voice_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, volume=30, initial_delay=45, pause_time=45)
                 hold_tone.bridge = SIPApplication.voice_audio_bridge
                 hold_tone.type = None
             else:
@@ -4175,7 +4175,7 @@ class SessionManager(object):
             notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*')
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
-        if notification.data.remote_hold and not notification.data.local_hold: # check if this could be integrated in update_ringtone -Dan
+        if notification.data.remote_hold and not notification.data.local_hold:
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hold_tone.wav'), loop_count=1, volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
