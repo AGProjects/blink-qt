@@ -3946,7 +3946,7 @@ class SessionManager(object):
             settings = SIPSimpleSettings()
             outbound_ringtone = settings.sounds.outbound_ringtone
             if outbound_ringtone:
-                if any('audio' in session.streams and not session.on_hold for session in outgoing_sessions_or_proposals):
+                if any('audio' in session.streams.proposed and not session.on_hold for session in outgoing_sessions_or_proposals):
                     ringtone_path = outbound_ringtone.path
                     ringtone_type = self.PrimaryRingtone
                 else:
