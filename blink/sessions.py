@@ -4171,7 +4171,7 @@ class SessionManager(object):
         if new_state in ('connecting/ringing', 'connecting/early_media', 'connected/*'):
             self.update_ringtone()
         elif new_state == 'ending':
-            notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*')
+            notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*') and notification.sender.streams.types.intersection({'audio', 'video'})
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
         if notification.data.remote_hold and not notification.data.local_hold:
