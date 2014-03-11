@@ -1585,9 +1585,9 @@ class AudioSessionItem(object):
         return self.blink_session.info.duration
 
     def end(self):
-        # this needs to consider the case where the audio stream is being added. in that case we need to cancel the proposal -Dan
-        # however that information is not yet available (need the proposed flag on the streams) -Dan
-        if len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
+        if self.audio_stream in self.blink_session.streams.proposed:
+            self.blink_session.sip_session.cancel_proposal()
+        elif len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
             self.blink_session.remove_stream(self.audio_stream)
         else:
             self.blink_session.end()
