@@ -3913,6 +3913,7 @@ class SessionManager(object):
         notification_center.add_observer(self, name='BlinkSessionWasDeleted')
         notification_center.add_observer(self, name='BlinkSessionDidChangeState')
         notification_center.add_observer(self, name='BlinkSessionDidChangeHoldState')
+        notification_center.add_observer(self, name='BlinkSessionDidRemoveStream')
 
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
 
@@ -4197,6 +4198,13 @@ class SessionManager(object):
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         self.update_ringtone()
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        if notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive():
+            self._hangup_tone_timer.start()
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=60)
+            SIPApplication.voice_audio_bridge.add(player)
+            player.start()
 
     def _NH_BlinkSessionDidEnd(self, notification):
         self.update_ringtone()
