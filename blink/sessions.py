@@ -857,16 +857,16 @@ class BlinkSession(QObject):
     def _NH_SIPSessionProposalAccepted(self, notification):
         accepted_streams = notification.data.accepted_streams
         proposed_streams = notification.data.proposed_streams
-        if self.state not in ('ending', 'ended', 'deleted'):
-            self.state = 'connected'
         for stream in proposed_streams:
             if stream in accepted_streams:
                 self.streams.set_active(stream)
                 notification.center.post_notification('BlinkSessionDidAddStream', sender=self, data=NotificationData(stream=stream))
             else:
                 self.streams.remove(stream)
-                if notification.data.originator == 'local':
+                if self.state == 'connected/sent_proposal':
                     notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+        if self.state not in ('ending', 'ended', 'deleted'):
+            self.state = 'connected'
         if accepted_streams:
             self.info.streams._update(self.streams)
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
@@ -874,7 +874,7 @@ class BlinkSession(QObject):
     def _NH_SIPSessionProposalRejected(self, notification):
         for stream in set(notification.data.proposed_streams).intersection(self.streams):
             self.streams.remove(stream)
-            if notification.data.originator == 'local':
+            if self.state == 'connected/sent_proposal':
                 notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
