@@ -1585,7 +1585,7 @@ class AudioSessionItem(object):
         return self.blink_session.info.duration
 
     def end(self):
-        if self.audio_stream in self.blink_session.streams.proposed:
+        if self.audio_stream in self.blink_session.streams.proposed and self.blink_session.state == 'connected/sent_proposal':
             self.blink_session.sip_session.cancel_proposal()
         elif len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
             self.blink_session.remove_stream(self.audio_stream)
