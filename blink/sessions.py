@@ -2456,12 +2456,12 @@ class ChatSessionIconLabel(QLabel):
     def __init__(self, parent=None):
         super(ChatSessionIconLabel, self).__init__(parent)
         self.pixmaps = PixmapContainer()
+        self.icon = None
         self.icon_size = 12
         self.selectedCompositionColor = Qt.transparent
-        self.icon = None
 
     def event(self, event):
-        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() in ('icon', 'selectedCompositionColor') and getattr(self, 'icon', None) is not None:
+        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() in ('icon', 'selectedCompositionColor') and self.icon is not None:
             self.pixmaps.standard = self.icon.pixmap(self.icon_size)
             self.pixmaps.selected = QPixmap(self.pixmaps.standard)
             painter = QPainter(self.pixmaps.selected)
