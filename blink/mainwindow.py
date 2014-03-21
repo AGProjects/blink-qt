@@ -25,6 +25,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog, URIUtils
+from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
@@ -52,6 +53,8 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='SIPAccountGotPendingWatcher')
         notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForOutgoing')
+        notification_center.add_observer(self, name='FileTransferNewIncoming')
+        notification_center.add_observer(self, name='FileTransferNewOutgoing')
         notification_center.add_observer(self, sender=AccountManager())
 
         icon_manager = IconManager()
@@ -122,6 +125,7 @@ class MainWindow(base_class, ui_class):
         self.conference_dialog = ConferenceDialog(self)
         self.contact_editor_dialog = ContactEditorDialog(self)
         self.google_contacts_dialog = GoogleContactsDialog(self)
+        self.filetransfer_window = FileTransferWindow()
         self.preferences_window = PreferencesWindow(self.account_model, None)
         self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
 
@@ -172,7 +176,6 @@ class MainWindow(base_class, ui_class):
         self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
         self.preferences_action.triggered.connect(self.preferences_window.show)
         self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatTriggered)
-        self.auto_accept_files_action.triggered.connect(self._AH_AutoAcceptFilesTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
         self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
 
@@ -202,6 +205,7 @@ class MainWindow(base_class, ui_class):
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.buy_pstn_access_action.triggered.connect(self._AH_PurchasePstnAccess)
+        self.file_transfers_action.triggered.connect(self._AH_FileTransfersActionTriggered)
         self.logs_action.triggered.connect(self._AH_LogsActionTriggered)
 
     def setupUi(self):
@@ -235,6 +239,7 @@ class MainWindow(base_class, ui_class):
         self.conference_dialog.close()
         self.contact_editor_dialog.close()
         self.google_contacts_dialog.close()
+        self.filetransfer_window.close()
         self.preferences_window.close()
         self.server_tools_window.close()
         for dialog in self.pending_watcher_dialogs[:]:
@@ -324,11 +329,6 @@ class MainWindow(base_class, ui_class):
         settings.chat.auto_accept = checked
         settings.save()
 
-    def _AH_AutoAcceptFilesTriggered(self, checked):
-        settings = SIPSimpleSettings()
-        settings.file_transfer.auto_accept = checked
-        settings.save()
-
     def _AH_EnableAnsweringMachineTriggered(self, checked):
         settings = SIPSimpleSettings()
         settings.answering_machine.enabled = checked
@@ -368,6 +368,9 @@ class MainWindow(base_class, ui_class):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_buy_pstn_access_page(account)
+
+    def _AH_FileTransfersActionTriggered(self, checked):
+        self.filetransfer_window.show()
 
     def _AH_LogsActionTriggered(self, checked):
         directory = ApplicationData.get('logs')
@@ -662,7 +665,6 @@ class MainWindow(base_class, ui_class):
         self.silent_button.setChecked(settings.audio.silent)
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
-        self.auto_accept_files_action.setChecked(settings.file_transfer.auto_accept)
         if settings.google_contacts.authorization_token is None:
             self.google_contacts_action.setText(u'Enable Google Contacts')
         else:
@@ -728,8 +730,6 @@ class MainWindow(base_class, ui_class):
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)
             if 'chat.auto_accept' in notification.data.modified:
                 self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
-            if 'file_transfer.auto_accept' in notification.data.modified:
-                self.auto_accept_files_action.setChecked(settings.file_transfer.auto_accept)
             if 'google_contacts.authorization_token' in notification.data.modified:
                 authorization_token = notification.sender.google_contacts.authorization_token
                 if authorization_token is None:
@@ -816,6 +816,11 @@ class MainWindow(base_class, ui_class):
     def _NH_BlinkSessionDidReinitializeForOutgoing(self, notification):
         self.search_box.clear()
 
+    def _NH_FileTransferNewIncoming(self, notification):
+        self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
+
+    def _NH_FileTransferNewOutgoing(self, notification):
+        self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
 
 del ui_class, base_class
 

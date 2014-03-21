@@ -948,7 +948,6 @@ padding: 2px;</string>
        <normaloff>icons/quick-settings.png</normaloff>icons/quick-settings.png</iconset>
      </property>
      <addaction name="auto_accept_chat_action"/>
-     <addaction name="auto_accept_files_action"/>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
@@ -1139,9 +1138,6 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="file_transfers_action">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
     <string>&amp;File transfers</string>
    </property>
@@ -1215,14 +1211,6 @@ padding: 2px;</string>
    </property>
    <property name="text">
     <string>Auto-accept &amp;chat from my contacts</string>
-   </property>
-  </action>
-  <action name="auto_accept_files_action">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Auto-accept &amp;files from my contacts</string>
    </property>
   </action>
   <action name="add_account_action">

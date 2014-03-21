@@ -240,7 +240,6 @@ class PreferencesWindow(base_class, ui_class):
         self.sms_replication_button.clicked.connect(self._SH_SMSReplicationButtonClicked)
 
         # File transfer
-        self.auto_accept_files_button.clicked.connect(self._SH_AutoAcceptFilesButtonClicked)
         self.download_directory_editor.locationCleared.connect(self._SH_DownloadDirectoryEditorLocationCleared)
         self.download_directory_browse_button.clicked.connect(self._SH_DownloadDirectoryBrowseButtonClicked)
 
@@ -501,7 +500,6 @@ class PreferencesWindow(base_class, ui_class):
         self.sms_replication_button.setChecked(settings.chat.sms_replication)
 
         # File transfer settings
-        self.auto_accept_files_button.setChecked(settings.file_transfer.auto_accept)
         self.download_directory_editor.setText(settings.file_transfer.directory or u'')
 
         # Alert settings
@@ -1091,11 +1089,6 @@ class PreferencesWindow(base_class, ui_class):
         settings.save()
 
     # File transfer signal handlers
-    def _SH_AutoAcceptFilesButtonClicked(self, checked):
-        settings = SIPSimpleSettings()
-        settings.file_transfer.auto_accept = checked
-        settings.save()
-
     def _SH_DownloadDirectoryEditorLocationCleared(self):
         settings = SIPSimpleSettings()
         settings.file_transfer.directory = None
@@ -1299,8 +1292,6 @@ class PreferencesWindow(base_class, ui_class):
                 self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
             if 'chat.auto_accept' in notification.data.modified:
                 self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
-            if 'file_transfer.auto_accept' in notification.data.modified:
-                self.auto_accept_files_button.setChecked(settings.file_transfer.auto_accept)
         elif isinstance(notification.sender, (Account, BonjourAccount)) and notification.sender is self.selected_account:
             account = notification.sender
             if 'enabled' in notification.data.modified:

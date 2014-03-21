@@ -13,7 +13,7 @@ from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QPointF, QPropertyAnimation, QRectF, QRect, QSize, pyqtSignal
 from PyQt4.QtGui  import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
 from PyQt4.QtGui  import QAction, QMenu, QKeyEvent, QMouseEvent, QSortFilterProxyModel, QItemDelegate, QStyledItemDelegate
-from PyQt4.QtGui  import QApplication, QButtonGroup, QComboBox, QHBoxLayout, QListView, QRadioButton, QTableView, QWidget
+from PyQt4.QtGui  import QApplication, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QRadioButton, QTableView, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -2352,7 +2352,23 @@ class ContactModel(QAbstractListModel):
         return True
 
     def _DH_TextUriList(self, mime_data, action, index):
-        return False
+        if not index.isValid():
+            return False
+        item = self.items[index.row()]
+        if not isinstance(item, Contact):
+            return False
+
+        # TODO: support directories? -Saul
+        files = [url.toLocalFile() for url in mime_data.urls() if url.isLocalFile() and os.path.isfile(url.toLocalFile())]
+        if not files:
+            return False
+
+        contact = item
+        session_manager = SessionManager()
+        for filename in files:
+            session_manager.send_file(contact, contact.uri, filename)
+
+        return True
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -2752,7 +2768,20 @@ class ContactSearchModel(QSortFilterProxyModel):
             return False
 
     def _DH_TextUriList(self, mime_data, action, index):
-        return False
+        if not index.isValid():
+            return False
+
+        # TODO: support directories? -Saul
+        files = [url.toLocalFile() for url in mime_data.urls() if url.isLocalFile() and os.path.isfile(url.toLocalFile())]
+        if not files:
+            return False
+
+        contact = index.data(Qt.UserRole)
+        session_manager = SessionManager()
+        for filename in files:
+            session_manager.send_file(contact, contact.uri, filename)
+
+        return True
 
 
 class ContactDetailModel(QAbstractListModel):
@@ -2865,7 +2894,26 @@ class ContactDetailModel(QAbstractListModel):
         return False
 
     def _DH_TextUriList(self, mime_data, action, index):
-        return False
+        if not index.isValid():
+            contact_uri = self.contact_detail.uri
+        else:
+            item = self.items[index.row()]
+            if isinstance(item, ContactURI):
+                contact_uri = item.uri
+            else:
+                contact_uri = self.contact_detail.uri
+
+        # TODO: support directories? -Saul
+        files = [url.toLocalFile() for url in mime_data.urls() if url.isLocalFile() and os.path.isfile(url.toLocalFile())]
+        if not files:
+            return False
+
+        contact = self.contact_detail
+        session_manager = SessionManager()
+        for filename in files:
+            session_manager.send_file(contact, contact_uri, filename)
+
+        return True
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -3026,7 +3074,7 @@ class ContactListView(QListView):
             self.actions.start_audio_call.setEnabled(default_account is not None)
             self.actions.start_chat_session.setEnabled(default_account is not None)
             self.actions.send_sms.setEnabled(False)
-            self.actions.send_files.setEnabled(False)
+            self.actions.send_files.setEnabled(True)
             self.actions.request_screen.setEnabled(False)
             self.actions.share_my_screen.setEnabled(False)
             self.actions.edit_item.setEnabled(contact.editable)
@@ -3251,7 +3299,12 @@ class ContactListView(QListView):
         pass
 
     def _AH_SendFiles(self):
-        pass
+        session_manager = SessionManager()
+        files = QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')
+        if files:
+            contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+            for filename in files:
+                session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
         pass
@@ -3418,7 +3471,7 @@ class ContactSearchListView(QListView):
             self.actions.start_audio_call.setEnabled(default_account is not None)
             self.actions.start_chat_session.setEnabled(default_account is not None)
             self.actions.send_sms.setEnabled(False)
-            self.actions.send_files.setEnabled(False)
+            self.actions.send_files.setEnabled(True)
             self.actions.request_screen.setEnabled(False)
             self.actions.share_my_screen.setEnabled(False)
             self.actions.edit_item.setEnabled(contact.editable)
@@ -3579,7 +3632,12 @@ class ContactSearchListView(QListView):
         pass
 
     def _AH_SendFiles(self):
-        pass
+        session_manager = SessionManager()
+        files = QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')
+        if files:
+            contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+            for filename in files:
+                session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
         pass
@@ -3634,6 +3692,7 @@ class ContactDetailView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
+        self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
         contact_list.installEventFilter(self)
 
@@ -3688,7 +3747,7 @@ class ContactDetailView(QListView):
         self.actions.start_audio_call.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.start_chat_session.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.send_sms.setEnabled(False)
-        self.actions.send_files.setEnabled(False)
+        self.actions.send_files.setEnabled(True)
         self.actions.request_screen.setEnabled(False)
         self.actions.share_my_screen.setEnabled(False)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
@@ -3707,6 +3766,17 @@ class ContactDetailView(QListView):
         else:
             super(ContactDetailView, self).keyPressEvent(event)
 
+    def paintEvent(self, event):
+        super(ContactDetailView, self).paintEvent(event)
+        if self.drop_indicator_index.isValid():
+            rect = self.visualRect(self.drop_indicator_index)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
+
     def startDrag(self, supported_actions):
         super(ContactDetailView, self).startDrag(supported_actions)
         main_window = QApplication.instance().main_window
@@ -3724,18 +3794,23 @@ class ContactDetailView(QListView):
 
     def dragLeaveEvent(self, event):
         super(ContactDetailView, self).dragLeaveEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
 
     def dragMoveEvent(self, event):
         super(ContactDetailView, self).dragMoveEvent(event)
         model = self.model()
         for mime_type in model.accepted_mime_types:
             if event.provides(mime_type):
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
+                self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
                 item = index.data(Qt.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
+                self.viewport().update(self.visualRect(self.drop_indicator_index))
                 break
         else:
             event.ignore()
@@ -3745,6 +3820,8 @@ class ContactDetailView(QListView):
         if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
             event.accept()
         super(ContactDetailView, self).dropEvent(event)
+        self.viewport().update(self.visualRect(self.drop_indicator_index))
+        self.drop_indicator_index = QModelIndex()
 
     def _AH_DeleteContact(self):
         self.contact_list._AH_DeleteSelection()
@@ -3784,7 +3861,18 @@ class ContactDetailView(QListView):
         pass
 
     def _AH_SendFiles(self):
-        pass
+        session_manager = SessionManager()
+        files = QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')
+        if files:
+            contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+            selected_indexes = self.selectionModel().selectedIndexes()
+            item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+            if isinstance(item, ContactURI):
+                selected_uri = item.uri
+            else:
+                selected_uri = contact.uri
+            for filename in files:
+                session_manager.send_file(contact, selected_uri, filename)
 
     def _AH_RequestScreen(self):
         pass
@@ -3796,7 +3884,14 @@ class ContactDetailView(QListView):
         event.ignore(rect)
 
     def _DH_TextUriList(self, event, index, rect, item):
-        event.ignore(rect)
+        if index.isValid():
+            event.accept(rect)
+            self.drop_indicator_index = index
+        else:
+            model = self.model()
+            rect = self.viewport().rect()
+            rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
+            event.accept(rect)
 
     def _SH_AnimationFinished(self):
         if self.animation.direction() == QPropertyAnimation.Forward:

@@ -5,25 +5,29 @@ __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSe
 
 import bisect
 import cPickle as pickle
+import hashlib
 import os
 import re
 import string
+import sys
 
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from functools import partial
-from itertools import chain, izip, repeat
+from itertools import chain, count, izip, repeat
 from operator import attrgetter
+from threading import Event
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QPropertyAnimation, QRect, QSize, QTimer, pyqtSignal
-from PyQt4.QtGui  import QApplication, QBrush, QColor, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QShortcut
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QPropertyAnimation, QRect, QRectF, QSize, QTimer, QUrl, pyqtSignal
+from PyQt4.QtGui  import QApplication, QBrush, QColor, QDesktopServices, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QShortcut
 from PyQt4.QtGui  import QStyle, QStyledItemDelegate, QStyleOption
 
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
 from application.python.weakref import weakobjectmap
+from application.system import makedirs, unlink
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
@@ -34,12 +38,14 @@ from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
 from sipsimple.session import Session
 from sipsimple.streams import MediaStreamRegistry
+from sipsimple.streams.msrp import FileSelector
+from sipsimple.threading import run_in_thread
 
 from blink.resources import Resources
-from blink.util import call_later, run_in_gui_thread
+from blink.util import call_later, call_in_gui_thread, run_in_gui_thread
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
-from blink.widgets.color import ColorHelperMixin
+from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 
 
@@ -310,12 +316,12 @@ class StreamListDescriptor(object):
         raise AttributeError("Attribute cannot be deleted")
 
 
-class BlinkSessionState(str):
+class SessionState(str):
     state    = property(lambda self: str(self.partition('/')[0]) or None)
     substate = property(lambda self: str(self.partition('/')[2]) or None)
 
     def __eq__(self, other):
-        if isinstance(other, BlinkSessionState):
+        if isinstance(other, SessionState):
             return self.state == other.state and self.substate == other.substate
         elif isinstance(other, basestring):
             state    = other.partition('/')[0] or None
@@ -403,8 +409,8 @@ class BlinkSession(QObject):
         return self.__dict__['state']
 
     def _set_state(self, value):
-        if value is not None and not isinstance(value, BlinkSessionState):
-            value = BlinkSessionState(value)
+        if value is not None and not isinstance(value, SessionState):
+            value = SessionState(value)
         old_state = self.__dict__.get('state', None)
         new_state = self.__dict__['state'] = value
         if new_state != old_state:
@@ -732,7 +738,7 @@ class BlinkSession(QObject):
         self.remote_hold = False
         self.recording = False
 
-        state = BlinkSessionState('ended')
+        state = SessionState('ended')
         state.reason = reason
         state.error = error
 
@@ -3166,6 +3172,844 @@ class ChatSessionListView(QListView):
         self.ignore_selection_changes = False
 
 
+# File transfers
+#
+
+class FileSizeFormatter(object):
+    boundaries = [(             1024, '%d bytes',               1),
+                  (          10*1024, '%.2f KB',           1024.0),  (        1024*1024, '%.1f KB',           1024.0),
+                  (     10*1024*1024, '%.2f MB',      1024*1024.0),  (   1024*1024*1024, '%.1f MB',      1024*1024.0),
+                  (10*1024*1024*1024, '%.2f GB', 1024*1024*1024.0),  (float('infinity'), '%.1f GB', 1024*1024*1024.0)]
+
+    @classmethod
+    def format(cls, size):
+        for boundary, format, divisor in cls.boundaries:
+            if size < boundary:
+                return format % (size/divisor,)
+        else:
+            return "%d bytes" % size
+
+
+class UniqueFilenameGenerator(object):
+    @classmethod
+    def generate(cls, name):
+        yield name
+        prefix, extension = os.path.splitext(name)
+        for x in count(1):
+            yield "%s-%d%s" % (prefix, x, extension)
+
+
+class FileTransfer(object):
+    implements(IObserver)
+
+    tmp_file_suffix = '.download'
+
+    def __init__(self):
+        self.direction = None
+        self.state = None
+
+        self.account = None
+        self.contact = None
+        self.contact_uri = None
+        self.sip_session = None
+        self.stream = None
+
+        self.filename = None
+
+        self._file_selector = None
+
+        self._error = False
+        self._finished = False
+        self._reason = None
+
+    def init_incoming(self, contact, contact_uri, session, stream):
+        assert self.state is None
+        self.direction = 'incoming'
+
+        self.account = session.account
+        self.contact = contact
+        self.contact_uri = contact_uri
+        self.sip_session = session
+        self.stream = stream
+
+        self._file_selector = stream.file_selector
+        self._local_hash = hashlib.sha1()
+
+        settings = SIPSimpleSettings()
+        directory = settings.file_transfer.directory.normalized
+        makedirs(directory)
+        filename = os.path.basename(self._file_selector.name)
+        for name in UniqueFilenameGenerator.generate(os.path.join(directory, filename)):
+            if not os.path.exists(name) and not os.path.exists(name + self.tmp_file_suffix):
+                self.filename = name
+                break
+        self._file_selector.fd = open(self.filename+self.tmp_file_suffix, 'w+')
+
+        self.state = 'connecting'
+        notification_center = NotificationCenter()
+        notification_center.post_notification('FileTransferNewIncoming', sender=self)
+        self.sip_session.accept([self.stream])
+
+    def init_outgoing(self, account, contact, contact_uri, filename):
+        assert self.state is None
+        self.direction = 'outgoing'
+
+        self.account = account
+        self.contact = contact
+        self.contact_uri = contact_uri
+
+        self._stop_event = Event()
+
+        self._uri = self._normalize_uri(contact_uri.uri)
+
+        self._file_selector = FileSelector.for_file(filename.encode(sys.getfilesystemencoding()), hash=None)
+        self.filename = filename
+
+        self.state = 'initialized'
+        notification_center = NotificationCenter()
+        notification_center.post_notification('FileTransferNewOutgoing', self)
+
+    def connect(self):
+        assert self.direction == 'outgoing' and self.state in ('initialized', 'ended')
+        if self.state == 'ended':
+            # Reinitialize to retry
+            self._error = False
+            self._finished = False
+            self._reason = None
+            self._stop_event.clear()
+            self._file_selector = FileSelector.for_file(self.filename.encode(sys.getfilesystemencoding()), hash=None)
+            self.state = 'initialized'
+            notification_center = NotificationCenter()
+            notification_center.post_notification('FileTransferWillRetry', self)
+        # TODO: use a pool of threads -Saul
+        self._calculate_hash()
+
+    def end(self):
+        assert self.state is not None
+        if self.state in ('ending', 'ended'):
+            return
+        self.state = 'ending'
+        if self.sip_session is not None:
+            self.sip_session.end()
+        else:
+            assert self.direction == 'outgoing'
+            self._error = True
+            self._reason = 'Cancelled'
+            self._stop_event.set()
+
+    def _get_state(self):
+        return self.__dict__['state']
+
+    def _set_state(self, value):
+        if value is not None and not isinstance(value, SessionState):
+            value = SessionState(value)
+        old_state = self.__dict__.get('state', None)
+        new_state = self.__dict__['state'] = value
+        if new_state != old_state:
+            NotificationCenter().post_notification('FileTransferDidChangeState', sender=self, data=NotificationData(old_state=old_state, new_state=new_state))
+
+    state = property(_get_state, _set_state)
+    del _get_state, _set_state
+
+    def _get_sip_session(self):
+        return self.__dict__['sip_session']
+
+    def _set_sip_session(self, value):
+        old_session = self.__dict__.get('sip_session', None)
+        new_session = self.__dict__['sip_session'] = value
+        if new_session != old_session:
+            notification_center = NotificationCenter()
+            if old_session is not None:
+                notification_center.remove_observer(self, sender=old_session)
+            if new_session is not None:
+                notification_center.add_observer(self, sender=new_session)
+
+    sip_session = property(_get_sip_session, _set_sip_session)
+    del _get_sip_session, _set_sip_session
+
+    def _get_stream(self):
+        return self.__dict__['stream']
+
+    def _set_stream(self, value):
+        old_session = self.__dict__.get('stream', None)
+        new_session = self.__dict__['stream'] = value
+        if new_session != old_session:
+            notification_center = NotificationCenter()
+            if old_session is not None:
+                notification_center.remove_observer(self, sender=old_session)
+            if new_session is not None:
+                notification_center.add_observer(self, sender=new_session)
+
+    stream = property(_get_stream, _set_stream)
+    del _get_stream, _set_stream
+
+    @run_in_thread('file-transfer')
+    def _process_received_chunk(self, data):
+        if data is not None:
+            try:
+                self._file_selector.fd.write(data)
+            except EnvironmentError, e:
+                self._error = True
+                self._reason = str(e)
+                call_in_gui_thread(self.end)
+            else:
+                self._local_hash.update(data)
+        else:
+            if not self._finished and not self._error:
+                self._error = True
+                self._reason = 'Cancelled'
+            self._terminate()
+
+    @run_in_thread('file-hash')
+    def _calculate_hash(self):
+        hash = hashlib.sha1()
+        pos = 0
+        progress = 0
+        size = self._file_selector.size
+
+        if size == 0:
+            self._error = True
+            self._reason = 'Empty file'
+            self._terminate()
+            return
+
+        chunk_size = limit(size/100, min=65536, max=1048576)
+
+        self.state = 'connecting/hashing'
+
+        notification_center = NotificationCenter()
+        notification_center.post_notification('FileTransferHashProgress', sender=self, data=NotificationData(progress=0))
+
+        while not self._stop_event.is_set():
+            try:
+                content = self._file_selector.fd.read(chunk_size)
+            except EnvironmentError, e:
+                self._error = True
+                self._reason = str(e)
+                self._terminate()
+                return
+            if not content:
+                break
+            hash.update(content)
+            pos += len(content)
+            progress = int(pos * 100 / size)
+            notification_center.post_notification('FileTransferHashProgress', sender=self, data=NotificationData(progress=progress))
+        else:
+            self._terminate()
+            return
+
+        self._file_selector.fd.seek(0)
+        self._file_selector.hash = hash
+
+        self._start_outgoing_session()
+
+    @run_in_gui_thread
+    def _start_outgoing_session(self):
+        if self._stop_event.is_set():
+            self._terminate()
+            return
+
+        settings = SIPSimpleSettings()
+        if isinstance(self.account, Account):
+            if self.account.sip.outbound_proxy is not None:
+                uri = SIPURI(host=self.account.sip.outbound_proxy.host, port=self.account.sip.outbound_proxy.port, parameters={'transport': self.account.sip.outbound_proxy.transport})
+            elif self.account.sip.always_use_my_proxy:
+                uri = SIPURI(host=self.account.id.domain)
+            else:
+                uri = self._uri
+        else:
+            uri = self._uri
+
+        lookup = DNSLookup()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=lookup)
+        lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
+
+        self.state = 'connecting/dns_lookup'
+
+    def _normalize_uri(self, uri):
+        if '@' not in uri:
+            uri += '@' + self.account.id.domain
+        if not uri.startswith(('sip:', 'sips:')):
+            uri = 'sip:' + uri
+        return SIPURI.parse(str(uri).translate(None, ' \t'))
+
+    @run_in_gui_thread
+    def _terminate(self):
+        if self.state != 'ending':
+            self.state = 'ending'
+
+        reason, error = self._reason, self._error
+
+        if self._file_selector is not None and self._file_selector.fd is not None:
+            self._file_selector.fd.close()
+            self._file_selector.fd = None
+
+        if self.direction == 'incoming':
+            filename = self.filename+self.tmp_file_suffix
+            if error:
+                unlink(filename)
+            else:
+                local_hash = 'sha1:' + ':'.join(re.findall(r'..', self._local_hash.hexdigest()))
+                remote_hash = self._file_selector.hash.lower()
+                if local_hash == remote_hash:
+                    tmp_name = filename
+                    os.rename(tmp_name, self.filename)
+                    reason = 'Completed (%s)' % FileSizeFormatter.format(self._file_selector.size)
+                else:
+                    error = True
+                    reason = 'File hash mismatch'
+                    unlink(filename)
+
+        self.sip_session = None
+        self.stream = None
+
+        state = SessionState('ended')
+        state.reason = reason
+        state.error = error
+
+        self.state = state
+        notification_center = NotificationCenter()
+        notification_center.post_notification('FileTransferDidEnd', sender=self, data=NotificationData(reason=reason, error=error))
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_DNSLookupDidSucceed(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        if self._stop_event.is_set():
+            self._terminate()
+            return
+
+        routes = notification.data.result
+        if not routes:
+            self._error = True
+            self._reason = 'Destination not found'
+            self._terminate()
+            return
+
+        self.sip_session = Session(self.account)
+        registry = MediaStreamRegistry()
+        cls = registry.get('file-transfer')
+        self.stream = cls(self._file_selector, 'sendonly')
+        self.sip_session.connect(ToHeader(self._uri), routes, [self.stream])
+
+    def _NH_DNSLookupDidFail(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        if self._stop_event.is_set():
+            self._terminate()
+            return
+        self._error = True
+        self._reason = 'DNS Lookup failed'
+        self._terminate()
+
+    def _NH_SIPSessionNewOutgoing(self, notification):
+        self.state = 'connecting'
+
+    def _NH_SIPSessionGotProvisionalResponse(self, notification):
+        if notification.data.code == 180:
+            self.state = 'connecting/ringing'
+
+    def _NH_SIPSessionWillStart(self, notification):
+        self.state = 'connecting/starting'
+
+    def _NH_SIPSessionDidStart(self, notification):
+        self.state = 'connected'
+
+    def _NH_SIPSessionDidFail(self, notification):
+        if notification.data.failure_reason == 'user request':
+            if notification.data.code == 487:
+                reason = 'Cancelled'
+            else:
+                reason = notification.data.reason
+        else:
+            reason = notification.data.failure_reason
+        if self.state != 'ended':
+            self._error = True
+            self._reason = reason
+            self._terminate()
+
+    def _NH_MediaStreamDidFail(self, notification):
+        if self.state == 'connected':
+            self.end()
+
+    def _NH_MediaStreamDidEnd(self, notification):
+        if self.direction == 'incoming':
+            # Mark end of write operations
+            self._process_received_chunk(None)
+        elif self.state != 'ended':
+            # In case of SIPSessionDidFail, _terminate() was already called -Saul
+            if self._finished:
+                self._error = False
+                self._reason = 'Completed (%s)' % FileSizeFormatter.format(self._file_selector.size)
+            else:
+                self._error = True
+                self._reason = 'Cancelled'
+            self._terminate()
+
+    def _NH_FileTransferStreamGotChunk(self, notification):
+        if not self._error:
+            self._file_selector.size = notification.data.file_size
+            self._process_received_chunk(notification.data.content)
+            notification.center.post_notification('FileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes,
+                                                                                                             total_bytes=notification.data.file_size))
+
+    def _NH_FileTransferStreamDidDeliverChunk(self, notification):
+        notification.center.post_notification('FileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes,
+                                                                                                         total_bytes=notification.data.file_size))
+
+    def _NH_FileTransferStreamDidNotDeliverChunk(self, notification):
+        if notification.data.chunk.size > 0:
+            self._error = True
+            self._reason = notification.data.reason
+            self.end()
+
+    def _NH_FileTransferStreamDidFinish(self, notification):
+        self._finished = True
+        if self.direction == 'incoming':
+            call_later(3, self.end)
+        else:
+            self.end()
+
+
+class TransferStateLabel(QLabel, ColorHelperMixin):
+    class ProgressDisplayMode: __metaclass__ = MarkerType
+    class InactiveDisplayMode: __metaclass__ = MarkerType
+
+    def __init__(self, parent=None):
+        super(TransferStateLabel, self).__init__(parent)
+        self.display_mode = self.InactiveDisplayMode
+        self.show_cancel_button = False
+        self.show_retry_button = False
+        self.progress = 0
+
+    def _get_display_mode(self):
+        return self.__dict__['display_mode']
+    def _set_display_mode(self, value):
+        if value not in (self.ProgressDisplayMode, self.InactiveDisplayMode):
+            raise ValueError("invalid display_mode: %r" % value)
+        old_value = self.__dict__.get('display_mode', self.InactiveDisplayMode)
+        new_value = self.__dict__['display_mode'] = value
+        if new_value != old_value:
+            self.update()
+    display_mode = property(_get_display_mode, _set_display_mode)
+    del _get_display_mode, _set_display_mode
+
+    def _get_show_cancel_button(self):
+        return self.__dict__['show_cancel_button']
+    def _set_show_cancel_button(self, value):
+        old_value = self.__dict__.get('show_cancel_button', False)
+        new_value = self.__dict__['show_cancel_button'] = bool(value)
+        if new_value != old_value:
+            self.update()
+    show_cancel_button = property(_get_show_cancel_button, _set_show_cancel_button)
+    del _get_show_cancel_button, _set_show_cancel_button
+
+    def _get_show_retry_button(self):
+        return self.__dict__['show_retry_button']
+    def _set_show_retry_button(self, value):
+        old_value = self.__dict__.get('show_retry_button', False)
+        new_value = self.__dict__['show_retry_button'] = bool(value)
+        if new_value != old_value:
+            self.update()
+    show_retry_button = property(_get_show_retry_button, _set_show_retry_button)
+    del _get_show_retry_button, _set_show_retry_button
+
+    def _get_progress(self):
+        return self.__dict__['progress']
+    def _set_progress(self, value):
+        self.__dict__['progress'] = value
+        self.update()
+    progress = property(_get_progress, _set_progress)
+    del _get_progress, _set_progress
+
+    def paintEvent(self, event):
+        margin = self.margin()
+        contents_rect = QRectF(self.contentsRect().adjusted(margin, margin, -margin, -margin))
+        size = min(contents_rect.width(), contents_rect.height())
+        rect = QRectF(0, 0, size, size)
+        rect.moveCenter(contents_rect.center())
+        palette = self.palette()
+        if self.display_mode is self.ProgressDisplayMode:
+            is_selected = self.foregroundRole() == QPalette.HighlightedText
+            inner_pen_color = self.color_with_alpha(palette.color(self.foregroundRole()), 70)
+            outer_pen_color = palette.color(QPalette.HighlightedText if is_selected else QPalette.Highlight)
+            inner_pen_width = 1.4 * size/20
+            outer_pen_width = 2.3 * size/20
+            inner_rect_adjust = outer_pen_width - inner_pen_width / 2
+            outer_rect_adjust = outer_pen_width / 2
+            inner_rect = rect.adjusted(inner_rect_adjust, inner_rect_adjust, -inner_rect_adjust, -inner_rect_adjust)
+            outer_rect = rect.adjusted(outer_rect_adjust, outer_rect_adjust, -outer_rect_adjust, -outer_rect_adjust)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setPen(QPen(inner_pen_color, inner_pen_width, style=Qt.SolidLine, cap=Qt.FlatCap, join=Qt.RoundJoin))
+            painter.drawEllipse(inner_rect)
+            painter.setPen(QPen(outer_pen_color, outer_pen_width, style=Qt.SolidLine, cap=Qt.FlatCap, join=Qt.RoundJoin))
+            painter.drawArc(outer_rect, 90*16, -self.progress*3.6*16)
+            if self.show_cancel_button:
+                foreground_color = palette.color(self.foregroundRole())
+                background_color = palette.color(self.backgroundRole())
+                cross_pen_color = self.strong_deco_color(background_color, foreground_color)
+                cross_pen_width = 2.0 * size/20
+                cross_rect = QRectF(0, 0, 6.0*size/20, 6.0*size/20)
+                cross_rect.moveCenter(QPointF(0, 0))
+                painter.save()
+                painter.translate(rect.center())
+                painter.setPen(QPen(cross_pen_color, cross_pen_width, style=Qt.SolidLine, cap=Qt.RoundCap, join=Qt.RoundJoin))
+                painter.drawLine(cross_rect.topLeft(), cross_rect.bottomRight())
+                painter.drawLine(cross_rect.topRight(), cross_rect.bottomLeft())
+                painter.restore()
+            painter.end()
+        elif self.show_retry_button:
+            foreground_color = palette.color(self.foregroundRole())
+            background_color = palette.color(self.backgroundRole())
+            retry_pen_color = self.strong_deco_color(background_color, foreground_color)
+            retry_pen_width = 1.8 * size/20
+            retry_margin = 1.8 * size/20
+            retry_rect_adjust = retry_pen_width / 2 + retry_margin
+            retry_rect = rect.adjusted(retry_rect_adjust, retry_rect_adjust, -retry_rect_adjust, -retry_rect_adjust)
+            path = QPainterPath()
+            path.moveTo(retry_rect.width(), retry_rect.height()/2)
+            path.arcMoveTo(retry_rect, -30)
+            path.arcTo(retry_rect, -30, -300)
+            arrow_size = path.currentPosition().y() - retry_rect.top() + min(retry_pen_width, retry_margin) / 2
+            polygon = QPolygonF([QPointF(-arrow_size, 0), QPointF(0, 0), QPointF(0, -arrow_size)])
+            polygon.translate(path.currentPosition())
+            path.addPolygon(polygon)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setPen(QPen(retry_pen_color, retry_pen_width, style=Qt.SolidLine, cap=Qt.RoundCap, join=Qt.MiterJoin))
+            painter.drawPath(path)
+            painter.end()
+
+    @cache_result(background_color_key)
+    def strong_deco_color(self, background, color):
+        return ColorUtils.mix(background, color, 0.55 + 0.8*self._contrast)
+
+    def minimumSizeHint(self):
+        margin = self.margin()
+        return QSize(16+2*margin, 16+2*margin)
+
+    def sizeHint(self):
+        margin = self.margin()
+        return QSize(20+2*margin, 20+2*margin)
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_item.ui'))
+
+class FileTransferItemWidget(base_class, ui_class):
+    class StandardDisplayMode:  __metaclass__ = MarkerType
+    class AlternateDisplayMode: __metaclass__ = MarkerType
+    class SelectedDisplayMode:  __metaclass__ = MarkerType
+
+    def __init__(self, parent=None):
+        super(FileTransferItemWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        self.palettes = Palettes()
+        self.palettes.standard = self.palette()
+        self.palettes.alternate = self.palette()
+        self.palettes.selected = self.palette()
+        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+
+        self.pixmaps = PixmapContainer()
+        self.pixmaps.incoming_transfer = QPixmap(Resources.get('icons/folder-downloads.png'))
+        self.pixmaps.outgoing_transfer = QPixmap(Resources.get('icons/folder-uploads.png'))
+        self.pixmaps.failed_transfer = QPixmap(Resources.get('icons/file-broken.png'))
+
+        self.display_mode = self.StandardDisplayMode
+
+        self.widget_layout.invalidate()
+        self.widget_layout.activate()
+
+    def _get_display_mode(self):
+        return self.__dict__['display_mode']
+
+    def _set_display_mode(self, value):
+        if value not in (self.StandardDisplayMode, self.AlternateDisplayMode, self.SelectedDisplayMode):
+            raise ValueError("invalid display_mode: %r" % value)
+        old_mode = self.__dict__.get('display_mode', None)
+        new_mode = self.__dict__['display_mode'] = value
+        if new_mode == old_mode:
+            return
+        if new_mode is self.StandardDisplayMode:
+            self.setPalette(self.palettes.standard)
+            self.state_indicator.setForegroundRole(QPalette.WindowText)
+            self.filename_label.setForegroundRole(QPalette.WindowText)
+            self.name_label.setForegroundRole(QPalette.Dark)
+            self.status_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.AlternateDisplayMode:
+            self.setPalette(self.palettes.alternate)
+            self.state_indicator.setForegroundRole(QPalette.WindowText)
+            self.filename_label.setForegroundRole(QPalette.WindowText)
+            self.name_label.setForegroundRole(QPalette.Dark)
+            self.status_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.SelectedDisplayMode:
+            self.setPalette(self.palettes.selected)
+            self.state_indicator.setForegroundRole(QPalette.HighlightedText)
+            self.filename_label.setForegroundRole(QPalette.HighlightedText)
+            self.name_label.setForegroundRole(QPalette.HighlightedText)
+            self.status_label.setForegroundRole(QPalette.HighlightedText)
+
+    display_mode = property(_get_display_mode, _set_display_mode)
+    del _get_display_mode, _set_display_mode
+
+    def update_content(self, item, initial=False):
+        if initial:
+            self.filename_label.setText(os.path.basename(item.filename))
+            if item.direction == 'outgoing':
+                self.name_label.setText(u'To: ' + item.name)
+                self.icon_label.setPixmap(self.pixmaps.outgoing_transfer)
+            else:
+                self.name_label.setText(u'From: ' + item.name)
+                self.icon_label.setPixmap(self.pixmaps.incoming_transfer)
+        self.status_label.setText(item.status)
+        if item.ended:
+            self.state_indicator.display_mode = self.state_indicator.InactiveDisplayMode
+            self.state_indicator.show_retry_button = False
+            if item.failed:
+                if item.direction == 'outgoing':
+                    self.state_indicator.show_retry_button = True
+                self.icon_label.setPixmap(self.pixmaps.failed_transfer)
+        else:
+            self.state_indicator.display_mode = self.state_indicator.ProgressDisplayMode
+            self.state_indicator.progress = item.progress or 0
+
+del ui_class, base_class
+
+
+class FileTransferItem(object):
+    implements(IObserver)
+
+    def __init__(self, transfer):
+        self.transfer = transfer
+
+        self.status = None
+        self.progress = None
+        self.bytes = 0
+        self.total_bytes = 0
+
+        self.widget = FileTransferItemWidget()
+        self.widget.update_content(self, initial=True)
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=transfer)
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, self.transfer)
+
+    def retry(self):
+        assert self.direction == 'outgoing' and self.ended and self.failed
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=self.transfer)
+        self.transfer.connect()
+
+    def end(self):
+        self.transfer.end()
+
+    @property
+    def direction(self):
+        return self.transfer.direction
+
+    @property
+    def filename(self):
+        return self.transfer.filename or u''
+
+    @property
+    def name(self):
+        return self.transfer.contact.name or self.transfer.contact_uri.uri
+
+    @property
+    def ended(self):
+        return self.transfer.state == 'ended'
+
+    @property
+    def failed(self):
+        return self.transfer.state == 'ended' and self.transfer.state.error
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_FileTransferDidChangeState(self, notification):
+        state = notification.data.new_state
+        if state == 'connecting/dns_lookup':
+            self.status = u'Looking up destination...'
+        elif state == 'connecting/hashing':
+            self.status = u'Computing hash...'
+        elif state == 'connecting':
+            self.progress = None
+            self.status = u'Connecting...'
+        elif state == 'connecting/ringing':
+            self.status = u'Ringing...'
+        elif state == 'connecting/starting':
+            self.status = u'Starting...'
+        elif state == 'connected':
+            self.status = u'Connected'
+        elif state == 'ending':
+            self.status = u'Ending...'
+        else:
+            self.status = None
+        self.widget.update_content(self)
+        notification.center.post_notification('FileTransferItemDidChange', sender=self)
+
+    def _NH_FileTransferHashProgress(self, notification):
+        progress = notification.data.progress
+        if self.progress is None or progress > self.progress:
+            self.progress = progress
+            self.status = u'Computing hash (%s%%)' % notification.data.progress
+            self.widget.update_content(self)
+            notification.center.post_notification('FileTransferItemDidChange', sender=self)
+
+    def _NH_FileTransferProgress(self, notification):
+        self.bytes = notification.data.bytes
+        self.total_bytes = notification.data.total_bytes
+        progress = int(self.bytes * 100 / self.total_bytes)
+        status = u'Transferring: %s/%s (%s%%)' % (FileSizeFormatter.format(self.bytes), FileSizeFormatter.format(self.total_bytes), progress)
+        if self.progress is None or progress > self.progress or status != self.status:
+            self.progress = progress
+            self.status = status
+            self.widget.update_content(self)
+            notification.center.post_notification('FileTransferItemDidChange', sender=self)
+
+    def _NH_FileTransferWillRetry(self, notification):
+        self.status = None
+        self.progress = None
+        self.bytes = 0
+        self.total_bytes = 0
+        self.widget.update_content(self, initial=True)
+
+    def _NH_FileTransferDidEnd(self, notification):
+        self.status = notification.data.reason
+        self.widget.update_content(self)
+        notification.center.post_notification('FileTransferItemDidChange', sender=self)
+        notification.center.remove_observer(self, sender=self.transfer)
+
+
+class FileTransferDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(FileTransferDelegate, self).__init__(parent)
+
+    def editorEvent(self, event, model, option, index):
+        if event.type()==QEvent.MouseButtonDblClick and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
+            item = index.data(Qt.UserRole)
+            if item.direction == 'incoming' and item.ended and not item.failed and os.path.isfile(item.filename):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
+                return True
+        elif event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
+            item = index.data(Qt.UserRole)
+            indicator = item.widget.state_indicator
+            margin = indicator.margin()
+            indicator_rect = indicator.contentsRect().adjusted(margin, margin, -margin, -margin)
+            size = min(indicator_rect.width(), indicator_rect.height())
+            rect = QRect(0, 0, size, size)
+            rect.moveCenter(indicator.geometry().center())
+            rect.translate(option.rect.topLeft())
+            if rect.contains(event.pos()):
+                if indicator.display_mode is indicator.InactiveDisplayMode and indicator.show_retry_button:
+                    item.retry()
+                    return True
+                elif indicator.display_mode is indicator.ProgressDisplayMode and indicator.show_cancel_button:
+                    item.end()
+                    return True
+        return super(FileTransferDelegate, self).editorEvent(event, model, option, index)
+
+    def paint(self, painter, option, index):
+        item = index.data(Qt.UserRole)
+        if option.state & QStyle.State_Selected:
+            item.widget.display_mode = item.widget.SelectedDisplayMode
+        elif index.row() % 2 == 0:
+            item.widget.display_mode = item.widget.StandardDisplayMode
+        else:
+            item.widget.display_mode = item.widget.AlternateDisplayMode
+
+        if not item.ended and (option.state & QStyle.State_MouseOver):
+            item.widget.state_indicator.show_cancel_button = True
+        else:
+            item.widget.state_indicator.show_cancel_button = False
+
+        item.widget.setFixedSize(option.rect.size())
+        painter.drawPixmap(option.rect, QPixmap.grabWidget(item.widget))
+
+    def sizeHint(self, option, index):
+        return index.data(Qt.SizeHintRole)
+
+
+class FileTransferModel(QAbstractListModel):
+    implements(IObserver)
+
+    itemAboutToBeAdded = pyqtSignal(FileTransferItem)
+    itemAboutToBeRemoved = pyqtSignal(FileTransferItem)
+    itemAdded = pyqtSignal(FileTransferItem)
+    itemRemoved = pyqtSignal(FileTransferItem)
+
+    def __init__(self, parent=None):
+        super(FileTransferModel, self).__init__(parent)
+        self.items = []
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='FileTransferNewIncoming')
+        notification_center.add_observer(self, name='FileTransferNewOutgoing')
+        notification_center.add_observer(self, name='FileTransferItemDidChange')
+
+    def clear_ended(self):
+        for item in (item for item in self.items[:] if item.ended):
+            self.removeItem(item)
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.items)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        item = self.items[index.row()]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.SizeHintRole:
+            return item.widget.sizeHint()
+        elif role == Qt.DisplayRole:
+            return unicode(item)
+        return None
+
+    def addItem(self, item):
+        if item in self.items:
+            return
+        self.itemAboutToBeAdded.emit(item)
+        self.beginInsertRows(QModelIndex(), 0, 0)
+        self.items.insert(0, item)
+        self.endInsertRows()
+        self.itemAdded.emit(item)
+
+    def removeItem(self, item):
+        if item not in self.items:
+            return
+        self.itemAboutToBeRemoved.emit(item)
+        position = self.items.index(item)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.items[position]
+        self.endRemoveRows()
+        self.itemRemoved.emit(item)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_FileTransferNewIncoming(self, notification):
+        self.addItem(FileTransferItem(notification.sender))
+
+    def _NH_FileTransferNewOutgoing(self, notification):
+        self.addItem(FileTransferItem(notification.sender))
+
+    def _NH_FileTransferItemDidChange(self, notification):
+        index = self.index(self.items.index(notification.sender))
+        self.dataChanged.emit(index, index)
+
+
 # Conference participants
 #
 
@@ -3791,13 +4635,123 @@ class IncomingRequest(QObject):
         elif self.chat_stream:
             return 3
         else:
-            return 4
+            return sys.maxint
+
+    @property
+    def stream_types(self):
+        return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream) if stream is not None}
 
     def _SH_DialogAccepted(self):
         self.accepted.emit(self)
 
     def _SH_DialogRejected(self):
         self.rejected.emit(self, self.dialog.reject_mode)
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('incoming_filetransfer_dialog.ui'))
+
+class IncomingFileTransferDialog(base_class, ui_class):
+    def __init__(self, parent=None):
+        super(IncomingFileTransferDialog, self).__init__(parent)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        with Resources.directory:
+            self.setupUi(self)
+        font = self.username_label.font()
+        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() + 3)
+        font.setFamily("Sans Serif")
+        self.username_label.setFont(font)
+        font = self.file_label.font()
+        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
+        self.file_label.setFont(font)
+        self.position = None
+
+    def show(self, activate=True, position=1):
+        blink = QApplication.instance()
+        screen_geometry = blink.desktop().screenGeometry(self)
+        available_geometry = blink.desktop().availableGeometry(self)
+        main_window_geometry = blink.main_window.geometry()
+        main_window_framegeometry = blink.main_window.frameGeometry()
+
+        horizontal_decorations = main_window_framegeometry.width() - main_window_geometry.width()
+        vertical_decorations = main_window_framegeometry.height() - main_window_geometry.height()
+        width = limit(self.sizeHint().width(), min=self.minimumSize().width(), max=min(self.maximumSize().width(), available_geometry.width()-horizontal_decorations))
+        height = limit(self.sizeHint().height(), min=self.minimumSize().height(), max=min(self.maximumSize().height(), available_geometry.height()-vertical_decorations))
+        total_width = width + horizontal_decorations
+        total_height = height + vertical_decorations
+        x = limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width)
+        if position is None:
+            y = -1
+        elif position % 2 == 0:
+            y = screen_geometry.center().y() + (position-1)*total_height/2
+        else:
+            y = screen_geometry.center().y() - position*total_height/2
+        if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
+            self.setGeometry(x, y, width, height)
+        else:
+            self.resize(width, height)
+        self.position = position
+        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        super(IncomingFileTransferDialog, self).show()
+
+del ui_class, base_class
+
+
+class IncomingFileTransferRequest(QObject):
+    accepted = pyqtSignal(object)
+    rejected = pyqtSignal(object)
+
+    priority = 4
+    stream_types = {'file-transfer'}
+
+    def __init__(self, dialog, contact, contact_uri, session, stream):
+        super(IncomingFileTransferRequest, self).__init__()
+        self.dialog = dialog
+        self.contact = contact
+        self.contact_uri = contact_uri
+        self.session = session
+        self.stream = stream
+
+        self.dialog.setWindowTitle(u'Incoming File Transfer')
+        self.dialog.setWindowIconText(u'Incoming File Transfer')
+
+        self.dialog.uri_label.setText(contact_uri.uri)
+        self.dialog.username_label.setText(contact.name)
+        if contact.pixmap:
+            self.dialog.user_icon.setPixmap(contact.pixmap)
+        filename = os.path.basename(self.stream.file_selector.name)
+        size = self.stream.file_selector.size
+        if size:
+            self.dialog.file_label.setText(u'File: %s (%s)' % (filename, FileSizeFormatter.format(size)))
+        else:
+            self.dialog.file_label.setText(u'File: %s' % filename)
+
+        self.dialog.accepted.connect(self._SH_DialogAccepted)
+        self.dialog.rejected.connect(self._SH_DialogRejected)
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __gt__(self, other):
+        return self.priority > other.priority
+
+    def __ge__(self, other):
+        return self.priority >= other.priority
+
+    def _SH_DialogAccepted(self):
+        self.accepted.emit(self)
+
+    def _SH_DialogRejected(self):
+        self.rejected.emit(self)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
@@ -3886,7 +4840,9 @@ class SessionManager(object):
         self.sessions = []
         self.incoming_requests = []
         self.dialog_positions = range(1, 100)
+        self.file_transfers = []
         self.last_dialed_uri = None
+        self.send_file_directory = os.path.expanduser('~')
         self.active_session = None
 
         self.inbound_ringtone = Null
@@ -3897,12 +4853,20 @@ class SessionManager(object):
         self._hangup_tone_timer.setInterval(1000)
         self._hangup_tone_timer.setSingleShot(True)
 
+        self._filetransfer_tone_timer = QTimer()
+        self._filetransfer_tone_timer.setInterval(1500)
+        self._filetransfer_tone_timer.setSingleShot(True)
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
         notification_center.add_observer(self, name='SIPSessionDidEnd')
         notification_center.add_observer(self, name='SIPSessionDidFail')
         notification_center.add_observer(self, name='SIPSessionProposalRejected')
         notification_center.add_observer(self, name='SIPSessionHadProposalFailure')
+
+        notification_center.add_observer(self, name='FileTransferDidChangeState')
+        notification_center.add_observer(self, name='FileTransferDidEnd')
+        notification_center.add_observer(self, name='FileTransferWillRetry')
 
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
@@ -3921,8 +4885,6 @@ class SessionManager(object):
             else:
                 account = AccountManager().default_account
 
-        assert account is not None
-
         try:
             session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
             reinitialize = True
@@ -3938,10 +4900,26 @@ class SessionManager(object):
 
         return session
 
+    def send_file(self, contact, contact_uri, filename, account=None):
+        if account is None:
+            if contact.type == 'bonjour':
+                account = BonjourAccount()
+            else:
+                account = AccountManager().default_account
+
+        self.send_file_directory = os.path.dirname(filename)
+
+        transfer = FileTransfer()
+        self.file_transfers.append(transfer)
+        transfer.init_outgoing(account, contact, contact_uri, filename)
+        transfer.connect()
+        return transfer
+
     def update_ringtone(self):
         # Outgoing ringtone
         outgoing_sessions_or_proposals = [session for session in self.sessions if session.state=='connecting/ringing' and session.direction=='outgoing' or session.state=='connected/sent_proposal']
-        if any(not session.on_hold for session in outgoing_sessions_or_proposals):
+        outgoing_file_transfers = [transfer for transfer in self.file_transfers if transfer.state=='connecting/ringing']
+        if any(not session.on_hold for session in outgoing_sessions_or_proposals) or outgoing_file_transfers:
             settings = SIPSimpleSettings()
             outbound_ringtone = settings.sounds.outbound_ringtone
             if outbound_ringtone:
@@ -3968,7 +4946,7 @@ class SessionManager(object):
         # Incoming ringtone
         if self.incoming_requests:
             try:
-                request = next(req for req in self.incoming_requests if req.audio_stream or req.video_stream)
+                request = next(req for req in self.incoming_requests if req.stream_types.intersection({'audio', 'video'}))
                 ringtone_type = self.PrimaryRingtone
             except StopIteration:
                 request = self.incoming_requests[0]
@@ -4081,6 +5059,22 @@ class SessionManager(object):
         elif mode == 'reject':
             incoming_request.session.reject(603)
 
+    def _SH_IncomingFileTransferRequestAccepted(self, incoming_request):
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        self.incoming_requests.remove(incoming_request)
+        self.update_ringtone()
+        transfer = FileTransfer()
+        self.file_transfers.append(transfer)
+        transfer.init_incoming(incoming_request.contact, incoming_request.contact_uri, incoming_request.session, incoming_request.stream)
+
+    def _SH_IncomingFileTransferRequestRejected(self, incoming_request):
+        if incoming_request.dialog.position is not None:
+            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
+        self.incoming_requests.remove(incoming_request)
+        self.update_ringtone()
+        incoming_request.session.reject(603)
+
     @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -4099,30 +5093,32 @@ class SessionManager(object):
         video_streams = stream_map['video']
         chat_streams = stream_map['chat']
         screensharing_streams = stream_map['screen-sharing']
-        filetransfer_streams = stream_map['file-transfer']
+        filetransfer_streams = [stream for stream in stream_map['file-transfer'] if stream.direction == 'recvonly']    # Only accept receiving files
 
         if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:
             session.reject(488)
             return
-        if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
-            # TODO: add support for this with different type of session -Saul
-            session.reject(488)
-            return
 
         session.send_ring_indication()
-
         contact, contact_uri = URIUtils.find_contact(session.remote_identity.uri, display_name=session.remote_identity.display_name, exact=False)
 
-        audio_stream = audio_streams[0] if audio_streams else None
-        video_stream = video_streams[0] if video_streams else None
-        chat_stream = chat_streams[0] if chat_streams else None
-        screensharing_stream = screensharing_streams[0] if screensharing_streams else None
+        if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
+            dialog = IncomingFileTransferDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+            incoming_request = IncomingFileTransferRequest(dialog, contact, contact_uri, session, filetransfer_streams[0])
+            incoming_request.accepted.connect(self._SH_IncomingFileTransferRequestAccepted)
+            incoming_request.rejected.connect(self._SH_IncomingFileTransferRequestRejected)
+        else:
+            audio_stream = audio_streams[0] if audio_streams else None
+            video_stream = video_streams[0] if video_streams else None
+            chat_stream = chat_streams[0] if chat_streams else None
+            screensharing_stream = screensharing_streams[0] if screensharing_streams else None
 
-        dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
-        incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+            dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+            incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+            incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
+            incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
         bisect.insort_right(self.incoming_requests, incoming_request)
-        incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
-        incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
+
         try:
             position = self.dialog_positions.pop(0)
         except IndexError:
@@ -4243,4 +5239,21 @@ class SessionManager(object):
             self.active_session = selected_session
             notification.center.post_notification('BlinkActiveSessionDidChange', sender=self, data=NotificationData(previous_active_session=old_active_session or None, active_session=selected_session))
 
+    def _NH_FileTransferDidChangeState(self, notification):
+        new_state = notification.data.new_state
+        if new_state in ('connecting/ringing', 'connected'):
+            self.update_ringtone()
+
+    def _NH_FileTransferWillRetry(self, notification):
+        self.file_transfers.append(notification.sender)
+        self.update_ringtone()
+
+    def _NH_FileTransferDidEnd(self, notification):
+        self.file_transfers.remove(notification.sender)
+        self.update_ringtone()
+        if not notification.data.error and not self._filetransfer_tone_timer.isActive():
+            self._filetransfer_tone_timer.start()
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
+            SIPApplication.voice_audio_bridge.add(player)
+            player.start()
 

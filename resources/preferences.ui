@@ -1948,38 +1948,7 @@
            <property name="horizontalSpacing">
             <number>3</number>
            </property>
-           <item row="0" column="1" colspan="2">
-            <widget class="QCheckBox" name="auto_accept_files_button">
-             <property name="text">
-              <string>Automatically accept file transfer requests from known contacts</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="download_directory_label">
-             <property name="text">
-              <string>Download Directory:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="LocationBar" name="download_directory_editor">
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="2">
-            <widget class="QPushButton" name="download_directory_browse_button">
-             <property name="text">
-              <string>Browse</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0" colspan="3">
+           <item row="1" column="0" colspan="3">
             <spacer name="file_transfer_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -1991,6 +1960,30 @@
               </size>
              </property>
             </spacer>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="download_directory_label">
+             <property name="text">
+              <string>Download Directory:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="LocationBar" name="download_directory_editor">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QPushButton" name="download_directory_browse_button">
+             <property name="text">
+              <string>Browse</string>
+             </property>
+            </widget>
            </item>
           </layout>
          </widget>

@@ -5,6 +5,7 @@
 
 __all__ = ['BlinkSettings', 'SIPSimpleSettingsExtension']
 
+import os
 import platform
 import sys
 
@@ -42,8 +43,7 @@ class ChatSettingsExtension(ChatSettings):
 
 
 class FileTransferSettingsExtension(FileTransferSettings):
-    auto_accept = Setting(type=bool, default=False)
-    directory = Setting(type=Path, default=None, nillable=True)
+    directory = Setting(type=Path, default=Path(os.path.expanduser('~/Downloads')))
 
 
 class GoogleContactsSettings(SettingsGroup):
