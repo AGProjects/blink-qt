@@ -2319,7 +2319,6 @@ class AudioSessionListView(QListView):
             if event_source is self:
                 event.setDropAction(Qt.MoveAction)
             event.accept()
-            self.setState(self.DraggingState)
 
     def dragLeaveEvent(self, event):
         super(AudioSessionListView, self).dragLeaveEvent(event)
@@ -3084,7 +3083,6 @@ class ChatSessionListView(QListView):
             event.ignore()
         else:
             event.accept()
-            self.setState(self.DraggingState)
 
     def dragLeaveEvent(self, event):
         super(ChatSessionListView, self).dragLeaveEvent(event)
@@ -3539,7 +3537,6 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
             event.ignore()
         else:
             event.accept()
-            self.setState(self.DraggingState)
 
     def dragLeaveEvent(self, event):
         super(ConferenceParticipantListView, self).dragLeaveEvent(event)

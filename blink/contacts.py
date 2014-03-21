@@ -3124,7 +3124,6 @@ class ContactListView(QListView):
             if has_blink_contacts:
                 QApplication.instance().main_window.switch_view_button.dnd_active = True
             event.accept()
-            self.setState(self.DraggingState)
 
     def dragLeaveEvent(self, event):
         super(ContactListView, self).dragLeaveEvent(event)
@@ -3489,7 +3488,6 @@ class ContactSearchListView(QListView):
             event.ignore()
         else:
             event.accept()
-            self.setState(self.DraggingState)
 
     def dragLeaveEvent(self, event):
         super(ContactSearchListView, self).dragLeaveEvent(event)
@@ -3723,7 +3721,6 @@ class ContactDetailView(QListView):
             event.ignore()
         else:
             event.accept()
-            self.setState(self.DraggingState)
 
     def dragLeaveEvent(self, event):
         super(ContactDetailView, self).dragLeaveEvent(event)
