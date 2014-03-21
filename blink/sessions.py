@@ -4199,7 +4199,7 @@ class SessionManager(object):
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         if notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive():
             self._hangup_tone_timer.start()
-            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=60)
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
 
@@ -4207,7 +4207,7 @@ class SessionManager(object):
         self.update_ringtone()
         if notification.sender._play_hangup_tone and not self._hangup_tone_timer.isActive():
             self._hangup_tone_timer.start()
-            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=60)
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
 
