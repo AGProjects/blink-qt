@@ -41,7 +41,7 @@ from sipsimple.streams import MediaStreamRegistry
 from sipsimple.streams.msrp import FileSelector
 from sipsimple.threading import run_in_thread
 
-from blink.resources import Resources
+from blink.resources import ApplicationData, Resources
 from blink.util import call_later, call_in_gui_thread, run_in_gui_thread
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
@@ -3222,6 +3222,29 @@ class FileTransfer(object):
         self._finished = False
         self._reason = None
 
+    def __getstate__(self):
+        state = dict(direction=self.direction, state=self.state, filename=self.filename, _error=self._error, _finished=self._finished, _reason=self._reason)
+        return (self.account.id, self.contact.name, self.contact_uri.uri, state)
+
+    def __setstate__(self, state):
+        from blink.contacts import URIUtils
+        account_id, contact_name, contact_uri, state = state
+        self.__dict__.update(state)
+        account_manager = AccountManager()
+        try:
+            self.account = account_manager.get_account(account_id)
+        except KeyError:
+            self.account = account_manager.default_account
+        self.contact, self.contact_uri = URIUtils.find_contact(contact_uri, display_name=contact_name)
+        if self.direction == 'outgoing':
+            self._stop_event = Event()
+            self._uri = self._normalize_uri(contact_uri)
+        else:
+            self._local_hash = hashlib.sha1()
+        self.sip_session = None
+        self.stream = None
+        self._file_selector = None
+
     def init_incoming(self, contact, contact_uri, session, stream):
         assert self.state is None
         self.direction = 'incoming'
@@ -3799,6 +3822,16 @@ class FileTransferItem(object):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=transfer)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['widget']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.widget = FileTransferItemWidget()
+        self.widget.update_content(self, initial=True)
+
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, self.transfer)
 
@@ -3940,6 +3973,40 @@ class FileTransferDelegate(QStyledItemDelegate):
         return index.data(Qt.SizeHintRole)
 
 
+class TransferHistory(object):
+    max_items = 100
+
+    def __init__(self):
+        self._transaction_level = 0
+        self._pending_items = []
+
+    def begin_transaction(self):
+        self._transaction_level += 1
+
+    def commit_transaction(self):
+        self._transaction_level -= 1
+        if self._transaction_level == 0:
+            self.save(self._pending_items)
+
+    def load(self):
+        try:
+            items = pickle.load(open(ApplicationData.get('transfer_history')))
+        except Exception:
+            items = []
+        return items
+
+    def save(self, items):
+        if self._transaction_level == 0:
+            @run_in_thread('file-io')
+            def save(items):
+                with open(ApplicationData.get('transfer_history'), 'wb+') as f:
+                    pickle.dump(items, f)
+            save(items[:self.max_items])
+            self._pending_items = []
+        else:
+            self._pending_items = items
+
+
 class FileTransferModel(QAbstractListModel):
     implements(IObserver)
 
@@ -3951,14 +4018,25 @@ class FileTransferModel(QAbstractListModel):
     def __init__(self, parent=None):
         super(FileTransferModel, self).__init__(parent)
         self.items = []
+        self.history = TransferHistory()
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='FileTransferNewIncoming')
         notification_center.add_observer(self, name='FileTransferNewOutgoing')
         notification_center.add_observer(self, name='FileTransferItemDidChange')
+        notification_center.add_observer(self, name='FileTransferDidEnd')
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+
+    @property
+    def ended_items(self):
+        return [item for item in self.items if item.ended]
 
     def clear_ended(self):
-        for item in (item for item in self.items[:] if item.ended):
-            self.removeItem(item)
+        self.history.begin_transaction()
+        try:
+            for item in self.ended_items:
+                self.removeItem(item)
+        finally:
+            self.history.commit_transaction()
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
@@ -3993,6 +4071,7 @@ class FileTransferModel(QAbstractListModel):
         del self.items[position]
         self.endRemoveRows()
         self.itemRemoved.emit(item)
+        self.history.save(self.ended_items)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -4009,6 +4088,13 @@ class FileTransferModel(QAbstractListModel):
         index = self.index(self.items.index(notification.sender))
         self.dataChanged.emit(index, index)
 
+    def _NH_SIPApplicationDidStart(self, notification):
+        self.beginResetModel()
+        self.items = self.history.load()
+        self.endResetModel()
+
+    def _NH_FileTransferDidEnd(self, notification):
+        self.history.save(self.ended_items)
 
 # Conference participants
 #
