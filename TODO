@@ -2,10 +2,11 @@
 Roadmap
 -------
 
-+ File transfers
 + Video sessions
-- Add arbitrary SIP addresses to conferences
-
+- Screen sharing
+- Answering machine
+- History browser
+- Localization
 
 
 Fixes and improvements
@@ -36,17 +37,13 @@ Fixes and improvements
 Nice to have
 ------------
 
-- LDAP
+- Add arbitrary SIP addresses to conferences
+- LDAP directory
 - Call transfer
-- Answering machine
-- Screen sharing
-- History browser
 - Logs window
 - Dial SIP URI from server web page
-- Show register status
 - Device switching window when detected at runtime
 - Alert panel for redirect 30X
 - Dial SIP URIs from the system
 - Desktop notifications
 - Accesibility features for blind users
-
