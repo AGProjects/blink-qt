@@ -105,7 +105,7 @@ class FileTransferWindow(base_class, ui_class):
 
     def _AH_OpenContainingFolder(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.basename(item.filename)))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(item.filename)))
 
     def _AH_CancelTransfer(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
