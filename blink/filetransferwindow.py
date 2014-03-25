@@ -41,6 +41,7 @@ class FileTransferWindow(base_class, ui_class):
         self.actions.open_file = QAction("Open", self, triggered=self._AH_OpenFile)
         self.actions.open_file_folder = QAction("Open File Folder", self, triggered=self._AH_OpenFileFolder)
         self.actions.cancel_transfer = QAction("Cancel", self, triggered=self._AH_CancelTransfer)
+        self.actions.retry_transfer = QAction("Retry", self, triggered=self._AH_RetryTransfer)
         self.actions.remove_entry = QAction("Remove From List", self, triggered=self._AH_RemoveEntry)
         self.actions.open_downloads_folder = QAction("Open Downloads Folder", self, triggered=self._AH_OpenDownloadsFolder)
         self.actions.clear_list = QAction("Clear List", self, triggered=self._AH_ClearList)
@@ -86,6 +87,8 @@ class FileTransferWindow(base_class, ui_class):
                 if not item.failed:
                     menu.addAction(self.actions.open_file)
                     menu.addAction(self.actions.open_file_folder)
+                elif item.direction == 'outgoing':
+                    menu.addAction(self.actions.retry_transfer)
                 menu.addAction(self.actions.remove_entry)
             else:
                 if item.direction == 'outgoing':
@@ -113,6 +116,10 @@ class FileTransferWindow(base_class, ui_class):
     def _AH_CancelTransfer(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
         item.end()
+
+    def _AH_RetryTransfer(self):
+        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
+        item.connect()
 
     def _AH_RemoveEntry(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
