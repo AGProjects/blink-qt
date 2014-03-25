@@ -83,11 +83,14 @@ class FileTransferWindow(base_class, ui_class):
         if index.isValid():
             item = index.data(Qt.UserRole)
             if item.ended:
-                if item.direction == 'incoming' and item.ended and not item.failed:
+                if not item.failed:
                     menu.addAction(self.actions.open_file)
                     menu.addAction(self.actions.open_file_folder)
                 menu.addAction(self.actions.remove_entry)
             else:
+                if item.direction == 'outgoing':
+                    menu.addAction(self.actions.open_file)
+                    menu.addAction(self.actions.open_file_folder)
                 menu.addAction(self.actions.cancel_transfer)
             menu.addSeparator()
             menu.addAction(self.actions.open_downloads_folder)

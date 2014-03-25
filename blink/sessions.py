@@ -3931,9 +3931,21 @@ class FileTransferDelegate(QStyledItemDelegate):
     def editorEvent(self, event, model, option, index):
         if event.type()==QEvent.MouseButtonDblClick and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
             item = index.data(Qt.UserRole)
-            if item.direction == 'incoming' and item.ended and not item.failed and os.path.isfile(item.filename):
+            if item.ended and not item.failed:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
                 return True
+            elif item.direction == 'outgoing' and not item.ended:
+                item = index.data(Qt.UserRole)
+                indicator = item.widget.state_indicator
+                margin = indicator.margin()
+                indicator_rect = indicator.contentsRect().adjusted(margin, margin, -margin, -margin)
+                size = min(indicator_rect.width(), indicator_rect.height())
+                rect = QRect(0, 0, size, size)
+                rect.moveCenter(indicator.geometry().center())
+                rect.translate(option.rect.topLeft())
+                if not rect.contains(event.pos()):
+                    QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
+                    return True
         elif event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
             item = index.data(Qt.UserRole)
             indicator = item.widget.state_indicator
