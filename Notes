@@ -16,6 +16,8 @@ Code refactoring
 Issues
 ------
 
+- review the change to only play a handup tone when session has audio/video
+
 - apply the default font/size from the theme to the input textbox?
 - in Smooth Operator check if the src attribute is still needed in elements
   that have the x-color class. there used to be a rule that matched elements
@@ -26,8 +28,6 @@ Issues
   safely removed from message.html and message_continuation.html
 - don't show selected audio device on the incoming dialog for chat
 - reconsider the busy button on the incoming dialog (replace with ignore?)
-- if I have an audio(+chat) call and make another atempt to establish a call
-  (doesn't matter what kind), but cancel it, the hold button is left disabled
 - when a session is closed the chat window shows: "Disconnected: Connection
   was closed cleanly", but when calling oneself and a loop is detected is
   only says "Disconnected". It should actually only say Disconnected when
