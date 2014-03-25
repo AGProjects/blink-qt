@@ -39,7 +39,7 @@ class FileTransferWindow(base_class, ui_class):
         self.context_menu = QMenu(self.listview)
         self.actions = ContextMenuActions()
         self.actions.open_file = QAction("Open", self, triggered=self._AH_OpenFile)
-        self.actions.open_folder = QAction("Open Containing Folder", self, triggered=self._AH_OpenContainingFolder)
+        self.actions.open_file_folder = QAction("Open File Folder", self, triggered=self._AH_OpenFileFolder)
         self.actions.cancel_transfer = QAction("Cancel", self, triggered=self._AH_CancelTransfer)
         self.actions.remove_entry = QAction("Remove From List", self, triggered=self._AH_RemoveEntry)
         self.actions.open_downloads_folder = QAction("Open Downloads Folder", self, triggered=self._AH_OpenDownloadsFolder)
@@ -85,7 +85,7 @@ class FileTransferWindow(base_class, ui_class):
             if item.ended:
                 if item.direction == 'incoming' and item.ended and not item.failed:
                     menu.addAction(self.actions.open_file)
-                    menu.addAction(self.actions.open_folder)
+                    menu.addAction(self.actions.open_file_folder)
                 menu.addAction(self.actions.remove_entry)
             else:
                 menu.addAction(self.actions.cancel_transfer)
@@ -103,7 +103,7 @@ class FileTransferWindow(base_class, ui_class):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
         QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
 
-    def _AH_OpenContainingFolder(self):
+    def _AH_OpenFileFolder(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(item.filename)))
 
