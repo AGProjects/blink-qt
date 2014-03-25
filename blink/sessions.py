@@ -4802,7 +4802,7 @@ del ui_class, base_class
 
 class IncomingFileTransferRequest(QObject):
     accepted = pyqtSignal(object)
-    rejected = pyqtSignal(object)
+    rejected = pyqtSignal(object, str)
 
     priority = 4
     stream_types = {'file-transfer'}
@@ -4854,7 +4854,7 @@ class IncomingFileTransferRequest(QObject):
         self.accepted.emit(self)
 
     def _SH_DialogRejected(self):
-        self.rejected.emit(self, self.reject_mode)
+        self.rejected.emit(self, self.dialog.reject_mode)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
