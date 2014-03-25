@@ -4751,6 +4751,8 @@ class IncomingFileTransferDialog(base_class, ui_class):
         font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
         self.file_label.setFont(font)
         self.position = None
+        self.reject_mode = 'ignore'
+        self.reject_button.released.connect(self._set_reject_mode)
 
     def show(self, activate=True, position=1):
         blink = QApplication.instance()
@@ -4779,6 +4781,9 @@ class IncomingFileTransferDialog(base_class, ui_class):
         self.position = position
         self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
         super(IncomingFileTransferDialog, self).show()
+
+    def _set_reject_mode(self):
+        self.reject_mode = 'reject'
 
 del ui_class, base_class
 
@@ -4837,7 +4842,7 @@ class IncomingFileTransferRequest(QObject):
         self.accepted.emit(self)
 
     def _SH_DialogRejected(self):
-        self.rejected.emit(self)
+        self.rejected.emit(self, self.reject_mode)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
@@ -5154,12 +5159,13 @@ class SessionManager(object):
         self.file_transfers.append(transfer)
         transfer.init_incoming(incoming_request.contact, incoming_request.contact_uri, incoming_request.session, incoming_request.stream)
 
-    def _SH_IncomingFileTransferRequestRejected(self, incoming_request):
+    def _SH_IncomingFileTransferRequestRejected(self, incoming_request, mode):
         if incoming_request.dialog.position is not None:
             bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
-        incoming_request.session.reject(603)
+        if mode == 'reject':
+            incoming_request.session.reject(603)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
