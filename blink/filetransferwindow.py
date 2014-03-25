@@ -119,7 +119,7 @@ class FileTransferWindow(base_class, ui_class):
 
     def _AH_RetryTransfer(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
-        item.connect()
+        item.retry()
 
     def _AH_RemoveEntry(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
