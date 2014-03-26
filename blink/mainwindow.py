@@ -192,12 +192,8 @@ class MainWindow(base_class, ui_class):
 
         # History menu actions
         self.history_manager = HistoryManager()
-        self.missed_calls_menu.aboutToShow.connect(self._SH_MissedCallsMenuAboutToShow)
-        self.missed_calls_menu.triggered.connect(self._AH_HistoryMenuTriggered)
-        self.placed_calls_menu.aboutToShow.connect(self._SH_PlacedCallsMenuAboutToShow)
-        self.placed_calls_menu.triggered.connect(self._AH_HistoryMenuTriggered)
-        self.received_calls_menu.aboutToShow.connect(self._SH_ReceivedCallsMenuAboutToShow)
-        self.received_calls_menu.triggered.connect(self._AH_HistoryMenuTriggered)
+        self.history_menu.aboutToShow.connect(self._SH_HistoryMenuAboutToShow)
+        self.history_menu.triggered.connect(self._AH_HistoryMenuTriggered)
 
         # Tools menu actions
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
@@ -382,6 +378,16 @@ class MainWindow(base_class, ui_class):
         contact, contact_uri = URIUtils.find_contact(account.voicemail_uri, display_name='Voicemail')
         session_manager = SessionManager()
         session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account)
+
+    def _SH_HistoryMenuAboutToShow(self):
+        self.history_menu.clear()
+        if self.history_manager.calls:
+            for entry in reversed(self.history_manager.calls):
+                action = self.history_menu.addAction(entry.icon, unicode(entry))
+                action.entry = entry
+        else:
+            action = self.history_menu.addAction("Call history is empty")
+            action.setEnabled(False)
 
     def _AH_HistoryMenuTriggered(self, action):
         account_manager = AccountManager()
@@ -625,24 +631,6 @@ class MainWindow(base_class, ui_class):
 
     def _SH_SwitchViewButtonChangedView(self, view):
         self.main_view.setCurrentWidget(self.contacts_panel if view is SwitchViewButton.ContactView else self.sessions_panel)
-
-    def _SH_MissedCallsMenuAboutToShow(self):
-        self.missed_calls_menu.clear()
-        for entry in reversed(self.history_manager.missed_calls):
-            action = self.missed_calls_menu.addAction(unicode(entry))
-            action.entry = entry
-
-    def _SH_PlacedCallsMenuAboutToShow(self):
-        self.placed_calls_menu.clear()
-        for entry in reversed(self.history_manager.placed_calls):
-            action = self.placed_calls_menu.addAction(unicode(entry))
-            action.entry = entry
-
-    def _SH_ReceivedCallsMenuAboutToShow(self):
-        self.received_calls_menu.clear()
-        for entry in reversed(self.history_manager.received_calls):
-            action = self.received_calls_menu.addAction(unicode(entry))
-            action.entry = entry
 
     def _SH_PendingWatcherDialogFinished(self, result):
         self.pending_watcher_dialogs.remove(self.sender())

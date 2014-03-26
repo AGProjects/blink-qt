@@ -3,13 +3,15 @@
 
 __all__ = ['HistoryManager']
 
-import re
+import bisect
 import cPickle as pickle
+import re
+
+from PyQt4.QtGui import QIcon
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
 from application.python.types import Singleton
-from collections import deque
 from datetime import date, datetime
 from zope.interface import implements
 
@@ -17,7 +19,7 @@ from sipsimple.account import BonjourAccount
 from sipsimple.addressbook import AddressbookManager
 from sipsimple.threading import run_in_thread
 
-from blink.resources import ApplicationData
+from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread
 
 
@@ -25,23 +27,25 @@ class HistoryManager(object):
     __metaclass__ = Singleton
     implements(IObserver)
 
+    history_size = 20
+
     def __init__(self):
         try:
             data = pickle.load(open(ApplicationData.get('calls_history')))
+            if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) for item in data):
+                raise ValueError("invalid save data")
         except Exception:
-            self.missed_calls = deque(maxlen=10)
-            self.placed_calls = deque(maxlen=10)
-            self.received_calls = deque(maxlen=10)
+            self.calls = []
         else:
-            self.missed_calls, self.placed_calls, self.received_calls = data
+            self.calls = data[-self.history_size:]
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPSessionDidEnd')
         notification_center.add_observer(self, name='SIPSessionDidFail')
 
     @run_in_thread('file-io')
     def save(self):
-        with open(ApplicationData.get('calls_history'), 'wb+') as f:
-            pickle.dump((self.missed_calls, self.placed_calls, self.received_calls), f)
+        with open(ApplicationData.get('calls_history'), 'wb+') as history_file:
+            pickle.dump(self.calls, history_file)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -53,10 +57,8 @@ class HistoryManager(object):
             return
         session = notification.sender
         entry = HistoryEntry.from_session(session)
-        if session.direction == 'incoming':
-            self.received_calls.append(entry)
-        else:
-            self.placed_calls.append(entry)
+        bisect.insort(self.calls, entry)
+        self.calls = self.calls[-self.history_size:]
         self.save()
 
     def _NH_SIPSessionDidFail(self, notification):
@@ -65,29 +67,76 @@ class HistoryManager(object):
         session = notification.sender
         entry = HistoryEntry.from_session(session)
         if session.direction == 'incoming':
-            if notification.data.code == 487 and notification.data.failure_reason == 'Call completed elsewhere':
-                self.received_calls.append(entry)
-            else:
-                self.missed_calls.append(entry)
+            if notification.data.code != 487 or notification.data.failure_reason != 'Call completed elsewhere':
+                entry.failed = True
         else:
             if notification.data.code == 487:
                 entry.reason = 'cancelled'
             else:
                 entry.reason = '%s (%s)' % (notification.data.reason or notification.data.failure_reason, notification.data.code)
-            self.placed_calls.append(entry)
+            entry.failed = True
+        bisect.insort(self.calls, entry)
+        self.calls = self.calls[-self.history_size:]
         self.save()
+
+
+class IconDescriptor(object):
+    def __init__(self, filename):
+        self.filename = filename
+        self.icon = None
+    def __get__(self, obj, objtype):
+        if self.icon is None:
+            self.icon = QIcon(self.filename)
+            self.icon.filename = self.filename
+        return self.icon
+    def __set__(self, obj, value):
+        raise AttributeError("attribute cannot be set")
+    def __delete__(self, obj):
+        raise AttributeError("attribute cannot be deleted")
 
 
 class HistoryEntry(object):
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
-    def __init__(self, remote_identity, target_uri, account_id, call_time, duration, reason=None):
+    incoming_normal_icon = IconDescriptor(Resources.get('icons/arrow-inward-blue.svg'))
+    outgoing_normal_icon = IconDescriptor(Resources.get('icons/arrow-outward-green.svg'))
+    incoming_failed_icon = IconDescriptor(Resources.get('icons/arrow-inward-red.svg'))
+    outgoing_failed_icon = IconDescriptor(Resources.get('icons/arrow-outward-red.svg'))
+
+    def __init__(self, direction, remote_identity, target_uri, account_id, call_time, duration, reason=None):
+        self.direction = direction
         self.remote_identity = remote_identity
         self.target_uri = target_uri
         self.account_id = account_id
         self.call_time = call_time
         self.duration = duration
         self.reason = reason
+        self.failed = False
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.call_time < other.call_time
+
+    def __le__(self, other):
+        return self.call_time <= other.call_time
+
+    def __gt__(self, other):
+        return self.call_time > other.call_time
+
+    def __ge__(self, other):
+        return self.call_time >= other.call_time
+
+    @property
+    def icon(self):
+        if self.failed:
+            return self.incoming_failed_icon if self.direction == 'incoming' else self.outgoing_failed_icon
+        else:
+            return self.incoming_normal_icon if self.direction == 'incoming' else self.outgoing_normal_icon
 
     @classmethod
     def from_session(cls, session):
@@ -114,7 +163,7 @@ class HistoryEntry(object):
             remote_identity = '%s <%s>' % (display_name, remote_uri)
         else:
             remote_identity = remote_uri
-        return cls(remote_identity, remote_uri, unicode(session.account.id), call_time, duration)
+        return cls(session.direction, remote_identity, remote_uri, unicode(session.account.id), call_time, duration)
 
     def __unicode__(self):
         result = unicode(self.remote_identity)
