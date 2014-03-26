@@ -13,7 +13,7 @@
    height="16px"
    id="svg2985"
    version="1.1"
-   inkscape:version="0.48.3.1 r9886"
+   inkscape:version="0.48.4 r9939"
    sodipodi:docname="bell.svg"
    inkscape:export-filename="/home/dan/bell.png"
    inkscape:export-xdpi="135"
@@ -27,14 +27,14 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="32"
+     inkscape:zoom="53.375"
      inkscape:cx="8"
-     inkscape:cy="8.2832916"
-     inkscape:current-layer="g4048"
+     inkscape:cy="8"
+     inkscape:current-layer="g4054"
      showgrid="true"
      inkscape:grid-bbox="true"
      inkscape:document-units="px"
-     inkscape:window-width="1249"
+     inkscape:window-width="1626"
      inkscape:window-height="1064"
      inkscape:window-x="143"
      inkscape:window-y="0"
@@ -81,6 +81,15 @@
        orientation="0,1"
        position="11.284901,11.194802"
        id="guide4010" />
+    <inkscape:grid
+       type="xygrid"
+       id="grid3002"
+       empspacing="10"
+       visible="true"
+       enabled="true"
+       snapvisiblegridlinesonly="true"
+       spacingx="0.5px"
+       spacingy="0.5px" />
   </sodipodi:namedview>
   <metadata
      id="metadata2990">
@@ -137,8 +146,29 @@
        style="fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none" />
   </g>
   <g
+     style="display:none"
+     inkscape:groupmode="layer"
+     inkscape:label="Bell red"
+     id="g3004">
+    <path
+       sodipodi:nodetypes="ssccccccccssss"
+       inkscape:connector-curvature="0"
+       d="M 5.5829856,4.9567763 5.4769584,8.4062854 C 5.4095534,10.599267 2.35,10.294088 2.35,11.515461 c 0,0.649489 0,0.669082 0,0.669082 l 4.7108569,0 0,0.965457 c 0.7551042,0 1.1116888,0 1.866793,0 l 0.029973,-0.965457 4.6923771,0 0,-0.669082 c -4e-6,-1.243419 -3.031825,-0.912321 -3.112859,-3.1091756 L 10.409904,4.9567763 c -0.0045,-0.1221938 -0.136959,-3.1067764 -2.4028561,-3.1067764 -2.2658973,0 -2.4203057,2.9845649 -2.4240623,3.1067764 z"
+       style="fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:#960000;stroke-width:0.69999999;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0"
+       id="path3006" />
+    <rect
+       style="fill:#640000;fill-opacity:1;fill-rule:nonzero;stroke:none;display:inline"
+       id="rect3008"
+       width="16.917469"
+       height="0.75406063"
+       x="2.3044033"
+       y="-2.8654296"
+       ry="0.37703031"
+       transform="matrix(0.53545009,0.84456687,-0.89892197,0.43810877,0,0)" />
+  </g>
+  <g
      id="g4054"
-     inkscape:label="Good size"
+     inkscape:label="Bell black"
      inkscape:groupmode="layer"
      style="display:inline">
     <path

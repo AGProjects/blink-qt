@@ -27,9 +27,9 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="32"
-     inkscape:cx="7.0876866"
-     inkscape:cy="7.3377976"
+     inkscape:zoom="53.375"
+     inkscape:cx="7.9812646"
+     inkscape:cy="7.9758635"
      inkscape:current-layer="layer3"
      showgrid="true"
      inkscape:grid-bbox="true"
@@ -122,6 +122,44 @@
       </cc:Work>
     </rdf:RDF>
   </metadata>
+  <g
+     inkscape:groupmode="layer"
+     id="g3841"
+     inkscape:label="Microphone alt"
+     style="display:none">
+    <rect
+       style="fill:#505050;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:0.70000011;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       id="rect3843"
+       width="3.8"
+       height="8.3000002"
+       x="6"
+       y="1.3500057"
+       rx="1.9"
+       ry="2.1452653" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:none"
+       id="rect3845"
+       width="8"
+       height="1"
+       x="4"
+       y="14"
+       ry="0.48333335" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:none;display:inline"
+       id="rect3847"
+       width="3"
+       height="1"
+       x="12"
+       y="-8.4997644"
+       ry="0.48333335"
+       transform="matrix(0,1,-1,0,0,0)" />
+    <path
+       sodipodi:nodetypes="csssc"
+       inkscape:connector-curvature="0"
+       id="path3849"
+       d="m 12,7.25 0,0.7803915 C 12,10.229554 10.216,12 8.0000004,12 5.784,12 4,10.229554 4,8.0303915 L 4,7.25"
+       style="fill:none;stroke:#000000;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;display:inline" />
+  </g>
   <g
      inkscape:groupmode="layer"
      id="layer3"
