@@ -32,7 +32,7 @@ class HistoryManager(object):
     def __init__(self):
         try:
             data = pickle.load(open(ApplicationData.get('calls_history')))
-            if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) for item in data):
+            if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text for item in data):
                 raise ValueError("invalid save data")
         except Exception:
             self.calls = []
@@ -103,15 +103,18 @@ class HistoryEntry(object):
     incoming_failed_icon = IconDescriptor(Resources.get('icons/arrow-inward-red.svg'))
     outgoing_failed_icon = IconDescriptor(Resources.get('icons/arrow-outward-red.svg'))
 
-    def __init__(self, direction, remote_identity, target_uri, account_id, call_time, duration, reason=None):
+    def __init__(self, direction, name, uri, account_id, call_time, duration, failed=False, reason=None):
         self.direction = direction
-        self.remote_identity = remote_identity
-        self.target_uri = target_uri
+        self.name = name
+        self.uri = uri
         self.account_id = account_id
         self.call_time = call_time
         self.duration = duration
+        self.failed = failed
         self.reason = reason
-        self.failed = False
+
+    def __reduce__(self):
+        return (self.__class__, (self.direction, self.name, self.uri, self.account_id, self.call_time, self.duration, self.failed, self.reason))
 
     def __eq__(self, other):
         return self is other
@@ -138,35 +141,9 @@ class HistoryEntry(object):
         else:
             return self.incoming_normal_icon if self.direction == 'incoming' else self.outgoing_normal_icon
 
-    @classmethod
-    def from_session(cls, session):
-        if session.start_time is None and session.end_time is not None:
-            # Session may have anded before it fully started
-            session.start_time = session.end_time
-        call_time = session.start_time or datetime.now()
-        if session.start_time and session.end_time:
-            duration = session.end_time - session.start_time
-        else:
-            duration = None
-        remote_identity = session.remote_identity
-        remote_uri = '%s@%s' % (remote_identity.uri.user, remote_identity.uri.host)
-        match = cls.phone_number_re.match(remote_uri)
-        if match:
-            remote_uri = match.group('number')
-        try:
-            contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri in (addr.uri for addr in contact.uris))
-        except StopIteration:
-            display_name = remote_identity.display_name
-        else:
-            display_name = contact.name
-        if display_name and display_name != remote_uri:
-            remote_identity = '%s <%s>' % (display_name, remote_uri)
-        else:
-            remote_identity = remote_uri
-        return cls(session.direction, remote_identity, remote_uri, unicode(session.account.id), call_time, duration)
-
-    def __unicode__(self):
-        result = unicode(self.remote_identity)
+    @property
+    def text(self):
+        result = unicode(self.name)
         if self.call_time:
             call_date = self.call_time.date()
             today = date.today()
@@ -190,5 +167,27 @@ class HistoryEntry(object):
         elif self.reason:
             result += ' (%s)' % self.reason.title()
         return result
+
+    @classmethod
+    def from_session(cls, session):
+        if session.start_time is None and session.end_time is not None:
+            # Session may have anded before it fully started
+            session.start_time = session.end_time
+        call_time = session.start_time or datetime.now()
+        if session.start_time and session.end_time:
+            duration = session.end_time - session.start_time
+        else:
+            duration = None
+        remote_uri = '%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
+        match = cls.phone_number_re.match(remote_uri)
+        if match:
+            remote_uri = match.group('number')
+        try:
+            contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri in (addr.uri for addr in contact.uris))
+        except StopIteration:
+            display_name = session.remote_identity.display_name
+        else:
+            display_name = contact.name
+        return cls(session.direction, display_name, remote_uri, unicode(session.account.id), call_time, duration)
 
 

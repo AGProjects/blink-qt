@@ -383,8 +383,9 @@ class MainWindow(base_class, ui_class):
         self.history_menu.clear()
         if self.history_manager.calls:
             for entry in reversed(self.history_manager.calls):
-                action = self.history_menu.addAction(entry.icon, unicode(entry))
+                action = self.history_menu.addAction(entry.icon, entry.text)
                 action.entry = entry
+                action.setToolTip(entry.uri)
         else:
             action = self.history_menu.addAction("Call history is empty")
             action.setEnabled(False)
@@ -396,7 +397,7 @@ class MainWindow(base_class, ui_class):
             account = account_manager.get_account(action.entry.account_id)
         except KeyError:
             account = None
-        contact, contact_uri = URIUtils.find_contact(action.entry.target_uri)
+        contact, contact_uri = URIUtils.find_contact(action.entry.uri)
         session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account) # TODO: memorize media type and use it? -Saul (not sure about history in/out -Dan)
 
     def _AH_SystemTrayShowWindow(self, checked):
