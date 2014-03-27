@@ -143,7 +143,7 @@ class HistoryEntry(object):
 
     @property
     def text(self):
-        result = unicode(self.name)
+        result = unicode(self.name or self.uri)
         if self.call_time:
             call_date = self.call_time.date()
             today = date.today()
