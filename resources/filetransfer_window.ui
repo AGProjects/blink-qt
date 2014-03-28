@@ -39,7 +39,7 @@
       <enum>Qt::CustomContextMenu</enum>
      </property>
      <property name="styleSheet">
-      <string notr="true">QListView { border: 1px solid palette(dark); border-style: inset; border-radius: 3px; }</string>
+      <string notr="true">QListView { border: 1px inset palette(dark); border-radius: 3px; }</string>
      </property>
      <property name="horizontalScrollBarPolicy">
       <enum>Qt::ScrollBarAlwaysOff</enum>
