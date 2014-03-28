@@ -191,7 +191,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="53.222222"
-     inkscape:cx="5.9843424"
+     inkscape:cx="9"
      inkscape:cy="9"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
@@ -216,10 +216,6 @@
        orientation="0,1"
        position="2,17"
        id="guide7684" />
-    <sodipodi:guide
-       orientation="1,0"
-       position="15.181628,9.6012526"
-       id="guide7738" />
   </sodipodi:namedview>
   <metadata
      id="metadata4118">
@@ -234,7 +230,7 @@
     </rdf:RDF>
   </metadata>
   <g
-     inkscape:label="Layer 1"
+     inkscape:label="Retry"
      inkscape:groupmode="layer"
      id="layer1"
      transform="translate(0,-1034.3622)">
@@ -246,7 +242,7 @@
        sodipodi:cy="7.25"
        sodipodi:rx="4.5"
        sodipodi:ry="4.75"
-       d="M 11.701112,8.9522477 A 4.5,4.75 0 1 1 11.397115,4.8750007"
+       d="M 11.701112,8.9522477 C 10.810467,11.401358 8.2075543,12.624633 5.8873442,11.684507 3.5671342,10.744382 2.4082429,7.9968629 3.2988881,5.5477523 4.1895333,3.0986416 6.7924457,1.8753675 9.1126558,2.815493 10.075167,3.2054926 10.88162,3.9325346 11.397115,4.8750007"
        transform="matrix(1.5555393,0,0,1.4732939,-2.6647636,1032.6808)"
        sodipodi:start="0.36651914"
        sodipodi:end="5.7595867"
