@@ -1229,6 +1229,9 @@ padding: 2px;</string>
    <property name="shortcut">
     <string>Ctrl+J</string>
    </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
   </action>
  </widget>
  <customwidgets>
