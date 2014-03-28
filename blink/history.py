@@ -70,10 +70,12 @@ class HistoryManager(object):
             if notification.data.code != 487 or notification.data.failure_reason != 'Call completed elsewhere':
                 entry.failed = True
         else:
-            if notification.data.code == 487:
-                entry.reason = 'cancelled'
+            if notification.data.code == 0:
+                entry.reason = 'Internal Error'
+            elif notification.data.code == 487:
+                entry.reason = 'Cancelled'
             else:
-                entry.reason = '%s (%s)' % (notification.data.reason or notification.data.failure_reason, notification.data.code)
+                entry.reason = notification.data.reason or notification.data.failure_reason
             entry.failed = True
         bisect.insort(self.calls, entry)
         self.calls = self.calls[-self.history_size:]
