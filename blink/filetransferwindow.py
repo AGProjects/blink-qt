@@ -48,8 +48,10 @@ class FileTransferWindow(base_class, ui_class):
 
         self.model.itemAdded.connect(self.update_status)
         self.model.itemRemoved.connect(self.update_status)
+        self.model.modelReset.connect(self.update_status)
 
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='FileTransferWillRetry')
         notification_center.add_observer(self, name='FileTransferDidEnd')
 
     def show(self, activate=True):
@@ -73,6 +75,9 @@ class FileTransferWindow(base_class, ui_class):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    def _NH_FileTransferWillRetry(self, notification):
+        self.update_status()
 
     def _NH_FileTransferDidEnd(self, notification):
         self.update_status()
