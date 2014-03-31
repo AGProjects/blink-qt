@@ -948,6 +948,7 @@ padding: 2px;</string>
        <normaloff>icons/quick-settings.png</normaloff>icons/quick-settings.png</iconset>
      </property>
      <addaction name="auto_accept_chat_action"/>
+     <addaction name="answering_machine_action"/>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
@@ -961,60 +962,16 @@ padding: 2px;</string>
     <addaction name="separator"/>
     <addaction name="quit_action"/>
    </widget>
-   <widget class="QMenu" name="history_menu">
-    <property name="title">
-     <string>&amp;History</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="devices_menu">
-    <property name="title">
-     <string>&amp;Devices</string>
-    </property>
-    <widget class="QMenu" name="output_device_menu">
-     <property name="title">
-      <string>&amp;Output device</string>
-     </property>
-     <property name="icon">
-      <iconset>
-       <normaloff>icons/speaker.png</normaloff>icons/speaker.png</iconset>
-     </property>
-    </widget>
-    <widget class="QMenu" name="input_device_menu">
-     <property name="title">
-      <string>&amp;Input device</string>
-     </property>
-     <property name="icon">
-      <iconset>
-       <normaloff>icons/mic.png</normaloff>icons/mic.png</iconset>
-     </property>
-    </widget>
-    <widget class="QMenu" name="alert_device_menu">
-     <property name="title">
-      <string>&amp;Alert device</string>
-     </property>
-     <property name="icon">
-      <iconset>
-       <normaloff>icons/bell.png</normaloff>icons/bell.png</iconset>
-     </property>
-    </widget>
-    <addaction name="output_device_menu"/>
-    <addaction name="input_device_menu"/>
-    <addaction name="alert_device_menu"/>
-   </widget>
    <widget class="QMenu" name="tools_menu">
     <property name="title">
      <string>&amp;Tools</string>
     </property>
-    <addaction name="answering_machine_action"/>
-    <addaction name="google_contacts_action"/>
-    <addaction name="separator"/>
     <addaction name="sip_server_settings_action"/>
-    <addaction name="search_for_people_action"/>
     <addaction name="history_on_server_action"/>
+    <addaction name="search_for_people_action"/>
     <addaction name="buy_pstn_access_action"/>
     <addaction name="separator"/>
-    <addaction name="file_transfers_action"/>
-    <addaction name="logs_action"/>
+    <addaction name="google_contacts_action"/>
    </widget>
    <widget class="QMenu" name="call_menu">
     <property name="title">
@@ -1025,18 +982,66 @@ padding: 2px;</string>
       <string>&amp;Voicemail</string>
      </property>
     </widget>
+    <widget class="QMenu" name="history_menu">
+     <property name="title">
+      <string>&amp;History</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/clock.svg</normaloff>icons/clock.svg</iconset>
+     </property>
+    </widget>
+    <widget class="QMenu" name="output_device_menu">
+     <property name="title">
+      <string>&amp;Output device</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/speaker.svg</normaloff>icons/speaker.svg</iconset>
+     </property>
+    </widget>
+    <widget class="QMenu" name="input_device_menu">
+     <property name="title">
+      <string>&amp;Input device</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/microphone.svg</normaloff>icons/microphone.svg</iconset>
+     </property>
+    </widget>
+    <widget class="QMenu" name="alert_device_menu">
+     <property name="title">
+      <string>&amp;Alert device</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/bell.svg</normaloff>icons/bell.svg</iconset>
+     </property>
+    </widget>
     <addaction name="redial_action"/>
     <addaction name="join_conference_action"/>
     <addaction name="voicemail_menu"/>
+    <addaction name="history_menu"/>
+    <addaction name="separator"/>
+    <addaction name="output_device_menu"/>
+    <addaction name="input_device_menu"/>
+    <addaction name="alert_device_menu"/>
     <addaction name="separator"/>
     <addaction name="mute_action"/>
     <addaction name="silent_action"/>
    </widget>
+   <widget class="QMenu" name="window_menu">
+    <property name="title">
+     <string>&amp;Window</string>
+    </property>
+    <addaction name="chat_window_action"/>
+    <addaction name="transfers_window_action"/>
+    <addaction name="logs_window_action"/>
+   </widget>
    <addaction name="blink_menu"/>
    <addaction name="call_menu"/>
-   <addaction name="devices_menu"/>
-   <addaction name="history_menu"/>
    <addaction name="tools_menu"/>
+   <addaction name="window_menu"/>
   </widget>
   <action name="quit_action">
    <property name="icon">
@@ -1077,7 +1082,7 @@ padding: 2px;</string>
      <normaloff>icons/configure.png</normaloff>icons/configure.png</iconset>
    </property>
    <property name="text">
-    <string>&amp;Preferences...</string>
+    <string>&amp;Preferences</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+P</string>
@@ -1094,7 +1099,7 @@ padding: 2px;</string>
     <string>Check for &amp;updates...</string>
    </property>
   </action>
-  <action name="logs_action">
+  <action name="logs_window_action">
    <property name="text">
     <string>&amp;Logs</string>
    </property>
@@ -1105,9 +1110,9 @@ padding: 2px;</string>
     <enum>Qt::ApplicationShortcut</enum>
    </property>
   </action>
-  <action name="file_transfers_action">
+  <action name="transfers_window_action">
    <property name="text">
-    <string>&amp;File transfers</string>
+    <string>File &amp;Transfers</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+T</string>
@@ -1121,15 +1126,19 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Enable &amp;Answering Machine</string>
+    <string>Enable &amp;answering machine</string>
    </property>
   </action>
   <action name="sip_server_settings_action">
    <property name="text">
-    <string>&amp;Settings on SIP server...</string>
+    <string>&amp;Settings on SIP server</string>
    </property>
   </action>
   <action name="redial_action">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/retry.svg</normaloff>icons/retry.svg</iconset>
+   </property>
    <property name="text">
     <string>&amp;Redial</string>
    </property>
@@ -1170,7 +1179,7 @@ padding: 2px;</string>
   </action>
   <action name="search_for_people_action">
    <property name="text">
-    <string>Search for &amp;people...</string>
+    <string>Search for &amp;people</string>
    </property>
   </action>
   <action name="auto_accept_chat_action">
@@ -1204,30 +1213,41 @@ padding: 2px;</string>
   </action>
   <action name="manage_accounts_action">
    <property name="text">
-    <string>&amp;Manage accounts...</string>
+    <string>&amp;Manage accounts</string>
    </property>
   </action>
   <action name="google_contacts_action">
    <property name="text">
-    <string>Enable Google Contacts</string>
+    <string>Enable &amp;Google Contacts...</string>
    </property>
   </action>
   <action name="history_on_server_action">
    <property name="text">
-    <string>Call history on server...</string>
+    <string>Call &amp;history on server</string>
    </property>
   </action>
   <action name="buy_pstn_access_action">
    <property name="text">
-    <string>Buy prepaid credit...</string>
+    <string>Buy prepaid credit</string>
    </property>
   </action>
   <action name="join_conference_action">
    <property name="text">
-    <string>Join &amp;Conference...</string>
+    <string>&amp;Join Conference...</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+J</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="chat_window_action">
+   <property name="text">
+    <string>&amp;Chat</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+G</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>

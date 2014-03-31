@@ -120,6 +120,9 @@ class MainWindow(base_class, ui_class):
         self.session_list.setModel(self.session_model)
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
 
+        # History
+        self.history_manager = HistoryManager()
+
         # Windows, dialogs and panels
         self.about_panel = AboutPanel(self)
         self.conference_dialog = ConferenceDialog(self)
@@ -176,33 +179,31 @@ class MainWindow(base_class, ui_class):
         self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
         self.preferences_action.triggered.connect(self.preferences_window.show)
         self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatTriggered)
+        self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
         self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
 
         # Call menu actions
         self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
         self.join_conference_action.triggered.connect(self.conference_dialog.show)
-        self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
-        self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
-
-        # Devices menu actions
+        self.history_menu.aboutToShow.connect(self._SH_HistoryMenuAboutToShow)
+        self.history_menu.triggered.connect(self._AH_HistoryMenuTriggered)
         self.output_devices_group.triggered.connect(self._AH_AudioOutputDeviceChanged)
         self.input_devices_group.triggered.connect(self._AH_AudioInputDeviceChanged)
         self.alert_devices_group.triggered.connect(self._AH_AudioAlertDeviceChanged)
-
-        # History menu actions
-        self.history_manager = HistoryManager()
-        self.history_menu.aboutToShow.connect(self._SH_HistoryMenuAboutToShow)
-        self.history_menu.triggered.connect(self._AH_HistoryMenuTriggered)
+        self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
+        self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
 
         # Tools menu actions
-        self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
         self.sip_server_settings_action.triggered.connect(self._AH_SIPServerSettings)
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.buy_pstn_access_action.triggered.connect(self._AH_PurchasePstnAccess)
-        self.file_transfers_action.triggered.connect(self._AH_FileTransfersActionTriggered)
-        self.logs_action.triggered.connect(self._AH_LogsActionTriggered)
+
+        # Window menu actions
+        self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
+        self.transfers_window_action.triggered.connect(self._AH_TransfersWindowActionTriggered)
+        self.logs_window_action.triggered.connect(self._AH_LogsWindowActionTriggered)
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
@@ -240,6 +241,11 @@ class MainWindow(base_class, ui_class):
         self.server_tools_window.close()
         for dialog in self.pending_watcher_dialogs[:]:
             dialog.close()
+
+    def show(self):
+        super(MainWindow, self).show()
+        self.raise_()
+        self.activateWindow()
 
     def set_user_icon(self, icon):
         self.account_state.setIcon(icon or self.default_icon)
@@ -365,10 +371,14 @@ class MainWindow(base_class, ui_class):
         account = account if account is not BonjourAccount() and account.server.settings_url else None
         self.server_tools_window.open_buy_pstn_access_page(account)
 
-    def _AH_FileTransfersActionTriggered(self, checked):
+    def _AH_ChatWindowActionTriggered(self, checked):
+        blink = QApplication.instance()
+        blink.chat_window.show()
+
+    def _AH_TransfersWindowActionTriggered(self, checked):
         self.filetransfer_window.show()
 
-    def _AH_LogsActionTriggered(self, checked):
+    def _AH_LogsWindowActionTriggered(self, checked):
         directory = ApplicationData.get('logs')
         makedirs(directory)
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
@@ -655,9 +665,9 @@ class MainWindow(base_class, ui_class):
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         if settings.google_contacts.authorization_token is None:
-            self.google_contacts_action.setText(u'Enable Google Contacts')
+            self.google_contacts_action.setText(u'Enable &Google Contacts...')
         else:
-            self.google_contacts_action.setText(u'Disable Google Contacts')
+            self.google_contacts_action.setText(u'Disable &Google Contacts')
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
         if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
@@ -722,9 +732,9 @@ class MainWindow(base_class, ui_class):
             if 'google_contacts.authorization_token' in notification.data.modified:
                 authorization_token = notification.sender.google_contacts.authorization_token
                 if authorization_token is None:
-                    self.google_contacts_action.setText(u'Enable Google Contacts')
+                    self.google_contacts_action.setText(u'Enable &Google Contacts...')
                 else:
-                    self.google_contacts_action.setText(u'Disable Google Contacts')
+                    self.google_contacts_action.setText(u'Disable &Google Contacts')
                 if authorization_token is InvalidToken:
                     self.google_contacts_dialog.open_for_incorrect_password()
         elif notification.sender is blink_settings:

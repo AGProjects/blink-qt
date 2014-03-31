@@ -7,7 +7,7 @@ import os
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QDesktopServices, QIcon, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
+from PyQt4.QtGui  import QAction, QBrush, QColor, QDesktopServices, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
@@ -619,6 +619,25 @@ class ChatWidget(base_class, ui_class):
 del ui_class, base_class
 
 
+class NoSessionsLabel(QLabel):
+    def __init__(self, chat_window):
+        super(NoSessionsLabel, self).__init__(chat_window.session_panel)
+        self.chat_window = chat_window
+        font = self.font()
+        font.setFamily("Sans Serif")
+        font.setPointSize(20)
+        self.setFont(font)
+        self.setAlignment(Qt.AlignCenter)
+        self.setStyleSheet("""QLabel { border: 1px inset palette(dark); border-radius: 3px; background-color: white; color: #545454; }""")
+        self.setText("No Sessions")
+        chat_window.session_panel.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Resize:
+            self.resize(event.size())
+        return False
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('chat_window.ui'))
 
 class ChatWindow(base_class, ui_class, ColorHelperMixin):
@@ -716,6 +735,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list = ChatSessionListView(self)
         self.session_list.setObjectName('session_list')
 
+        self.no_sessions_label = NoSessionsLabel(self)
+        self.no_sessions_label.setObjectName('no_sessions_label')
+
         self.slide_direction = self.session_details.RightToLeft # decide if we slide from one direction only -Dan
         self.slide_direction = self.session_details.Automatic
         self.session_details.animationDuration = 300
@@ -752,6 +774,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.session_list.hide()
         self.new_messages_button.hide()
+        self.hold_button.hide()
+        self.record_button.hide()
+        self.control_button.setEnabled(False)
 
         self.info_label.setForegroundRole(QPalette.Dark)
 
@@ -1271,6 +1296,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget = ChatWidget(session, self.tab_widget)
         session.active_panel = self.info_panel
         self.tab_widget.insertTab(position, session.chat_widget, session.name)
+        self.no_sessions_label.hide()
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
@@ -1282,6 +1308,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.active_panel = None
         if not self.session_model.sessions:
             self.close()
+            self.no_sessions_label.show()
         elif not self.session_list.isVisibleTo(self):
             self.session_list.animation.setDirection(QPropertyAnimation.Forward)
             self.session_list.animation.setStartValue(self.session_widget.geometry())
@@ -1303,17 +1330,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.session_details.setCurrentWidget(self.selected_session.active_panel)
             self.participants_list.setModel(self.selected_session.participants_model)
             self.control_button.setEnabled(True)
-            # start animation to show list? -Dan
-        elif self.session_model.sessions:
+        else:
             self.tab_widget.setCurrentWidget(self.dummy_tab)
             self.session_details.setCurrentWidget(self.info_panel)
             self.participants_list.setModel(None)
             self.control_button.setEnabled(False)
-            # start animation to show list? -Dan
-        else:
-            self.session_details.setCurrentWidget(self.info_panel)
-            self.participants_list.setModel(None)
-            self.hide()
 
     def _AH_Connect(self):
         blink_session = self.selected_session.blink_session
