@@ -10,6 +10,7 @@ import re
 from urllib import pathname2url, url2pathname
 from urlparse import urlparse
 
+from application.python.types import MarkerType
 from sipsimple.configuration.datatypes import Hostname, List
 
 from blink.resources import ApplicationData
@@ -59,9 +60,7 @@ class SoundFile(object):
     del _get_path, _set_path
 
 
-class DefaultPath(object):
-    def __repr__(self):
-        return self.__class__.__name__
+class DefaultPath: __metaclass__ = MarkerType
 
 class CustomSoundFile(object): # check if this data type is still needed -Dan
     def __init__(self, path=DefaultPath, volume=100):
