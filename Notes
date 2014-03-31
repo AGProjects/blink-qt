@@ -1,9 +1,7 @@
 Code refactoring
 ----------------
 
-+ accounts.py line 648 remove redundant setMovie statement
 + adjust web view spacing and margins for widgets (relative to window borders)
-+ check if QEvent.DynamicPropertyChange happens after the property changed
 
 + do not kill greenlets but interrupt commands instead (sipsimple)
 - refactor how models/dialogs/windows are created and where are they kept
@@ -16,7 +14,7 @@ Code refactoring
 Issues
 ------
 
-- review the change to only play a handup tone when session has audio/video
+- review the change to only play a hangup tone when session has audio/video
 
 - apply the default font/size from the theme to the input textbox?
 - in Smooth Operator check if the src attribute is still needed in elements
