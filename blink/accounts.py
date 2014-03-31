@@ -647,7 +647,6 @@ class ServerToolsWindow(base_class, ui_class):
         view.load_account_page(account, tab=view.tab, task=view.task)
 
     def _SH_WebViewLoadStarted(self):
-        self.spinner_label.setMovie(self.spinner_movie)
         self.spinner_label.show()
         self.spinner_movie.start()
         self.progress_bar.setValue(0)
