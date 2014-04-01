@@ -327,7 +327,7 @@
                   </sizepolicy>
                  </property>
                  <property name="text">
-                  <string>Note: drag codecs to change their order</string>
+                  <string>Drag codecs to change their order</string>
                  </property>
                  <property name="alignment">
                   <set>Qt::AlignCenter</set>
@@ -1674,7 +1674,7 @@
            <item>
             <widget class="QLabel" name="audio_codecs_note">
              <property name="text">
-              <string>Note: drag codecs to change their order</string>
+              <string>Drag codecs to change their order</string>
              </property>
             </widget>
            </item>
