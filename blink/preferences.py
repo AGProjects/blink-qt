@@ -284,6 +284,9 @@ class PreferencesWindow(base_class, ui_class):
         self.tail_length_slider.hide()
         self.tail_length_value_label.hide()
 
+        # Hide the answering machine section for now as it's not implemented -Dan
+        self.answering_machine_group_box.hide()
+
         self.section_group = QActionGroup(self)
         self.section_group.setExclusive(True)
         for index, action in enumerate(action for action in self.toolbar.actions() if not action.isSeparator()):

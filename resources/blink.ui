@@ -1128,6 +1128,9 @@ padding: 2px;</string>
    <property name="text">
     <string>Enable &amp;answering machine</string>
    </property>
+   <property name="visible">
+    <bool>false</bool>
+   </property>
   </action>
   <action name="sip_server_settings_action">
    <property name="text">
