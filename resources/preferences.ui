@@ -254,6 +254,12 @@
             </property>
             <item row="2" column="1">
              <widget class="QListWidget" name="account_video_codecs_list">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
               <property name="horizontalScrollBarPolicy">
                <enum>Qt::ScrollBarAlwaysOff</enum>
               </property>
