@@ -141,6 +141,28 @@ class AccountListView(QListView):
             selection_model.setCurrentIndex(index, selection_model.Select)
 
 
+class blocked_qt_signals(object):
+    def __init__(self, qobject):
+        self.qobject = qobject
+    def __enter__(self):
+        self.qobject.blockSignals(True)
+        return self.qobject
+    def __exit__(self, type, value, traceback):
+        self.qobject.blockSignals(False)
+
+
+class UnspecifiedOutboundProxy(object):
+    host = u''
+    port = 5060
+    transport = u'UDP'
+
+
+class UnspecifiedMSRPRelay(object):
+    host = u''
+    port = 0
+    transport = u'TLS'
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('preferences.ui'))
 
 class PreferencesWindow(base_class, ui_class):
@@ -150,7 +172,6 @@ class PreferencesWindow(base_class, ui_class):
 
     def __init__(self, account_model, parent=None):
         super(PreferencesWindow, self).__init__(parent)
-        self.load_in_progress = False
 
         with Resources.directory:
             self.setupUi()
@@ -475,27 +496,29 @@ class PreferencesWindow(base_class, ui_class):
         """Load settings from configuration into the UI controls"""
         settings = SIPSimpleSettings()
 
-        self.load_in_progress = True
-
         # Audio devices
         self.load_audio_devices()
         self.enable_echo_cancelling_button.setChecked(settings.audio.echo_canceller.enabled)
-        self.tail_length_slider.setValue(settings.audio.echo_canceller.tail_length)
+        with blocked_qt_signals(self.tail_length_slider):
+            self.tail_length_slider.setValue(settings.audio.echo_canceller.tail_length)
         self.audio_sample_rate_button.clear()
         for rate in SIPSimpleSettings.audio.sample_rate.type.valid_values:
             self.audio_sample_rate_button.addItem(str(rate), rate)
         self.audio_sample_rate_button.setCurrentIndex(self.audio_sample_rate_button.findText(str(settings.audio.sample_rate)))
 
         # Audio codecs
-        self.audio_codecs_list.clear()
-        for codec in settings.rtp.audio_codec_order:
-            item = QListWidgetItem(codec, self.audio_codecs_list)
-            item.setCheckState(Qt.Checked if codec in settings.rtp.audio_codec_list else Qt.Unchecked)
+        with blocked_qt_signals(self.audio_codecs_list):
+            self.audio_codecs_list.clear()
+            for codec in settings.rtp.audio_codec_order:
+                item = QListWidgetItem(codec, self.audio_codecs_list)
+                item.setCheckState(Qt.Checked if codec in settings.rtp.audio_codec_list else Qt.Unchecked)
 
         # Asnwering Machine settings
         self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
-        self.answer_delay.setValue(settings.answering_machine.answer_delay)
-        self.max_recording.setValue(settings.answering_machine.max_recording)
+        with blocked_qt_signals(self.answer_delay):
+            self.answer_delay.setValue(settings.answering_machine.answer_delay)
+        with blocked_qt_signals(self.max_recording):
+            self.max_recording.setValue(settings.answering_machine.max_recording)
         # TODO: load unavailable message -Dan
 
         # Chat and SMS settings
@@ -516,7 +539,8 @@ class PreferencesWindow(base_class, ui_class):
         self.trace_xcap_button.setChecked(settings.logs.trace_xcap)
         self.trace_notifications_button.setChecked(settings.logs.trace_notifications)
         self.trace_pjsip_button.setChecked(settings.logs.trace_pjsip)
-        self.pjsip_trace_level.setValue(limit(settings.logs.pjsip_level, min=0, max=5))
+        with blocked_qt_signals(self.pjsip_trace_level):
+            self.pjsip_trace_level.setValue(limit(settings.logs.pjsip_level, min=0, max=5))
 
         # Advanced settings
         for button in self.sip_transports_button_group.buttons():
@@ -526,26 +550,31 @@ class PreferencesWindow(base_class, ui_class):
             log.warning("the SIP TLS and TCP ports cannot be the same")
             settings.sip.tls_port = settings.sip.tcp_port+1 if settings.sip.tcp_port<65535 else 65534
             settings.save()
-        self.udp_port.setValue(settings.sip.udp_port)
-        self.tcp_port.setValue(settings.sip.tcp_port)
-        self.tls_port.setValue(settings.sip.tls_port)
-        self.media_ports_start.setValue(settings.rtp.port_range.start)
-        self.media_ports.setValue(settings.rtp.port_range.end - settings.rtp.port_range.start)
 
-        self.session_timeout.setValue(settings.sip.invite_timeout)
-        self.rtp_timeout.setValue(settings.rtp.timeout)
+        with blocked_qt_signals(self.udp_port):
+            self.udp_port.setValue(settings.sip.udp_port)
+        with blocked_qt_signals(self.tcp_port):
+            self.tcp_port.setValue(settings.sip.tcp_port)
+        with blocked_qt_signals(self.tls_port):
+            self.tls_port.setValue(settings.sip.tls_port)
+        with blocked_qt_signals(self.media_ports_start):
+            self.media_ports_start.setValue(settings.rtp.port_range.start)
+        with blocked_qt_signals(self.media_ports):
+            self.media_ports.setValue(settings.rtp.port_range.end - settings.rtp.port_range.start)
+
+        with blocked_qt_signals(self.session_timeout):
+            self.session_timeout.setValue(settings.sip.invite_timeout)
+        with blocked_qt_signals(self.rtp_timeout):
+            self.rtp_timeout.setValue(settings.rtp.timeout)
 
         self.tls_ca_file_editor.setText(settings.tls.ca_list or u'')
-        self.tls_timeout.setValue(settings.tls.timeout / 1000.0)
-
-        self.load_in_progress = False
+        with blocked_qt_signals(self.tls_timeout):
+            self.tls_timeout.setValue(settings.tls.timeout / 1000.0)
 
     def load_account_settings(self, account):
         """Load the account settings from configuration into the UI controls"""
         settings = SIPSimpleSettings()
         bonjour_account = BonjourAccount()
-
-        self.load_in_progress = True
 
         # Account information tab
         self.account_enabled_button.setChecked(account.enabled)
@@ -563,12 +592,13 @@ class PreferencesWindow(base_class, ui_class):
             self.account_registration_label.setText(u'')
 
         # Media tab
-        self.account_audio_codecs_list.clear()
-        audio_codec_order = account.rtp.audio_codec_order or settings.rtp.audio_codec_order
-        audio_codec_list = account.rtp.audio_codec_list or settings.rtp.audio_codec_list
-        for codec in audio_codec_order:
-            item = QListWidgetItem(codec, self.account_audio_codecs_list)
-            item.setCheckState(Qt.Checked if codec in audio_codec_list else Qt.Unchecked)
+        with blocked_qt_signals(self.account_audio_codecs_list):
+            self.account_audio_codecs_list.clear()
+            audio_codec_order = account.rtp.audio_codec_order or settings.rtp.audio_codec_order
+            audio_codec_list = account.rtp.audio_codec_list or settings.rtp.audio_codec_list
+            for codec in audio_codec_order:
+                item = QListWidgetItem(codec, self.account_audio_codecs_list)
+                item.setCheckState(Qt.Checked if codec in audio_codec_list else Qt.Unchecked)
         self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_order is not None)
         self.reset_account_video_codecs_button.setEnabled(False)
         self.account_video_codecs_list.setEnabled(False)
@@ -579,24 +609,20 @@ class PreferencesWindow(base_class, ui_class):
         if account is not bonjour_account:
             # Server settings tab
             self.always_use_my_proxy_button.setChecked(account.sip.always_use_my_proxy)
-            if account.sip.outbound_proxy is None:
-                self.outbound_proxy_host_editor.setText(u'')
-                self.outbound_proxy_port.setValue(5060)
-                self.outbound_proxy_transport_button.setCurrentIndex(self.outbound_proxy_transport_button.findText(u'UDP'))
-            else:
-                self.outbound_proxy_host_editor.setText(account.sip.outbound_proxy.host)
-                self.outbound_proxy_port.setValue(account.sip.outbound_proxy.port)
-                self.outbound_proxy_transport_button.setCurrentIndex(self.outbound_proxy_transport_button.findText(account.sip.outbound_proxy.transport.upper()))
+            outbound_proxy = account.sip.outbound_proxy or UnspecifiedOutboundProxy
+            self.outbound_proxy_host_editor.setText(outbound_proxy.host)
+            with blocked_qt_signals(self.outbound_proxy_port):
+                self.outbound_proxy_port.setValue(outbound_proxy.port)
+            self.outbound_proxy_transport_button.setCurrentIndex(self.outbound_proxy_transport_button.findText(outbound_proxy.transport.upper()))
             self.auth_username_editor.setText(account.auth.username or u'')
+
             self.always_use_my_msrp_relay_button.setChecked(account.nat_traversal.use_msrp_relay_for_outbound)
-            if account.nat_traversal.msrp_relay is None:
-                self.msrp_relay_host_editor.setText(u'')
-                self.msrp_relay_port.setValue(0)
-                self.msrp_relay_transport_button.setCurrentIndex(self.msrp_relay_transport_button.findText(u'TLS'))
-            else:
-                self.msrp_relay_host_editor.setText(account.nat_traversal.msrp_relay.host)
-                self.msrp_relay_port.setValue(account.nat_traversal.msrp_relay.port)
-                self.msrp_relay_transport_button.setCurrentIndex(self.msrp_relay_transport_button.findText(account.nat_traversal.msrp_relay.transport.upper()))
+            msrp_relay = account.nat_traversal.msrp_relay or UnspecifiedMSRPRelay
+            self.msrp_relay_host_editor.setText(msrp_relay.host)
+            with blocked_qt_signals(self.msrp_relay_port):
+                self.msrp_relay_port.setValue(msrp_relay.port)
+            self.msrp_relay_transport_button.setCurrentIndex(self.msrp_relay_transport_button.findText(msrp_relay.transport.upper()))
+
             self.voicemail_uri_editor.setText(account.message_summary.voicemail_uri or u'')
             self.xcap_root_editor.setText(account.xcap.xcap_root or u'')
             self.server_tools_url_editor.setText(account.server.settings_url or u'')
@@ -607,9 +633,12 @@ class PreferencesWindow(base_class, ui_class):
             self.msrp_transport_button.setCurrentIndex(self.msrp_transport_button.findText(account.msrp.transport.upper()))
 
             # Advanced tab
-            self.register_interval.setValue(account.sip.register_interval)
-            self.publish_interval.setValue(account.sip.publish_interval)
-            self.subscribe_interval.setValue(account.sip.subscribe_interval)
+            with blocked_qt_signals(self.register_interval):
+                self.register_interval.setValue(account.sip.register_interval)
+            with blocked_qt_signals(self.publish_interval):
+                self.publish_interval.setValue(account.sip.publish_interval)
+            with blocked_qt_signals(self.subscribe_interval):
+                self.subscribe_interval.setValue(account.sip.subscribe_interval)
             self.reregister_button.setEnabled(account.enabled)
 
             item_text = account.pstn.idd_prefix or '+'
@@ -628,8 +657,6 @@ class PreferencesWindow(base_class, ui_class):
 
             self.account_tls_cert_file_editor.setText(account.tls.certificate or u'')
             self.account_tls_verify_server_button.setChecked(account.tls.verify_server)
-
-        self.load_in_progress = False
 
     def show(self):
         selection_model = self.account_list.selectionModel()
@@ -792,12 +819,11 @@ class PreferencesWindow(base_class, ui_class):
 
     # Account media settings
     def _SH_AccountAudioCodecsListItemChanged(self, item):
-        if not self.load_in_progress:
-            account = self.selected_account
-            items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-            account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
-            account.rtp.audio_codec_order = [item.text() for item in items]
-            account.save()
+        account = self.selected_account
+        items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
+        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.audio_codec_order = [item.text() for item in items]
+        account.save()
 
     def _SH_AccountAudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
@@ -810,16 +836,13 @@ class PreferencesWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         account = self.selected_account
 
-        self.load_in_progress = True
-
-        self.account_audio_codecs_list.clear()
-        audio_codec_order = settings.rtp.audio_codec_order
-        audio_codec_list = settings.rtp.audio_codec_list
-        for codec in audio_codec_order:
-            item = QListWidgetItem(codec, self.account_audio_codecs_list)
-            item.setCheckState(Qt.Checked if codec in audio_codec_list else Qt.Unchecked)
-
-        self.load_in_progress = False
+        with blocked_qt_signals(self.account_audio_codecs_list):
+            self.account_audio_codecs_list.clear()
+            audio_codec_order = settings.rtp.audio_codec_order
+            audio_codec_list = settings.rtp.audio_codec_list
+            for codec in audio_codec_order:
+                item = QListWidgetItem(codec, self.account_audio_codecs_list)
+                item.setCheckState(Qt.Checked if codec in audio_codec_list else Qt.Unchecked)
 
         account.rtp.audio_codec_list  = DefaultValue
         account.rtp.audio_codec_order = DefaultValue
@@ -849,12 +872,11 @@ class PreferencesWindow(base_class, ui_class):
             account.save()
 
     def _SH_OutboundProxyPortValueChanged(self, value):
-        if not self.load_in_progress:
-            account = self.selected_account
-            outbound_proxy = self.account_outbound_proxy
-            if account.sip.outbound_proxy != outbound_proxy:
-                account.sip.outbound_proxy = outbound_proxy
-                account.save()
+        account = self.selected_account
+        outbound_proxy = self.account_outbound_proxy
+        if account.sip.outbound_proxy != outbound_proxy:
+            account.sip.outbound_proxy = outbound_proxy
+            account.save()
 
     def _SH_OutboundProxyTransportButtonActivated(self, text):
         account = self.selected_account
@@ -883,12 +905,11 @@ class PreferencesWindow(base_class, ui_class):
             account.save()
 
     def _SH_MSRPRelayPortValueChanged(self, value):
-        if not self.load_in_progress:
-            account = self.selected_account
-            msrp_relay = self.account_msrp_relay
-            if account.nat_traversal.msrp_relay != msrp_relay:
-                account.nat_traversal.msrp_relay = msrp_relay
-                account.save()
+        account = self.selected_account
+        msrp_relay = self.account_msrp_relay
+        if account.nat_traversal.msrp_relay != msrp_relay:
+            account.nat_traversal.msrp_relay = msrp_relay
+            account.save()
 
     def _SH_MSRPRelayTransportButtonActivated(self, text):
         account = self.selected_account
@@ -938,22 +959,19 @@ class PreferencesWindow(base_class, ui_class):
 
     # Account advanced settings
     def _SH_RegisterIntervalValueChanged(self, value):
-        if not self.load_in_progress:
-            account = self.selected_account
-            account.sip.register_interval = value
-            account.save()
+        account = self.selected_account
+        account.sip.register_interval = value
+        account.save()
 
     def _SH_PublishIntervalValueChanged(self, value):
-        if not self.load_in_progress:
-            account = self.selected_account
-            account.sip.publish_interval = value
-            account.save()
+        account = self.selected_account
+        account.sip.publish_interval = value
+        account.save()
 
     def _SH_SubscribeIntervalValueChanged(self, value):
-        if not self.load_in_progress:
-            account = self.selected_account
-            account.sip.subscribe_interval = value
-            account.save()
+        account = self.selected_account
+        account.sip.subscribe_interval = value
+        account.save()
 
     def _SH_ReregisterButtonClicked(self):
         account = self.selected_account
@@ -1042,11 +1060,10 @@ class PreferencesWindow(base_class, ui_class):
 
     # Audio codecs signal handlers
     def _SH_AudioCodecsListItemChanged(self, item):
-        if not self.load_in_progress:
-            settings = SIPSimpleSettings()
-            item_iterator = (self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count()))
-            settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState()==Qt.Checked]
-            settings.save()
+        settings = SIPSimpleSettings()
+        item_iterator = (self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count()))
+        settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState()==Qt.Checked]
+        settings.save()
 
     def _SH_AudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
@@ -1069,14 +1086,14 @@ class PreferencesWindow(base_class, ui_class):
         else:
             self.answer_delay_seconds_label.setText(u'seconds')
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.answering_machine.answer_delay != value:
+        if settings.answering_machine.answer_delay != value:
             settings.answering_machine.answer_delay = value
             settings.save()
 
     def _SH_MaxRecordingValueChanged(self, value):
         self.max_recording_minutes_label.setText(u'minute' if value==1 else u'minutes')
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.answering_machine.max_recording != value:
+        if settings.answering_machine.max_recording != value:
             settings.answering_machine.max_recording = value
             settings.save()
 
@@ -1153,7 +1170,7 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_PJSIPTraceLevelValueChanged(self, value):
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.logs.pjsip_level != value:
+        if settings.logs.pjsip_level != value:
             settings.logs.pjsip_level = value
             settings.save()
 
@@ -1183,19 +1200,19 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_UDPPortValueChanged(self, value):
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.sip.udp_port != value:
+        if settings.sip.udp_port != value:
             settings.sip.udp_port = value
             settings.save()
 
     def _SH_TCPPortValueChanged(self, value):
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.sip.tcp_port != value:
+        if settings.sip.tcp_port != value:
             settings.sip.tcp_port = value
             settings.save()
 
     def _SH_TLSPortValueChanged(self, value):
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.sip.tls_port != value:
+        if settings.sip.tls_port != value:
             settings.sip.tls_port = value
             settings.save()
 
@@ -1203,7 +1220,7 @@ class PreferencesWindow(base_class, ui_class):
         self.media_ports.setMaximum(limit(65535-value, min=10, max=10000))
         settings = SIPSimpleSettings()
         port_range = PortRange(value, value + self.media_ports.value())
-        if not self.load_in_progress and settings.rtp.port_range != port_range:
+        if settings.rtp.port_range != port_range:
             settings.rtp.port_range = port_range
             settings.save()
 
@@ -1211,13 +1228,13 @@ class PreferencesWindow(base_class, ui_class):
         self.media_ports_start.setMaximum(limit(65535-value, min=10000, max=65000))
         settings = SIPSimpleSettings()
         port_range = PortRange(self.media_ports_start.value(), self.media_ports_start.value() + value)
-        if not self.load_in_progress and settings.rtp.port_range != port_range:
+        if settings.rtp.port_range != port_range:
             settings.rtp.port_range = port_range
             settings.save()
 
     def _SH_SessionTimeoutValueChanged(self, value):
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.sip.invite_timeout != value:
+        if settings.sip.invite_timeout != value:
             settings.sip.invite_timeout = value
             settings.save()
 
@@ -1229,7 +1246,7 @@ class PreferencesWindow(base_class, ui_class):
         else:
             self.rtp_timeout_seconds_label.setText(u'seconds')
         settings = SIPSimpleSettings()
-        if not self.load_in_progress and settings.rtp.timeout != value:
+        if settings.rtp.timeout != value:
             settings.rtp.timeout = value
             settings.save()
 
@@ -1262,7 +1279,7 @@ class PreferencesWindow(base_class, ui_class):
         self.tls_timeout_seconds_label.setText(u'second' if value==1 else u'seconds')
         settings = SIPSimpleSettings()
         timeout = value * 1000
-        if not self.load_in_progress and settings.tls.timeout != timeout:
+        if settings.tls.timeout != timeout:
             settings.tls.timeout = timeout
             settings.save()
 
