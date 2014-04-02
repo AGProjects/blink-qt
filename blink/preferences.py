@@ -404,7 +404,7 @@ class PreferencesWindow(base_class, ui_class):
         default_list  = SIPSimpleSettings.rtp.audio_codec_list.default
 
         if settings.rtp.audio_codec_order is not default_order:
-            # user changed the default order, we need to sync with the new settings
+            # user has a non-default codec order, we need to sync with the new settings
             added_codecs = set(default_order).difference(settings.rtp.audio_codec_order)
             removed_codecs = set(settings.rtp.audio_codec_order).difference(default_order)
             if added_codecs:
@@ -422,7 +422,7 @@ class PreferencesWindow(base_class, ui_class):
                 settings.save()
 
         for account in (account for account in account_manager.iter_accounts() if account.rtp.audio_codec_order is not None):
-            # user changed the default order, we need to sync with the new settings
+            # user has a non-default codec order, we need to sync with the new settings
             added_codecs = set(default_order).difference(account.rtp.audio_codec_order)
             removed_codecs = set(account.rtp.audio_codec_order).difference(default_order)
             if added_codecs:
