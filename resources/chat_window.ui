@@ -1044,7 +1044,7 @@ QToolButton:pressed {
                   </sizepolicy>
                  </property>
                  <property name="styleSheet">
-                  <string notr="true">#info_panel_container_widget &gt; [role=&quot;name&quot;] {
+                  <string notr="true">#info_panel_container_widget &gt; [role=&quot;title&quot;] {
 	background-color: rbga(0, 0, 0, 10);
 	border-top-left-radius: 3px;
 	border-bottom-left-radius: 3px;
@@ -1062,7 +1062,7 @@ QToolButton:pressed {
 	padding-right: 2px;
 }
 
-#info_panel_container_widget &gt; [role=&quot;alt-name&quot;] {
+#info_panel_container_widget &gt; [role=&quot;alt-title&quot;] {
 	background-color: transparent;
 	border-bottom: 1px solid rgba(0, 0, 0, 50);
 	padding-bottom: 1px;
@@ -1171,7 +1171,7 @@ QToolButton:pressed {
                      <string>Account</string>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1181,7 +1181,7 @@ QToolButton:pressed {
                      <string>Duration</string>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1210,7 +1210,7 @@ QToolButton:pressed {
                      <string>Remote Agent</string>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1239,7 +1239,7 @@ QToolButton:pressed {
                      <string>Addresses</string>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1365,7 +1365,7 @@ QToolButton:pressed {
                      <string>Audio</string>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1466,7 +1466,7 @@ QToolButton:pressed {
                      <number>12</number>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1476,7 +1476,7 @@ QToolButton:pressed {
                      <string>Chat</string>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1508,7 +1508,7 @@ QToolButton:pressed {
                      <number>12</number>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1540,7 +1540,7 @@ QToolButton:pressed {
                      <number>12</number>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
@@ -1815,7 +1815,7 @@ QToolButton:pressed {
                      <string>Status</string>
                     </property>
                     <property name="role" stdset="0">
-                     <string notr="true">name</string>
+                     <string notr="true">title</string>
                     </property>
                    </widget>
                   </item>
