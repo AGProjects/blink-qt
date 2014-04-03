@@ -1064,15 +1064,19 @@ QToolButton:pressed {
 
 #info_panel_container_widget &gt; [role=&quot;alt-title&quot;] {
 	background-color: transparent;
+	border-left: 1px solid transparent;
+	border-top: 1px solid transparent;
+	border-right: 0px;
 	border-bottom: 1px solid rgba(0, 0, 0, 50);
-	padding-bottom: 1px;
 	padding-right: 7px;
 }
 
 #info_panel_container_widget &gt; [role=&quot;alt-value&quot;] {
 	background-color: transparent;
+	border-left: 0px;
+	border-top: 1px solid transparent;
+	border-right: 1px solid transparent;
 	border-bottom: 1px solid rgba(0, 0, 0, 50);
-	padding-bottom: 1px;
 	padding-right: 2px;
 }
 </string>
