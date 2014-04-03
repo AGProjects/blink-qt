@@ -1044,12 +1044,7 @@ QToolButton:pressed {
                   </sizepolicy>
                  </property>
                  <property name="styleSheet">
-                  <string notr="true">#info_panel_container_widget &gt; [role=&quot;title&quot;] {
-	margin-top: 10px;
-	font-weight: bold;
-}
-
-#info_panel_container_widget &gt; [role=&quot;name&quot;] {
+                  <string notr="true">#info_panel_container_widget &gt; [role=&quot;name&quot;] {
 	background-color: rbga(0, 0, 0, 10);
 	border-top-left-radius: 3px;
 	border-bottom-left-radius: 3px;
@@ -1065,14 +1060,6 @@ QToolButton:pressed {
 	border: 1px solid rgba(0, 0, 0, 50);
 	border-left: 0px;
 	padding-right: 2px;
-}
-
-#info_panel_container_widget &gt; [role=&quot;alt-title&quot;] {
-	background-color: transparent;
-	border-bottom: 1px solid rgba(0, 0, 0, 50);
-	padding-bottom: 1px;
-	margin-top: 8px;
-	font-weight: bold;
 }
 
 #info_panel_container_widget &gt; [role=&quot;alt-name&quot;] {
