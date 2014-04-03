@@ -468,7 +468,7 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_input_device_button.clear()
         self.audio_input_device_button.addItem(u'System Default', 'system_default')
         self.audio_input_device_button.insertSeparator(1)
-        self.audio_input_device_button.setItemData(1, Separator) # prevent the separator from being selectable
+        self.audio_input_device_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.input_devices:
             self.audio_input_device_button.addItem(device, device)
         self.audio_input_device_button.addItem(u'None', None)
@@ -477,7 +477,7 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_output_device_button.clear()
         self.audio_output_device_button.addItem(u'System Default', 'system_default')
         self.audio_output_device_button.insertSeparator(1)
-        self.audio_output_device_button.setItemData(1, Separator) # prevent the separator from being selectable
+        self.audio_output_device_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_output_device_button.addItem(device, device)
         self.audio_output_device_button.addItem(u'None', None)
@@ -486,7 +486,7 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_alert_device_button.clear()
         self.audio_alert_device_button.addItem(u'System Default', 'system_default')
         self.audio_alert_device_button.insertSeparator(1)
-        self.audio_alert_device_button.setItemData(1, Separator) # prevent the separator from being selectable
+        self.audio_alert_device_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_alert_device_button.addItem(device, device)
         self.audio_alert_device_button.addItem(u'None', None)
