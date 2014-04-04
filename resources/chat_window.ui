@@ -1162,7 +1162,7 @@ QToolButton:pressed {
                         <double>1.600000000000000</double>
                        </property>
                        <property name="smoothEnvelope" stdset="0">
-                        <bool>false</bool>
+                        <bool>true</bool>
                        </property>
                       </widget>
                      </item>
