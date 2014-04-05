@@ -17,7 +17,7 @@ from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
-from sipsimple.account import Account, BonjourAccount, AccountManager
+from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration import DefaultValue
 from sipsimple.configuration.datatypes import MSRPRelayAddress, PortRange, SIPProxyAddress
@@ -1312,7 +1312,7 @@ class PreferencesWindow(base_class, ui_class):
                 self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
             if 'chat.auto_accept' in notification.data.modified:
                 self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
-        elif isinstance(notification.sender, (Account, BonjourAccount)) and notification.sender is self.selected_account:
+        elif notification.sender is self.selected_account is not None:
             account = notification.sender
             if 'enabled' in notification.data.modified:
                 self.account_enabled_button.setChecked(account.enabled)
