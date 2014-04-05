@@ -7,7 +7,8 @@ import os
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QDesktopServices, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
+from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
+from PyQt4.QtGui  import QApplication, QDesktopServices
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
@@ -731,6 +732,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.add_audio = QAction("Add audio", self, triggered=self._AH_AddAudio)
         self.control_button.actions.remove_audio = QAction("Remove audio", self, triggered=self._AH_RemoveAudio)
         self.control_button.actions.dump_session = QAction("Dump session", self, triggered=self._AH_DumpSession) # remove later -Dan
+        self.control_button.actions.main_window = QAction("Main Window", self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
+
+        self.addAction(self.control_button.actions.main_window) # make this active even when it's not in the contol_button's menu
 
         self.session_list = ChatSessionListView(self)
         self.session_list.setObjectName('session_list')
@@ -1364,6 +1368,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         print "hold:    %r/%r" % (blink_session.local_hold, blink_session.remote_hold)
         print "conf:    %r" % blink_session.client_conference
         print "active:  %r" % blink_session.active
+
+    def _AH_MainWindow(self):
+        blink = QApplication.instance()
+        blink.main_window.show()
 
     def _EH_CloseSession(self):
         if self.selected_session is not None:
