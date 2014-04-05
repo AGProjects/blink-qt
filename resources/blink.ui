@@ -1069,9 +1069,6 @@ padding: 2px;</string>
    <property name="text">
     <string>About &amp;Blink</string>
    </property>
-   <property name="shortcutContext">
-    <enum>Qt::ApplicationShortcut</enum>
-   </property>
    <property name="menuRole">
     <enum>QAction::AboutRole</enum>
    </property>
