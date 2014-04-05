@@ -111,6 +111,17 @@ class Blink(QApplication):
         self.main_window = MainWindow()
         self.chat_window = ChatWindow()
 
+        self.main_window.addAction(self.chat_window.control_button.actions.main_window)
+        self.chat_window.addAction(self.main_window.quit_action)
+        self.chat_window.addAction(self.main_window.help_action)
+        self.chat_window.addAction(self.main_window.redial_action)
+        self.chat_window.addAction(self.main_window.join_conference_action)
+        self.chat_window.addAction(self.main_window.mute_action)
+        self.chat_window.addAction(self.main_window.silent_action)
+        self.chat_window.addAction(self.main_window.preferences_action)
+        self.chat_window.addAction(self.main_window.transfers_window_action)
+        self.chat_window.addAction(self.main_window.logs_window_action)
+
         self.ip_address_monitor = IPAddressMonitor()
         self.log_manager = LogManager()
         self.presence_manager = PresenceManager()
