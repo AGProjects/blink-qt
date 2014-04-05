@@ -768,8 +768,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.info_panel_participants_button.hide()
         self.participants_panel_files_button.hide()
 
-        while self.tab_widget.count():
-            self.tab_widget.removeTab(0) # remove the tab(s) added in designer
+        self.tab_widget.clear() # remove the tab(s) added in designer
         self.tab_widget.tabBar().hide()
         self.dummy_tab = ChatWidget(None, self.tab_widget)
         self.dummy_tab.setDisabled(True)
