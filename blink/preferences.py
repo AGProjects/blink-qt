@@ -281,10 +281,7 @@ class PreferencesWindow(base_class, ui_class):
         # File transfer
         self.download_directory_editor.locationCleared.connect(self._SH_DownloadDirectoryEditorLocationCleared)
         self.download_directory_browse_button.clicked.connect(self._SH_DownloadDirectoryBrowseButtonClicked)
-
-        # Alerts
-        self.silence_alerts_button.clicked.connect(self._SH_SilenceAlertsButtonClicked)
-        self.file_alerts_button.clicked.connect(self._SH_FileAlertsButtonClicked)
+        self.file_transfer_alert_button.clicked.connect(self._SH_FileTransferAlertButtonClicked)
 
         # File logging
         self.trace_sip_button.clicked.connect(self._SH_TraceSIPButtonClicked)
@@ -590,10 +587,7 @@ class PreferencesWindow(base_class, ui_class):
 
         # File transfer settings
         self.download_directory_editor.setText(settings.file_transfer.directory or u'')
-
-        # Alert settings
-        self.silence_alerts_button.setChecked(settings.audio.silent)
-        self.file_alerts_button.setChecked(settings.sounds.play_file_alerts)
+        self.file_transfer_alert_button.setChecked(settings.sounds.play_file_alerts)
 
         # File logging settings
         self.trace_sip_button.setChecked(settings.logs.trace_sip)
@@ -1309,13 +1303,7 @@ class PreferencesWindow(base_class, ui_class):
                 settings.file_transfer.directory = directory
                 settings.save()
 
-    # Alerts signal handlers
-    def _SH_SilenceAlertsButtonClicked(self, checked):
-        settings = SIPSimpleSettings()
-        settings.audio.silent = checked
-        settings.save()
-
-    def _SH_FileAlertsButtonClicked(self, checked):
+    def _SH_FileTransferAlertButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.sounds.play_file_alerts = checked
         settings.save()
@@ -1485,8 +1473,6 @@ class PreferencesWindow(base_class, ui_class):
                 self.update_chat_preview()
                 self.style_default_font_button.setEnabled(blink_settings.chat_window.font is not None or blink_settings.chat_window.font_size is not None)
         elif notification.sender is settings:
-            if 'audio.silent' in notification.data.modified:
-                self.silence_alerts_button.setChecked(settings.audio.silent)
             if 'audio.alert_device' in notification.data.modified:
                 self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
             if 'audio.input_device' in notification.data.modified:

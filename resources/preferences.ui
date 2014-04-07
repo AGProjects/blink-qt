@@ -2143,7 +2143,17 @@
            <property name="horizontalSpacing">
             <number>3</number>
            </property>
-           <item row="1" column="0" colspan="3">
+           <item row="0" column="0">
+            <widget class="QLabel" name="download_directory_label">
+             <property name="text">
+              <string>Download Directory:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0" colspan="3">
             <spacer name="file_transfer_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -2156,13 +2166,10 @@
              </property>
             </spacer>
            </item>
-           <item row="0" column="0">
-            <widget class="QLabel" name="download_directory_label">
+           <item row="0" column="2">
+            <widget class="QPushButton" name="download_directory_browse_button">
              <property name="text">
-              <string>Download Directory:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              <string>Browse</string>
              </property>
             </widget>
            </item>
@@ -2173,53 +2180,10 @@
              </property>
             </widget>
            </item>
-           <item row="0" column="2">
-            <widget class="QPushButton" name="download_directory_browse_button">
-             <property name="text">
-              <string>Browse</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
-       </layout>
-      </widget>
-      <widget class="QWidget" name="alerts_page">
-       <layout class="QVBoxLayout" name="alerts_layout">
-        <property name="margin">
-         <number>0</number>
-        </property>
-        <item>
-         <widget class="QGroupBox" name="alerts_group_box">
-          <property name="title">
-           <string>Alert Settings</string>
-          </property>
-          <layout class="QGridLayout" name="alerts_group_box_layout">
-           <item row="2" column="0">
-            <spacer name="alerts_spacer">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>40</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item row="1" column="0">
-            <widget class="QCheckBox" name="file_alerts_button">
+           <item row="1" column="1" colspan="2">
+            <widget class="QCheckBox" name="file_transfer_alert_button">
              <property name="text">
               <string>Play a sound when a file transfer finishes</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="0">
-            <widget class="QCheckBox" name="silence_alerts_button">
-             <property name="text">
-              <string>Silence all alerts (incoming ringtones, text message notifications and file transfer notifications)</string>
              </property>
             </widget>
            </item>
@@ -2819,7 +2783,6 @@
    <addaction name="audio_action"/>
    <addaction name="chat_action"/>
    <addaction name="file_transfer_action"/>
-   <addaction name="alerts_action"/>
    <addaction name="logging_action"/>
    <addaction name="advanced_action"/>
   </widget>
@@ -2869,18 +2832,6 @@
    </property>
    <property name="text">
     <string>File Transfer</string>
-   </property>
-  </action>
-  <action name="alerts_action">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="icon">
-    <iconset>
-     <normaloff>icons/alerts.png</normaloff>icons/alerts.png</iconset>
-   </property>
-   <property name="text">
-    <string>Alerts</string>
    </property>
   </action>
   <action name="logging_action">
