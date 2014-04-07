@@ -24,7 +24,7 @@ from zope.interface import implements
 from sipsimple.account import AccountManager
 from sipsimple.configuration.settings import SIPSimpleSettings
 
-from blink.configuration.datatypes import FileURL
+from blink.configuration.datatypes import FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.resources import IconManager, Resources
@@ -476,24 +476,22 @@ ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 class ChatWidget(base_class, ui_class):
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
 
+    chat_template = open(Resources.get('chat/template.html')).read()
+
     def __init__(self, session, parent=None):
         super(ChatWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.session = session
-        self.style = ChatMessageStyle('Stockholm')
-        self.style_variant = self.style.default_variant
-        #self.style_variant = 'Blue - Red'
-        #self.style = ChatMessageStyle('Smooth Operator')
-        #self.style_variant = self.style.default_variant
-        #self.style_variant = 'Classic'
-        #self.style_variant = 'Time-Icon'
-        chat_template = open(Resources.get('chat/template.html')).read()
-        self.chat_view.setChatFont(self.style.font_family, self.style.font_size)
-        self.chat_view.setHtml(chat_template.format(base_url=FileURL(self.style.path)+'/', style_url=self.style_variant+'.style'))
+        blink_settings = BlinkSettings()
+        self.style = ChatMessageStyle(blink_settings.chat_window.style)
+        self.style_variant = blink_settings.chat_window.style_variant or self.style.default_variant
+        self.user_icons_css_class = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
+        self.chat_view.setChatFont(blink_settings.chat_window.font or self.style.font_family, blink_settings.chat_window.font_size or self.style.font_size)
+        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path)+'/', style_url=self.style_variant+'.style'))
         self.chat_element = self.chat_view.page().mainFrame().findFirstElement('#chat')
         self.composing_timer = QTimer()
         self.last_message = None
+        self.session = session
         # connect to signals
         self.chat_input.textChanged.connect(self._SH_ChatInputTextChanged)
         self.chat_input.textEntered.connect(self._SH_ChatInputTextEntered)
@@ -505,10 +503,10 @@ class ChatWidget(base_class, ui_class):
         insertion_point = self.chat_element.findFirst('#insert')
         if message.is_related_to(self.last_message):
             message.consecutive = True
-            insertion_point.replace(message.to_html(self.style, user_icons='show-icons'))
+            insertion_point.replace(message.to_html(self.style, user_icons=self.user_icons_css_class))
         else:
             insertion_point.removeFromDocument()
-            self.chat_element.appendInside(message.to_html(self.style, user_icons='show-icons'))
+            self.chat_element.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class))
         self.last_message = message
 
     def _align_chat(self, scroll=False):
@@ -657,6 +655,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_widget.installEventFilter(self)
         self.state_label.installEventFilter(self)
 
+        self.latency_graph.installEventFilter(self)
+        self.packet_loss_graph.installEventFilter(self)
+        self.traffic_graph.installEventFilter(self)
+
         self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
         self.hold_button.clicked.connect(self._SH_HoldButtonClicked)
         self.record_button.clicked.connect(self._SH_RecordButtonClicked)
@@ -707,9 +709,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.cancel_icon = QIcon(Resources.get('icons/cancel.png'))
         self.lock_grey_icon = QIcon(Resources.get('icons/lock-grey-12.svg'))
         self.lock_green_icon = QIcon(Resources.get('icons/lock-green-12.svg'))
-
-        # re-apply the stylesheet for self.session_info_container_widget to account for all its subwidget role properties that were set after it
-        self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
 
         # fix the SVG icons as the generated code loads them as pixmaps, losing their ability to scale -Dan
         def svg_icon(filename_off, filename_on):
@@ -764,18 +763,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.traffic_graph.add_graph(self.incoming_traffic_graph)
         self.traffic_graph.add_graph(self.outgoing_traffic_graph)
 
+        self.dummy_tab = None   # will be replaced by a dummy ChatWidget during SIPApplicationDidStart (creating a ChatWidget needs access to settings)
+        self.tab_widget.clear() # remove the tab(s) added in designer
+        self.tab_widget.tabBar().hide()
+
+        self.session_list.hide()
+
         self.info_panel_files_button.hide()
         self.info_panel_participants_button.hide()
         self.participants_panel_files_button.hide()
 
-        self.tab_widget.clear() # remove the tab(s) added in designer
-        self.tab_widget.tabBar().hide()
-        self.dummy_tab = ChatWidget(None, self.tab_widget)
-        self.dummy_tab.setDisabled(True)
-        self.tab_widget.addTab(self.dummy_tab, "Dummy")
-        self.tab_widget.setCurrentWidget(self.dummy_tab)
-
-        self.session_list.hide()
         self.new_messages_button.hide()
         self.hold_button.hide()
         self.record_button.hide()
@@ -996,6 +993,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 watched.event(event)
                 self.drawSessionWidgetIndicators()
                 return True
+        elif watched in (self.latency_graph, self.packet_loss_graph, self.traffic_graph):
+            if event_type == QEvent.Wheel and event.modifiers() == Qt.ControlModifier:
+                settings = BlinkSettings()
+                if event.delta() > 0 and settings.chat_window.session_info.graph_time_scale > GraphTimeScale.min_value:
+                    settings.chat_window.session_info.graph_time_scale -= 1
+                    settings.save()
+                elif event.delta() < 0 and settings.chat_window.session_info.graph_time_scale < GraphTimeScale.max_value:
+                    settings.chat_window.session_info.graph_time_scale += 1
+                    settings.save()
         return False
 
     def drawSessionWidgetIndicators(self):
@@ -1065,8 +1071,32 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_SIPApplicationDidStart(self, notification): # this should not run in the gui thread -Dan
+    def _NH_SIPApplicationDidStart(self, notification):
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
+
+        blink_settings = BlinkSettings()
+        if blink_settings.chat_window.session_info.alternate_style:
+            title_role = 'alt-title'
+            value_role = 'alt-value'
+        else:
+            title_role = 'title'
+            value_role = 'value'
+        for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_title_label') and attr.property('role') is not None):
+            label.setProperty('role', title_role)
+        for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
+            label.setProperty('role', value_role)
+        self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
+        self.latency_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
+        self.packet_loss_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
+        self.traffic_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
+        self.latency_graph.update()
+        self.packet_loss_graph.update()
+        self.traffic_graph.update()
+
+        self.dummy_tab = ChatWidget(None, self.tab_widget)
+        self.dummy_tab.setDisabled(True)
+        self.tab_widget.addTab(self.dummy_tab, "Dummy")
+        self.tab_widget.setCurrentWidget(self.dummy_tab)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
@@ -1077,6 +1107,27 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         elif notification.sender is blink_settings:
             if 'presence.icon' in notification.data.modified:
                 QWebSettings.clearMemoryCaches()
+            if 'chat_window.session_info.alternate_style' in notification.data.modified:
+                if blink_settings.chat_window.session_info.alternate_style:
+                    title_role = 'alt-title'
+                    value_role = 'alt-value'
+                else:
+                    title_role = 'title'
+                    value_role = 'value'
+                for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_title_label') and attr.property('role') is not None):
+                    label.setProperty('role', title_role)
+                for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
+                    label.setProperty('role', value_role)
+                self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
+            if 'chat_window.session_info.bytes_per_second' in notification.data.modified:
+                self.traffic_graph.update()
+            if 'chat_window.session_info.graph_time_scale' in notification.data.modified:
+                self.latency_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
+                self.packet_loss_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
+                self.traffic_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
+                self.latency_graph.update()
+                self.packet_loss_graph.update()
+                self.traffic_graph.update()
 
     def _NH_BlinkSessionNewIncoming(self, notification):
         if 'chat' in notification.sender.streams.types:
@@ -1263,10 +1314,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.packet_loss_label.setText(u'Packet Loss: %.1f%%, max=%.1f%%' % (max(self.audio_packet_loss_graph.last_value, self.video_packet_loss_graph.last_value), self.packet_loss_graph.max_value))
 
     def _SH_TrafficGraphUpdated(self):
-        #incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value)
-        #outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value)
-        incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value*8, bits_per_second=True)
-        outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value*8, bits_per_second=True)
+        blink_settings = BlinkSettings()
+        if blink_settings.chat_window.session_info.bytes_per_second:
+            incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value)
+            outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value)
+        else:
+            incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value*8, bits_per_second=True)
+            outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value*8, bits_per_second=True)
         self.traffic_label.setText(u"""<p>Traffic: <span style="color: #d70000;">\u2193</span> %s <span style="color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
 
     def _SH_MuteButtonClicked(self, checked):

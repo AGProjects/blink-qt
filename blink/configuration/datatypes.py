@@ -3,7 +3,8 @@
 
 """Definitions for datatypes used in configuration extensions."""
 
-__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'AuthorizationToken', 'InvalidToken', 'IconDescriptor', 'PresenceState', 'PresenceStateList']
+__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'AuthorizationToken', 'InvalidToken',
+           'IconDescriptor', 'PresenceState', 'PresenceStateList', 'GraphTimeScale']
 
 import os
 import re
@@ -221,5 +222,16 @@ class PresenceState(object):
 
 class PresenceStateList(List):
     type = PresenceState
+
+
+class GraphTimeScale(int):
+    min_value = 2
+    max_value = 4
+
+    def __new__(cls, value):
+        value = int(value)
+        if not (cls.min_value <= value <= cls.max_value):
+            raise ValueError("expected an integer number between %d and %d, found %d" % (cls.min_value, cls.max_value, value))
+        return value
 
 

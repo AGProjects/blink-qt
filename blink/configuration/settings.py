@@ -14,7 +14,7 @@ from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger
 from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, FileTransferSettings, LogsSettings, RTPSettings, TLSSettings
 
 from blink import __version__
-from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
+from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, GraphTimeScale, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
 from blink.resources import Resources
 
 
@@ -98,6 +98,22 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
     user_agent = Setting(type=str, default='Blink %s (%s)' % (__version__, platform.system() if sys.platform!='darwin' else 'MacOSX Qt'))
 
 
+class SessionInfoSettings(SettingsGroup):
+    alternate_style = Setting(type=bool, default=False)
+    bytes_per_second = Setting(type=bool, default=False)
+    graph_time_scale = Setting(type=GraphTimeScale, default=3)
+
+
+class ChatWindowSettings(SettingsGroup):
+    session_info = SessionInfoSettings
+
+    style = Setting(type=str, default='Stockholm')
+    style_variant = Setting(type=str, default=None, nillable=True)
+    show_user_icons = Setting(type=bool, default=True)
+    font = Setting(type=str, default=None, nillable=True)
+    font_size = Setting(type=int, default=None, nillable=True)
+
+
 class BlinkPresenceSettings(SettingsGroup):
     current_state = Setting(type=PresenceState, default=PresenceState('Available'))
     state_history = Setting(type=PresenceStateList, default=PresenceStateList())
@@ -108,5 +124,6 @@ class BlinkPresenceSettings(SettingsGroup):
 class BlinkSettings(SettingsObject):
     __id__ = 'BlinkSettings'
 
+    chat_window = ChatWindowSettings
     presence = BlinkPresenceSettings
 

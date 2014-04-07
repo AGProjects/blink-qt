@@ -8,7 +8,7 @@ import urlparse
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QRegExp
-from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QRegExpValidator, QSpinBox, QStyle, QStyleOptionComboBox, QValidator
+from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QFont, QListView, QListWidgetItem, QMessageBox, QRegExpValidator, QSpinBox, QStyle, QStyleOptionComboBox, QValidator
 
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -25,6 +25,9 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.accounts import AddAccountDialog
+from blink.chatwindow import ChatMessageStyle, ChatStyleError, ChatMessage, ChatEvent, ChatSender
+from blink.configuration.datatypes import FileURL
+from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
@@ -257,8 +260,23 @@ class PreferencesWindow(base_class, ui_class):
         self.max_recording.valueChanged[int].connect(self._SH_MaxRecordingValueChanged)
 
         # Chat and SMS
+        self.style_view.sizeChanged.connect(self._SH_StyleViewSizeChanged)
+        self.style_view.page().mainFrame().contentsSizeChanged.connect(self._SH_StyleViewFrameContentsSizeChanged)
+
+        self.style_button.activated[int].connect(self._SH_StyleButtonActivated)
+        self.style_variant_button.activated[str].connect(self._SH_StyleVariantButtonActivated)
+        self.style_show_icons_button.clicked.connect(self._SH_StyleShowIconsButtonClicked)
+
+        self.style_font_button.currentIndexChanged[str].connect(self._SH_StyleFontButtonCurrentIndexChanged)
+        self.style_font_size.valueChanged[int].connect(self._SH_StyleFontSizeValueChanged)
+        self.style_default_font_button.clicked.connect(self._SH_StyleDefaultFontButtonClicked)
+
         self.auto_accept_chat_button.clicked.connect(self._SH_AutoAcceptChatButtonClicked)
         self.sms_replication_button.clicked.connect(self._SH_SMSReplicationButtonClicked)
+        self.chat_message_alert_button.clicked.connect(self._SH_ChatMessageAlertButtonClicked)
+
+        self.session_info_style_button.clicked.connect(self._SH_SessionInfoStyleButtonClicked)
+        self.traffic_units_button.clicked.connect(self._SH_TrafficUnitsButtonClicked)
 
         # File transfer
         self.download_directory_editor.locationCleared.connect(self._SH_DownloadDirectoryEditorLocationCleared)
@@ -266,7 +284,6 @@ class PreferencesWindow(base_class, ui_class):
 
         # Alerts
         self.silence_alerts_button.clicked.connect(self._SH_SilenceAlertsButtonClicked)
-        self.message_alerts_button.clicked.connect(self._SH_MessageAlertsButtonClicked)
         self.file_alerts_button.clicked.connect(self._SH_FileAlertsButtonClicked)
 
         # File logging
@@ -305,8 +322,23 @@ class PreferencesWindow(base_class, ui_class):
         self.tail_length_slider.hide()
         self.tail_length_value_label.hide()
 
-        # Hide the answering machine section for now as it's not implemented -Dan
+        # Hide the controls for the features that are not yet implemented -Dan
         self.answering_machine_group_box.hide()
+        self.sms_replication_button.hide()
+
+        self.style_view.template = open(Resources.get('chat/template.html')).read()
+
+        self.style_button.clear()
+        self.style_variant_button.clear()
+
+        styles_path = Resources.get('chat/styles')
+        for style_name in os.listdir(styles_path):
+            try:
+                style = ChatMessageStyle(style_name)
+            except ChatStyleError:
+                pass
+            else:
+                self.style_button.addItem(style_name, style)
 
         self.section_group = QActionGroup(self)
         self.section_group.setExclusive(True)
@@ -495,6 +527,7 @@ class PreferencesWindow(base_class, ui_class):
     def load_settings(self):
         """Load settings from configuration into the UI controls"""
         settings = SIPSimpleSettings()
+        blink_settings = BlinkSettings()
 
         # Audio devices
         self.load_audio_devices()
@@ -522,15 +555,44 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: load unavailable message -Dan
 
         # Chat and SMS settings
+        style_index = self.style_button.findText(blink_settings.chat_window.style)
+        if style_index == -1:
+            style_index = 0
+            blink_settings.chat_window.style = self.style_button.itemText(style_index)
+            blink_settings.chat_window.style_variant = None
+            blink_settings.save()
+        style = self.style_button.itemData(style_index)
+        self.style_button.setCurrentIndex(style_index)
+        self.style_variant_button.clear()
+        for variant in style.variants:
+            self.style_variant_button.addItem(variant)
+        variant_index = self.style_variant_button.findText(blink_settings.chat_window.style_variant or style.default_variant)
+        if variant_index == -1:
+            variant_index = self.style_variant_button.findText(style.default_variant)
+            blink_settings.chat_window.style_variant = None
+            blink_settings.save()
+        self.style_variant_button.setCurrentIndex(variant_index)
+        self.style_show_icons_button.setChecked(blink_settings.chat_window.show_user_icons)
+        self.update_chat_preview()
+
+        with blocked_qt_signals(self.style_font_button):
+            self.style_font_button.setCurrentFont(QFont(blink_settings.chat_window.font or style.font_family))
+        with blocked_qt_signals(self.style_font_size):
+            self.style_font_size.setValue(blink_settings.chat_window.font_size or style.font_size)
+        self.style_default_font_button.setEnabled(blink_settings.chat_window.font is not None or blink_settings.chat_window.font_size is not None)
+
         self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
         self.sms_replication_button.setChecked(settings.chat.sms_replication)
+        self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
+
+        self.session_info_style_button.setChecked(blink_settings.chat_window.session_info.alternate_style)
+        self.traffic_units_button.setChecked(blink_settings.chat_window.session_info.bytes_per_second)
 
         # File transfer settings
         self.download_directory_editor.setText(settings.file_transfer.directory or u'')
 
         # Alert settings
         self.silence_alerts_button.setChecked(settings.audio.silent)
-        self.message_alerts_button.setChecked(settings.sounds.play_message_alerts)
         self.file_alerts_button.setChecked(settings.sounds.play_file_alerts)
 
         # File logging settings
@@ -658,6 +720,45 @@ class PreferencesWindow(base_class, ui_class):
             self.account_tls_cert_file_editor.setText(account.tls.certificate or u'')
             self.account_tls_verify_server_button.setChecked(account.tls.verify_server)
 
+    def update_chat_preview(self):
+        blink_settings = BlinkSettings()
+
+        style = self.style_button.itemData(self.style_button.currentIndex())
+        style_variant = self.style_variant_button.itemText(self.style_variant_button.currentIndex())
+        user_icons = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
+
+        self.style_view.setChatFont(blink_settings.chat_window.font or style.font_family, blink_settings.chat_window.font_size or style.font_size)
+        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path)+'/', style_url=style_variant+'.style'))
+        chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
+        chat_element.last_message = None
+
+        def add_message(message):
+            insertion_point = chat_element.findFirst('#insert')
+            if message.is_related_to(chat_element.last_message):
+                message.consecutive = True
+                insertion_point.replace(message.to_html(style, user_icons=user_icons))
+            else:
+                insertion_point.removeFromDocument()
+                chat_element.appendInside(message.to_html(style, user_icons=user_icons))
+            chat_element.last_message = message
+
+        ruby = ChatSender("Ruby", 'ruby@example.com', Resources.get('icons/avatar-ruby.png'))
+        nate = ChatSender("Nate", 'nate@example.net', Resources.get('icons/avatar-nate.png'))
+
+        messages = [ChatMessage("Andrew stepped into the room cautiously. The air was stale as if the place has not been visited in years and he had an acute feeling of being watched. "
+                                "Was this the place he was looking for, the place holding the answers he looked for so long? He was hopeful but felt uneasy about it.", ruby, 'incoming'),
+                    ChatMessage("Hey Ruby. Is this from the new book you're working on? Looks like it will be another interesting story to read :)", nate, 'outgoing'),
+                    ChatMessage("Yeah. But I'm kind of lacking inspiration right now and the book needs to be finished in a month :(", ruby, 'incoming'),
+                    ChatMessage("I think you put too much pressure on yourself. What about we get out for a bit? Watch a movie, chat about everyday events for a bit...", nate, 'outgoing'),
+                    ChatMessage("It could help you take your mind off of things and relax. We can meet at the usual spot in an hour if you want.", nate, 'outgoing'),
+                    ChatMessage("You may be right. Maybe that's what I need indeed. See you there.", ruby, 'incoming'),
+                    ChatEvent("Ruby has left the conversation")]
+
+        for message in messages:
+            add_message(message)
+
+        del chat_element.last_message
+
     def show(self):
         selection_model = self.account_list.selectionModel()
         if not selection_model.selectedIndexes():
@@ -717,6 +818,21 @@ class PreferencesWindow(base_class, ui_class):
         prefix = self.prefix_button.currentText()
         idd_prefix = self.idd_prefix_button.currentText()
         self.pstn_example_transformed_label.setText(u"%s%s442079460000" % ('' if prefix=='None' else prefix, idd_prefix))
+
+    def _align_style_preview(self, scroll=False):
+        chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
+        widget_height = self.style_view.size().height()
+        content_height = chat_element.geometry().height()
+        if widget_height > content_height:
+            chat_element.setStyleProperty('position', 'relative')
+            chat_element.setStyleProperty('top', '%dpx' % (widget_height-content_height))
+        else:
+            chat_element.setStyleProperty('position', 'static')
+            chat_element.setStyleProperty('top', None)
+        frame = self.style_view.page().mainFrame()
+        if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height*0.2:
+            frame = self.style_view.page().mainFrame()
+            frame.setScrollBarValue(Qt.Vertical, frame.scrollBarMaximum(Qt.Vertical))
 
     # Signal handlers
     #
@@ -1098,6 +1214,58 @@ class PreferencesWindow(base_class, ui_class):
             settings.save()
 
     # Chat and SMS signal handlers
+    def _SH_StyleViewSizeChanged(self):
+        self._align_style_preview(scroll=True)
+
+    def _SH_StyleViewFrameContentsSizeChanged(self, size):
+        self._align_style_preview(scroll=True)
+
+    def _SH_StyleButtonActivated(self, index):
+        style = self.style_button.itemData(index)
+        settings = BlinkSettings()
+        if style.name != settings.chat_window.style:
+            self.style_variant_button.clear()
+            for variant in style.variants:
+                self.style_variant_button.addItem(variant)
+            self.style_variant_button.setCurrentIndex(self.style_variant_button.findText(style.default_variant))
+            settings.chat_window.style = style.name
+            settings.chat_window.style_variant = None
+            settings.save()
+
+    def _SH_StyleVariantButtonActivated(self, style_variant):
+        style = self.style_button.itemData(self.style_button.currentIndex())
+        settings = BlinkSettings()
+        current_variant = settings.chat_window.style_variant or style.default_variant
+        if style_variant != current_variant:
+            settings.chat_window.style_variant = style_variant
+            settings.save()
+
+    def _SH_StyleShowIconsButtonClicked(self, checked):
+        settings = BlinkSettings()
+        settings.chat_window.show_user_icons = checked
+        settings.save()
+
+    def _SH_StyleFontButtonCurrentIndexChanged(self, font):
+        settings = BlinkSettings()
+        settings.chat_window.font = font
+        settings.save()
+
+    def _SH_StyleFontSizeValueChanged(self, size):
+        settings = BlinkSettings()
+        settings.chat_window.font_size = size
+        settings.save()
+
+    def _SH_StyleDefaultFontButtonClicked(self, checked):
+        settings = BlinkSettings()
+        settings.chat_window.font = DefaultValue
+        settings.chat_window.font_size = DefaultValue
+        settings.save()
+        style = self.style_button.itemData(self.style_button.currentIndex())
+        with blocked_qt_signals(self.style_font_button):
+            self.style_font_button.setCurrentFont(QFont(style.font_family))
+        with blocked_qt_signals(self.style_font_size):
+            self.style_font_size.setValue(style.font_size)
+
     def _SH_AutoAcceptChatButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.chat.auto_accept = checked
@@ -1106,6 +1274,21 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_SMSReplicationButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.chat.sms_replication = checked
+        settings.save()
+
+    def _SH_ChatMessageAlertButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.sounds.play_message_alerts = checked
+        settings.save()
+
+    def _SH_SessionInfoStyleButtonClicked(self, checked):
+        settings = BlinkSettings()
+        settings.chat_window.session_info.alternate_style = checked
+        settings.save()
+
+    def _SH_TrafficUnitsButtonClicked(self, checked):
+        settings = BlinkSettings()
+        settings.chat_window.session_info.bytes_per_second = checked
         settings.save()
 
     # File transfer signal handlers
@@ -1130,11 +1313,6 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_SilenceAlertsButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.audio.silent = checked
-        settings.save()
-
-    def _SH_MessageAlertsButtonClicked(self, checked):
-        settings = SIPSimpleSettings()
-        settings.sounds.play_message_alerts = checked
         settings.save()
 
     def _SH_FileAlertsButtonClicked(self, checked):
@@ -1299,7 +1477,14 @@ class PreferencesWindow(base_class, ui_class):
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
-        if notification.sender is settings:
+        blink_settings = BlinkSettings()
+        if notification.sender is blink_settings:
+            if {'chat_window.style', 'chat_window.style_variant', 'chat_window.show_user_icons'}.intersection(notification.data.modified):
+                self.update_chat_preview()
+            if {'chat_window.font', 'chat_window.font_size'}.intersection(notification.data.modified):
+                self.update_chat_preview()
+                self.style_default_font_button.setEnabled(blink_settings.chat_window.font is not None or blink_settings.chat_window.font_size is not None)
+        elif notification.sender is settings:
             if 'audio.silent' in notification.data.modified:
                 self.silence_alerts_button.setChecked(settings.audio.silent)
             if 'audio.alert_device' in notification.data.modified:

@@ -31,7 +31,7 @@
     <item row="0" column="0">
      <widget class="QStackedWidget" name="pages">
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="accounts_page">
        <layout class="QGridLayout" name="accounts_layout">
@@ -1908,16 +1908,152 @@
        </layout>
       </widget>
       <widget class="QWidget" name="chat_page">
-       <layout class="QVBoxLayout" name="chat_layout">
+       <layout class="QGridLayout" name="chat_layout" rowstretch="1,0" rowminimumheight="0,150">
         <property name="margin">
          <number>0</number>
         </property>
-        <item>
-         <widget class="QGroupBox" name="chat_group_box">
+        <item row="0" column="0" colspan="2">
+         <widget class="QGroupBox" name="messages_group_box">
           <property name="title">
-           <string>Chat and SMS Settings</string>
+           <string>Messages</string>
           </property>
-          <layout class="QVBoxLayout" name="chat_group_box_layout">
+          <layout class="QGridLayout" name="messages_layout">
+           <item row="1" column="1">
+            <widget class="QComboBox" name="style_button">
+             <item>
+              <property name="text">
+               <string>Smooth Operator</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Stockholm</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="1" column="3">
+            <spacer name="messages_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="2" column="1">
+            <widget class="QComboBox" name="style_variant_button">
+             <property name="maxVisibleItems">
+              <number>20</number>
+             </property>
+             <item>
+              <property name="text">
+               <string>Blue - Grey</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="1" column="6">
+            <widget class="QSpinBox" name="style_font_size">
+             <property name="correctionMode">
+              <enum>QAbstractSpinBox::CorrectToNearestValue</enum>
+             </property>
+             <property name="suffix">
+              <string> px</string>
+             </property>
+             <property name="minimum">
+              <number>9</number>
+             </property>
+             <property name="maximum">
+              <number>20</number>
+             </property>
+             <property name="value">
+              <number>11</number>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="5">
+            <widget class="QFontComboBox" name="style_font_button"/>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="style_label">
+             <property name="text">
+              <string>Style:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0" colspan="8">
+            <widget class="ChatWebView" name="style_view">
+             <property name="url">
+              <url>
+               <string>about:blank</string>
+              </url>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="7">
+            <widget class="QPushButton" name="style_default_font_button">
+             <property name="text">
+              <string>Default</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="4">
+            <widget class="QLabel" name="style_font_label">
+             <property name="text">
+              <string>Font:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="3" colspan="5">
+            <widget class="QLabel" name="style_note_label">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>Style changes take effect for new sessions</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="2">
+            <widget class="QCheckBox" name="style_show_icons_button">
+             <property name="text">
+              <string>Show user icons</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="style_variant_label">
+             <property name="text">
+              <string>Variant:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QGroupBox" name="chat_sessions_group_box">
+          <property name="title">
+           <string>Chat Sessions</string>
+          </property>
+          <layout class="QVBoxLayout" name="chat_sessions_group_box_layout">
            <item>
             <widget class="QCheckBox" name="auto_accept_chat_button">
              <property name="text">
@@ -1933,14 +2069,57 @@
             </widget>
            </item>
            <item>
-            <spacer name="chat_spacer">
+            <widget class="QCheckBox" name="chat_message_alert_button">
+             <property name="text">
+              <string>Play a sound when a chat message is received</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="chat_sessions_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
              </property>
              <property name="sizeHint" stdset="0">
               <size>
                <width>20</width>
-               <height>40</height>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QGroupBox" name="chat_window_group_box">
+          <property name="title">
+           <string>Chat Window</string>
+          </property>
+          <layout class="QVBoxLayout" name="chat_window_group_box_layout">
+           <item>
+            <widget class="QCheckBox" name="session_info_style_button">
+             <property name="text">
+              <string>Use alternate style for the session information panel</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="traffic_units_button">
+             <property name="text">
+              <string>Show traffic in bytes per second</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="chat_window_spacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
               </size>
              </property>
             </spacer>
@@ -2017,28 +2196,7 @@
            <string>Alert Settings</string>
           </property>
           <layout class="QGridLayout" name="alerts_group_box_layout">
-           <item row="0" column="0">
-            <widget class="QCheckBox" name="silence_alerts_button">
-             <property name="text">
-              <string>Silence all alerts (incoming ringtones, text message notifications and file transfer notifications)</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0">
-            <widget class="QCheckBox" name="message_alerts_button">
-             <property name="text">
-              <string>Play a sound when a chat or SMS message is sent or received</string>
-             </property>
-            </widget>
-           </item>
            <item row="2" column="0">
-            <widget class="QCheckBox" name="file_alerts_button">
-             <property name="text">
-              <string>Play a sound when a file transfer finishes</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="0">
             <spacer name="alerts_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -2050,6 +2208,20 @@
               </size>
              </property>
             </spacer>
+           </item>
+           <item row="1" column="0">
+            <widget class="QCheckBox" name="file_alerts_button">
+             <property name="text">
+              <string>Play a sound when a file transfer finishes</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QCheckBox" name="silence_alerts_button">
+             <property name="text">
+              <string>Silence all alerts (incoming ringtones, text message notifications and file transfer notifications)</string>
+             </property>
+            </widget>
            </item>
           </layout>
          </widget>
@@ -2741,6 +2913,16 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>QWebView</class>
+   <extends>QWidget</extends>
+   <header>QtWebKit/QWebView</header>
+  </customwidget>
+  <customwidget>
+   <class>ChatWebView</class>
+   <extends>QWebView</extends>
+   <header>blink.chatwindow</header>
+  </customwidget>
+  <customwidget>
    <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
@@ -2770,12 +2952,12 @@
    <slot>setNum(int)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>228</x>
-     <y>229</y>
+     <x>147</x>
+     <y>245</y>
     </hint>
     <hint type="destinationlabel">
-     <x>364</x>
-     <y>238</y>
+     <x>382</x>
+     <y>245</y>
     </hint>
    </hints>
   </connection>
