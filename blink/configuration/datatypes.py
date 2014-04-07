@@ -1,7 +1,7 @@
 # Copyright (C) 2010 AG Projects. See LICENSE for details.
 #
 
-"""Definitions of datatypes for use in settings extensions."""
+"""Definitions for datatypes used in configuration extensions."""
 
 __all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'AuthorizationToken', 'InvalidToken', 'IconDescriptor', 'PresenceState', 'PresenceStateList']
 
