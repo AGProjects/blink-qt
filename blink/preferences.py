@@ -305,7 +305,6 @@ class PreferencesWindow(base_class, ui_class):
         # TLS
         self.tls_ca_file_editor.locationCleared.connect(self._SH_TLSCAFileEditorLocationCleared)
         self.tls_ca_file_browse_button.clicked.connect(self._SH_TLSCAFileBrowseButtonClicked)
-        self.tls_timeout.valueChanged[float].connect(self._SH_TLSTimeoutValueChanged)
 
         # Setup initial state (show the acounts page right after start)
         self.accounts_action.trigger()
@@ -402,7 +401,7 @@ class PreferencesWindow(base_class, ui_class):
 
         # advanced settings
         font_metrics = self.transports_label.fontMetrics() # we assume all labels have the same font
-        labels = (self.transports_label, self.media_ports_label, self.session_timeout_label, self.rtp_timeout_label, self.tls_ca_file_label, self.tls_timeout_label)
+        labels = (self.transports_label, self.media_ports_label, self.session_timeout_label, self.rtp_timeout_label, self.tls_ca_file_label)
         text_width = max(font_metrics.width(label.text()) for label in labels)
         self.transports_label.setMinimumWidth(text_width)
         self.tls_ca_file_label.setMinimumWidth(text_width)
@@ -624,8 +623,6 @@ class PreferencesWindow(base_class, ui_class):
             self.rtp_timeout.setValue(settings.rtp.timeout)
 
         self.tls_ca_file_editor.setText(settings.tls.ca_list or u'')
-        with blocked_qt_signals(self.tls_timeout):
-            self.tls_timeout.setValue(settings.tls.timeout / 1000.0)
 
     def load_account_settings(self, account):
         """Load the account settings from configuration into the UI controls"""
@@ -1440,14 +1437,6 @@ class PreferencesWindow(base_class, ui_class):
                     self.tls_ca_file_editor.setText(ca_path)
                     settings.tls.ca_list = ca_path
                     settings.save()
-
-    def _SH_TLSTimeoutValueChanged(self, value):
-        self.tls_timeout_seconds_label.setText(u'second' if value==1 else u'seconds')
-        settings = SIPSimpleSettings()
-        timeout = value * 1000
-        if settings.tls.timeout != timeout:
-            settings.tls.timeout = timeout
-            settings.save()
 
     @run_in_gui_thread
     def handle_notification(self, notification):

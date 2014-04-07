@@ -2662,6 +2662,13 @@
            <string>TLS Settings</string>
           </property>
           <layout class="QGridLayout" name="tls_group_box_layout">
+           <item row="0" column="1">
+            <widget class="LocationBar" name="tls_ca_file_editor">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
            <item row="0" column="0">
             <widget class="QLabel" name="tls_ca_file_label">
              <property name="text">
@@ -2672,31 +2679,14 @@
              </property>
             </widget>
            </item>
-           <item row="0" column="1" colspan="3">
-            <widget class="LocationBar" name="tls_ca_file_editor">
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="4">
+           <item row="0" column="2">
             <widget class="QPushButton" name="tls_ca_file_browse_button">
              <property name="text">
               <string>Browse</string>
              </property>
             </widget>
            </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="tls_timeout_label">
-             <property name="text">
-              <string>Connection Timeout:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0" colspan="5">
+           <item row="1" column="0" colspan="3">
             <spacer name="tls_vertical_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -2708,38 +2698,6 @@
               </size>
              </property>
             </spacer>
-           </item>
-           <item row="1" column="1">
-            <widget class="QDoubleSpinBox" name="tls_timeout">
-             <property name="accelerated">
-              <bool>true</bool>
-             </property>
-             <property name="decimals">
-              <number>1</number>
-             </property>
-             <property name="minimum">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="maximum">
-              <double>30.000000000000000</double>
-             </property>
-             <property name="value">
-              <double>3.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="2">
-            <widget class="QLabel" name="tls_timeout_seconds_label">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="text">
-              <string>seconds</string>
-             </property>
-            </widget>
            </item>
           </layout>
          </widget>
