@@ -1158,12 +1158,6 @@ QToolButton:pressed {
                        <property name="boundary" stdset="0">
                         <double>3.000000000000000</double>
                        </property>
-                       <property name="lineThickness" stdset="0">
-                        <double>1.600000000000000</double>
-                       </property>
-                       <property name="smoothEnvelope" stdset="0">
-                        <bool>true</bool>
-                       </property>
                       </widget>
                      </item>
                     </layout>
@@ -1431,12 +1425,6 @@ QToolButton:pressed {
                        <property name="minHeight" stdset="0">
                         <double>10.000000000000000</double>
                        </property>
-                       <property name="lineThickness" stdset="0">
-                        <double>1.600000000000000</double>
-                       </property>
-                       <property name="smoothEnvelope" stdset="0">
-                        <bool>true</bool>
-                       </property>
                       </widget>
                      </item>
                     </layout>
@@ -1662,14 +1650,8 @@ QToolButton:pressed {
 	background-color: #f8f8f8;
 }</string>
                        </property>
-                       <property name="lineThickness" stdset="0">
-                        <double>1.600000000000000</double>
-                       </property>
                        <property name="fillTransparency" stdset="0">
                         <number>25</number>
-                       </property>
-                       <property name="smoothEnvelope" stdset="0">
-                        <bool>true</bool>
                        </property>
                       </widget>
                      </item>
