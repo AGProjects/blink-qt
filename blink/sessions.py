@@ -5355,7 +5355,8 @@ class SessionManager(object):
     def _NH_FileTransferDidEnd(self, notification):
         self.file_transfers.remove(notification.sender)
         self.update_ringtone()
-        if not notification.data.error and not self._filetransfer_tone_timer.isActive():
+        settings = SIPSimpleSettings()
+        if settings.sounds.play_file_alerts and not notification.data.error and not self._filetransfer_tone_timer.isActive():
             self._filetransfer_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
