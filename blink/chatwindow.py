@@ -22,6 +22,8 @@ from weakref import proxy
 from zope.interface import implements
 
 from sipsimple.account import AccountManager
+from sipsimple.application import SIPApplication
+from sipsimple.audio import WavePlayer
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.configuration.datatypes import FileURL, GraphTimeScale
@@ -1222,6 +1224,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         content = message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml()
         session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
         session.remote_composing = False
+        settings = SIPSimpleSettings()
+        if settings.sounds.play_message_alerts and self.selected_session is session:
+            player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_received.wav'), volume=20)
+            SIPApplication.alert_audio_bridge.add(player)
+            player.start()
 
     def _NH_ChatStreamGotComposingIndication(self, notification):
         session = notification.sender.blink_session.items.chat
