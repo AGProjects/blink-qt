@@ -5203,7 +5203,6 @@ class SessionManager(object):
             session.reject(488)
             return
 
-        session.send_ring_indication()
         contact, contact_uri = URIUtils.find_contact(session.remote_identity.uri, display_name=session.remote_identity.display_name, exact=False)
 
         if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
@@ -5217,6 +5216,19 @@ class SessionManager(object):
             chat_stream = chat_streams[0] if chat_streams else None
             screensharing_stream = screensharing_streams[0] if screensharing_streams else None
 
+            settings = SIPSimpleSettings()
+
+            if chat_stream and not (audio_stream or video_stream or screensharing_stream) and contact.type != 'dummy' and settings.chat.auto_accept:
+                try:
+                    blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
+                    reinitialize = True
+                except StopIteration:
+                    blink_session = BlinkSession()
+                    self.sessions.append(blink_session)
+                    reinitialize = False
+                blink_session.init_incoming(session, [chat_stream], contact, contact_uri, reinitialize=reinitialize)
+                return
+
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
             incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
@@ -5228,6 +5240,7 @@ class SessionManager(object):
         except IndexError:
             position = None
         incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
+        session.send_ring_indication()
         self.update_ringtone()
 
     def _NH_SIPSessionDidFail(self, notification):
