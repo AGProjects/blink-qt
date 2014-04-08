@@ -897,10 +897,11 @@ class PreferencesWindow(base_class, ui_class):
             else:
                 account_manager.default_account = None
 
-        try:
-            os.unlink(selected_account.tls.certificate.normalized)
-        except (AttributeError, OSError, IOError):
-            pass
+        if selected_account.tls.certificate.normalized.startswith(ApplicationData.directory):
+            try:
+                os.unlink(selected_account.tls.certificate.normalized)
+            except (AttributeError, OSError, IOError):
+                pass
 
         selected_account.delete()
 
