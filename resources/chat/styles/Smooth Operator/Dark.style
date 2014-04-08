@@ -342,8 +342,8 @@ body
 {
 	position: absolute;
 	left: 43px;
-	margin-left: -.07em;
-	margin-top: -.15em;
+	margin-left: -0.07em;
+	margin-top: -0.15em;
 	margin-right: -2px;
 	font-size: 1.2em;
 }

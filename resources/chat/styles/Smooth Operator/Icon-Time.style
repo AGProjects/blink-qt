@@ -353,10 +353,10 @@ body
 {
 	position: absolute;
 	left: 39px;
-	margin-left: -.054em;
-	margin-top: -2px;
+	margin-left: -0.054em;
+	margin-top: -1px;
 	margin-right: -2px;
-	letter-spacing: -.2em;
+	letter-spacing: -0.2em;
 	font-size: 12px;
 }
 

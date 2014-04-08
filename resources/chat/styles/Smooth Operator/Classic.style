@@ -262,9 +262,10 @@ body
 .message .x-mark
 {
 	font-size: 1.2em;
-	margin-left: -.74em;
-	margin-top: -.17em;
-	letter-spacing: -.2em;
+	margin-left: -0.74em;
+	margin-top: -0.15em;
+	margin-right: 0.2em;
+	letter-spacing: -0.2em;
 	float: left;
 }
 
