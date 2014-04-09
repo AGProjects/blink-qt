@@ -16,7 +16,7 @@ import cjson
 sip.setapi('QString',  2)
 sip.setapi('QVariant', 2)
 
-from PyQt4.QtCore import Qt
+from PyQt4.QtCore import Qt, QEvent
 from PyQt4.QtGui  import QApplication
 
 from application import log
@@ -110,6 +110,10 @@ class Blink(QApplication):
 
         self.main_window = MainWindow()
         self.chat_window = ChatWindow()
+        self.main_window.__closed__ = True
+        self.chat_window.__closed__ = True
+        self.main_window.installEventFilter(self)
+        self.chat_window.installEventFilter(self)
 
         self.main_window.addAction(self.chat_window.control_button.actions.main_window)
         self.chat_window.addAction(self.main_window.quit_action)
@@ -235,6 +239,19 @@ class Blink(QApplication):
         settings.tls.ca_list = ca_path
         settings.save()
         return certificate_path
+
+    def eventFilter(self, watched, event):
+        if watched in (self.main_window, self.chat_window):
+            if event.type() == QEvent.Show:
+                watched.__closed__ = False
+            elif event.type() == QEvent.Close:
+                watched.__closed__ = True
+                if self.main_window.__closed__ and self.chat_window.__closed__:
+                    # close auxiliary windows
+                    self.main_window.conference_dialog.close()
+                    self.main_window.filetransfer_window.close()
+                    self.main_window.preferences_window.close()
+        return False
 
     def customEvent(self, event):
         handler = getattr(self, '_EH_%s' % event.name, Null)

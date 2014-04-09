@@ -233,11 +233,8 @@ class MainWindow(base_class, ui_class):
         QSettings().setValue("main_window/geometry", self.saveGeometry())
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
-        self.conference_dialog.close()
         self.contact_editor_dialog.close()
         self.google_contacts_dialog.close()
-        self.filetransfer_window.close()
-        self.preferences_window.close()
         self.server_tools_window.close()
         for dialog in self.pending_watcher_dialogs[:]:
             dialog.close()
