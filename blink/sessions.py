@@ -4885,13 +4885,19 @@ class ConferenceDialog(base_class, ui_class):
     def join_conference(self):
         from blink.contacts import URIUtils
 
+        current_text = self.room_button.currentText()
+        if self.room_button.findText(current_text) == -1:
+            if self.room_button.count() == self.room_button.maxCount():
+                self.room_button.removeItem(self.room_button.count()-1)
+            self.room_button.insertItem(0, current_text)
+
         account_manager = AccountManager()
         session_manager = SessionManager()
         account = account_manager.default_account
         if account is not BonjourAccount():
-            conference_uri = u'%s@%s' % (self.room_button.currentText(), account.server.conference_server or 'conference.sip2sip.info')
+            conference_uri = u'%s@%s' % (current_text, account.server.conference_server or 'conference.sip2sip.info')
         else:
-            conference_uri = u'%s@%s' % (self.room_button.currentText(), 'conference.sip2sip.info')
+            conference_uri = u'%s@%s' % (current_text, 'conference.sip2sip.info')
         contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')
         streams = []
         if self.audio_button.isChecked():

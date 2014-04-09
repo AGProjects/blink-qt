@@ -53,6 +53,15 @@
      <property name="editable">
       <bool>true</bool>
      </property>
+     <property name="maxVisibleItems">
+      <number>20</number>
+     </property>
+     <property name="maxCount">
+      <number>20</number>
+     </property>
+     <property name="insertPolicy">
+      <enum>QComboBox::NoInsert</enum>
+     </property>
     </widget>
    </item>
    <item row="1" column="1">
