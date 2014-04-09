@@ -2212,12 +2212,12 @@ class AudioSessionListView(QListView):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        digit = event.text()
-        if digit and digit in string.digits+string.uppercase+'#*':
+        char = event.text()
+        if char and char in string.digits+string.uppercase+'#*':
             letter_map = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
-            letter_map = dict(chain(*(izip(letters, repeat(digit)) for digit, letters in letter_map.iteritems())))
+            letter_map = dict(chain(*(izip(letters, repeat(char)) for char, letters in letter_map.iteritems())))
             for session in (s for s in self.model().sessions if s.active):
-                session.send_dtmf(letter_map.get(digit, digit))
+                session.send_dtmf(letter_map.get(char, char))
         elif event.key() in (Qt.Key_Up, Qt.Key_Down):
             selection_model = self.selectionModel()
             current_index = selection_model.currentIndex()
