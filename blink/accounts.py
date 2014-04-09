@@ -169,13 +169,26 @@ class ActiveAccountModel(QSortFilterProxyModel):
         return account_info.account.enabled
 
 
+class AccountStatePalettes(dict):
+    def __init__(self, palette):
+        super(AccountStatePalettes, self).__init__(succeeded=palette)
+        self.alternate_palette = QPalette(palette)
+        self.alternate_palette.setColor(QPalette.Text, self.alternate_palette.color(QPalette.Mid))
+        self.alternate_palette.setColor(QPalette.ButtonText, self.alternate_palette.color(QPalette.Mid))
+        self.alternate_palette.setColor(QPalette.WindowText, self.alternate_palette.color(QPalette.Mid))
+
+    def __missing__(self, key):
+        return self.setdefault(key, self.alternate_palette)
+
+
 class AccountDelegate(QStyledItemDelegate):
+    def __init__(self, parent):
+        super(AccountDelegate, self).__init__(parent)
+        self.state_palette_map = AccountStatePalettes(parent.palette())
+
     def paint(self, painter, option, index):
         account_info = index.data(Qt.UserRole)
-        if account_info.registration_state == 'succeeded':
-            option.palette.setColor(QPalette.Text, Qt.black)
-        else:
-            option.palette.setColor(QPalette.Text, Qt.gray)
+        option.palette = self.state_palette_map[account_info.registration_state]
         super(AccountDelegate, self).paint(painter, option, index)
 
 
@@ -184,9 +197,10 @@ class AccountSelector(QComboBox):
 
     def __init__(self, parent=None):
         super(AccountSelector, self).__init__(parent)
+        self.state_palette_map = AccountStatePalettes(self.palette())
+        self.setItemDelegate(AccountDelegate(self.view()))
         self.currentIndexChanged[int].connect(self._SH_SelectionChanged)
         self.model().dataChanged.connect(self._SH_DataChanged)
-        self.view().setItemDelegate(AccountDelegate(self.view()))
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name="SIPAccountManagerDidChangeDefaultAccount")
@@ -201,23 +215,13 @@ class AccountSelector(QComboBox):
         index = self.currentIndex()
         if topLeft.row() <= index <= bottomRight.row():
             account_info = self.itemData(index)
-            palette = self.palette()
-            if account_info.registration_state == 'succeeded':
-                palette.setColor(QPalette.Text, Qt.black)
-            else:
-                palette.setColor(QPalette.Text, Qt.gray)
-            self.setPalette(palette)
+            self.setPalette(self.state_palette_map[account_info.registration_state])
 
     def _SH_SelectionChanged(self, index):
         if index == -1:
             return
         account_info = self.itemData(index)
-        palette = self.palette()
-        if account_info.registration_state == 'succeeded':
-            palette.setColor(QPalette.Text, Qt.black)
-        else:
-            palette.setColor(QPalette.Text, Qt.gray)
-        self.setPalette(palette)
+        self.setPalette(self.state_palette_map[account_info.registration_state])
 
     @run_in_gui_thread
     def handle_notification(self, notification):
