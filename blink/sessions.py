@@ -2212,8 +2212,8 @@ class AudioSessionListView(QListView):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        digit = chr(event.key()) if event.key() < 256 else None
-        if digit is not None and digit in string.digits+string.uppercase+'#*':
+        digit = event.text()
+        if digit and digit in string.digits+string.uppercase+'#*':
             letter_map = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
             letter_map = dict(chain(*(izip(letters, repeat(digit)) for digit, letters in letter_map.iteritems())))
             for session in (s for s in self.model().sessions if s.active):
