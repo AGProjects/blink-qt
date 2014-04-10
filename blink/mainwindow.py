@@ -179,6 +179,7 @@ class MainWindow(base_class, ui_class):
         self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
         self.preferences_action.triggered.connect(self.preferences_window.show)
         self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatActionTriggered)
+        self.received_messages_sound_action.triggered.connect(self._AH_ReceivedMessagesSoundActionTriggered)
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineActionTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
         self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
@@ -326,6 +327,11 @@ class MainWindow(base_class, ui_class):
     def _AH_AutoAcceptChatActionTriggered(self, checked):
         settings = SIPSimpleSettings()
         settings.chat.auto_accept = checked
+        settings.save()
+
+    def _AH_ReceivedMessagesSoundActionTriggered(self, checked):
+        settings = SIPSimpleSettings()
+        settings.sounds.play_message_alerts = checked
         settings.save()
 
     def _AH_EnableAnsweringMachineActionTriggered(self, checked):
@@ -661,6 +667,7 @@ class MainWindow(base_class, ui_class):
         self.silent_button.setChecked(settings.audio.silent)
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
+        self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
         if settings.google_contacts.authorization_token is None:
             self.google_contacts_action.setText(u'Enable &Google Contacts...')
         else:
@@ -726,6 +733,8 @@ class MainWindow(base_class, ui_class):
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)
             if 'chat.auto_accept' in notification.data.modified:
                 self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
+            if 'sounds.play_message_alerts' in notification.data.modified:
+                self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
             if 'google_contacts.authorization_token' in notification.data.modified:
                 authorization_token = notification.sender.google_contacts.authorization_token
                 if authorization_token is None:

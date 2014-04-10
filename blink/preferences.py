@@ -1473,6 +1473,8 @@ class PreferencesWindow(base_class, ui_class):
                 self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
             if 'chat.auto_accept' in notification.data.modified:
                 self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
+            if 'sounds.play_message_alerts' in notification.data.modified:
+                self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
         elif notification.sender is self.selected_account is not None:
             account = notification.sender
             if 'enabled' in notification.data.modified:

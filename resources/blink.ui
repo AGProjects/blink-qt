@@ -949,6 +949,7 @@ padding: 2px;</string>
      </property>
      <addaction name="auto_accept_chat_action"/>
      <addaction name="answering_machine_action"/>
+     <addaction name="received_messages_sound_action"/>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
@@ -1251,6 +1252,14 @@ padding: 2px;</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="received_messages_sound_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Play a sound for &amp;received messages</string>
    </property>
   </action>
  </widget>
