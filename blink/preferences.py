@@ -8,7 +8,7 @@ import urlparse
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QRegExp
-from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QFont, QListView, QListWidgetItem, QMessageBox, QRegExpValidator, QSpinBox, QStyle, QStyleOptionComboBox, QValidator
+from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QFont, QListView, QListWidgetItem, QMessageBox, QRegExpValidator, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate, QValidator
 
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -129,10 +129,18 @@ class SIPPortEditor(QSpinBox):
         return state, input, pos
 
 
+class AccountDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        account_info = index.data(Qt.UserRole)
+        if not account_info.account.enabled:
+            option.state &= ~QStyle.State_Enabled
+        super(AccountDelegate, self).paint(painter, option, index)
+
+
 class AccountListView(QListView):
     def __init__(self, parent=None):
         super(AccountListView, self).__init__(parent)
-        #self.setItemDelegate(AccountDelegate(self))
+        self.setItemDelegate(AccountDelegate(self))
         #self.setDropIndicatorShown(False)
 
     def selectionChanged(self, selected, deselected):

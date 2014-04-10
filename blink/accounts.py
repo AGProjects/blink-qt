@@ -12,7 +12,7 @@ from collections import defaultdict
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QUrl
-from PyQt4.QtGui  import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QMovie, QPalette, QPixmap, QSortFilterProxyModel, QStyledItemDelegate
+from PyQt4.QtGui  import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QMovie, QSortFilterProxyModel
 from PyQt4.QtNetwork import QNetworkAccessManager
 from PyQt4.QtWebKit  import QWebView
 
@@ -33,15 +33,42 @@ from blink.widgets.labels import Status
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
 
+class IconDescriptor(object):
+    def __init__(self, filename):
+        self.filename = filename
+        self.icon = None
+    def __get__(self, obj, objtype):
+        if self.icon is None:
+            self.icon = QIcon(self.filename)
+            self.icon.filename = self.filename
+        return self.icon
+    def __set__(self, obj, value):
+        raise AttributeError("attribute cannot be set")
+    def __delete__(self, obj):
+        raise AttributeError("attribute cannot be deleted")
+
+
 class AccountInfo(object):
-    def __init__(self, account, icon=None):
+    active_icon = IconDescriptor(Resources.get('icons/circle-dot.svg'))
+    inactive_icon = IconDescriptor(Resources.get('icons/circle-grey.svg'))
+    activity_icon = IconDescriptor(Resources.get('icons/circle-progress.svg'))
+
+    def __init__(self, account):
         self.account = account
-        self.icon = icon
         self.registration_state = None
 
     @property
     def name(self):
         return u'Bonjour' if self.account is BonjourAccount() else unicode(self.account.id)
+
+    @property
+    def icon(self):
+        if self.registration_state == 'started':
+            return self.activity_icon
+        elif self.registration_state == 'succeeded':
+            return self.active_icon
+        else:
+            return self.inactive_icon
 
     def __eq__(self, other):
         if isinstance(other, basestring):
@@ -97,14 +124,8 @@ class AccountModel(QAbstractListModel):
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
-        icon = None
-        if account is BonjourAccount():
-            pixmap = QPixmap()
-            if pixmap.load(Resources.get('icons/bonjour.png')):
-                pixmap = pixmap.scaled(16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                icon = QIcon(pixmap)
         self.beginInsertRows(QModelIndex(), len(self.accounts), len(self.accounts))
-        self.accounts.append(AccountInfo(account, icon))
+        self.accounts.append(AccountInfo(account))
         self.endInsertRows()
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
@@ -169,59 +190,15 @@ class ActiveAccountModel(QSortFilterProxyModel):
         return account_info.account.enabled
 
 
-class AccountStatePalettes(dict):
-    def __init__(self, palette):
-        super(AccountStatePalettes, self).__init__(succeeded=palette)
-        self.alternate_palette = QPalette(palette)
-        self.alternate_palette.setColor(QPalette.Text, self.alternate_palette.color(QPalette.Mid))
-        self.alternate_palette.setColor(QPalette.ButtonText, self.alternate_palette.color(QPalette.Mid))
-        self.alternate_palette.setColor(QPalette.WindowText, self.alternate_palette.color(QPalette.Mid))
-
-    def __missing__(self, key):
-        return self.setdefault(key, self.alternate_palette)
-
-
-class AccountDelegate(QStyledItemDelegate):
-    def __init__(self, parent):
-        super(AccountDelegate, self).__init__(parent)
-        self.state_palette_map = AccountStatePalettes(parent.palette())
-
-    def paint(self, painter, option, index):
-        account_info = index.data(Qt.UserRole)
-        option.palette = self.state_palette_map[account_info.registration_state]
-        super(AccountDelegate, self).paint(painter, option, index)
-
-
 class AccountSelector(QComboBox):
     implements(IObserver)
 
     def __init__(self, parent=None):
         super(AccountSelector, self).__init__(parent)
-        self.state_palette_map = AccountStatePalettes(self.palette())
-        self.setItemDelegate(AccountDelegate(self.view()))
-        self.currentIndexChanged[int].connect(self._SH_SelectionChanged)
-        self.model().dataChanged.connect(self._SH_DataChanged)
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name="SIPAccountManagerDidChangeDefaultAccount")
         notification_center.add_observer(self, name="SIPAccountManagerDidStart")
-
-    def setModel(self, model):
-        self.model().dataChanged.disconnect(self._SH_DataChanged)
-        model.dataChanged.connect(self._SH_DataChanged)
-        super(AccountSelector, self).setModel(model)
-
-    def _SH_DataChanged(self, topLeft, bottomRight):
-        index = self.currentIndex()
-        if topLeft.row() <= index <= bottomRight.row():
-            account_info = self.itemData(index)
-            self.setPalette(self.state_palette_map[account_info.registration_state])
-
-    def _SH_SelectionChanged(self, index):
-        if index == -1:
-            return
-        account_info = self.itemData(index)
-        self.setPalette(self.state_palette_map[account_info.registration_state])
 
     @run_in_gui_thread
     def handle_notification(self, notification):
