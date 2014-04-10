@@ -14,7 +14,7 @@ import sys
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from functools import partial
-from itertools import chain, count, izip, repeat
+from itertools import chain, count
 from operator import attrgetter
 from threading import Event
 
@@ -2214,8 +2214,8 @@ class AudioSessionListView(QListView):
     def keyPressEvent(self, event):
         char = event.text().upper()
         if char and char in string.digits+string.uppercase+'#*':
-            letter_map = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
-            letter_map = dict(chain(*(izip(letters, repeat(char)) for char, letters in letter_map.iteritems())))
+            digit_map  = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
+            letter_map = {letter: digit for digit, letter_group in digit_map.iteritems() for letter in letter_group}
             for session in (s for s in self.model().sessions if s.active):
                 session.send_dtmf(letter_map.get(char, char))
         elif event.key() in (Qt.Key_Up, Qt.Key_Down):
