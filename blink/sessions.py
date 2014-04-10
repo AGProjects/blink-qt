@@ -2212,7 +2212,7 @@ class AudioSessionListView(QListView):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        char = event.text()
+        char = event.text().upper()
         if char and char in string.digits+string.uppercase+'#*':
             letter_map = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
             letter_map = dict(chain(*(izip(letters, repeat(char)) for char, letters in letter_map.iteritems())))
