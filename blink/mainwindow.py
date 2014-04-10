@@ -178,8 +178,8 @@ class MainWindow(base_class, ui_class):
         self.manage_accounts_action.triggered.connect(self.preferences_window.show_for_accounts)
         self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help-qt.phtml')))
         self.preferences_action.triggered.connect(self.preferences_window.show)
-        self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatTriggered)
-        self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineTriggered)
+        self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatActionTriggered)
+        self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineActionTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog-qt.phtml')))
         self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
 
@@ -323,12 +323,12 @@ class MainWindow(base_class, ui_class):
         settings.audio.output_device = action.data()
         settings.save()
 
-    def _AH_AutoAcceptChatTriggered(self, checked):
+    def _AH_AutoAcceptChatActionTriggered(self, checked):
         settings = SIPSimpleSettings()
         settings.chat.auto_accept = checked
         settings.save()
 
-    def _AH_EnableAnsweringMachineTriggered(self, checked):
+    def _AH_EnableAnsweringMachineActionTriggered(self, checked):
         settings = SIPSimpleSettings()
         settings.answering_machine.enabled = checked
         settings.save()
