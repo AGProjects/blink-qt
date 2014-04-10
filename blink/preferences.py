@@ -272,8 +272,8 @@ class PreferencesWindow(base_class, ui_class):
         self.style_default_font_button.clicked.connect(self._SH_StyleDefaultFontButtonClicked)
 
         self.auto_accept_chat_button.clicked.connect(self._SH_AutoAcceptChatButtonClicked)
-        self.sms_replication_button.clicked.connect(self._SH_SMSReplicationButtonClicked)
         self.chat_message_alert_button.clicked.connect(self._SH_ChatMessageAlertButtonClicked)
+        self.sms_replication_button.clicked.connect(self._SH_SMSReplicationButtonClicked)
 
         self.session_info_style_button.clicked.connect(self._SH_SessionInfoStyleButtonClicked)
         self.traffic_units_button.clicked.connect(self._SH_TrafficUnitsButtonClicked)
@@ -578,8 +578,8 @@ class PreferencesWindow(base_class, ui_class):
         self.style_default_font_button.setEnabled(blink_settings.chat_window.font is not None or blink_settings.chat_window.font_size is not None)
 
         self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
-        self.sms_replication_button.setChecked(settings.chat.sms_replication)
         self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
+        self.sms_replication_button.setChecked(settings.chat.sms_replication)
 
         self.session_info_style_button.setChecked(blink_settings.chat_window.session_info.alternate_style)
         self.traffic_units_button.setChecked(blink_settings.chat_window.session_info.bytes_per_second)
@@ -1263,14 +1263,14 @@ class PreferencesWindow(base_class, ui_class):
         settings.chat.auto_accept = checked
         settings.save()
 
-    def _SH_SMSReplicationButtonClicked(self, checked):
-        settings = SIPSimpleSettings()
-        settings.chat.sms_replication = checked
-        settings.save()
-
     def _SH_ChatMessageAlertButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.sounds.play_message_alerts = checked
+        settings.save()
+
+    def _SH_SMSReplicationButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.chat.sms_replication = checked
         settings.save()
 
     def _SH_SessionInfoStyleButtonClicked(self, checked):
