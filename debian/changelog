@@ -1,3 +1,36 @@
+blink (0.8.0) unstable; urgency=medium
+
+  * Added file transfer support
+  * Added chat preferences
+  * Added quick setting for playing message alerts
+  * Added keyboard shortcuts for different windows
+  * Added option for auto-accepting chat from known contacts
+  * Rearranged menus in the main window
+  * Refactored history menu
+  * Improved displaying the account states in preferences and the main window
+  * Removed alerts section in preferences
+  * Save conference rooms in combobox history and limit it to 20 entries
+  * Fixed unwanted selection switching when sessions were ended
+  * Fixed using correct avatar and display name for received chat messages
+  * Fixed updating toolbar buttons when changing sessions and allow hold early
+  * Fixed using secondary ringtone when adding chat to an audio session
+  * Fixed playing hold tone when switching sessions
+  * Fixed playing tones when streams are cancelled
+  * Fixed incoming dialog margins
+  * Fixed processing DTMF tones
+  * Prevent chat session list from scrolling during animations
+  * Disable chat session control button when no session is selected
+  * Close dialog if session is ended while in a proposal
+  * Only remove the TLS certificate if it's in the application data directory
+  * Play file transfer alert tone only if enabled
+  * Play sound for received chat messages, if enabled
+  * Do not start a drag from self when accepting drops from other entities
+  * Do not play the hangup tone for sessions without audio
+  * Do not close all windows when closing the main window
+  * Remove license restrictions
+
+ -- Saul Ibarra <saul@ag-projects.com>  Thu, 10 Apr 2014 17:26:13 +0200
+
 blink (0.7.0) unstable; urgency=low
 
   * Added session information panel into the chat window
