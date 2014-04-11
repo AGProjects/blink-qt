@@ -38,6 +38,7 @@ Nice to have
 ------------
 
 - Add arbitrary SIP addresses to conferences
+- Add chat from audio call
 - LDAP directory
 - Call transfer
 - Logs window
