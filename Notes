@@ -14,8 +14,10 @@ Code refactoring
 Issues
 ------
 
+- tls cert text editors have the clear button cover the text
+- have a random conference room be joined if no room is specified
+- raise publish/subscribe intervals to 3600? what about register?
 - review the change to only play a hangup tone when session has audio/video
-
 - apply the default font/size from the theme to the input textbox?
 - in Smooth Operator check if the src attribute is still needed in elements
   that have the x-color class. there used to be a rule that matched elements
