@@ -18,7 +18,7 @@ from types import ListType, DictionaryType
 """Contains a client to communicate with the Contacts servers.
 
 For documentation on the Contacts API, see:
-http://code.google.com/apis/contatcs/
+http://code.google.com/apis/contacts/
 """
 
 __author__ = 'vinces1979@gmail.com (Vince Spicer)'
