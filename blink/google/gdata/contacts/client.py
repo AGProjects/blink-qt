@@ -35,8 +35,7 @@ class ContactsClient(gdata_client.GDClient):
   contact_list = "default"
   auth_scopes = gdata_gauth.AUTH_SCOPES['cp']
 
-  def get_feed_uri(self, kind='contacts', contact_list=None, projection='full',
-                  scheme="http"):
+  def get_feed_uri(self, kind='contacts', contact_list=None, projection='full', scheme="https"):
     """Builds a feed URI.
 
     Args:
@@ -451,8 +450,7 @@ class ContactsQuery(gdata_client.Query):
 
 class ProfilesQuery(gdata_client.Query):
   def __init__(self, feed=None):
-    self.feed = feed or 'http://www.google.com/m8/feeds/profiles/default/full'
-    
+    self.feed = feed or 'https://www.google.com/m8/feeds/profiles/default/full'
 
   def _CleanUri(self, uri):
     """Sanitizes a feed URI.
@@ -461,10 +459,10 @@ class ProfilesQuery(gdata_client.Query):
       uri: The URI to sanitize, can be relative or absolute.
 
     Returns:
-      The given URI without its http://server prefix, if any.
+      The given URI without its https://server prefix, if any.
       Keeps the leading slash of the URI.
     """
-    url_prefix = 'http://%s' % self.server
+    url_prefix = 'https://%s' % self.server
     if uri.startswith(url_prefix):
       uri = uri[len(url_prefix):]
     return uri                 

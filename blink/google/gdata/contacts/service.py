@@ -29,10 +29,8 @@ from blink.google import gdata
 from blink.google.gdata import service as gdata_service
 
 
-DEFAULT_BATCH_URL = ('http://www.google.com/m8/feeds/contacts/default/full'
-                     '/batch')
-DEFAULT_PROFILES_BATCH_URL = ('http://www.google.com'
-                              '/m8/feeds/profiles/default/full/batch')
+DEFAULT_BATCH_URL = 'https://www.google.com/m8/feeds/contacts/default/full/batch'
+DEFAULT_PROFILES_BATCH_URL = 'https://www.google.com/m8/feeds/profiles/default/full/batch'
 
 GDATA_VER_HEADER = 'GData-Version'
 
@@ -375,10 +373,10 @@ class ContactsService(gdata_service.GDataService):
       uri: The URI to sanitize, can be relative or absolute.
 
     Returns:
-      The given URI without its http://server prefix, if any.
+      The given URI without its https://server prefix, if any.
       Keeps the leading slash of the URI.
     """
-    url_prefix = 'http://%s' % self.server
+    url_prefix = 'https://%s' % self.server
     if uri.startswith(url_prefix):
       uri = uri[len(url_prefix):]
     return uri
