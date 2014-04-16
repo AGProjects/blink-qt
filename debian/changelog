@@ -1,3 +1,10 @@
+blink (0.8.1) unstable; urgency=medium
+
+  * Fixed issue with not fetching google contacts after recent Google changes
+  * Changed audo codec order: prefer G722 to Speex
+
+ -- Saul Ibarra <saul@ag-projects.com>  Wed, 16 Apr 2014 15:56:45 +0200
+
 blink (0.8.0) unstable; urgency=medium
 
   * Added file transfer support
