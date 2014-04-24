@@ -838,7 +838,7 @@ class BlinkSession(QObject):
             if notification.data.code == 487:
                 reason = 'Call cancelled'
             else:
-                reason = notification.data.reason
+                reason = notification.data.reason or 'Call failed'
         else:
             reason = notification.data.failure_reason
         self._terminate(reason=reason, error=True)
