@@ -3,10 +3,33 @@ Roadmap
 -------
 
 + Video sessions
-- Screen sharing
++ Screen sharing
+- Add arbitrary SIP addresses to conferences
+- Add chat from audio call
+
+
+Nice to have
+------------
+
+- Localization
+- Dial SIP URI from server web page
+- Device switching window when detected at runtime
+- Dial SIP URIs from the system
+- Desktop notifications
+- Accesibility features for blind users
+
+
+Pro version
+-----------
+
+- LDAP directory
+- Call transfer
+- Phone Number translations
+- Handle redirect 30X
+- Auto answer
+- External Alert URL handler
 - Answering machine
 - History browser
-- Localization
 
 
 Fixes and improvements
@@ -34,17 +57,3 @@ Fixes and improvements
 - save state timestamp so we don't overwrite the state when we start a new
   instance of blink and it publishes its old state on startup
 
-Nice to have
-------------
-
-- Add arbitrary SIP addresses to conferences
-- Add chat from audio call
-- LDAP directory
-- Call transfer
-- Logs window
-- Dial SIP URI from server web page
-- Device switching window when detected at runtime
-- Alert panel for redirect 30X
-- Dial SIP URIs from the system
-- Desktop notifications
-- Accesibility features for blind users
