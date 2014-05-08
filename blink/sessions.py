@@ -3266,7 +3266,7 @@ class FileTransfer(object):
             if not os.path.exists(name) and not os.path.exists(name + self.tmp_file_suffix):
                 self.filename = name
                 break
-        self._file_selector.fd = open(self.filename+self.tmp_file_suffix, 'w+')
+        self._file_selector.fd = open(self.filename+self.tmp_file_suffix, 'wb+')
 
         self.state = 'connecting'
         notification_center = NotificationCenter()
