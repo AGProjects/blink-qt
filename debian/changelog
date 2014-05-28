@@ -1,3 +1,10 @@
+blink (0.8.2) unstable; urgency=medium
+
+  * Always open file for incoming transfer in binary mode
+  * Use a generic fail reason when none is provided
+
+ -- Saul Ibarra <saul@ag-projects.com>  Wed, 28 May 2014 10:05:24 +0200
+
 blink (0.8.1) unstable; urgency=medium
 
   * Fixed issue with not fetching google contacts after recent Google changes
