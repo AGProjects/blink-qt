@@ -92,7 +92,7 @@ class BlinkPresenceState(object):
             service.capabilities.audio = True
             service.capabilities.text = False
             service.capabilities.message = True
-            service.capabilities.file_transfer = False
+            service.capabilities.file_transfer = True
             service.capabilities.screen_sharing_server = False
             service.capabilities.screen_sharing_client = False
             service.display_name = self.account.display_name or None
