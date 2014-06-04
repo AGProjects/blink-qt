@@ -10,12 +10,6 @@
     <height>290</height>
    </rect>
   </property>
-  <property name="minimumSize">
-   <size>
-    <width>0</width>
-    <height>0</height>
-   </size>
-  </property>
   <property name="windowTitle">
    <string>Google Contacts Authorization</string>
   </property>
@@ -287,9 +281,6 @@
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
        </property>
-       <property name="sizeType">
-        <enum>QSizePolicy::Fixed</enum>
-       </property>
        <property name="sizeHint" stdset="0">
         <size>
          <width>200</width>
@@ -364,8 +355,8 @@
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>257</x>
-     <y>202</y>
+     <x>299</x>
+     <y>284</y>
     </hint>
     <hint type="destinationlabel">
      <x>199</x>
