@@ -1618,7 +1618,7 @@ class AudioSessionItem(object):
         self.widget.hangup_button.setEnabled(False)
 
     def _reset_status(self):
-        if not self.blink_session.on_hold:
+        if not self.__deleted__ and not self.blink_session.on_hold:
             self.status = None
 
     def _SH_HangupButtonClicked(self):
