@@ -1719,7 +1719,7 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         if notification.data.stream.type == 'audio':
-            self.status = Status('Call ended')
+            self.status = Status('Audio removed') if self.blink_session.streams else Status('Call ended')
             self._cleanup()
 
     def _NH_BlinkSessionWillEnd(self, notification):
