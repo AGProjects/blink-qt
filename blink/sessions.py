@@ -669,7 +669,6 @@ class BlinkSession(QObject):
             player.start()
 
     def start_recording(self):
-        # I'd like to start recording before the call starts -Dan
         audio_stream = self.streams.get('audio')
         if audio_stream is not None and not self.recording:
             settings = SIPSimpleSettings()
