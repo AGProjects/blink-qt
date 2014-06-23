@@ -287,7 +287,6 @@ class PreferencesWindow(base_class, ui_class):
         self.traffic_units_button.clicked.connect(self._SH_TrafficUnitsButtonClicked)
 
         # File transfer
-        self.download_directory_editor.locationCleared.connect(self._SH_DownloadDirectoryEditorLocationCleared)
         self.download_directory_browse_button.clicked.connect(self._SH_DownloadDirectoryBrowseButtonClicked)
         self.file_transfer_alert_button.clicked.connect(self._SH_FileTransferAlertButtonClicked)
 
@@ -1292,11 +1291,6 @@ class PreferencesWindow(base_class, ui_class):
         settings.save()
 
     # File transfer signal handlers
-    def _SH_DownloadDirectoryEditorLocationCleared(self):
-        settings = SIPSimpleSettings()
-        settings.file_transfer.directory = None
-        settings.save()
-
     def _SH_DownloadDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = SIPSimpleSettings()
