@@ -205,6 +205,8 @@ class MainWindow(base_class, ui_class):
         self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
         self.transfers_window_action.triggered.connect(self._AH_TransfersWindowActionTriggered)
         self.logs_window_action.triggered.connect(self._AH_LogsWindowActionTriggered)
+        self.received_files_window_action.triggered.connect(self._AH_ReceivedFilesWindowActionTriggered)
+        self.screenshots_window_action.triggered.connect(self._AH_ScreenshotsWindowActionTriggered)
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
@@ -215,6 +217,11 @@ class MainWindow(base_class, ui_class):
         self.output_devices_group = QActionGroup(self)
         self.input_devices_group = QActionGroup(self)
         self.alert_devices_group = QActionGroup(self)
+
+        self.request_screen_action = QAction('Request screen', self, triggered=self._AH_RequestScreenActionTriggered)
+        self.share_my_screen_action = QAction('Share my screen', self, triggered=self._AH_ShareMyScreenActionTriggered)
+        self.screen_sharing_button.addAction(self.request_screen_action)
+        self.screen_sharing_button.addAction(self.share_my_screen_action)
 
         # adjust search box height depending on theme as the value set in designer isn't suited for all themes
         search_box = self.search_box
@@ -251,7 +258,7 @@ class MainWindow(base_class, ui_class):
     def enable_call_buttons(self, enabled):
         self.audio_call_button.setEnabled(enabled)
         self.chat_session_button.setEnabled(enabled)
-        self.screen_sharing_button.setEnabled(False)
+        self.screen_sharing_button.setEnabled(enabled)
 
     def load_audio_devices(self):
         settings = SIPSimpleSettings()
@@ -386,6 +393,18 @@ class MainWindow(base_class, ui_class):
         makedirs(directory)
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
+    def _AH_ReceivedFilesWindowActionTriggered(self, checked):
+        settings = SIPSimpleSettings()
+        directory = settings.file_transfer.directory.normalized
+        makedirs(directory)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
+
+    def _AH_ScreenshotsWindowActionTriggered(self, checked):
+        settings = BlinkSettings()
+        directory = settings.screen_sharing.screenshots_directory.normalized
+        makedirs(directory)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
+
     def _AH_VoicemailActionTriggered(self, action, checked):
         account = action.data()
         contact, contact_uri = URIUtils.find_contact(account.voicemail_uri, display_name='Voicemail')
@@ -495,6 +514,34 @@ class MainWindow(base_class, ui_class):
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
             session_manager = SessionManager()
             session_manager.create_session(contact, contact_uri, [StreamDescription('chat')], connect=False)
+
+    def _AH_RequestScreenActionTriggered(self):
+        list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
+        if list_view.detail_view.isVisible():
+            list_view.detail_view._AH_RequestScreen()
+        else:
+            selected_indexes = list_view.selectionModel().selectedIndexes()
+            if selected_indexes:
+                contact = selected_indexes[0].data(Qt.UserRole)
+                contact_uri = contact.uri
+            else:
+                contact, contact_uri = URIUtils.find_contact(self.search_box.text())
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact_uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
+
+    def _AH_ShareMyScreenActionTriggered(self):
+        list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
+        if list_view.detail_view.isVisible():
+            list_view.detail_view._AH_ShareMyScreen()
+        else:
+            selected_indexes = list_view.selectionModel().selectedIndexes()
+            if selected_indexes:
+                contact = selected_indexes[0].data(Qt.UserRole)
+                contact_uri = contact.uri
+            else:
+                contact, contact_uri = URIUtils.find_contact(self.search_box.text())
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _SH_BreakConference(self):
         active_session = self.session_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)

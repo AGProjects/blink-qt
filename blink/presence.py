@@ -93,8 +93,8 @@ class BlinkPresenceState(object):
             service.capabilities.text = False
             service.capabilities.message = True
             service.capabilities.file_transfer = True
-            service.capabilities.screen_sharing_server = False
-            service.capabilities.screen_sharing_client = False
+            service.capabilities.screen_sharing_server = True
+            service.capabilities.screen_sharing_client = True
             service.display_name = self.account.display_name or None
             service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon is not None else None
             service.device_info = pidf.DeviceInfo(instance_id, description=hostname, user_agent=settings.user_agent)

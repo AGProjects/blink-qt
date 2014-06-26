@@ -114,6 +114,13 @@ class ChatWindowSettings(SettingsGroup):
     font_size = Setting(type=int, default=None, nillable=True)
 
 
+class BlinkScreenSharingSettings(SettingsGroup):
+    screenshots_directory = Setting(type=Path, default=Path(os.path.expanduser('~/Downloads')))
+    scale = Setting(type=bool, default=True)
+    open_fullscreen = Setting(type=bool, default=False)
+    open_viewonly = Setting(type=bool, default=False)
+
+
 class BlinkPresenceSettings(SettingsGroup):
     current_state = Setting(type=PresenceState, default=PresenceState('Available'))
     state_history = Setting(type=PresenceStateList, default=PresenceStateList())
@@ -126,4 +133,5 @@ class BlinkSettings(SettingsObject):
 
     chat_window = ChatWindowSettings
     presence = BlinkPresenceSettings
+    screen_sharing = BlinkScreenSharingSettings
 

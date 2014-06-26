@@ -646,6 +646,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     sliding_panels = True
 
+    __streamtypes__ = {'chat', 'screen-sharing', 'video'} # the stream types for which we show the chat window
+
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)
         with Resources.directory:
@@ -732,6 +734,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.disconnect = QAction("Disconnect", self, triggered=self._AH_Disconnect)
         self.control_button.actions.add_audio = QAction("Add audio", self, triggered=self._AH_AddAudio)
         self.control_button.actions.remove_audio = QAction("Remove audio", self, triggered=self._AH_RemoveAudio)
+        self.control_button.actions.share_my_screen = QAction("Share my screen", self, triggered=self._AH_ShareMyScreen)
+        self.control_button.actions.request_screen = QAction("Request screen", self, triggered=self._AH_RequestScreen)
+        self.control_button.actions.end_screen_sharing = QAction("End screen sharing", self, triggered=self._AH_EndScreenSharing)
         self.control_button.actions.dump_session = QAction("Dump session", self, triggered=self._AH_DumpSession) # remove later -Dan
         self.control_button.actions.main_window = QAction("Main Window", self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
 
@@ -852,7 +857,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 menu.addAction(self.control_button.actions.disconnect)
                 if state == 'connected':
-                    menu.addAction(self.control_button.actions.add_audio if 'audio' not in blink_session.streams else self.control_button.actions.remove_audio)
+                    stream_types = blink_session.streams.types
+                    if 'audio' not in stream_types:
+                        menu.addAction(self.control_button.actions.add_audio)
+                    elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
+                        menu.addAction(self.control_button.actions.remove_audio)
+                    if 'screen-sharing' not in stream_types:
+                        menu.addAction(self.control_button.actions.request_screen)
+                        menu.addAction(self.control_button.actions.share_my_screen)
+                    elif stream_types != {'screen-sharing'}:
+                        menu.addAction(self.control_button.actions.end_screen_sharing)
             #menu.addAction(self.control_button.actions.dump_session) # remove this later -Dan
             self.control_button.setMenu(menu)
 
@@ -865,6 +879,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         have_session = blink_session.state in ('connecting/*', 'connected/*', 'ending')
         have_audio = 'audio' in blink_session.streams
         have_chat = 'chat' in blink_session.streams
+        have_screen = 'screen-sharing' in blink_session.streams
 
         if update_visibility:
             self.status_value_label.setEnabled(have_session)
@@ -877,11 +892,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.audio_ice_status_value_label.setEnabled(have_audio)
             self.chat_value_widget.setEnabled(have_chat)
             self.chat_addresses_value_label.setEnabled(have_chat)
+            self.screen_value_widget.setEnabled(have_screen)
 
         session_info = blink_session.info
         audio_info = blink_session.info.streams.audio
         video_info = blink_session.info.streams.video
         chat_info = blink_session.info.streams.chat
+        screen_info = blink_session.info.streams.screen_sharing
 
         if 'status' in elements and blink_session.state in ('initialized', 'connecting/*', 'connected/*', 'ended'):
             state_map = {'initialized': 'Disconnected',
@@ -953,6 +970,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.chat_addresses_value_label.setText(u'%s \u21c4 %s:%s' % (chat_info.local_address, chat_info.transport, chat_info.remote_address))
             else:
                 self.chat_addresses_value_label.setText(u'N/A')
+
+            if screen_info.remote_address is not None and screen_info.mode == 'active':
+                self.screen_value_label.setText(u'Viewing remote')
+            elif screen_info.remote_address is not None and screen_info.mode == 'passive':
+                self.screen_value_label.setText(u'Sharing local')
+            else:
+                self.screen_value_label.setText(u'N/A')
+            self.screen_encryption_label.setVisible(screen_info.remote_address is not None and screen_info.transport=='tls')
 
         if 'statistics' in elements:
             self.duration_value_label.value = session_info.duration
@@ -1132,11 +1157,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.traffic_graph.update()
 
     def _NH_BlinkSessionNewIncoming(self, notification):
-        if 'chat' in notification.sender.streams.types:
+        if notification.sender.streams.types.intersection(self.__streamtypes__):
             self.show()
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
-        if 'chat' in notification.sender.stream_descriptions.types:
+        if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             self.show()
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
@@ -1145,7 +1170,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
-        if 'chat' in notification.sender.streams.types:
+        if notification.sender.streams.types.intersection(self.__streamtypes__):
             self.show()
 
     def _NH_BlinkSessionDidReinitializeForOutgoing(self, notification):
@@ -1154,7 +1179,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
-        if 'chat' in notification.sender.stream_descriptions.types:
+        if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             self.show()
 
     # use BlinkSessionNewIncoming/Outgoing to show the chat window if there is a chat stream available (like with reinitialize) instead of using the sessionAdded signal from the model -Dan
@@ -1163,7 +1188,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     # different class for them that posts different notifications. in that case we can do in in NewIncoming/Outgoing -Dan
 
     def _NH_BlinkSessionWillAddStream(self, notification):
-        if notification.data.stream.type == 'chat':
+        if notification.data.stream.type in self.__streamtypes__:
             self.show()
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
@@ -1420,6 +1445,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _AH_RemoveAudio(self):
         self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('audio'))
+
+    def _AH_RequestScreen(self):
+        if 'audio' in self.selected_session.blink_session.streams:
+            self.selected_session.blink_session.add_stream(StreamDescription('screen-sharing', mode='viewer'))
+        else:
+            self.selected_session.blink_session.add_streams([StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
+
+    def _AH_ShareMyScreen(self):
+        if 'audio' in self.selected_session.blink_session.streams:
+            self.selected_session.blink_session.add_stream(StreamDescription('screen-sharing', mode='server'))
+        else:
+            self.selected_session.blink_session.add_streams([StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
+
+    def _AH_EndScreenSharing(self):
+        self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('screen-sharing'))
 
     def _AH_DumpSession(self):
         blink_session = self.selected_session.blink_session

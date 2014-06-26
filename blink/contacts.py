@@ -3060,8 +3060,8 @@ class ContactListView(QListView):
             menu.addAction(self.actions.start_chat_session)
             #menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
-            #menu.addAction(self.actions.request_screen)
-            #menu.addAction(self.actions.share_my_screen)
+            menu.addAction(self.actions.request_screen)
+            menu.addAction(self.actions.share_my_screen)
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
@@ -3307,10 +3307,14 @@ class ContactListView(QListView):
                 session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
-        pass
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
     def _AH_ShareMyScreen(self):
-        pass
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _DH_ApplicationXBlinkGroupList(self, event, index, rect, item):
         model = self.model()
@@ -3459,8 +3463,8 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.start_chat_session)
             #menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
-            #menu.addAction(self.actions.request_screen)
-            #menu.addAction(self.actions.share_my_screen)
+            menu.addAction(self.actions.request_screen)
+            menu.addAction(self.actions.share_my_screen)
             menu.addSeparator()
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
@@ -3640,10 +3644,14 @@ class ContactSearchListView(QListView):
                 session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
-        pass
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
     def _AH_ShareMyScreen(self):
-        pass
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
@@ -3736,8 +3744,8 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.start_chat_session)
         #menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.send_files)
-        #menu.addAction(self.actions.request_screen)
-        #menu.addAction(self.actions.share_my_screen)
+        menu.addAction(self.actions.request_screen)
+        menu.addAction(self.actions.share_my_screen)
         menu.addSeparator()
         if isinstance(selected_item, ContactURI) and model.contact_detail.editable:
             menu.addAction(self.actions.make_uri_default)
@@ -3875,10 +3883,26 @@ class ContactDetailView(QListView):
                 session_manager.send_file(contact, selected_uri, filename)
 
     def _AH_RequestScreen(self):
-        pass
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = contact.uri
+        session_manager = SessionManager()
+        session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
     def _AH_ShareMyScreen(self):
-        pass
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = contact.uri
+        session_manager = SessionManager()
+        session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _DH_ApplicationXBlinkSession(self, event, index, rect, item):
         event.ignore(rect)

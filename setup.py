@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
+from distutils.extension import Extension
+from Cython.Build import cythonize
+
 from itertools import chain
 import glob
 import os
@@ -32,6 +35,7 @@ setup(name         = "blink",
           "Programming Language :: Python"
       ],
       packages     = find_packages('blink'),
+      ext_modules  = cythonize([Extension(name="blink.screensharing._rfb", sources=["blink/screensharing/_rfb.pyx"], libraries=["vncclient"])]),
       data_files   = list_resources('resources', destination_directory='share/blink'),
       scripts      = ['bin/blink']
 )

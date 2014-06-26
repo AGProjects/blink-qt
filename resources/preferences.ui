@@ -2136,6 +2136,83 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="screen_sharing_page">
+       <layout class="QVBoxLayout" name="screen_sharing_layout">
+        <property name="margin">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QGroupBox" name="screen_sharing_group_box">
+          <property name="title">
+           <string>Screen Sharing Settings</string>
+          </property>
+          <layout class="QGridLayout" name="screen_sharing_box_layout">
+           <property name="horizontalSpacing">
+            <number>3</number>
+           </property>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="screenshots_directory_editor">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QPushButton" name="screenshots_directory_browse_button">
+             <property name="text">
+              <string>Browse</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="screenshots_directory_label">
+             <property name="text">
+              <string>Screenshots Directory:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0" colspan="3">
+            <spacer name="screen_sharing_spacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="2" column="1" colspan="2">
+            <widget class="QCheckBox" name="screen_sharing_fullscreen_button">
+             <property name="text">
+              <string>Open the viewer window in fullscreen mode</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1" colspan="2">
+            <widget class="QCheckBox" name="screen_sharing_viewonly_button">
+             <property name="text">
+              <string>Open the viewer window in view only mode</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1" colspan="2">
+            <widget class="QCheckBox" name="screen_sharing_scale_button">
+             <property name="text">
+              <string>Scale the remote screen to fit the viewer window</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="file_transfers_page">
        <layout class="QVBoxLayout" name="file_transfer_layout">
         <property name="margin">
@@ -2747,6 +2824,7 @@
    <addaction name="separator"/>
    <addaction name="audio_action"/>
    <addaction name="chat_action"/>
+   <addaction name="screen_sharing_action"/>
    <addaction name="file_transfer_action"/>
    <addaction name="logging_action"/>
    <addaction name="advanced_action"/>
@@ -2826,6 +2904,18 @@
     <string>Advanced</string>
    </property>
   </action>
+  <action name="screen_sharing_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/screensharing.png</normaloff>icons/screensharing.png</iconset>
+   </property>
+   <property name="text">
+    <string>Screen Sharing</string>
+   </property>
+  </action>
  </widget>
  <customwidgets>
   <customwidget>
@@ -2834,14 +2924,14 @@
    <header>QtWebKit/QWebView</header>
   </customwidget>
   <customwidget>
-   <class>ChatWebView</class>
-   <extends>QWebView</extends>
-   <header>blink.chatwindow</header>
-  </customwidget>
-  <customwidget>
    <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
+  </customwidget>
+  <customwidget>
+   <class>ChatWebView</class>
+   <extends>QWebView</extends>
+   <header>blink.chatwindow</header>
   </customwidget>
   <customwidget>
    <class>SIPPortEditor</class>

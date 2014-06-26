@@ -19,7 +19,7 @@ from operator import attrgetter
 from threading import Event
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QPropertyAnimation, QRect, QRectF, QSize, QTimer, QUrl, pyqtSignal
+from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QProcess, QPropertyAnimation, QRect, QRectF, QSize, QTimer, QUrl, pyqtSignal
 from PyQt4.QtGui  import QApplication, QBrush, QColor, QDesktopServices, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QShortcut
 from PyQt4.QtGui  import QStyle, QStyledItemDelegate, QStyleOption
 
@@ -28,6 +28,7 @@ from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
 from application.python.weakref import weakobjectmap
 from application.system import makedirs, unlink
+from eventlib.proc import spawn
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
@@ -38,10 +39,12 @@ from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
 from sipsimple.session import Session
 from sipsimple.streams import MediaStreamRegistry
-from sipsimple.streams.msrp import FileSelector
-from sipsimple.threading import run_in_thread
+from sipsimple.streams.msrp import FileSelector, ExternalVNCServerHandler, ExternalVNCViewerHandler, ScreenSharingStream
+from sipsimple.threading import run_in_thread, run_in_twisted_thread
 
+from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
+from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
 from blink.util import call_later, call_in_gui_thread, run_in_gui_thread
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
@@ -133,15 +136,28 @@ class MSRPStreamInfo(object):
         self.__init__()
 
 
+class ScreenSharingStreamInfo(MSRPStreamInfo):
+    def __init__(self):
+        super(ScreenSharingStreamInfo, self).__init__()
+        self.mode = None
+
+    def _update(self, stream):
+        super(ScreenSharingStreamInfo, self)._update(stream)
+        if stream is not None:
+            self.mode = stream.handler.type
+
+
 class StreamsInfo(object):
-    __slots__ = 'audio', 'video', 'chat'
+    __slots__ = 'audio', 'video', 'chat', 'screen_sharing'
 
     def __init__(self):
         self.audio = RTPStreamInfo()
         self.video = RTPStreamInfo()
         self.chat = MSRPStreamInfo()
+        self.screen_sharing = ScreenSharingStreamInfo()
 
     def __getitem__(self, key):
+        key = key.replace('-', '_')
         try:
             return getattr(self, key)
         except AttributeError:
@@ -151,6 +167,7 @@ class StreamsInfo(object):
         self.audio._update(streams.get('audio'))
         self.video._update(streams.get('video'))
         self.chat._update(streams.get('chat'))
+        self.screen_sharing._update(streams.get('screen-sharing'))
 
 
 class SessionInfo(object):
@@ -622,6 +639,20 @@ class BlinkSession(QObject):
         notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
         notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
 
+    def add_streams(self, stream_descriptions):
+        assert self.state == 'connected'
+        for stream_description in stream_descriptions:
+            if stream_description.type in self.streams:
+                raise RuntimeError('session already has a stream of type %s' % stream_description.type)
+            self.info.streams[stream_description.type]._reset()
+        streams = [stream_description.create_stream() for stream_description in stream_descriptions]
+        self.sip_session.add_streams(streams)
+        self.streams.extend(streams)
+        notification_center = NotificationCenter()
+        for stream in streams:
+            notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
+            notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
+
     def remove_stream(self, stream):
         assert self.state == 'connected'
         if stream not in self.streams:
@@ -629,6 +660,15 @@ class BlinkSession(QObject):
         self.sip_session.remove_stream(stream)
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkSessionWillRemoveStream', sender=self, data=NotificationData(stream=stream))
+
+    def remove_streams(self, streams):
+        assert self.state == 'connected'
+        if not set(self.streams).issuperset(streams):
+            raise RuntimeError('not all streams are part of the current session')
+        self.sip_session.remove_streams(streams)
+        notification_center = NotificationCenter()
+        for stream in streams:
+            notification_center.post_notification('BlinkSessionWillRemoveStream', sender=self, data=NotificationData(stream=stream))
 
     def accept_proposal(self, streams):
         assert self.state == 'connected/received_proposal'
@@ -1592,8 +1632,11 @@ class AudioSessionItem(object):
     def end(self):
         if self.audio_stream in self.blink_session.streams.proposed and self.blink_session.state == 'connected/sent_proposal':
             self.blink_session.sip_session.cancel_proposal()
-        elif len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
-            self.blink_session.remove_stream(self.audio_stream)
+        # review this -Dan
+        #elif len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
+        #    self.blink_session.remove_stream(self.audio_stream)
+        elif 'chat' in self.blink_session.streams and self.blink_session.state == 'connected':
+            self.blink_session.remove_streams([stream for stream in self.blink_session.streams if stream.type != 'chat'])
         else:
             self.blink_session.end()
 
@@ -2583,9 +2626,9 @@ class ChatSessionWidget(base_class, ui_class):
         self.hold_icon.setVisible(session.blink_session.on_hold)
         self.composing_icon.setVisible(session.remote_composing)
         self.chat_icon.setVisible('chat' in session.blink_session.streams)
+        self.audio_icon.setVisible('audio' in session.blink_session.streams)
         self.video_icon.setVisible('video' in session.blink_session.streams)
         self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
-        self.audio_icon.setVisible(session.blink_session.streams.types.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
 
 del ui_class, base_class
 
@@ -3169,6 +3212,133 @@ class ChatSessionListView(QListView):
             #print "-- chat session list updating selection to", position, notification.data.active_session
             selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.ignore_selection_changes = False
+
+
+# Screen sharing
+#
+
+class VNCServerProcess(QProcess):
+    __running__ = set()
+
+    ready = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super(VNCServerProcess, self).__init__(parent)
+        self.server_host = 'localhost'
+        self.server_port = None
+        self.started.connect(self._SH_Started)
+        self.error.connect(self._SH_Error)
+        self.finished.connect(self._SH_Finished)
+        self.readyReadStandardOutput.connect(self._SH_ReadyReadStandardOutput)
+        self.readyReadStandardError.connect(self._SH_ReadyReadStandardError)
+
+    @property
+    def command(self):
+        if sys.platform == 'win32':
+            return '"%s"' % os.path.abspath(os.path.join(Resources.directory, '..', 'blinkvnc.exe'))
+        else:
+            return 'x11vnc -quiet -localhost -once -noshared -nopw -noncache -repeat'
+
+    def start(self):
+        super(VNCServerProcess, self).start(self.command)
+
+    def _SH_Started(self):
+        if self.server_port is not None:
+            self.ready.emit()
+        self.__running__.add(self)
+
+    def _SH_Error(self, error):
+        self.server_port = None
+
+    def _SH_Finished(self, exit_code, exit_status):
+        self.server_port = None
+        self.__running__.remove(self)
+
+    def _SH_ReadyReadStandardOutput(self):
+        server_output = str(self.readAllStandardOutput())
+        if self.server_port is None:
+            match = re.search(r'^PORT\s*=\s*(?P<port>\d+)\s*$', server_output, re.IGNORECASE | re.MULTILINE)
+            if match:
+                self.server_port = int(match.group('port'))
+                if self.state() == QProcess.Running:
+                    self.ready.emit()
+
+    def _SH_ReadyReadStandardError(self):
+        self.readAllStandardError()
+
+
+class ExternalVNCServerHandler(ExternalVNCServerHandler):
+    address = property(lambda self: None if self.vnc_process.server_port is None else (self.vnc_process.server_host, self.vnc_process.server_port))
+
+    def __init__(self):
+        super(ExternalVNCServerHandler, self).__init__()
+        self.vnc_process = None
+
+    @run_in_gui_thread
+    def _NH_MediaStreamDidStart(self, notification):
+        self.vnc_process = VNCServerProcess()
+        self.vnc_process.ready.connect(self._SH_VNCProcessReady)
+        self.vnc_process.error.connect(self._SH_VNCProcessError)
+        self.vnc_process.start()
+
+    def _NH_MediaStreamWillEnd(self, notification):
+        super(ExternalVNCServerHandler, self)._NH_MediaStreamWillEnd(notification)
+        if self.vnc_process is not None:
+            self.vnc_process.kill()
+
+    @run_in_twisted_thread
+    def _SH_VNCProcessReady(self):
+        self.vnc_starter_thread = spawn(self._start_vnc_connection)
+
+    @run_in_twisted_thread
+    def _SH_VNCProcessError(self, error):
+        NotificationCenter().post_notification('ScreenSharingHandlerDidFail', sender=self, data=NotificationData(context='starting', failure=None, reason='failed to start VNC server'))
+
+
+class EmbeddedVNCViewerHandler(ExternalVNCViewerHandler):
+    def __init__(self):
+        super(EmbeddedVNCViewerHandler, self).__init__()
+        self.window = None
+
+    @run_in_gui_thread
+    def _start_vnc_viewer(self):
+        settings = BlinkSettings()
+        notification_center = NotificationCenter()
+        host, port = self.address
+        vncclient = VNCClient(host, port, settings=ServerDefault)
+        notification_center.add_observer(self, sender=vncclient)
+        self.window = ScreensharingWindow(vncclient)
+        self.window.show()
+        if settings.screen_sharing.scale:
+            self.window.scale_action.trigger()
+        if settings.screen_sharing.open_viewonly:
+            self.window.viewonly_action.trigger()
+        if settings.screen_sharing.open_fullscreen:
+            self.window.fullscreen_action.trigger()
+        self.window.vncclient.start()
+
+    @run_in_gui_thread
+    def _stop_vnc_viewer(self):
+        if self.window is not None:
+            self.window.vncclient.stop()
+            self.window.hide()
+
+    @run_in_gui_thread
+    def _NH_VNCClientDidEnd(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        self.window = None
+
+    def _NH_MediaStreamDidStart(self, notification):
+        super(EmbeddedVNCViewerHandler, self)._NH_MediaStreamDidStart(notification)
+        self._start_vnc_viewer()
+
+    def _NH_MediaStreamWillEnd(self, notification):
+        super(EmbeddedVNCViewerHandler, self)._NH_MediaStreamWillEnd(notification)
+        self._stop_vnc_viewer()
+
+
+ScreenSharingStream.ServerHandler = ExternalVNCServerHandler
+ScreenSharingStream.ViewerHandler = EmbeddedVNCViewerHandler
 
 
 # File transfers
@@ -4120,9 +4290,9 @@ class ConferenceParticipantWidget(ChatSessionWidget):
         self.hold_icon.setVisible(participant.on_hold)
         self.composing_icon.setVisible(participant.is_composing)
         self.chat_icon.setVisible('chat' in participant.active_media)
+        self.audio_icon.setVisible('audio' in participant.active_media)
         self.video_icon.setVisible('video' in participant.active_media)
         self.screen_sharing_icon.setVisible('screen-sharing' in participant.active_media)
-        self.audio_icon.setVisible(participant.active_media.intersection(('audio', 'video', 'screen-sharing')) == {'audio'})
 
 
 class ConferenceParticipantItem(object):
@@ -4667,7 +4837,7 @@ class IncomingRequest(QObject):
                 self.dialog.screensharing_label.setText(u'is offering to share his screen')
             else:
                 self.dialog.screensharing_label.setText(u'is asking to share your screen')
-            self.dialog.screensharing_stream.accepted = False # Remove when implemented later -Luci
+                #self.dialog.screensharing_stream.accepted = True if proposal else False
             self.dialog.screensharing_stream.show()
         self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 

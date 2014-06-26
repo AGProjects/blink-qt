@@ -1,0 +1,345 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>fullscreen_toolbox</class>
+ <widget class="QWidget" name="fullscreen_toolbox">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>385</width>
+    <height>37</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Screensharing toolbox</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget#fullscreen_toolbox {
+	background-color: white;
+	border: 1px outset #222222;
+	border-top: 0px;
+	border-bottom-left-radius: 4px;
+	border-bottom-right-radius: 4px;
+}
+</string>
+  </property>
+  <layout class="QHBoxLayout" name="toolbox_layout">
+   <property name="spacing">
+    <number>1</number>
+   </property>
+   <property name="leftMargin">
+    <number>4</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>4</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QComboBox" name="color_depth_button">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Higher color depths provide better quality but also require more bandwidth. Lowering it may help if screen sharing feels sluggish or it is lagging.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <item>
+      <property name="text">
+       <string>Default Color Depth</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>True Color (24 bits)</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>High Color (16 bits)</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Low Color (8 bits)</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item>
+    <spacer name="spacer_left">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::MinimumExpanding</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>20</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QToolButton" name="scale_button">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>Scale</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/scale.svg</normaloff>icons/scale.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="viewonly_button">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>View Only</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/viewonly.svg</normaloff>icons/viewonly.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="screenshot_button">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>Screenshot</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/screenshot.svg</normaloff>icons/screenshot.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="fullscreen_button">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>Fullscreen</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/fullscreen.svg</normaloff>
+       <normalon>icons/fullscreen-exit.svg</normalon>
+       <disabledon>icons/fullscreen-exit.svg</disabledon>
+       <activeon>icons/fullscreen-exit.svg</activeon>
+       <selectedon>icons/fullscreen-exit.svg</selectedon>icons/fullscreen.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="spacer_right">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::Fixed</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>10</width>
+       <height>20</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QToolButton" name="minimize_button">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>Minimize</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/minimize.svg</normaloff>
+       <activeoff>icons/minimize-active.svg</activeoff>icons/minimize.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="close_button">
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/close.svg</normaloff>
+       <activeoff>icons/close-active.svg</activeoff>icons/close.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+  </layout>
+  <action name="scale_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/scale.svg</normaloff>icons/scale.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Scale</string>
+   </property>
+   <property name="toolTip">
+    <string>Scale remote screen to fit window size</string>
+   </property>
+  </action>
+  <action name="viewonly_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/viewonly.svg</normaloff>icons/viewonly.svg</iconset>
+   </property>
+   <property name="text">
+    <string>View Only</string>
+   </property>
+   <property name="toolTip">
+    <string>View only</string>
+   </property>
+  </action>
+  <action name="screenshot_action">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/screenshot.svg</normaloff>icons/screenshot.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Screenshot</string>
+   </property>
+   <property name="toolTip">
+    <string>Take a screenshot</string>
+   </property>
+  </action>
+  <action name="fullscreen_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/fullscreen.svg</normaloff>
+     <normalon>icons/fullscreen-exit.svg</normalon>
+     <disabledon>icons/fullscreen-exit.svg</disabledon>
+     <activeon>icons/fullscreen-exit.svg</activeon>
+     <selectedon>icons/fullscreen-exit.svg</selectedon>icons/fullscreen.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Fullscreen</string>
+   </property>
+  </action>
+  <action name="minimize_action">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/minimize.svg</normaloff>
+     <activeoff>icons/minimize-active.svg</activeoff>icons/minimize.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Minimize</string>
+   </property>
+   <property name="toolTip">
+    <string>Minimize</string>
+   </property>
+  </action>
+  <action name="close_action">
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/close.svg</normaloff>
+     <activeoff>icons/close-active.svg</activeoff>icons/close.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Close</string>
+   </property>
+   <property name="toolTip">
+    <string>End screen sharing and close the window</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -657,12 +657,12 @@ padding: 2px;</string>
               </property>
               <property name="icon">
                <iconset>
-                <normaloff>icons/green-handset.png</normaloff>icons/green-handset.png</iconset>
+                <normaloff>icons/handset.svg</normaloff>icons/handset.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
-                <width>18</width>
-                <height>18</height>
+                <width>16</width>
+                <height>16</height>
                </size>
               </property>
              </widget>
@@ -690,8 +690,8 @@ padding: 2px;</string>
               </property>
               <property name="iconSize">
                <size>
-                <width>18</width>
-                <height>18</height>
+                <width>16</width>
+                <height>16</height>
                </size>
               </property>
               <property name="popupMode">
@@ -718,12 +718,12 @@ padding: 2px;</string>
               </property>
               <property name="icon">
                <iconset>
-                <normaloff>icons/display18.png</normaloff>icons/display18.png</iconset>
+                <normaloff>icons/work/screen.svg</normaloff>icons/work/screen.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
-                <width>18</width>
-                <height>18</height>
+                <width>16</width>
+                <height>16</height>
                </size>
               </property>
               <property name="popupMode">
@@ -1052,6 +1052,8 @@ padding: 2px;</string>
     <addaction name="chat_window_action"/>
     <addaction name="transfers_window_action"/>
     <addaction name="logs_window_action"/>
+    <addaction name="received_files_window_action"/>
+    <addaction name="screenshots_window_action"/>
    </widget>
    <addaction name="blink_menu"/>
    <addaction name="call_menu"/>
@@ -1274,6 +1276,28 @@ padding: 2px;</string>
    </property>
    <property name="text">
     <string>Play a sound for &amp;received messages</string>
+   </property>
+  </action>
+  <action name="received_files_window_action">
+   <property name="text">
+    <string>Received &amp;Files</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="screenshots_window_action">
+   <property name="text">
+    <string>&amp;Screenshots</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+E</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
    </property>
   </action>
  </widget>
