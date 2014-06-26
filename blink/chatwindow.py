@@ -887,7 +887,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.duration_value_label.setEnabled(have_session)
             self.account_value_label.setEnabled(have_session)
             self.remote_agent_value_label.setEnabled(have_session)
-            self.sip_address_value_label.setEnabled(have_session)
             self.audio_value_widget.setEnabled('audio' in blink_session.streams)
             self.chat_value_widget.setEnabled('chat' in blink_session.streams)
             self.screen_value_widget.setEnabled('screen-sharing' in blink_session.streams)
@@ -922,10 +921,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if 'session' in elements:
             self.account_value_label.setText(blink_session.account.id)
             self.remote_agent_value_label.setText(session_info.remote_user_agent or u'N/A')
-            if session_info.remote_address:
-                self.sip_address_value_label.setText(u'%s:%s' % (session_info.transport, session_info.remote_address))
-            else:
-                self.sip_address_value_label.setText(u'N/A')
 
         if 'media' in elements:
             self.audio_value_label.setText(audio_info.codec or 'N/A')

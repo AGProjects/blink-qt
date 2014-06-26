@@ -1110,7 +1110,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="5" column="0" colspan="2">
+                  <item row="4" column="0" colspan="2">
                    <spacer name="session_spacer">
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
@@ -1145,7 +1145,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="12" column="0" colspan="2">
+                  <item row="11" column="0" colspan="2">
                    <spacer name="info_panel_spacer">
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
@@ -1161,36 +1161,7 @@ QToolButton:pressed {
                     </property>
                    </spacer>
                   </item>
-                  <item row="4" column="0">
-                   <widget class="QLabel" name="sip_address_title_label">
-                    <property name="text">
-                     <string>Next Hop</string>
-                    </property>
-                    <property name="role" stdset="0">
-                     <string notr="true">title</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="4" column="1">
-                   <widget class="ElidedLabel" name="sip_address_value_label">
-                    <property name="sizePolicy">
-                     <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
-                      <horstretch>0</horstretch>
-                      <verstretch>0</verstretch>
-                     </sizepolicy>
-                    </property>
-                    <property name="text">
-                     <string>tls:1.2.3.4:5061</string>
-                    </property>
-                    <property name="indent">
-                     <number>0</number>
-                    </property>
-                    <property name="role" stdset="0">
-                     <string notr="true">value</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="6" column="1">
+                  <item row="5" column="1">
                    <widget class="QWidget" name="chat_value_widget" native="true">
                     <property name="role" stdset="0">
                      <string notr="true">value</string>
@@ -1268,7 +1239,7 @@ QToolButton:pressed {
                     </layout>
                    </widget>
                   </item>
-                  <item row="8" column="0">
+                  <item row="7" column="0">
                    <widget class="QLabel" name="screen_title_label">
                     <property name="text">
                      <string>Screen</string>
@@ -1278,7 +1249,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="8" column="1">
+                  <item row="7" column="1">
                    <widget class="QWidget" name="screen_value_widget" native="true">
                     <property name="role" stdset="0">
                      <string notr="true">value</string>
@@ -1356,7 +1327,7 @@ QToolButton:pressed {
                     </layout>
                    </widget>
                   </item>
-                  <item row="7" column="0">
+                  <item row="6" column="0">
                    <widget class="QLabel" name="audio_title_label">
                     <property name="text">
                      <string>Audio</string>
@@ -1376,7 +1347,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="10" column="0" colspan="2">
+                  <item row="9" column="0" colspan="2">
                    <widget class="QWidget" name="packet_loss_widget" native="true">
                     <layout class="QVBoxLayout" name="packet_loss_layout">
                      <property name="spacing">
@@ -1449,7 +1420,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="11" column="0" colspan="2">
+                  <item row="10" column="0" colspan="2">
                    <widget class="QWidget" name="traffic_widget" native="true">
                     <layout class="QVBoxLayout" name="speed_layout">
                      <property name="spacing">
@@ -1665,7 +1636,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="9" column="0" colspan="2">
+                  <item row="8" column="0" colspan="2">
                    <widget class="QWidget" name="latency_widget" native="true">
                     <layout class="QVBoxLayout" name="latency_layout">
                      <property name="spacing">
@@ -1728,7 +1699,7 @@ QToolButton:pressed {
                     </layout>
                    </widget>
                   </item>
-                  <item row="7" column="1">
+                  <item row="6" column="1">
                    <widget class="QWidget" name="audio_value_widget" native="true">
                     <property name="role" stdset="0">
                      <string notr="true">value</string>
@@ -1816,7 +1787,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="6" column="0">
+                  <item row="5" column="0">
                    <widget class="QLabel" name="chat_title_label">
                     <property name="text">
                      <string>Chat</string>
