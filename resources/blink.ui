@@ -682,7 +682,7 @@ padding: 2px;</string>
                </size>
               </property>
               <property name="toolTip">
-               <string>Start a chat session or send an SMS</string>
+               <string>Start a chat session</string>
               </property>
               <property name="icon">
                <iconset>
