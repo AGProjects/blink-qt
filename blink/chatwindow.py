@@ -7,7 +7,7 @@ import os
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPolygonF, QTextCursor, QTextDocument, QTextEdit
+from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCursor, QTextDocument, QTextEdit
 from PyQt4.QtGui  import QApplication, QDesktopServices
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
@@ -714,6 +714,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.lock_grey_icon = QIcon(Resources.get('icons/lock-grey-12.svg'))
         self.lock_green_icon = QIcon(Resources.get('icons/lock-green-12.svg'))
 
+        self.direct_connection_pixmap = QPixmap(Resources.get('icons/connection-direct.svg'))
+        self.relay_connection_pixmap = QPixmap(Resources.get('icons/connection-relay.svg'))
+        self.unknown_connection_pixmap = QPixmap(Resources.get('icons/connection-unknown.svg'))
+
         # fix the SVG icons as the generated code loads them as pixmaps, losing their ability to scale -Dan
         def svg_icon(filename_off, filename_on):
             icon = QIcon()
@@ -877,22 +881,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _update_session_info_panel(self, elements={}, update_visibility=False):
         blink_session = self.selected_session.blink_session
         have_session = blink_session.state in ('connecting/*', 'connected/*', 'ending')
-        have_audio = 'audio' in blink_session.streams
-        have_chat = 'chat' in blink_session.streams
-        have_screen = 'screen-sharing' in blink_session.streams
 
         if update_visibility:
             self.status_value_label.setEnabled(have_session)
             self.duration_value_label.setEnabled(have_session)
             self.account_value_label.setEnabled(have_session)
             self.remote_agent_value_label.setEnabled(have_session)
-            self.sip_addresses_value_label.setEnabled(have_session)
-            self.audio_value_widget.setEnabled(have_audio)
-            self.audio_addresses_value_label.setEnabled(have_audio)
-            self.audio_ice_status_value_label.setEnabled(have_audio)
-            self.chat_value_widget.setEnabled(have_chat)
-            self.chat_addresses_value_label.setEnabled(have_chat)
-            self.screen_value_widget.setEnabled(have_screen)
+            self.sip_address_value_label.setEnabled(have_session)
+            self.audio_value_widget.setEnabled('audio' in blink_session.streams)
+            self.chat_value_widget.setEnabled('chat' in blink_session.streams)
+            self.screen_value_widget.setEnabled('screen-sharing' in blink_session.streams)
 
         session_info = blink_session.info
         audio_info = blink_session.info.streams.audio
@@ -924,52 +922,47 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if 'session' in elements:
             self.account_value_label.setText(blink_session.account.id)
             self.remote_agent_value_label.setText(session_info.remote_user_agent or u'N/A')
-            if session_info.local_address and session_info.remote_address:
-                self.sip_addresses_value_label.setText(u'%s \u21c4 %s:%s' % (session_info.local_address, session_info.transport, session_info.remote_address))
-            elif session_info.local_address:
-                self.sip_addresses_value_label.setText(u'%s \u21c4 N/A' % session_info.local_address)
+            if session_info.remote_address:
+                self.sip_address_value_label.setText(u'%s:%s' % (session_info.transport, session_info.remote_address))
             else:
-                self.sip_addresses_value_label.setText(u'N/A')
+                self.sip_address_value_label.setText(u'N/A')
 
         if 'media' in elements:
             self.audio_value_label.setText(audio_info.codec or 'N/A')
-            self.audio_encryption_label.setVisible(audio_info.encryption is not None)
 
-            if audio_info.local_address and audio_info.remote_address:
-                self.audio_addresses_value_label.setText(u'%s \u21c4 %s' % (audio_info.local_address, audio_info.remote_address))
-            else:
-                self.audio_addresses_value_label.setText(u'N/A')
-
-            if audio_info.ice_status == None:
-                self.audio_ice_status_value_label.setText(u'N/A')
-            elif audio_info.ice_status == 'disabled':
-                self.audio_ice_status_value_label.setText(u'Disabled')
-            elif audio_info.ice_status == 'gathering':
-                self.audio_ice_status_value_label.setText(u'Gathering candidates')
-            elif audio_info.ice_status == 'gathering_complete':
-                self.audio_ice_status_value_label.setText(u'Gathered candidates')
-            elif audio_info.ice_status == 'negotiating':
-                self.audio_ice_status_value_label.setText(u'Negotiating')
-            elif audio_info.ice_status == 'succeeded':
+            if audio_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (audio_info.local_rtp_candidate, audio_info.remote_rtp_candidate)}:
-                    self.audio_ice_status_value_label.setText(u'Using relay')
+                    self.audio_connection_label.setPixmap(self.relay_connection_pixmap)
+                    self.audio_connection_label.setToolTip(u'Using relay')
                 else:
-                    self.audio_ice_status_value_label.setText(u'Peer to peer')
+                    self.audio_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.audio_connection_label.setToolTip(u'Peer to peer')
             elif audio_info.ice_status == 'failed':
-                self.audio_ice_status_value_label.setText(u"Couldn't negotiate ICE")
+                self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.audio_connection_label.setToolTip(u"Couldn't negotiate ICE")
+            elif audio_info.ice_status == 'disabled':
+                self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.audio_connection_label.setToolTip(u'ICE is disabled')
+            else:
+                self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.audio_connection_label.setToolTip(u'Negotiating ICE')
+
+            self.audio_connection_label.setVisible(audio_info.remote_address is not None)
+            self.audio_encryption_label.setVisible(audio_info.encryption is not None)
 
             if any(len(path) > 1 for path in (chat_info.full_local_path, chat_info.full_remote_path)):
                 self.chat_value_label.setText(u'Using relay')
+                self.chat_connection_label.setPixmap(self.relay_connection_pixmap)
+                self.chat_connection_label.setToolTip(u'Using relay')
             elif chat_info.full_local_path and chat_info.full_remote_path:
                 self.chat_value_label.setText(u'Peer to peer')
+                self.chat_connection_label.setPixmap(self.direct_connection_pixmap)
+                self.chat_connection_label.setToolTip(u'Peer to peer')
             else:
                 self.chat_value_label.setText(u'N/A')
-            self.chat_encryption_label.setVisible(chat_info.remote_address is not None and chat_info.transport=='tls')
 
-            if chat_info.local_address and chat_info.remote_address:
-                self.chat_addresses_value_label.setText(u'%s \u21c4 %s:%s' % (chat_info.local_address, chat_info.transport, chat_info.remote_address))
-            else:
-                self.chat_addresses_value_label.setText(u'N/A')
+            self.chat_connection_label.setVisible(chat_info.remote_address is not None)
+            self.chat_encryption_label.setVisible(chat_info.remote_address is not None and chat_info.transport=='tls')
 
             if screen_info.remote_address is not None and screen_info.mode == 'active':
                 self.screen_value_label.setText(u'Viewing remote')
@@ -977,6 +970,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.screen_value_label.setText(u'Sharing local')
             else:
                 self.screen_value_label.setText(u'N/A')
+
+            if any(len(path) > 1 for path in (screen_info.full_local_path, screen_info.full_remote_path)):
+                self.screen_connection_label.setPixmap(self.relay_connection_pixmap)
+                self.screen_connection_label.setToolTip(u'Using relay')
+            elif screen_info.full_local_path and screen_info.full_remote_path:
+                self.screen_connection_label.setPixmap(self.direct_connection_pixmap)
+                self.screen_connection_label.setToolTip(u'Peer to peer')
+
+            self.screen_connection_label.setVisible(screen_info.remote_address is not None)
             self.screen_encryption_label.setVisible(screen_info.remote_address is not None and screen_info.transport=='tls')
 
         if 'statistics' in elements:
