@@ -1,5 +1,7 @@
-include MANIFEST.in TODO run
+include MANIFEST.in TODO build_inplace run
 include bin/blink
+recursive-include * *.pyx
+recursive-exclude * *.c
 graft doc
 graft resources
 prune resources/icons/work
