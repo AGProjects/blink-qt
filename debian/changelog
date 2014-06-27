@@ -1,3 +1,16 @@
+blink (0.9.0) unstable; urgency=medium
+
+  * Added screen sharing support
+  * Refactored session info panel
+  * UI Layout fixes
+  * Added file transfer to the list of client capabilities
+  * Fixed status message when audio is removed vs when the session is ended
+  * Fixed exception when trying to change status after audio session is gone
+  * The file transfer download directory cannot be undefined
+  * Raised python-sipsimple version dependency
+
+ -- Saul Ibarra <saul@ag-projects.com>  Fri, 27 Jun 2014 09:54:54 +0200
+
 blink (0.8.2) unstable; urgency=medium
 
   * Always open file for incoming transfer in binary mode
