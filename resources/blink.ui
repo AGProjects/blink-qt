@@ -718,7 +718,7 @@ padding: 2px;</string>
               </property>
               <property name="icon">
                <iconset>
-                <normaloff>icons/work/screen.svg</normaloff>icons/work/screen.svg</iconset>
+                <normaloff>icons/screen.svg</normaloff>icons/work/screen.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
