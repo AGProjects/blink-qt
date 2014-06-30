@@ -629,16 +629,7 @@ class BlinkSession(QObject):
         self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
 
     def add_stream(self, stream_description):
-        assert self.state == 'connected'
-        if stream_description.type in self.streams:
-            raise RuntimeError('session already has a stream of type %s' % stream_description.type)
-        self.info.streams[stream_description.type]._reset()
-        stream = stream_description.create_stream()
-        self.sip_session.add_stream(stream)
-        self.streams.add(stream)
-        notification_center = NotificationCenter()
-        notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
-        notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
+        self.add_streams([stream_description])
 
     def add_streams(self, stream_descriptions):
         assert self.state == 'connected'
@@ -655,12 +646,7 @@ class BlinkSession(QObject):
             notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
 
     def remove_stream(self, stream):
-        assert self.state == 'connected'
-        if stream not in self.streams:
-            raise RuntimeError('stream is not part of the current session')
-        self.sip_session.remove_stream(stream)
-        notification_center = NotificationCenter()
-        notification_center.post_notification('BlinkSessionWillRemoveStream', sender=self, data=NotificationData(stream=stream))
+        self.remove_streams([stream])
 
     def remove_streams(self, streams):
         assert self.state == 'connected'
