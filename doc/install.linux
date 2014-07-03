@@ -63,9 +63,9 @@ http://download.ag-projects.com/Blink/Linux/
 
 Install the runtime dependencies:
 
- * python (2.5 or 2.6)
+ * python (2.7)
  * python-application (>= 1.2.5)
- * python-cjson 
+ * python-cjson
  * python-eventlet-0.8 (>= 0.8.11.4)
  * python-qt4 (>= 4.7)
  * python-twisted-core (>= 8.1.0)
@@ -74,8 +74,9 @@ Install the runtime dependencies:
 
 After installing the above dependencies, install Blink system wide using:
 
+python setup.py build_ext
 sudo python setup.py install
- 
+
 
 Creating Debian Packages
 ------------------------
@@ -84,12 +85,13 @@ Install the building dependencies:
 
  * cdbs (>= 0.4.47)
  * debhelper (>= 7)
- * python-all (>= 2.5)
+ * python-all (>= 2.7, not 3)
  * python-qt4 (>=4.7)
  * python-support
  * build-essential
  * python-all-dev
  * devscripts
+ * libvncserver-dev (or libvncserver-devel)
 
 Create a clean distribution file:
 
