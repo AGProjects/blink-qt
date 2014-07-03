@@ -4,6 +4,7 @@
 __all__ = ['ChatWindow']
 
 import os
+import re
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
@@ -17,7 +18,8 @@ from application.python import Null
 from application.python.types import MarkerType
 from collections import MutableSet
 from datetime import datetime, timedelta
-from lxml import etree
+from lxml import etree, html
+from lxml.html.clean import autolink
 from weakref import proxy
 from zope.interface import implements
 
@@ -607,7 +609,8 @@ class ChatWidget(base_class, ui_class):
             uri = account.id
         icon = IconManager().get('avatar') or self.default_user_icon
         sender = ChatSender(display_name, uri, icon.filename)
-        self.add_message(ChatMessage(text, sender, 'outgoing'))
+        content = HtmlProcessor.autolink(text)
+        self.add_message(ChatMessage(content, sender, 'outgoing'))
 
     def _SH_ComposingTimerTimeout(self):
         self.composing_timer.stop()
@@ -1243,7 +1246,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
-        content = message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml()
+        content = HtmlProcessor.autolink(message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml())
         session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
         session.remote_composing = False
         settings = SIPSimpleSettings()
@@ -1483,6 +1486,36 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.animation.start()
 
 del ui_class, base_class
+
+
+# Helpers
+#
+
+class HtmlProcessor(object):
+    _autolink_re = [#re.compile(r"(?P<body>https?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?(?:/[\w/%!$@*&='~():;,.+-]*(?:\?[\w%!$@*&='~():;,.+-]*)?)?)", re.I|re.U),
+                    re.compile(r"""
+                                (?P<body>
+                                  https?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?  # scheme :// [ user [ : password ] @ ] host [ : port ]
+                                  (?:/(?:[\w/%!$@*&='~:;,.+-]*(?:\([\w/%!$@*&='~:;,.+-]*\))?)*)?  # [ / path]
+                                  (?:\?(?:[\w%!$@*&='~:;,.+-]*(?:\([\w%!$@*&='~:;,.+-]*\))?)*)?   # [ ? query]
+                                )
+                                """, re.I|re.U|re.X),
+                    re.compile(r"(?P<body>ftps?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?(?:/(?:[\w/%!?$@*&='~:,.+-]*(?:\([\w/%!?$@*&='~:,.+-]*\))?)*(?:;type=[aid])?)?)", re.I|re.U),
+                    re.compile(r'mailto:(?P<body>[\w.-]+@(?P<host>[a-z0-9.-]+))', re.I|re.U)]
+
+    @classmethod
+    def autolink(cls, content):
+        if isinstance(content, basestring):
+            doc = html.fromstring(content)
+            autolink(doc, link_regexes=cls._autolink_re)
+            return html.tostring(doc, encoding='unicode') # add method='xml' to get <br/> xhtml style tags and doctype=doc.getroottree().docinfo.doctype for prepending the DOCTYPE line
+        else:
+            autolink(content, link_regexes=cls._autolink_re)
+            return content
+
+    @classmethod
+    def normalize(cls, content):
+        return content
 
 
 class TrafficNormalizer(object):
