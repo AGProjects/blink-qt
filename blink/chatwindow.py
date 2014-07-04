@@ -939,8 +939,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
                 self.audio_connection_label.setToolTip(u"Couldn't negotiate ICE")
             elif audio_info.ice_status == 'disabled':
-                self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
-                self.audio_connection_label.setToolTip(u'ICE is disabled')
+                if blink_session.contact.type == 'bonjour':
+                    self.audio_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.audio_connection_label.setToolTip(u'Peer to peer')
+                else:
+                    self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
+                    self.audio_connection_label.setToolTip(u'ICE is disabled')
             else:
                 self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
                 self.audio_connection_label.setToolTip(u'Negotiating ICE')
