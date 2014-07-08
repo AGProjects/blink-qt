@@ -190,6 +190,6 @@ class VNCClient(QObject):
 
     def _EH_RFBCutTextEvent(self, event):
         if self.rfb_client is not None:
-            self.rfb_client.send_client_cut_text(event.text.encode('utf8'))
+            self.rfb_client.send_client_cut_text(event.text)
 
 
