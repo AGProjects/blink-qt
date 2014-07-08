@@ -26,7 +26,6 @@ cdef extern from "stdarg.h":
 
 cdef extern from "Python.h":
     object PyString_FromStringAndSize(const char *u, Py_ssize_t size)
-    object PyUnicode_FromStringAndSize(const char *u, Py_ssize_t size)
     int PyOS_vsnprintf(char *buf, size_t size, const char *format, va_list va)
 
 
@@ -338,15 +337,15 @@ cdef class RFBClient:
 
     def send_client_cut_text(self, unicode text):
         cdef int result, strlen
-        cdef bytes text_utf8
+        cdef bytes text_latin1
         cdef char *string
 
         if not self.connected:
             return
 
-        text_utf8 = text.encode('utf8')
-        string = text_utf8
-        strlen = len(text_utf8)
+        text_latin1 = text.encode('latin1')
+        string = text_latin1
+        strlen = len(text_latin1)
 
         with nogil:
             result = SendClientCutText(self.client, string, strlen)
@@ -403,7 +402,7 @@ cdef class RFBClient:
         return credential
 
     cdef void _text_cut_callback(self, const char *text, int length):
-        cut_text = PyUnicode_FromStringAndSize(text, length)
+        cut_text = PyString_FromStringAndSize(text, length).decode('latin1')
         if cut_text:
             self.parent.textCut.emit(cut_text)
 
