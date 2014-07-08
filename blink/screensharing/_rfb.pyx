@@ -337,19 +337,15 @@ cdef class RFBClient:
 
     def send_client_cut_text(self, unicode text):
         cdef int result, strlen
-        cdef bytes text_latin1
+        cdef bytes encoded_text
         cdef char *string
 
         if not self.connected:
             return
 
-        try:
-            text_latin1 = text.encode('latin1')
-        except UnicodeEncodeError:
-            return
-
-        string = text_latin1
-        strlen = len(text_latin1)
+        encoded_text = text.encode('latin1', errors='replace')
+        string = encoded_text
+        strlen = len(encoded_text)
 
         with nogil:
             result = SendClientCutText(self.client, string, strlen)
