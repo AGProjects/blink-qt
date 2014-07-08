@@ -343,7 +343,11 @@ cdef class RFBClient:
         if not self.connected:
             return
 
-        text_latin1 = text.encode('latin1')
+        try:
+            text_latin1 = text.encode('latin1')
+        except UnicodeEncodeError:
+            return
+
         string = text_latin1
         strlen = len(text_latin1)
 
