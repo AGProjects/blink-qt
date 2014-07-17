@@ -94,7 +94,8 @@ class IconManager(object):
             pixmap = QPixmap()
             filename = ApplicationData.get(os.path.join('images', id + '.png'))
             try:
-                data = file(filename).read()
+                with open(filename, 'rb') as f:
+                    data = f.read()
             except (IOError, OSError):
                 data = None
             if data is not None and pixmap.loadFromData(data):
