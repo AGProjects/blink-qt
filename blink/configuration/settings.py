@@ -43,7 +43,7 @@ class ChatSettingsExtension(ChatSettings):
 
 
 class FileTransferSettingsExtension(FileTransferSettings):
-    directory = Setting(type=Path, default=Path(os.path.expanduser('~/Downloads')))
+    directory = Setting(type=Path, default=Path('~/Downloads'))
 
 
 class GoogleContactsSettings(SettingsGroup):
@@ -115,7 +115,7 @@ class ChatWindowSettings(SettingsGroup):
 
 
 class BlinkScreenSharingSettings(SettingsGroup):
-    screenshots_directory = Setting(type=Path, default=Path(os.path.expanduser('~/Downloads')))
+    screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
     scale = Setting(type=bool, default=True)
     open_fullscreen = Setting(type=bool, default=False)
     open_viewonly = Setting(type=bool, default=False)

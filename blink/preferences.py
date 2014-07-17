@@ -20,7 +20,7 @@ from zope.interface import implements
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration import DefaultValue
-from sipsimple.configuration.datatypes import MSRPRelayAddress, PortRange, SIPProxyAddress
+from sipsimple.configuration.datatypes import MSRPRelayAddress, Path, PortRange, SIPProxyAddress
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
@@ -1128,7 +1128,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_AccountTLSCertFileBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         account = self.selected_account
-        directory = os.path.dirname(account.tls.certificate.normalized) if account.tls.certificate else os.path.expanduser('~')
+        directory = os.path.dirname(account.tls.certificate.normalized) if account.tls.certificate else Path('~').normalized
         cert_path = QFileDialog.getOpenFileName(self, u'Select Certificate File', directory, u"TLS certificates (*.crt *.pem)") or None
         if cert_path is not None:
             cert_path = os.path.normpath(cert_path)
@@ -1306,7 +1306,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_ScreenshotsDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = BlinkSettings()
-        directory = settings.screen_sharing.screenshots_directory or os.path.expanduser('~')
+        directory = settings.screen_sharing.screenshots_directory.normalized
         directory = QFileDialog.getExistingDirectory(self, u'Select Screenshots Directory', directory) or None
         if directory is not None:
             directory = os.path.normpath(directory)
@@ -1334,7 +1334,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_DownloadDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = SIPSimpleSettings()
-        directory = settings.file_transfer.directory or os.path.expanduser('~')
+        directory = settings.file_transfer.directory.normalized
         directory = QFileDialog.getExistingDirectory(self, u'Select Download Directory', directory) or None
         if directory is not None:
             directory = os.path.normpath(directory)
@@ -1465,7 +1465,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_TLSCAFileBrowseButtonClicked(self):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         settings = SIPSimpleSettings()
-        directory = os.path.dirname(settings.tls.ca_list.normalized) if settings.tls.ca_list else os.path.expanduser('~')
+        directory = os.path.dirname(settings.tls.ca_list.normalized) if settings.tls.ca_list else Path('~').normalized
         ca_path = QFileDialog.getOpenFileName(self, u'Select Certificate Authority File', directory, u"TLS certificates (*.crt *.pem)") or None
         if ca_path is not None:
             ca_path = os.path.normpath(ca_path)

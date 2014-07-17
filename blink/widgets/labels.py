@@ -11,6 +11,8 @@ from PyQt4.QtGui import QAction, QBrush, QColor, QFileDialog, QFontMetrics, QIco
 
 from application.python.types import MarkerType
 
+from sipsimple.configuration.datatypes import Path
+
 from blink.resources import IconManager
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import QtDynamicProperty, ContextMenuActions
@@ -32,7 +34,7 @@ class IconSelector(QLabel):
         self.contact_icon = None
         self.icon = None
         self.filename = self.NotSelected
-        self.last_icon_directory = os.path.expanduser('~')
+        self.last_icon_directory = Path('~').normalized
 
     def _get_icon(self):
         return self.__dict__['icon']

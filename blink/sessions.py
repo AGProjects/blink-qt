@@ -34,6 +34,7 @@ from zope.interface import implements
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.audio import AudioConference, WavePlayer
+from sipsimple.configuration.datatypes import Path
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
@@ -5120,7 +5121,7 @@ class SessionManager(object):
         self.dialog_positions = range(1, 100)
         self.file_transfers = []
         self.last_dialed_uri = None
-        self.send_file_directory = os.path.expanduser('~')
+        self.send_file_directory = Path('~').normalized
         self.active_session = None
 
         self.inbound_ringtone = Null

@@ -20,6 +20,7 @@ from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
+from sipsimple.configuration.datatypes import Path
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
@@ -76,7 +77,7 @@ class MainWindow(base_class, ui_class):
 
         self.default_icon_path = Resources.get('icons/default-avatar.png')
         self.default_icon = QIcon(self.default_icon_path)
-        self.last_icon_directory = os.path.expanduser('~')
+        self.last_icon_directory = Path('~').normalized
         self.set_user_icon(icon_manager.get('avatar'))
 
         self.active_sessions_label.hide()

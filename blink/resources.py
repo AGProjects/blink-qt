@@ -18,6 +18,7 @@ from application.python.types import Singleton
 from application.system import makedirs, unlink
 from threading import Event
 
+from sipsimple.configuration.datatypes import Path
 from blink.util import run_in_gui_thread
 
 
@@ -43,7 +44,7 @@ class ApplicationData(object):
             elif platform.system() == 'Windows':
                 cls._cached_directory = os.path.join(os.environ['APPDATA'], 'Blink').decode(sys.getfilesystemencoding())
             else:
-                cls._cached_directory = os.path.expanduser('~/.blink').decode(sys.getfilesystemencoding())
+                cls._cached_directory = Path('~/.blink').normalized
         return DirectoryContextManager(cls._cached_directory)
 
     @classmethod

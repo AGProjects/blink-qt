@@ -8,6 +8,7 @@ __all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile',
 
 import os
 import re
+
 from urllib import pathname2url, url2pathname
 from urlparse import urlparse
 
@@ -140,7 +141,7 @@ InvalidToken = AuthorizationToken() # a valid token is never empty
 class FileURL(unicode):
     def __new__(cls, value):
         if not value.startswith('file:'):
-            value = 'file:' + pathname2url(os.path.abspath(value))
+            value = 'file:' + pathname2url(os.path.abspath(value).encode('utf-8')).decode('utf-8')
         return unicode.__new__(cls, value)
 
 
