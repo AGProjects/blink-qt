@@ -20,6 +20,11 @@ if os.path.basename(script_dir)=='bin' and os.path.exists(os.path.join(parent_di
     sys.path.insert(position, parent_dir)
 
 
+if getattr(sys, 'frozen', False):
+    # Override stdout and stderr, save output to a file
+    sys.stdout = sys.stderr = open(sys.executable + '.log', 'a')
+
+
 if __name__ == '__main__':
     from blink import Blink
     blink = Blink()

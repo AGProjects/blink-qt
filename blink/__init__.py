@@ -147,6 +147,11 @@ class Blink(QApplication):
         Group.register_extension(GroupExtension)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
 
+        if getattr(sys, 'frozen', False):
+            from blink.resources import Resources
+            from sipsimple.payloads import XMLDocument
+            XMLDocument.schema_path = Resources.get('xml-schemas')
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.sip_application)
 
