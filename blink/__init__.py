@@ -33,6 +33,7 @@ from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.payloads import XMLDocument
 from sipsimple.storage import FileStorage
 from sipsimple.threading import run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
@@ -49,7 +50,7 @@ from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.logging import LogManager
 from blink.mainwindow import MainWindow
 from blink.presence import PresenceManager
-from blink.resources import ApplicationData
+from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager
 from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
@@ -141,16 +142,14 @@ class Blink(QApplication):
         self.main_window.check_for_updates_action.triggered.connect(self.update_manager.check_for_updates)
         self.main_window.check_for_updates_action.setVisible(self.update_manager != Null)
 
+        if getattr(sys, 'frozen', False):
+            XMLDocument.schema_path = Resources.get('xml-schemas')
+
         Account.register_extension(AccountExtension)
         BonjourAccount.register_extension(BonjourAccountExtension)
         Contact.register_extension(ContactExtension)
         Group.register_extension(GroupExtension)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
-
-        if getattr(sys, 'frozen', False):
-            from blink.resources import Resources
-            from sipsimple.payloads import XMLDocument
-            XMLDocument.schema_path = Resources.get('xml-schemas')
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.sip_application)
