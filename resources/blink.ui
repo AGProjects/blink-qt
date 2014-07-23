@@ -984,7 +984,6 @@ padding: 2px;</string>
     <addaction name="sip_server_settings_action"/>
     <addaction name="history_on_server_action"/>
     <addaction name="search_for_people_action"/>
-    <addaction name="buy_pstn_access_action"/>
     <addaction name="separator"/>
     <addaction name="google_contacts_action"/>
    </widget>
@@ -1241,11 +1240,6 @@ padding: 2px;</string>
   <action name="history_on_server_action">
    <property name="text">
     <string>Call &amp;history on server</string>
-   </property>
-  </action>
-  <action name="buy_pstn_access_action">
-   <property name="text">
-    <string>Buy prepaid credit</string>
    </property>
   </action>
   <action name="join_conference_action">
