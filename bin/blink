@@ -21,11 +21,7 @@ if os.path.basename(script_dir)=='bin' and os.path.exists(os.path.join(parent_di
 
 
 if getattr(sys, 'frozen', False):
-    try:
-        from cStringIO import StringIO
-    except ImportError:
-        from StringIO import StringIO
-    # Override stdout and stderr, save output to a StringIO object, then to a file
+    from StringIO import StringIO
     sys.stdout = sys.stderr = StringIO()
 
 
