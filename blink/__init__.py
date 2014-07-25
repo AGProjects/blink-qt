@@ -58,6 +58,7 @@ from blink.util import QSingleton, run_in_gui_thread
 
 if getattr(sys, 'frozen', False):
     output = sys.stdout
+    makedirs(ApplicationData.get('logs'))
     sys.stdout = sys.stderr = open(ApplicationData.get('logs/output.log'), 'a')
     sys.stdout.write(output.getvalue())
     output.close()
