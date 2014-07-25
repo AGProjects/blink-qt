@@ -56,6 +56,13 @@ from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
 
 
+if getattr(sys, 'frozen', False):
+    output = sys.stdout
+    sys.stdout = sys.stderr = open(ApplicationData.get('logs/output.log'), 'a')
+    sys.stdout.write(output.getvalue())
+    output.close()
+
+
 class IPAddressMonitor(object):
     """
     An object which monitors the IP address used for the default route of the

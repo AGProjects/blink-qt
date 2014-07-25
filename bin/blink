@@ -21,8 +21,12 @@ if os.path.basename(script_dir)=='bin' and os.path.exists(os.path.join(parent_di
 
 
 if getattr(sys, 'frozen', False):
-    # Override stdout and stderr, save output to a file
-    sys.stdout = sys.stderr = open(sys.executable + '.log', 'a')
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
+    # Override stdout and stderr, save output to a StringIO object, then to a file
+    sys.stdout = sys.stderr = StringIO()
 
 
 if __name__ == '__main__':
