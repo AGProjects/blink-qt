@@ -1,0 +1,53 @@
+
+Blink Qt Installation on Microsoft Windows
+------------------------------------------
+
+Copyright (c) 2010-2014 AG Projects
+http://ag-projects.com
+
+Home page: http://icanblink.com
+
+This document describes the installation procedure on Microsoft Windows
+systems. Windows XP and higher are supported.
+
+This document assumes the SIP SIMPLE Client SDK has already been
+installed alongside with all its dependencies.
+
+
+Step 1. Install dependencies
+----------------------------
+
+* Install PyQt4: pacman -S mingw-w64-i686-python2-pyqt4
+
+NOTE: at the time of this writing binary packages weren't available due to some work
+in progress, they can alternatively be built manually.
+
+
+Step 1.1. Install libvncclient
+------------------------------
+
+The MSYS2 project does not provide a package for libvncclient, and since our
+needs are pretty specific, we provide the source to build a package which just
+install the client side VNC libraries.
+
+* Install dependencies: pacman -S pkgconf
+* Get the package code: darcs get http://devel.ag-projects.com/repositories/windows/mingw-w64-libvncclient
+* Enter the directory and build the package: cd mingw-w64-libvncclient && makepkg-mingw -L --nocheck
+* In case the above command fails with an error regarding a non-existent icon file,
+  just run "makepkg-mingw -L --nocheck" again
+* Install the package: pacman -U mingw-w64-i686-libvncclient*any.pkg.tar.xz
+
+
+Step 2. Build and run Blink
+---------------------------
+
+if [ -d blink-qt ]; then
+        cd blink-qt
+        darcs pull -a
+else
+        darcs get --set-scripts-executable http://devel.ag-projects.com/repositories/blink-qt
+        cd blink-qt
+fi
+./build_inplace
+./run
+
