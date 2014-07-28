@@ -1,3 +1,18 @@
+blink (0.9.1) unstable; urgency=medium
+
+  * Automatically transform URLs in the chat window into clickable links
+  * Show P2P icon if contact is a Bonjour neighbour
+  * Fixed handling unicode in user's home directory
+  * Fixed http URL regular expression
+  * Removed menu entry for buying prepaid credit
+  * Fixed encoding of cut text for the VNC client
+  * Fixes for running 'frozen'
+  * Raised python-sipsimple version dependency
+  * Added missing dependency on python-lxml
+  * Updated install documentation
+
+ -- Saul Ibarra <saul@ag-projects.com>  Mon, 28 Jul 2014 15:57:51 +0200
+
 blink (0.9.0) unstable; urgency=medium
 
   * Added screen sharing support
