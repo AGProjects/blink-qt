@@ -651,7 +651,7 @@ class BlinkSession(QObject):
     def remove_streams(self, streams):
         assert self.state == 'connected'
         if not set(self.streams).issuperset(streams):
-            raise RuntimeError('not all streams are part of the current session')
+            raise RuntimeError('not all streams are part of the session')
         self.sip_session.remove_streams(streams)
         notification_center = NotificationCenter()
         for stream in streams:
