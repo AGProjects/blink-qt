@@ -13,7 +13,7 @@
    height="12"
    id="svg4429"
    version="1.1"
-   inkscape:version="0.48.4 r9939"
+   inkscape:version="0.48.5 r10040"
    sodipodi:docname="camera12.svg">
   <defs
      id="defs4431" />
@@ -67,7 +67,7 @@
      transform="translate(0,-4)">
     <path
        style="fill:#333333;fill-opacity:1;stroke:#333333;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:1"
-       d="m 10.5,6.5 c 0,2 0,5 0,7 -1,-1 -2,-2 -3,-3 l 0,2.5 -6,0 c 0,-1.333333 0,-4.6666667 0,-6 l 6,0 0,2.5 c 0,1.414214 2,-2 3,-3 z"
+       d="m 10.5,6.5 c 0,2 0,5 0,7 -1,-1 -2,-2 -3,-3 l 0,2.5 -6,0 c 0,-1.333333 0,-4.6666667 0,-6 l 6,0 0,2.5 c 0,0 2,-2 3,-3 z"
        id="path4967"
        inkscape:connector-curvature="0"
        sodipodi:nodetypes="ccccccccc" />
