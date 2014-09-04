@@ -700,6 +700,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='ChatStreamDidDeliverMessage')
         notification_center.add_observer(self, name='ChatStreamDidNotDeliverMessage')
         notification_center.add_observer(self, name='MediaStreamDidInitialize')
+        notification_center.add_observer(self, name='MediaStreamDidNotInitialize')
         notification_center.add_observer(self, name='MediaStreamDidStart')
         notification_center.add_observer(self, name='MediaStreamDidFail')
         notification_center.add_observer(self, name='MediaStreamDidEnd')
@@ -1291,6 +1292,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         notification.sender._blink_fail_reason = None
         #session.chat_widget.add_message(ChatStatus('Connecting...')) # disable it until we can replace it in the DOM -Dan
+
+    def _NH_MediaStreamDidNotInitialize(self, notification):
+        if notification.sender.type != 'chat':
+            return
+        session = notification.sender.blink_session.items.chat
+        if session is None:
+            return
+        session.chat_widget.add_message(ChatStatus('Failed to initialize chat: %s' % notification.data.reason))
 
     def _NH_MediaStreamDidStart(self, notification):
         if notification.sender.type != 'chat':

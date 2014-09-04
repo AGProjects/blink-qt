@@ -3711,8 +3711,9 @@ class FileTransfer(object):
             self._terminate()
 
     def _NH_MediaStreamDidFail(self, notification):
-        if self.state == 'connected':
-            self.end()
+        # In principle the Session will end itself because this is the only stream,
+        # but lets be explicit about it -Saul
+        self.end()
 
     def _NH_MediaStreamDidEnd(self, notification):
         if self.direction == 'incoming':
