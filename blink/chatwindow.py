@@ -1290,7 +1290,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
-        notification.sender._blink_fail_reason = None
         #session.chat_widget.add_message(ChatStatus('Connecting...')) # disable it until we can replace it in the DOM -Dan
 
     def _NH_MediaStreamDidNotInitialize(self, notification):
@@ -1315,19 +1314,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
-        stream = notification.sender
-        if stream._blink_fail_reason:
-            session.chat_widget.add_message(ChatStatus('Disconnected: %s' % stream._blink_fail_reason))
+        if notification.data.error is not None:
+            session.chat_widget.add_message(ChatStatus('Disconnected: %s' % notification.data.error))
         else:
             session.chat_widget.add_message(ChatStatus('Disconnected'))
-
-    def _NH_MediaStreamDidFail(self, notification):
-        if notification.sender.type != 'chat':
-            return
-        session = notification.sender.blink_session.items.chat
-        if session is None:
-            return
-        notification.sender._blink_fail_reason = notification.data.reason
 
     # signal handlers
     #
