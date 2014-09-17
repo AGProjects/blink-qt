@@ -694,9 +694,6 @@ padding: 2px;</string>
                 <height>16</height>
                </size>
               </property>
-              <property name="popupMode">
-               <enum>QToolButton::InstantPopup</enum>
-              </property>
              </widget>
             </item>
             <item>
