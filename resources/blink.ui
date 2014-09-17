@@ -1037,8 +1037,8 @@ padding: 2px;</string>
     <addaction name="voicemail_menu"/>
     <addaction name="history_menu"/>
     <addaction name="separator"/>
-    <addaction name="output_device_menu"/>
     <addaction name="input_device_menu"/>
+    <addaction name="output_device_menu"/>
     <addaction name="alert_device_menu"/>
     <addaction name="separator"/>
     <addaction name="mute_action"/>
