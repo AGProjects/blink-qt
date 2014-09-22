@@ -12,6 +12,7 @@ from PyQt4.QtGui import QIcon
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
 from application.python.types import Singleton
+from datetime import date
 from dateutil.tz import tzlocal
 from zope.interface import implements
 
@@ -150,7 +151,7 @@ class HistoryEntry(object):
         if self.call_time:
             call_time = self.call_time.astimezone(tzlocal())
             call_date = call_time.date()
-            today = ISOTimestamp.now().date()
+            today = date.today()
             days = (today - call_date).days
             if call_date == today:
                 result += call_time.strftime(" at %H:%M")
