@@ -12,12 +12,13 @@ from PyQt4.QtGui import QIcon
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
 from application.python.types import Singleton
-from datetime import date, datetime
+from dateutil.tz import tzlocal
 from zope.interface import implements
 
 from sipsimple.account import BonjourAccount
 from sipsimple.addressbook import AddressbookManager
 from sipsimple.threading import run_in_thread
+from sipsimple.util import ISOTimestamp
 
 from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread
@@ -32,7 +33,7 @@ class HistoryManager(object):
     def __init__(self):
         try:
             data = pickle.load(open(ApplicationData.get('calls_history')))
-            if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text for item in data):
+            if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text and isinstance(item.call_time, ISOTimestamp) for item in data):
                 raise ValueError("invalid save data")
         except Exception:
             self.calls = []
@@ -147,19 +148,20 @@ class HistoryEntry(object):
     def text(self):
         result = unicode(self.name or self.uri)
         if self.call_time:
-            call_date = self.call_time.date()
-            today = date.today()
+            call_time = self.call_time.astimezone(tzlocal())
+            call_date = call_time.date()
+            today = ISOTimestamp.now().date()
             days = (today - call_date).days
             if call_date == today:
-                result += self.call_time.strftime(" at %H:%M")
+                result += call_time.strftime(" at %H:%M")
             elif days == 1:
-                result += self.call_time.strftime(" Yesterday at %H:%M")
+                result += call_time.strftime(" Yesterday at %H:%M")
             elif days < 7:
-                result += self.call_time.strftime(" on %A")
+                result += call_time.strftime(" on %A")
             elif call_date.year == today.year:
-                result += self.call_time.strftime(" on %B %d")
+                result += call_time.strftime(" on %B %d")
             else:
-                result += self.call_time.strftime(" on %Y-%m-%d")
+                result += call_time.strftime(" on %Y-%m-%d")
         if self.duration:
             seconds = int(self.duration.total_seconds())
             if seconds >= 3600:
@@ -175,7 +177,7 @@ class HistoryEntry(object):
         if session.start_time is None and session.end_time is not None:
             # Session may have anded before it fully started
             session.start_time = session.end_time
-        call_time = session.start_time or datetime.now()
+        call_time = session.start_time or ISOTimestamp.now()
         if session.start_time and session.end_time:
             duration = session.end_time - session.start_time
         else:
