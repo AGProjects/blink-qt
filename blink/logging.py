@@ -217,10 +217,8 @@ class LogManager(object):
         if not settings.logs.trace_msrp:
             return
         arrow = {'incoming': '<--', 'outgoing': '-->'}[notification.data.direction]
-        local_address = notification.sender.getHost()
-        local_address = '%s:%d' % (local_address.host, local_address.port)
-        remote_address = notification.sender.getPeer()
-        remote_address = '%s:%d' % (remote_address.host, remote_address.port)
+        local_address = '%s:%d' % (notification.data.local_address.host, notification.data.local_address.port)
+        remote_address = '%s:%d' % (notification.data.remote_address.host, notification.data.remote_address.port)
         message = '%s %s %s\n' % (local_address, arrow, remote_address) + notification.data.data
         try:
             self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
