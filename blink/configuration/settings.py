@@ -5,7 +5,6 @@
 
 __all__ = ['BlinkSettings', 'SIPSimpleSettingsExtension']
 
-import os
 import platform
 import sys
 
