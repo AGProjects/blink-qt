@@ -1,0 +1,10 @@
+#!/bin/sh
+
+if [ $# = 0 ]; then
+   blink_pid=$(ps ax | grep blink | grep -v grep | head -1 | awk '{print $1}')
+else
+   blink_pid=$1
+fi
+
+gdb --batch --eval-command="attach $blink_pid" --eval-command="thread apply all bt"
+
