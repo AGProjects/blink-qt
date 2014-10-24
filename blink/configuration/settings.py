@@ -9,7 +9,7 @@ import platform
 import sys
 
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObject, SettingsObjectExtension
-from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger, PositiveInteger, Path, SampleRate
+from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger, PositiveInteger, Path, SampleRate, VideoCodecList
 from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, FileTransferSettings, LogsSettings, RTPSettings, TLSSettings
 
 from blink import __version__
@@ -60,6 +60,7 @@ class LogsSettingsExtension(LogsSettings):
 
 class RTPSettingsExtension(RTPSettings):
     audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'speex', 'GSM', 'iLBC', 'PCMU', 'PCMA')))
+    video_codec_order = Setting(type=VideoCodecList, default=VideoCodecList(('H264',)))
 
 
 class ServerSettings(SettingsGroup):
@@ -120,6 +121,10 @@ class BlinkScreenSharingSettings(SettingsGroup):
     open_viewonly = Setting(type=bool, default=False)
 
 
+class BlinkVideoSettings(SettingsGroup):
+    screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
+
+
 class BlinkPresenceSettings(SettingsGroup):
     current_state = Setting(type=PresenceState, default=PresenceState('Available'))
     state_history = Setting(type=PresenceStateList, default=PresenceStateList())
@@ -133,4 +138,5 @@ class BlinkSettings(SettingsObject):
     chat_window = ChatWindowSettings
     presence = BlinkPresenceSettings
     screen_sharing = BlinkScreenSharingSettings
+    video = BlinkVideoSettings
 

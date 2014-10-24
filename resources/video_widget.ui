@@ -1,0 +1,420 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>video_widget</class>
+ <widget class="QWidget" name="video_widget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>906</width>
+    <height>587</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>0</width>
+    <height>240</height>
+   </size>
+  </property>
+  <property name="mouseTracking">
+   <bool>true</bool>
+  </property>
+  <property name="windowTitle">
+   <string>Blink Video</string>
+  </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>icons/blink48.png</normaloff>icons/blink48.png</iconset>
+  </property>
+  <layout class="QGridLayout" name="video_widget_layout">
+   <property name="margin">
+    <number>6</number>
+   </property>
+   <item row="6" column="1">
+    <spacer name="spacer_buttons">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item row="0" column="1">
+    <widget class="VideoToolButton" name="fullscreen_button">
+     <property name="minimumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QToolButton {
+	background: #e4e1df;
+	border: 2px solid #808080;
+	border-radius: 4px;
+	margin: 0px;
+	padding: 1px;
+}
+
+QToolButton:hover {
+	border: 2px solid #007fff;
+}
+
+QToolButton:pressed {
+	border: 2px solid #007fff;
+	background: qradialgradient(cx: 0.5, cy: 0.5, radius: 1, fx:0.5, fy:0.5, stop:0.2 #e4e1df, stop:1 #404040);
+	background-origin: border;
+}
+</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/fullscreen.svg</normaloff>
+       <normalon>icons/fullscreen-exit.svg</normalon>
+       <disabledon>icons/fullscreen-exit.svg</disabledon>
+       <activeon>icons/fullscreen-exit.svg</activeon>
+       <selectedon>icons/fullscreen-exit.svg</selectedon>icons/fullscreen.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="active" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="VideoToolButton" name="detach_button">
+     <property name="minimumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QToolButton {
+	background: #e4e1df;
+	border: 2px solid #808080;
+	border-radius: 4px;
+	margin: 0px;
+	padding: 1px;
+}
+
+QToolButton:hover {
+	border: 2px solid #007fff;
+}
+
+QToolButton:pressed {
+	border: 2px solid #007fff;
+	background: qradialgradient(cx: 0.5, cy: 0.5, radius: 1, fx:0.5, fy:0.5, stop:0.2 #e4e1df, stop:1 #404040);
+	background-origin: border;
+}
+</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/detach.svg</normaloff>
+       <normalon>icons/attach.svg</normalon>
+       <disabledon>icons/attach.svg</disabledon>
+       <activeon>icons/attach.svg</activeon>
+       <selectedon>icons/attach.svg</selectedon>icons/detach.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+     <property name="active" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="1">
+    <widget class="VideoToolButton" name="hold_button">
+     <property name="minimumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QToolButton {
+	background: #e4e1df;
+	border: 2px solid #808080;
+	border-radius: 4px;
+	margin: 0px;
+	padding: 1px;
+}
+
+QToolButton:hover {
+	border: 2px solid #007fff;
+}
+
+QToolButton:pressed {
+	border: 2px solid #007fff;
+	background: qradialgradient(cx: 0.5, cy: 0.5, radius: 1, fx:0.5, fy:0.5, stop:0.2 #e4e1df, stop:1 #404040);
+	background-origin: border;
+}
+</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/pause.svg</normaloff>
+       <normalon>icons/paused.svg</normalon>
+       <disabledon>icons/paused.svg</disabledon>
+       <activeon>icons/paused.svg</activeon>
+       <selectedon>icons/paused.svg</selectedon>icons/pause.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="active" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="VideoToolButton" name="mute_button">
+     <property name="minimumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QToolButton {
+	background: #e4e1df;
+	border: 2px solid #808080;
+	border-radius: 4px;
+	margin: 0px;
+	padding: 1px;
+}
+
+QToolButton:hover {
+	border: 2px solid #007fff;
+}
+
+QToolButton:pressed {
+	border: 2px solid #007fff;
+	background: qradialgradient(cx: 0.5, cy: 0.5, radius: 1, fx:0.5, fy:0.5, stop:0.2 #e4e1df, stop:1 #404040);
+	background-origin: border;
+}
+</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/mic-on.svg</normaloff>
+       <normalon>icons/mic-off.svg</normalon>
+       <disabledon>icons/mic-off.svg</disabledon>
+       <activeon>icons/mic-off.svg</activeon>
+       <selectedon>icons/mic-off.svg</selectedon>icons/mic-on.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+     <property name="active" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="VideoToolButton" name="screenshot_button">
+     <property name="minimumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="contextMenuPolicy">
+      <enum>Qt::CustomContextMenu</enum>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QToolButton {
+	background: #e4e1df;
+	border: 2px solid #808080;
+	border-radius: 4px;
+	margin: 0px;
+	padding: 1px;
+}
+
+QToolButton:hover {
+	border: 2px solid #007fff;
+}
+
+QToolButton:pressed {
+	border: 2px solid #007fff;
+	background: qradialgradient(cx: 0.5, cy: 0.5, radius: 1, fx:0.5, fy:0.5, stop:0.2 #e4e1df, stop:1 #404040);
+	background-origin: border;
+}
+</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/screenshot.svg</normaloff>icons/screenshot.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="active" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="1">
+    <widget class="VideoToolButton" name="close_button">
+     <property name="minimumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>32</width>
+       <height>32</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QToolButton {
+	background: #e4e1df;
+	border: 2px solid #808080;
+	border-radius: 4px;
+	margin: 0px;
+	padding: 1px;
+}
+
+QToolButton:hover {
+	border: 2px solid #007fff;
+}
+
+QToolButton:pressed {
+	border: 2px solid #007fff;
+	background: qradialgradient(cx: 0.5, cy: 0.5, radius: 1, fx:0.5, fy:0.5, stop:0.2 #e4e1df, stop:1 #404040);
+	background-origin: border;
+}
+</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/close.svg</normaloff>
+       <activeoff>icons/close-active.svg</activeoff>icons/close.svg</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+     <property name="active" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <spacer name="spacer_top">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>40</width>
+       <height>20</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>VideoToolButton</class>
+   <extends>QToolButton</extends>
+   <header>blink.chatwindow</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

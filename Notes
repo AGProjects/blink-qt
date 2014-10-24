@@ -1,3 +1,25 @@
+Video fixes
+-----------
+
+- global screenshots/download directory (for all sections)
+- consider if we should always show the mute/hold/close buttons (even in
+  attached mode)?
+- run the preview at the normal framerate before we connect (while big)?
+- hide scrollbar in chat widget when video is overlayed on it?
+- right click on camera preview bring up context menu to select camera
+- make detaching animation have a duration that is proportional with the
+  distance traveled, so that it appears to be similarly fast no matter
+  how far it detaches
+- maybe don't show the camera preview if the video device is None
+- hide preview (and buttons?) while we animate?
+- preview limited to parent (resize still has issues)
+- double click to restore default size for preview? (might be problematic)
+
+- if audio is removed blink-qt puts the session on hold 5 seconds later
+  when the AudioSessionItem is destroyed
+- custom icons for each window (chat, video, file transfer, ...)
+
+
 Code refactoring
 ----------------
 
@@ -60,7 +82,58 @@ Ideas:
   900x550 (230 splitter), 925x550 (240 splitter), 950x550 (250 splitter)
 
 
+CPU usage increases for video:
+------------------------------
+
+painting camera preview @10fps (static image no producer connected)
+
+in chat:   +4-5%
+detached:  +3-4%
+fullscren: +4-7%
+
+producer @25fps connected, not paining
+
+in chat:    +8-9%
+detached:   +8-9%
+fullscreen: +6-7%
+
+producer @25fps connected, paining @10fps
+
+in chat:    +13-14%
+detached:   +12%
+fullscreen: +12-15%
+
+
 - exceptions:
+
+error: Exception occured in observer <blink.chatwindow.ChatWindow object at 0xab33d5cc> while handling notification 'BlinkSessionInfoUpdated'
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/dist-packages/application/notification.py", line 216, in post_notification
+    observer.handle_notification(notification)
+  File "<string>", line 1, in handle_notification
+  File "/home/dan/work/voip/blink-qt/blink/util.py", line 36, in wrapper
+    function(*args, **kw)
+  File "/home/dan/work/voip/blink-qt/blink/chatwindow.py", line 1653, in handle_notification
+    handler(notification)
+  File "/home/dan/work/voip/blink-qt/blink/chatwindow.py", line 1767, in _NH_BlinkSessionInfoUpdated
+    self._update_session_info_panel(elements=notification.data.elements)
+  File "/home/dan/work/voip/blink-qt/blink/chatwindow.py", line 1481, in _update_session_info_panel
+    self.video_value_label.setText(video_info.codec or 'N/A')
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 158, in codec
+    return '{0.codec_name} {0.framerate:.3g}fps'.format(self) if self.codec_name else None
+ValueError: Unknown format code 'g' for object of type 'str'
+
+
+error: Exception occured in observer <blink.sessions.AudioSessionListView object at 0xab300a04> while handling notification 'BlinkActiveSessionDidChange'
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/dist-packages/application/notification.py", line 216, in post_notification
+    observer.handle_notification(notification)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 2466, in handle_notification
+    handler(notification)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 2480, in _NH_BlinkActiveSessionDidChange
+    position = model.sessions.index(notification.data.active_session.items.audio)
+ValueError: None is not in list
+
 
 error: Exception occured in observer <sipsimple.streams.msrp.ScreenSharingStream object at 0x7fa65c2a3550> while handling notification 'MediaStreamWillEnd'
 Traceback (most recent call last):

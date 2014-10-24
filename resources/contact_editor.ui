@@ -108,6 +108,11 @@
      </item>
      <item>
       <property name="text">
+       <string>Start video calls by default</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
        <string>Start chat sessions by default</string>
       </property>
      </item>

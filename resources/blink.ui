@@ -668,6 +668,35 @@ padding: 2px;</string>
              </widget>
             </item>
             <item>
+             <widget class="ToolButton" name="video_call_button">
+              <property name="minimumSize">
+               <size>
+                <width>29</width>
+                <height>24</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>29</width>
+                <height>24</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>Make a video call</string>
+              </property>
+              <property name="icon">
+               <iconset>
+                <normaloff>icons/camera.svg</normaloff>icons/camera.svg</iconset>
+              </property>
+              <property name="iconSize">
+               <size>
+                <width>16</width>
+                <height>16</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="ToolButton" name="chat_session_button">
               <property name="minimumSize">
                <size>
@@ -1029,6 +1058,15 @@ padding: 2px;</string>
        <normaloff>icons/bell.svg</normaloff>icons/bell.svg</iconset>
      </property>
     </widget>
+    <widget class="QMenu" name="video_camera_menu">
+     <property name="title">
+      <string>Video &amp;Camera</string>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/camera.svg</normaloff>icons/camera.svg</iconset>
+     </property>
+    </widget>
     <addaction name="redial_action"/>
     <addaction name="join_conference_action"/>
     <addaction name="voicemail_menu"/>
@@ -1037,6 +1075,7 @@ padding: 2px;</string>
     <addaction name="input_device_menu"/>
     <addaction name="output_device_menu"/>
     <addaction name="alert_device_menu"/>
+    <addaction name="video_camera_menu"/>
     <addaction name="separator"/>
     <addaction name="mute_action"/>
     <addaction name="silent_action"/>

@@ -11,6 +11,7 @@ import re
 import string
 import sys
 
+from abc import ABCMeta, abstractproperty
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from functools import partial
@@ -54,6 +55,8 @@ from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 
 
 class RTPStreamInfo(object):
+    __metaclass__ = ABCMeta
+
     dataset_size = 5000
     average_interval = 10
 
@@ -78,9 +81,9 @@ class RTPStreamInfo(object):
         self._total_packets_discarded = 0
         self._average_loss_queue = deque(maxlen=self.average_interval)
 
-    @property
+    @abstractproperty
     def codec(self):
-        return '%s %dkHz' % (self.codec_name, self.sample_rate/1000) if self.codec_name else None
+        raise NotImplementedError
 
     def _update(self, stream):
         if stream is not None:
@@ -114,6 +117,8 @@ class RTPStreamInfo(object):
 
 
 class MSRPStreamInfo(object):
+    __metaclass__ = ABCMeta
+
     def __init__(self):
         self.local_address = None
         self.remote_address = None
@@ -137,6 +142,33 @@ class MSRPStreamInfo(object):
         self.__init__()
 
 
+class AudioStreamInfo(RTPStreamInfo):
+    @property
+    def codec(self):
+        return '{} {}kHz'.format(self.codec_name, self.sample_rate//1000) if self.codec_name else None
+
+
+class VideoStreamInfo(RTPStreamInfo):
+    def __init__(self):
+        super(VideoStreamInfo, self).__init__()
+        self.framerate = None
+
+    @property
+    def codec(self):
+        return '{0.codec_name} {0.framerate:.3g}fps'.format(self) if self.codec_name else None
+
+    def _update(self, stream):
+        super(VideoStreamInfo, self)._update(stream)
+        try:
+            self.framerate = stream.producer.framerate
+        except AttributeError:
+            pass
+
+
+class ChatStreamInfo(MSRPStreamInfo):
+    pass
+
+
 class ScreenSharingStreamInfo(MSRPStreamInfo):
     def __init__(self):
         super(ScreenSharingStreamInfo, self).__init__()
@@ -152,9 +184,9 @@ class StreamsInfo(object):
     __slots__ = 'audio', 'video', 'chat', 'screen_sharing'
 
     def __init__(self):
-        self.audio = RTPStreamInfo()
-        self.video = RTPStreamInfo()
-        self.chat = MSRPStreamInfo()
+        self.audio = AudioStreamInfo()
+        self.video = VideoStreamInfo()
+        self.chat = ChatStreamInfo()
         self.screen_sharing = ScreenSharingStreamInfo()
 
     def __getitem__(self, key):
@@ -965,6 +997,10 @@ class BlinkSession(QObject):
     def _NH_AudioStreamWillStopRecordingAudio(self, notification):
         self.recording = False
         notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
+
+    def _NH_VideoStreamRemoteFormatDidChange(self, notification):
+        self.info.streams.video._update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_BlinkContactDidChange(self, notification):
         notification.center.post_notification('BlinkSessionContactDidChange', sender=self)
@@ -2663,6 +2699,14 @@ class ChatSessionItem(object):
     @property
     def chat_stream(self):
         return self.blink_session.streams.get('chat')
+
+    @property
+    def audio_stream(self):
+        return self.blink_session.streams.get('audio')
+
+    @property
+    def video_stream(self):
+        return self.blink_session.streams.get('video')
 
     def _get_remote_composing(self):
         return self.__dict__['remote_composing']

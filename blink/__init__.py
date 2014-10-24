@@ -19,6 +19,8 @@ sip.setapi('QVariant', 2)
 from PyQt4.QtCore import Qt, QEvent
 from PyQt4.QtGui  import QApplication
 
+QApplication.setAttribute(Qt.AA_X11InitThreads, True)
+
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null

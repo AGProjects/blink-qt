@@ -216,6 +216,19 @@ class AllContactsGroup(VirtualGroup):
         notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
 
 
+class PreferredMedia(str):
+    @property
+    def stream_descriptions(self):
+        streams = set(self.split('+'))
+        if 'video' in streams:
+            streams.add('audio')
+        return [StreamDescription(stream) for stream in streams]
+
+    @property
+    def autoconnect(self):
+        return self != 'chat'
+
+
 class BonjourNeighbourID(str):
     pass
 
@@ -297,7 +310,7 @@ class BonjourNeighbour(object):
         self.hostname = hostname
         self.uris = BonjourNeighbourURIList(uris)
         self.presence = presence or BonjourPresence()
-        self.preferred_media = 'audio'
+        self.preferred_media = PreferredMedia('audio')
 
 
 class BonjourNeighboursList(object):
@@ -486,7 +499,7 @@ class GoogleContact(object):
         self.icon = icon
         self.uris = GoogleContactURIList(uris)
         self.presence = GooglePresence()
-        self.preferred_media = 'audio'
+        self.preferred_media = PreferredMedia('audio')
 
     def __reduce__(self):
         return (self.__class__, (self.id, self.name, self.company, self.icon, self.uris))
@@ -863,7 +876,7 @@ class DummyContact(object):
         self.name = name
         self.uris = DummyContactURIList(uris)
         self.presence = DummyPresence()
-        self.preferred_media = 'audio'
+        self.preferred_media = PreferredMedia('audio')
 
     def __reduce__(self):
         return (self.__class__, (self.name, self.uris))
@@ -1114,7 +1127,7 @@ class Contact(object):
 
     @property
     def preferred_media(self):
-        return self.settings.preferred_media
+        return PreferredMedia(self.settings.preferred_media)
 
     @property
     def icon(self):
@@ -1274,7 +1287,7 @@ class ContactDetail(object):
 
     @property
     def preferred_media(self):
-        return self.settings.preferred_media
+        return PreferredMedia(self.settings.preferred_media)
 
     @property
     def icon(self):
@@ -2986,6 +2999,7 @@ class ContactListView(QListView):
         self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
+        self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -3057,6 +3071,7 @@ class ContactListView(QListView):
         else:
             contact = selected_items[0]
             menu.addAction(self.actions.start_audio_call)
+            menu.addAction(self.actions.start_video_call)
             menu.addAction(self.actions.start_chat_session)
             #menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
@@ -3072,6 +3087,7 @@ class ContactListView(QListView):
             account_manager = AccountManager()
             default_account = account_manager.default_account
             self.actions.start_audio_call.setEnabled(default_account is not None)
+            self.actions.start_video_call.setEnabled(default_account is not None)
             self.actions.start_chat_session.setEnabled(default_account is not None)
             self.actions.send_sms.setEnabled(default_account is not None)
             self.actions.send_files.setEnabled(default_account is not None)
@@ -3091,7 +3107,7 @@ class ContactListView(QListView):
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
             if isinstance(item, Contact):
                 session_manager = SessionManager()
-                session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
+                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
         elif event.key() == Qt.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
@@ -3290,6 +3306,11 @@ class ContactListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, contact.uri, [StreamDescription('audio')])
 
+    def _AH_StartVideoCall(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('audio'), StreamDescription('video')])
+
     def _AH_StartChatSession(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
@@ -3384,7 +3405,7 @@ class ContactListView(QListView):
         item = index.data(Qt.UserRole)
         if isinstance(item, Contact):
             session_manager = SessionManager()
-            session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
+            session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
 
 
 class ContactSearchListView(QListView):
@@ -3403,6 +3424,7 @@ class ContactSearchListView(QListView):
         self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
+        self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -3460,6 +3482,7 @@ class ContactSearchListView(QListView):
         else:
             contact = selected_items[0]
             menu.addAction(self.actions.start_audio_call)
+            menu.addAction(self.actions.start_video_call)
             menu.addAction(self.actions.start_chat_session)
             #menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
@@ -3473,6 +3496,7 @@ class ContactSearchListView(QListView):
             account_manager = AccountManager()
             default_account = account_manager.default_account
             self.actions.start_audio_call.setEnabled(default_account is not None)
+            self.actions.start_video_call.setEnabled(default_account is not None)
             self.actions.start_chat_session.setEnabled(default_account is not None)
             self.actions.send_sms.setEnabled(default_account is not None)
             self.actions.send_files.setEnabled(default_account is not None)
@@ -3499,7 +3523,7 @@ class ContactSearchListView(QListView):
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
             if isinstance(item, Contact):
                 session_manager = SessionManager()
-                session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
+                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
         elif event.key() == Qt.Key_Escape:
             QApplication.instance().main_window.search_box.clear()
         elif event.key() == Qt.Key_Space:
@@ -3627,6 +3651,11 @@ class ContactSearchListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, contact.uri, [StreamDescription('audio')])
 
+    def _AH_StartVideoCall(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, contact.uri, [StreamDescription('audio'), StreamDescription('video')])
+
     def _AH_StartChatSession(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
@@ -3667,7 +3696,7 @@ class ContactSearchListView(QListView):
         item = index.data(Qt.UserRole)
         if isinstance(item, Contact):
             session_manager = SessionManager()
-            session_manager.create_session(item, item.uri, [StreamDescription(media) for media in item.preferred_media.split('+')], connect=('audio' in item.preferred_media))
+            session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
 
 
 class ContactDetailView(QListView):
@@ -3695,6 +3724,7 @@ class ContactDetailView(QListView):
         self.actions.edit_contact = QAction("Edit Contact", self, triggered=self._AH_EditContact)
         self.actions.make_uri_default = QAction("Set Address As Default", self, triggered=self._AH_MakeURIDefault)
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
+        self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
@@ -3741,6 +3771,7 @@ class ContactDetailView(QListView):
         menu = self.context_menu
         menu.clear()
         menu.addAction(self.actions.start_audio_call)
+        menu.addAction(self.actions.start_video_call)
         menu.addAction(self.actions.start_chat_session)
         #menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.send_files)
@@ -3753,6 +3784,7 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.edit_contact)
         menu.addAction(self.actions.delete_contact)
         self.actions.start_audio_call.setEnabled(account_manager.default_account is not None and contact_has_uris)
+        self.actions.start_video_call.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.start_chat_session.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.send_sms.setEnabled(account_manager.default_account is not None and contact_has_uris)
         self.actions.send_files.setEnabled(account_manager.default_account is not None and contact_has_uris)
@@ -3767,7 +3799,15 @@ class ContactDetailView(QListView):
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Enter, Qt.Key_Return):
-            self._AH_StartAudioCall()
+            contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+            selected_indexes = self.selectionModel().selectedIndexes()
+            item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+            if isinstance(item, ContactURI):
+                selected_uri = item.uri
+            else:
+                selected_uri = contact.uri
+            session_manager = SessionManager()
+            session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
         elif event.key() == Qt.Key_Escape:
             self.animation.setDirection(QPropertyAnimation.Backward)
             self.animation.start()
@@ -3853,6 +3893,17 @@ class ContactDetailView(QListView):
             selected_uri = contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('audio')])
+
+    def _AH_StartVideoCall(self):
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = contact.uri
+        session_manager = SessionManager()
+        session_manager.create_session(contact, selected_uri, [StreamDescription('audio'), StreamDescription('video')])
 
     def _AH_StartChatSession(self):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -3942,7 +3993,7 @@ class ContactDetailView(QListView):
         else:
             selected_uri = contact.uri
         session_manager = SessionManager()
-        session_manager.create_session(contact, selected_uri, [StreamDescription(media) for media in contact.preferred_media.split('+')], connect=('audio' in contact.preferred_media))
+        session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
 
 
 # The contact editor dialog
@@ -4260,8 +4311,9 @@ class ContactEditorDialog(base_class, ui_class):
     def setupUi(self, contact_editor):
         super(ContactEditorDialog, self).setupUi(contact_editor)
         self.preferred_media.setItemData(0, 'audio')
-        self.preferred_media.setItemData(1, 'chat')
-        self.preferred_media.setItemData(2, 'audio+chat')
+        self.preferred_media.setItemData(1, 'video')
+        self.preferred_media.setItemData(2, 'chat')
+        self.preferred_media.setItemData(3, 'audio+chat')
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
     def open_for_add(self, sip_address=u'', target_group=None):

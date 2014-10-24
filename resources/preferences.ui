@@ -269,6 +269,14 @@
               <property name="dragDropMode">
                <enum>QAbstractItemView::InternalMove</enum>
               </property>
+              <item>
+               <property name="text">
+                <string>H264</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
              </widget>
             </item>
             <item row="0" column="0">
@@ -1914,6 +1922,292 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="video_page">
+       <layout class="QGridLayout" name="video_layout" columnstretch="1,0">
+        <property name="margin">
+         <number>0</number>
+        </property>
+        <item row="0" column="1">
+         <widget class="QGroupBox" name="video_codecs_group_box">
+          <property name="title">
+           <string>Video Codecs</string>
+          </property>
+          <layout class="QGridLayout" name="video_codecs_layout" columnstretch="0,1">
+           <item row="0" column="0" colspan="2">
+            <widget class="QListWidget" name="video_codecs_list">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="horizontalScrollBarPolicy">
+              <enum>Qt::ScrollBarAlwaysOff</enum>
+             </property>
+             <property name="dragEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="dragDropMode">
+              <enum>QAbstractItemView::InternalMove</enum>
+             </property>
+             <item>
+              <property name="text">
+               <string>H264</string>
+              </property>
+              <property name="checkState">
+               <enum>Checked</enum>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="5" column="0" colspan="2">
+            <spacer name="video_codecs_spacer_2">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="h264_profile_label">
+             <property name="text">
+              <string>H264 profile:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QComboBox" name="h264_profile_button">
+             <item>
+              <property name="text">
+               <string>baseline</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>main</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>high</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="2" column="0" colspan="2">
+            <spacer name="video_codecs_spacer_1">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="1" column="0" colspan="2">
+            <widget class="QLabel" name="video_codecs_note">
+             <property name="text">
+              <string>Drag codecs to change their order</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QComboBox" name="video_codec_bitrate_button">
+             <item>
+              <property name="text">
+               <string>automatic</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>1 Mbps</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>2 Mbps</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>4 Mbps</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="video_codec_bitrate_label">
+             <property name="text">
+              <string>Bitrate:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QGroupBox" name="video_camera_group_box">
+          <property name="title">
+           <string>Video Camera</string>
+          </property>
+          <layout class="QGridLayout" name="video_camera_layout">
+           <item row="5" column="0" colspan="3">
+            <spacer name="video_spacer_3">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="video_resolution_label">
+             <property name="text">
+              <string>Resolution:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0" colspan="3">
+            <widget class="VideoSurface" name="camera_preview" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>240</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="video_camera_label">
+             <property name="text">
+              <string>Camera:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="2">
+            <spacer name="video_spacer_2">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>10</width>
+               <height>22</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="2" column="1">
+            <widget class="QComboBox" name="video_camera_button">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QComboBox" name="video_resolution_button">
+             <item>
+              <property name="text">
+               <string>HD 720p</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>VGA</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="video_framerate_label">
+             <property name="text">
+              <string>Framerate:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0" colspan="3">
+            <spacer name="video_spacer_1">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>10</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="4" column="1">
+            <widget class="QComboBox" name="video_framerate_button">
+             <item>
+              <property name="text">
+               <string>10 fps</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>15 fps</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>20 fps</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>25 fps</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>30 fps</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="chat_page">
        <layout class="QGridLayout" name="chat_layout" rowstretch="1,0" rowminimumheight="0,150">
         <property name="margin">
@@ -2000,8 +2294,8 @@
             </widget>
            </item>
            <item row="0" column="0" colspan="8">
-            <widget class="ChatWebView" name="style_view">
-             <property name="url">
+            <widget class="ChatWebView" name="style_view" native="true">
+             <property name="url" stdset="0">
               <url>
                <string>about:blank</string>
               </url>
@@ -2150,30 +2444,6 @@
            <property name="horizontalSpacing">
             <number>3</number>
            </property>
-           <item row="0" column="1">
-            <widget class="QLineEdit" name="screenshots_directory_editor">
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="2">
-            <widget class="QPushButton" name="screenshots_directory_browse_button">
-             <property name="text">
-              <string>Browse</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="0">
-            <widget class="QLabel" name="screenshots_directory_label">
-             <property name="text">
-              <string>Screenshots Directory:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
            <item row="4" column="0" colspan="3">
             <spacer name="screen_sharing_spacer">
              <property name="orientation">
@@ -2205,6 +2475,30 @@
             <widget class="QCheckBox" name="screen_sharing_scale_button">
              <property name="text">
               <string>Scale the remote screen to fit the viewer window</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="screenshots_directory_editor">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="screenshots_directory_label">
+             <property name="text">
+              <string>Screenshots Directory:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QPushButton" name="screenshots_directory_browse_button">
+             <property name="text">
+              <string>Browse</string>
              </property>
             </widget>
            </item>
@@ -2823,6 +3117,7 @@
    <addaction name="accounts_action"/>
    <addaction name="separator"/>
    <addaction name="audio_action"/>
+   <addaction name="video_action"/>
    <addaction name="chat_action"/>
    <addaction name="screen_sharing_action"/>
    <addaction name="file_transfer_action"/>
@@ -2853,6 +3148,18 @@
     <string>Audio</string>
    </property>
   </action>
+  <action name="video_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/video.png</normaloff>icons/video.png</iconset>
+   </property>
+   <property name="text">
+    <string>Video</string>
+   </property>
+  </action>
   <action name="chat_action">
    <property name="checkable">
     <bool>true</bool>
@@ -2863,6 +3170,18 @@
    </property>
    <property name="text">
     <string>Chat</string>
+   </property>
+  </action>
+  <action name="screen_sharing_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>icons/screensharing.png</normaloff>icons/screensharing.png</iconset>
+   </property>
+   <property name="text">
+    <string>Screen Sharing</string>
    </property>
   </action>
   <action name="file_transfer_action">
@@ -2904,18 +3223,6 @@
     <string>Advanced</string>
    </property>
   </action>
-  <action name="screen_sharing_action">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="icon">
-    <iconset>
-     <normaloff>icons/screensharing.png</normaloff>icons/screensharing.png</iconset>
-   </property>
-   <property name="text">
-    <string>Screen Sharing</string>
-   </property>
-  </action>
  </widget>
  <customwidgets>
   <customwidget>
@@ -2924,14 +3231,14 @@
    <header>QtWebKit/QWebView</header>
   </customwidget>
   <customwidget>
-   <class>LineEdit</class>
-   <extends>QLineEdit</extends>
-   <header>blink.widgets.lineedit</header>
-  </customwidget>
-  <customwidget>
    <class>ChatWebView</class>
    <extends>QWebView</extends>
    <header>blink.chatwindow</header>
+  </customwidget>
+  <customwidget>
+   <class>LineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>blink.widgets.lineedit</header>
   </customwidget>
   <customwidget>
    <class>SIPPortEditor</class>
@@ -2947,6 +3254,12 @@
    <class>AccountListView</class>
    <extends>QListView</extends>
    <header>blink.preferences</header>
+  </customwidget>
+  <customwidget>
+   <class>VideoSurface</class>
+   <extends>QWidget</extends>
+   <header>blink.widgets.video</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources/>

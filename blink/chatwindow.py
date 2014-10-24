@@ -1,23 +1,27 @@
 # Copyright (C) 2013 AG Projects. See LICENSE for details.
 #
 
+from __future__ import division
+
 __all__ = ['ChatWindow']
 
 import os
 import re
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRect, QSettings, QTimer, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCursor, QTextDocument, QTextEdit
+from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
+from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCursor, QTextDocument, QTextEdit, QToolButton
 from PyQt4.QtGui  import QApplication, QDesktopServices
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
-from application.notification import IObserver, NotificationCenter
-from application.python import Null
+from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy
+from application.python import Null, limit
 from application.python.types import MarkerType
+from application.system import makedirs
 from collections import MutableSet
 from datetime import datetime, timedelta
+from itertools import count
 from lxml import etree, html
 from lxml.html.clean import autolink
 from weakref import proxy
@@ -27,6 +31,7 @@ from sipsimple.account import AccountManager
 from sipsimple.application import SIPApplication
 from sipsimple.audio import WavePlayer
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.threading import run_in_thread
 
 from blink.configuration.datatypes import FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
@@ -36,7 +41,8 @@ from blink.sessions import ChatSessionModel, ChatSessionListView, StreamDescript
 from blink.util import run_in_gui_thread
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
-from blink.widgets.util import ContextMenuActions
+from blink.widgets.util import ContextMenuActions, QtDynamicProperty
+from blink.widgets.video import VideoSurface
 
 
 # Chat style classes
@@ -623,6 +629,546 @@ class ChatWidget(base_class, ui_class):
 del ui_class, base_class
 
 
+class VideoToolButton(QToolButton):
+    active = QtDynamicProperty('active', bool)
+
+    def event(self, event):
+        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() == 'active':
+            self.setVisible(self.active)
+        return super(VideoToolButton, self).event(event)
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('video_widget.ui'))
+
+class VideoWidget(VideoSurface, ui_class):
+    implements(IObserver)
+
+    def __init__(self, session_item, parent=None):
+        super(VideoWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi()
+        self.session_item = session_item
+        self.blink_session = session_item.blink_session
+        self.parent_widget = parent
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.fullscreen_button.clicked.connect(self._SH_FullscreenButtonClicked)
+        self.screenshot_button.clicked.connect(self._SH_ScreenshotButtonClicked)
+        self.detach_button.clicked.connect(self._SH_DetachButtonClicked)
+        self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
+        self.hold_button.clicked.connect(self._SH_HoldButtonClicked)
+        self.close_button.clicked.connect(self._SH_CloseButtonClicked)
+        self.screenshots_folder_action.triggered.connect(self._SH_ScreenshotsFolderActionTriggered)
+        self.screenshot_button.customContextMenuRequested.connect(self._SH_ScreenshotButtonContextMenuRequested)
+        self.camera_preview.adjusted.connect(self._SH_CameraPreviewAdjusted)
+        self.detach_animation.finished.connect(self._SH_DetachAnimationFinished)
+        self.preview_animation.finished.connect(self._SH_PreviewAnimationFinished)
+        self.idle_timer.timeout.connect(self._SH_IdleTimerTimeout)
+        if parent is not None:
+            parent.installEventFilter(self)
+            self.setGeometry(self.geometryHint())
+            self.setVisible('video' in session_item.blink_session.streams)
+        settings = SIPSimpleSettings()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), sender=session_item.blink_session)
+        notification_center.add_observer(ObserverWeakrefProxy(self), name='CFGSettingsObjectDidChange', sender=settings)
+        notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoStreamRemoteFormatDidChange')
+        notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoStreamReceivedKeyFrame')
+        notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoDeviceDidChangeCamera')
+
+    def setupUi(self):
+        super(VideoWidget, self).setupUi(self)
+
+        self.no_flicker_widget = QLabel()
+        self.no_flicker_widget.setWindowFlags(Qt.FramelessWindowHint)
+        #self.no_flicker_widget.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+
+        self.camera_preview = VideoSurface(self, framerate=10)
+        self.camera_preview.interactive = True
+        self.camera_preview.mirror = True
+        self.camera_preview.setMinimumHeight(45)
+        self.camera_preview.setMaximumHeight(135)
+        self.camera_preview.setGeometry(QRect(0, 0, self.camera_preview.width_for_height(81), 81))
+        self.camera_preview.lower()
+        self.camera_preview.scale_factor = 1.0
+
+        self.detach_animation = QPropertyAnimation(self, 'geometry')
+        self.detach_animation.setDuration(200)
+        #self.detach_animation.setEasingCurve(QEasingCurve.Linear)
+
+        self.preview_animation = QPropertyAnimation(self.camera_preview, 'geometry')
+        self.preview_animation.setDuration(500)
+        self.preview_animation.setDirection(QPropertyAnimation.Forward)
+        self.preview_animation.setEasingCurve(QEasingCurve.OutQuad)
+
+        self.idle_timer = QTimer()
+        self.idle_timer.setSingleShot(True)
+        self.idle_timer.setInterval(3000)
+
+        for button in self.tool_buttons:
+            button.setCursor(Qt.ArrowCursor)
+            button.installEventFilter(self)
+            button.active = False
+
+        # fix the SVG icons, as the generated code loads them as pixmaps, losing their ability to scale -Dan
+        fullscreen_icon = QIcon()
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Normal, state=QIcon.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Active, state=QIcon.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Disabled, state=QIcon.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Selected, state=QIcon.On)
+
+        detach_icon = QIcon()
+        detach_icon.addFile(Resources.get('icons/detach.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Normal, state=QIcon.On)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Active, state=QIcon.On)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Disabled, state=QIcon.On)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Selected, state=QIcon.On)
+
+        mute_icon = QIcon()
+        mute_icon.addFile(Resources.get('icons/mic-on.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Normal, state=QIcon.On)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Active, state=QIcon.On)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Disabled, state=QIcon.On)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Selected, state=QIcon.On)
+
+        hold_icon = QIcon()
+        hold_icon.addFile(Resources.get('icons/pause.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Normal, state=QIcon.On)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Active, state=QIcon.On)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Disabled, state=QIcon.On)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Selected, state=QIcon.On)
+
+        screenshot_icon = QIcon()
+        screenshot_icon.addFile(Resources.get('icons/screenshot.svg'), mode=QIcon.Normal, state=QIcon.Off)
+
+        close_icon = QIcon()
+        close_icon.addFile(Resources.get('icons/close.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        close_icon.addFile(Resources.get('icons/close-active.svg'), mode=QIcon.Active, state=QIcon.Off)
+
+        self.fullscreen_button.setIcon(fullscreen_icon)
+        self.screenshot_button.setIcon(screenshot_icon)
+        self.detach_button.setIcon(detach_icon)
+        self.mute_button.setIcon(mute_icon)
+        self.hold_button.setIcon(hold_icon)
+        self.close_button.setIcon(close_icon)
+
+        self.screenshot_button_menu = QMenu(self)
+        self.screenshots_folder_action = self.screenshot_button_menu.addAction('Open screenshots folder')
+
+    @property
+    def interactive(self):
+        return self.parent() is None and not self.isFullScreen()
+
+    @property
+    def tool_buttons(self):
+        return tuple(attr for attr in vars(self).itervalues() if isinstance(attr, VideoToolButton))
+
+    @property
+    def active_tool_buttons(self):
+        return tuple(button for button in self.tool_buttons if button.active)
+
+    def eventFilter(self, watched, event):
+        event_type = event.type()
+        if watched is self.parent():
+            if event_type == QEvent.Resize:
+                self.setGeometry(self.geometryHint())
+        elif event_type == QEvent.Enter:
+            self.idle_timer.stop()
+            cursor = self.cursor()
+            cursor_pos = cursor.pos()
+            if not watched.rect().translated(watched.mapToGlobal(QPoint(0, 0))).contains(cursor_pos):
+                # sometimes we get invalid enter events for the fullscreen_button after we switch to fullscreen.
+                # simulate a mouse move in and out of the button to force qt to update the button state.
+                cursor.setPos(self.mapToGlobal(watched.geometry().center()))
+                cursor.setPos(cursor_pos)
+        elif event_type == QEvent.Leave:
+            self.idle_timer.start()
+        return False
+
+    def mousePressEvent(self, event):
+        super(VideoWidget, self).mousePressEvent(event)
+        if self._interaction.active:
+            for button in self.active_tool_buttons:
+                button.show() # show or hide the toolbuttons while we move/resize? -Dan
+            self.idle_timer.stop()
+
+    def mouseReleaseEvent(self, event):
+        if self._interaction.active:
+            for button in self.active_tool_buttons:
+                button.show()
+            self.idle_timer.start()
+        super(VideoWidget, self).mouseReleaseEvent(event)
+
+    def mouseMoveEvent(self, event):
+        super(VideoWidget, self).mouseMoveEvent(event)
+        if self._interaction.active:
+            return
+        if not self.idle_timer.isActive():
+            for button in self.active_tool_buttons:
+                button.show()
+            self.setCursor(Qt.ArrowCursor)
+        self.idle_timer.start()
+
+    def resizeEvent(self, event):
+        if self.preview_animation.state() == QPropertyAnimation.Running:
+            return
+
+        if not event.oldSize().isValid():
+            return
+
+        if self.camera_preview.size() == event.oldSize():
+            self.camera_preview.resize(event.size())
+            return
+
+        old_size = QSizeF(event.oldSize())
+        new_size = QSizeF(event.size())
+
+        ratio = new_size.height() / old_size.height()
+
+        if ratio == 1:
+            return
+
+        scaled_preview_geometry = QRectF(QPointF(self.camera_preview.geometry().topLeft()) * ratio, QSizeF(self.camera_preview.size()) * ratio)
+        preview_center = scaled_preview_geometry.center()
+        ideal_geometry = scaled_preview_geometry.toAlignedRect()
+
+        if ideal_geometry.right() > self.rect().right():
+            ideal_geometry.moveRight(self.rect().right())
+        if ideal_geometry.bottom() > self.rect().bottom():
+            ideal_geometry.moveBottom(self.rect().bottom())
+
+        new_height = limit((new_size.height() + 117) / 6 * self.camera_preview.scale_factor, min=self.camera_preview.minimumHeight(), max=self.camera_preview.maximumHeight())
+        preview_geometry = QRect(0, 0, self.width_for_height(new_height), new_height)
+
+        quadrant = QRectF(QPointF(0, 0), new_size/3)
+
+        if quadrant.translated(0, 0).contains(preview_center):                                      # top left gravity
+            preview_geometry.moveTopLeft(ideal_geometry.topLeft())
+        elif quadrant.translated(quadrant.width(), 0).contains(preview_center):                     # top gravity
+            preview_geometry.moveCenter(ideal_geometry.center())
+            preview_geometry.moveTop(ideal_geometry.top())
+        elif quadrant.translated(2*quadrant.width(), 0).contains(preview_center):                   # top right gravity
+            preview_geometry.moveTopRight(ideal_geometry.topRight())
+
+        elif quadrant.translated(0, quadrant.height()).contains(preview_center):                    # left gravity
+            preview_geometry.moveCenter(ideal_geometry.center())
+            preview_geometry.moveLeft(ideal_geometry.left())
+        elif quadrant.translated(quadrant.width(), quadrant.height()).contains(preview_center):     # center gravity
+            preview_geometry.moveCenter(ideal_geometry.center())
+        elif quadrant.translated(2*quadrant.width(), quadrant.height()).contains(preview_center):   # right gravity
+            preview_geometry.moveCenter(ideal_geometry.center())
+            preview_geometry.moveRight(ideal_geometry.right())
+
+        elif quadrant.translated(0, 2*quadrant.height()).contains(preview_center):                  # bottom left gravity
+            preview_geometry.moveBottomLeft(ideal_geometry.bottomLeft())
+        elif quadrant.translated(quadrant.width(), 2*quadrant.height()).contains(preview_center):   # bottom gravity
+            preview_geometry.moveCenter(ideal_geometry.center())
+            preview_geometry.moveBottom(ideal_geometry.bottom())
+        elif quadrant.translated(2*quadrant.width(), 2*quadrant.height()).contains(preview_center): # bottom right gravity
+            preview_geometry.moveBottomRight(ideal_geometry.bottomRight())
+
+        self.camera_preview.setGeometry(preview_geometry)
+
+    def setParent(self, parent):
+        old_parent = self.parent()
+        if old_parent is not None:
+            old_parent.removeEventFilter(self)
+        super(VideoWidget, self).setParent(parent)
+        if parent is not None:
+            parent.installEventFilter(self)
+            self.setGeometry(self.geometryHint())
+
+    def setVisible(self, visible):
+        if visible == False and self.isFullScreen():
+            self.showNormal()
+            if not self.detach_button.isChecked():
+                self.setParent(self.parent_widget)
+                self.setGeometry(self.parent().rect())
+            self.fullscreen_button.setChecked(False)
+        super(VideoWidget, self).setVisible(visible)
+
+    def geometryHint(self, parent=None):
+        parent = parent or self.parent()
+        if parent is not None:
+            origin = QPoint(0, 0)
+            size   = QSize(parent.width(), min(self.height_for_width(parent.width()), parent.height() - 175))
+        else:
+            origin = self.geometry().topLeft()
+            size   = QSize(self.width_for_height(self.height()), self.height())
+        return QRect(origin, size)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionWillConnect(self, notification):
+        if 'video' in notification.sender.streams:
+            self.setParent(self.parent_widget)
+            self.setGeometry(self.geometryHint())
+            self.detach_button.setChecked(False)
+            for button in self.tool_buttons:
+                button.active = False
+            self.camera_preview.setMaximumHeight(16777215)
+            self.camera_preview.setGeometry(self.rect())
+            self.camera_preview.setCursor(Qt.ArrowCursor)
+            self.camera_preview.interactive = False
+            self.camera_preview.scale_factor = 1.0
+            self.camera_preview.producer = SIPApplication.video_device.producer
+            self.setCursor(Qt.ArrowCursor)
+            self.show()
+
+    def _NH_BlinkSessionDidConnect(self, notification):
+        video_stream = notification.sender.streams.get('video')
+        if video_stream is not None:
+            if self.parent() is None:
+                self.setParent(self.parent_widget)
+                self.setGeometry(self.geometryHint())
+                self.detach_button.setChecked(False)
+            for button in self.tool_buttons:
+                button.active = False
+            self.camera_preview.setMaximumHeight(16777215)
+            self.camera_preview.setGeometry(self.rect())
+            self.camera_preview.setCursor(Qt.ArrowCursor)
+            self.camera_preview.interactive = False
+            self.camera_preview.scale_factor = 1.0
+            self.camera_preview.producer = SIPApplication.video_device.producer
+            self.producer = video_stream.producer
+            self.setCursor(Qt.ArrowCursor)
+            self.show()
+        else:
+            self.hide()
+            self.producer = None
+            self._image = None
+            self.camera_preview.producer = None
+            self.camera_preview._image = None
+
+    def _NH_BlinkSessionWillAddStream(self, notification):
+        if notification.data.stream.type == 'video':
+            self.setParent(self.parent_widget)
+            self.setGeometry(self.geometryHint())
+            self.detach_button.setChecked(False)
+            for button in self.tool_buttons:
+                button.active = False
+            self.camera_preview.setMaximumHeight(16777215)
+            self.camera_preview.setGeometry(self.rect())
+            self.camera_preview.setCursor(Qt.ArrowCursor)
+            self.camera_preview.interactive = False
+            self.camera_preview.scale_factor = 1.0
+            self.camera_preview.producer = SIPApplication.video_device.producer
+            self.setCursor(Qt.ArrowCursor)
+            self.show()
+
+    def _NH_BlinkSessionDidAddStream(self, notification):
+        if notification.data.stream.type == 'video':
+            self.producer = notification.data.stream.producer
+
+    def _NH_BlinkSessionDidNotAddStream(self, notification):
+        if notification.data.stream.type == 'video':
+            self.hide()
+            self.producer = None
+            self._image = None
+            self.camera_preview.producer = None
+            self.camera_preview._image = None
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        if notification.data.stream.type == 'video':
+            self.hide()
+            self.producer = None
+            self._image = None
+            self.camera_preview.producer = None
+            self.camera_preview._image = None
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self.hide()
+        self.producer = None
+        self._image = None
+        self.camera_preview.producer = None
+        self.camera_preview._image = None
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        self.stop()
+        self.setParent(None)
+        self.session_item = None
+        self.blink_session = None
+        self.parent_widget = None
+        self.detach_animation = None
+        self.preview_animation = None
+
+    def _NH_BlinkSessionDidChangeHoldState(self, notification):
+        self.hold_button.setChecked(notification.data.local_hold)
+
+    def _NH_VideoStreamRemoteFormatDidChange(self, notification):
+        if notification.sender.blink_session is self.blink_session and not self.isFullScreen():
+            self.setGeometry(self.geometryHint())
+
+    def _NH_VideoStreamReceivedKeyFrame(self, notification):
+        if notification.sender.blink_session is self.blink_session and self.preview_animation.state() != QPropertyAnimation.Running and self.camera_preview.size() == self.size():
+            self.preview_animation.setStartValue(self.rect())
+            self.preview_animation.setEndValue(QRect(0, 0, self.camera_preview.width_for_height(81), 81))
+            self.preview_animation.start()
+
+    def _NH_VideoDeviceDidChangeCamera(self, notification):
+        #self.camera_preview.producer = SIPApplication.video_device.producer
+        self.camera_preview.producer = notification.data.new_camera
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        settings = SIPSimpleSettings()
+        if 'audio.muted' in notification.data.modified:
+            self.mute_button.setChecked(settings.audio.muted)
+
+    def _SH_CameraPreviewAdjusted(self, old_geometry, new_geometry):
+        print old_geometry, new_geometry
+        if new_geometry.size() != old_geometry.size():
+            default_height_for_size = (self.height() + 117) / 6
+            self.camera_preview.scale_factor = new_geometry.height() / default_height_for_size
+
+    def _SH_IdleTimerTimeout(self):
+        for button in self.active_tool_buttons:
+            button.hide()
+        self.setCursor(Qt.BlankCursor)
+
+    def _SH_FullscreenButtonClicked(self, checked):
+        if checked:
+            if not self.detach_button.isChecked():
+                geometry = self.rect().translated(self.mapToGlobal(QPoint(0, 0)))
+                self.setParent(None)
+                self.setGeometry(geometry)
+                self.show() # without this, showFullScreen below doesn't work properly
+            self.detach_button.active = False
+            self.mute_button.active = True
+            self.hold_button.active = True
+            self.close_button.active = True
+            self.showFullScreen()
+            self.fullscreen_button.hide() # it seems the leave event after the button is pressed doesn't register and starting the idle timer here doesn't work well either -Dan
+            self.fullscreen_button.show()
+        else:
+            if not self.detach_button.isChecked():
+                self.setGeometry(self.geometryHint(self.parent_widget)) # force a geometry change before reparenting, else we will get a change from (-1, -1) to the parent geometry hint
+                self.setParent(self.parent_widget)                      # this is probably because since it unmaps when it's reparented, the geometry change won't appear from fullscreen
+                self.setGeometry(self.geometryHint())                   # to the new size, since we changed the geometry after returning from fullscreen, while invisible
+                self.mute_button.active = False
+                self.hold_button.active = False
+                self.close_button.active = False
+            self.detach_button.active = True
+            self.showNormal()
+            self.window().show()
+        self.setCursor(Qt.ArrowCursor)
+
+    def _SH_DetachButtonClicked(self, checked):
+        if checked:
+            if self.isFullScreen():
+                self.showNormal()
+
+            desktop = QApplication.desktop()
+            screen_area = desktop.availableGeometry(self)
+
+            start_rect = self.rect()
+            final_rect = QRect(0, 0, self.width_for_height(261), 261)
+            start_geometry = start_rect.translated(self.mapToGlobal(QPoint(0, 0)))
+            final_geometry = final_rect.translated(screen_area.topRight() - final_rect.topRight() + QPoint(-10, 10))
+
+            pixmap = QPixmap.grabWidget(self)
+            self.no_flicker_widget.resize(pixmap.size())
+            self.no_flicker_widget.setPixmap(pixmap)
+            self.no_flicker_widget.setGeometry(self.rect().translated(self.mapToGlobal(QPoint(0, 0))))
+            self.no_flicker_widget.show()
+            self.no_flicker_widget.raise_()
+
+            self.setParent(None)
+            self.setGeometry(start_geometry)
+            self.show()
+            self.no_flicker_widget.hide()
+
+            self.detach_animation.setDirection(QPropertyAnimation.Forward)
+            self.detach_animation.setEasingCurve(QEasingCurve.OutQuad)
+            self.detach_animation.setStartValue(start_geometry)
+            self.detach_animation.setEndValue(final_geometry)
+            self.detach_animation.start()
+        else:
+            start_geometry = self.geometry()
+            final_geometry = self.geometryHint(self.parent_widget).translated(self.parent_widget.mapToGlobal(QPoint(0, 0)))
+
+            # do this early or late? -Dan
+            self.parent_widget.window().show()
+
+            self.detach_animation.setDirection(QPropertyAnimation.Backward)
+            self.detach_animation.setEasingCurve(QEasingCurve.InQuad)
+            self.detach_animation.setStartValue(final_geometry) # start and end are reversed because we go backwards
+            self.detach_animation.setEndValue(start_geometry)
+            self.detach_animation.start()
+        self.fullscreen_button.setChecked(False)
+
+    def _SH_ScreenshotButtonClicked(self):
+        screenshot = VideoScreenshot(self)
+        screenshot.capture()
+        screenshot.save()
+
+    def _SH_MuteButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.audio.muted = checked
+        settings.save()
+
+    def _SH_HoldButtonClicked(self, checked):
+        if checked:
+            self.blink_session.hold()
+        else:
+            self.blink_session.unhold()
+
+    def _SH_CloseButtonClicked(self):
+        if 'screen-sharing' in self.blink_session.streams:
+            self.blink_session.remove_stream(self.session_item.video_stream)
+        else:
+            self.session_item.end()
+
+    def _SH_ScreenshotButtonContextMenuRequested(self, pos):
+        if not self.isFullScreen():
+            self.screenshot_button_menu.exec_(self.screenshot_button.mapToGlobal(pos))
+
+    def _SH_ScreenshotsFolderActionTriggered(self, pos):
+        settings = BlinkSettings()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.video.screenshots_directory.normalized))
+
+    def _SH_DetachAnimationFinished(self):
+        if self.detach_animation.direction() == QPropertyAnimation.Backward:
+            pixmap = QPixmap.grabWidget(self)
+            self.no_flicker_widget.resize(pixmap.size())
+            self.no_flicker_widget.setPixmap(pixmap)
+            self.no_flicker_widget.setGeometry(self.geometry())
+            self.no_flicker_widget.show()
+            self.no_flicker_widget.raise_()
+            #self.no_flicker_widget.repaint()
+            #self.repaint()
+            self.setParent(self.parent_widget)
+            self.setGeometry(self.geometryHint())
+            self.show() # solve the flicker -Dan
+            #self.repaint()
+            #self.no_flicker_widget.lower()
+            self.no_flicker_widget.hide()
+            #self.window().show()
+            self.mute_button.active = False
+            self.hold_button.active = False
+            self.close_button.active = False
+        else:
+            self.detach_button.hide() # it seems the leave event after the button is pressed doesn't register and starting the idle timer here doesn't work well either -Dan
+            self.detach_button.show()
+            self.mute_button.active = True
+            self.hold_button.active = True
+            self.close_button.active = True
+        self.setCursor(Qt.ArrowCursor)
+
+    def _SH_PreviewAnimationFinished(self):
+        self.camera_preview.setMaximumHeight(135)
+        self.camera_preview.interactive = True
+        self.setCursor(Qt.ArrowCursor)
+        self.detach_button.active = True
+        self.fullscreen_button.active = True
+        self.screenshot_button.active = True
+        self.idle_timer.start()
+
+del ui_class, base_class
+
+
 class NoSessionsLabel(QLabel):
     def __init__(self, chat_window):
         super(NoSessionsLabel, self).__init__(chat_window.session_panel)
@@ -739,9 +1285,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions = ContextMenuActions()
         self.control_button.actions.connect = QAction("Connect", self, triggered=self._AH_Connect)
         self.control_button.actions.connect_with_audio = QAction("Connect with audio", self, triggered=self._AH_ConnectWithAudio)
+        self.control_button.actions.connect_with_video = QAction("Connect with video", self, triggered=self._AH_ConnectWithVideo)
         self.control_button.actions.disconnect = QAction("Disconnect", self, triggered=self._AH_Disconnect)
         self.control_button.actions.add_audio = QAction("Add audio", self, triggered=self._AH_AddAudio)
         self.control_button.actions.remove_audio = QAction("Remove audio", self, triggered=self._AH_RemoveAudio)
+        self.control_button.actions.add_video = QAction("Add video", self, triggered=self._AH_AddVideo)
+        self.control_button.actions.remove_video = QAction("Remove video", self, triggered=self._AH_RemoveVideo)
         self.control_button.actions.share_my_screen = QAction("Share my screen", self, triggered=self._AH_ShareMyScreen)
         self.control_button.actions.request_screen = QAction("Request screen", self, triggered=self._AH_RequestScreen)
         self.control_button.actions.end_screen_sharing = QAction("End screen sharing", self, triggered=self._AH_EndScreenSharing)
@@ -762,9 +1311,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_details.animationEasingCurve = QEasingCurve.OutCirc
 
         self.audio_latency_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
-        self.video_latency_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0))
+        self.video_latency_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0), enabled=False)     # disable for now
         self.audio_packet_loss_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
-        self.video_packet_loss_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0))
+        self.video_packet_loss_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0), enabled=False) # disable for now
 
         self.incoming_traffic_graph = Graph([], color=QColor(255, 50, 50))
         self.outgoing_traffic_graph = Graph([], color=QColor(0, 100, 215))
@@ -862,6 +1411,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if state not in ('connecting/*', 'connected/*'):
                 menu.addAction(self.control_button.actions.connect)
                 menu.addAction(self.control_button.actions.connect_with_audio)
+                menu.addAction(self.control_button.actions.connect_with_video)
             else:
                 menu.addAction(self.control_button.actions.disconnect)
                 if state == 'connected':
@@ -870,6 +1420,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.add_audio)
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
                         menu.addAction(self.control_button.actions.remove_audio)
+                    if 'video' not in stream_types:
+                        menu.addAction(self.control_button.actions.add_video)
+                    elif stream_types != {'video'}:
+                        menu.addAction(self.control_button.actions.remove_video)
                     if 'screen-sharing' not in stream_types:
                         menu.addAction(self.control_button.actions.request_screen)
                         menu.addAction(self.control_button.actions.share_my_screen)
@@ -892,6 +1446,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.account_value_label.setEnabled(have_session)
             self.remote_agent_value_label.setEnabled(have_session)
             self.audio_value_widget.setEnabled('audio' in blink_session.streams)
+            self.video_value_widget.setEnabled('video' in blink_session.streams)
             self.chat_value_widget.setEnabled('chat' in blink_session.streams)
             self.screen_value_widget.setEnabled('screen-sharing' in blink_session.streams)
 
@@ -928,7 +1483,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if 'media' in elements:
             self.audio_value_label.setText(audio_info.codec or 'N/A')
-
             if audio_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (audio_info.local_rtp_candidate, audio_info.remote_rtp_candidate)}:
                     self.audio_connection_label.setPixmap(self.relay_connection_pixmap)
@@ -949,9 +1503,32 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
                 self.audio_connection_label.setToolTip(u'Negotiating ICE')
-
             self.audio_connection_label.setVisible(audio_info.remote_address is not None)
             self.audio_encryption_label.setVisible(audio_info.encryption is not None)
+
+            self.video_value_label.setText(video_info.codec or 'N/A')
+            if video_info.ice_status == 'succeeded':
+                if 'relay' in {candidate.type.lower() for candidate in (video_info.local_rtp_candidate, video_info.remote_rtp_candidate)}:
+                    self.video_connection_label.setPixmap(self.relay_connection_pixmap)
+                    self.video_connection_label.setToolTip(u'Using relay')
+                else:
+                    self.video_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.video_connection_label.setToolTip(u'Peer to peer')
+            elif video_info.ice_status == 'failed':
+                self.video_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.video_connection_label.setToolTip(u"Couldn't negotiate ICE")
+            elif video_info.ice_status == 'disabled':
+                if blink_session.contact.type == 'bonjour':
+                    self.video_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.video_connection_label.setToolTip(u'Peer to peer')
+                else:
+                    self.video_connection_label.setPixmap(self.unknown_connection_pixmap)
+                    self.video_connection_label.setToolTip(u'ICE is disabled')
+            else:
+                self.video_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.video_connection_label.setToolTip(u'Negotiating ICE')
+            self.video_connection_label.setVisible(video_info.remote_address is not None)
+            self.video_encryption_label.setVisible(video_info.encryption is not None)
 
             if any(len(path) > 1 for path in (chat_info.full_local_path, chat_info.full_remote_path)):
                 self.chat_value_label.setText(u'Using relay')
@@ -1375,7 +1952,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             self.selected_session.blink_session.stop_recording()
 
-    def _SH_ControlButtonClicked(self, checked):
+    def _SH_ControlButtonClicked(self):
         # this is only called if the control button doesn't have a menu attached
         if self.selected_session.blink_session.state == 'connected/sent_proposal':
             self.selected_session.blink_session.sip_session.cancel_proposal()
@@ -1386,6 +1963,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         model = self.session_model
         position = model.sessions.index(session)
         session.chat_widget = ChatWidget(session, self.tab_widget)
+        session.video_widget = VideoWidget(session, session.chat_widget)
         session.active_panel = self.info_panel
         self.tab_widget.insertTab(position, session.chat_widget, session.name)
         self.no_sessions_label.hide()
@@ -1397,6 +1975,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _SH_SessionModelSessionRemoved(self, session):
         self.tab_widget.removeTab(self.tab_widget.indexOf(session.chat_widget))
         session.chat_widget = None
+        session.video_widget = None
         session.active_panel = None
         if not self.session_model.sessions:
             self.close()
@@ -1440,6 +2019,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=stream_descriptions, reinitialize=True)
         blink_session.connect()
 
+    def _AH_ConnectWithVideo(self):
+        stream_descriptions = [StreamDescription('audio'), StreamDescription('video'), StreamDescription('chat')]
+        blink_session = self.selected_session.blink_session
+        blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=stream_descriptions, reinitialize=True)
+        blink_session.connect()
+
     def _AH_Disconnect(self):
         self.selected_session.end()
 
@@ -1448,6 +2033,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _AH_RemoveAudio(self):
         self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('audio'))
+
+    def _AH_AddVideo(self):
+        if 'audio' in self.selected_session.blink_session.streams:
+            self.selected_session.blink_session.add_stream(StreamDescription('video'))
+        else:
+            self.selected_session.blink_session.add_streams([StreamDescription('video'), StreamDescription('audio')])
+
+    def _AH_RemoveVideo(self):
+        self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('video'))
 
     def _AH_RequestScreen(self):
         if 'audio' in self.selected_session.blink_session.streams:
@@ -1532,5 +2126,36 @@ class TrafficNormalizer(object):
         for boundary, format, divisor in cls.boundaries:
             if value < boundary:
                 return format % (value/divisor, 'bp' if bits_per_second else 'B/')
+
+
+class VideoScreenshot(object):
+    def __init__(self, surface):
+        self.surface = surface
+        self.image = None
+
+    @classmethod
+    def filename_generator(cls):
+        settings = BlinkSettings()
+        name = os.path.join(settings.video.screenshots_directory.normalized, 'VideoCall-{:%Y%m%d-%H.%M.%S}'.format(datetime.now()))
+        yield '%s.png' % name
+        for x in count(1):
+            yield "%s-%d.png" % (name, x)
+
+    def capture(self):
+        try:
+            self.image = self.surface._image.copy()
+        except AttributeError:
+            pass
+        else:
+            player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/screenshot.wav'), volume=30)
+            SIPApplication.alert_audio_bridge.add(player)
+            player.start()
+
+    @run_in_thread('file-io')
+    def save(self):
+        if self.image is not None:
+            filename = next(filename for filename in self.filename_generator() if not os.path.exists(filename))
+            makedirs(os.path.dirname(filename))
+            self.image.save(filename)
 
 

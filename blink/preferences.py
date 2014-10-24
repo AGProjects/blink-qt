@@ -7,7 +7,7 @@ import os
 import urlparse
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QRegExp
+from PyQt4.QtCore import Qt, QEvent, QRegExp
 from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QFont, QListView, QListWidgetItem, QMessageBox, QRegExpValidator, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate, QValidator
 
 from application import log
@@ -20,7 +20,7 @@ from zope.interface import implements
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration import DefaultValue
-from sipsimple.configuration.datatypes import MSRPRelayAddress, Path, PortRange, SIPProxyAddress
+from sipsimple.configuration.datatypes import H264Profile, MSRPRelayAddress, Path, PortRange, SIPProxyAddress
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
@@ -193,6 +193,8 @@ class PreferencesWindow(base_class, ui_class):
         self.account_list.setModel(account_model)
         self.delete_account_button.setEnabled(False)
 
+        self.camera_preview.installEventFilter(self)
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
 
@@ -217,6 +219,9 @@ class PreferencesWindow(base_class, ui_class):
         self.account_audio_codecs_list.itemChanged.connect(self._SH_AccountAudioCodecsListItemChanged)
         self.account_audio_codecs_list.model().rowsMoved.connect(self._SH_AccountAudioCodecsListModelRowsMoved)
         self.reset_account_audio_codecs_button.clicked.connect(self._SH_ResetAudioCodecsButtonClicked)
+        self.account_video_codecs_list.itemChanged.connect(self._SH_AccountVideoCodecsListItemChanged)
+        self.account_video_codecs_list.model().rowsMoved.connect(self._SH_AccountVideoCodecsListModelRowsMoved)
+        self.reset_account_video_codecs_button.clicked.connect(self._SH_ResetVideoCodecsButtonClicked)
         self.inband_dtmf_button.clicked.connect(self._SH_InbandDTMFButtonClicked)
         self.srtp_encryption_button.activated[str].connect(self._SH_SRTPEncryptionButtonActivated)
 
@@ -266,6 +271,17 @@ class PreferencesWindow(base_class, ui_class):
         self.enable_answering_machine_button.clicked.connect(self._SH_EnableAnsweringMachineButtonClicked)
         self.answer_delay.valueChanged[int].connect(self._SH_AnswerDelayValueChanged)
         self.max_recording.valueChanged[int].connect(self._SH_MaxRecordingValueChanged)
+
+        # Video devices
+        self.video_camera_button.activated[int].connect(self._SH_VideoCameraButtonActivated)
+        self.video_resolution_button.activated[int].connect(self._SH_VideoResolutionButtonActivated)
+        self.video_framerate_button.activated[int].connect(self._SH_VideoFramerateButtonActivated)
+
+        # Video codecs
+        self.video_codecs_list.itemChanged.connect(self._SH_VideoCodecsListItemChanged)
+        self.video_codecs_list.model().rowsMoved.connect(self._SH_VideoCodecsListModelRowsMoved)
+        self.video_codec_bitrate_button.activated[int].connect(self._SH_VideoCodecBitrateButtonActivated)
+        self.h264_profile_button.activated[int].connect(self._SH_H264ProfileButtonActivated)
 
         # Chat and SMS
         self.style_view.sizeChanged.connect(self._SH_StyleViewSizeChanged)
@@ -326,6 +342,8 @@ class PreferencesWindow(base_class, ui_class):
     def setupUi(self):
         super(PreferencesWindow, self).setupUi(self)
 
+        # Audio
+
         # Hide the tail_length slider as it is only useful for debugging -Dan
         self.tail_length_label.hide()
         self.tail_length_slider.hide()
@@ -335,6 +353,31 @@ class PreferencesWindow(base_class, ui_class):
         self.answering_machine_group_box.hide()
         self.sms_replication_button.hide()
 
+        # Video
+        size_policy = self.camera_preview.sizePolicy()
+        size_policy.setHeightForWidth(True)
+        self.camera_preview.setSizePolicy(size_policy)
+        self.camera_preview.mirror = True
+
+        self.video_resolution_button.clear()
+        self.video_resolution_button.addItem('HD 720p', '1280x720')
+        self.video_resolution_button.addItem('VGA', '640x480')
+        self.h264_level_map = {'1280x720': '3.1', '640x480': '3.0'}
+
+        self.video_framerate_button.clear()
+        for rate in range(10, 31, 5):
+            self.video_framerate_button.addItem('%d fps' % rate, rate)
+
+        self.video_codec_bitrate_button.clear()
+        self.video_codec_bitrate_button.addItem('automatic', None)
+        for bitrate in (1.0, 2.0, 4.0):
+            self.video_codec_bitrate_button.addItem('%g Mbps' % bitrate, bitrate)
+
+        self.h264_profile_button.clear()
+        for profile in H264Profile.valid_values:
+            self.h264_profile_button.addItem(profile, profile)
+
+        # Chat
         self.style_view.template = open(Resources.get('chat/template.html')).read()
 
         self.style_button.clear()
@@ -432,6 +475,15 @@ class PreferencesWindow(base_class, ui_class):
             self.audio_sample_rate_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.unavailable_message_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
 
+    def eventFilter(self, watched, event):
+        if watched is self.camera_preview:
+            event_type = event.type()
+            if event_type == QEvent.Show:
+                self.camera_preview.producer = SIPApplication.video_device.producer
+            elif event_type == QEvent.Hide:
+                self.camera_preview.producer = None
+        return False
+
     def closeEvent(self, event):
         super(PreferencesWindow, self).closeEvent(event)
         self.add_account_dialog.close()
@@ -462,31 +514,30 @@ class PreferencesWindow(base_class, ui_class):
     def _sync_defaults(self):
         settings = SIPSimpleSettings()
         account_manager = AccountManager()
-        default_order = SIPSimpleSettings.rtp.audio_codec_order.default
-        default_list  = SIPSimpleSettings.rtp.audio_codec_list.default
 
-        if settings.rtp.audio_codec_order is not default_order:
+        if settings.rtp.audio_codec_order is not SIPSimpleSettings.rtp.audio_codec_order.default or settings.rtp.audio_codec_list is not SIPSimpleSettings.rtp.audio_codec_list.default:
             # user has a non-default codec order, we need to sync with the new settings
-            added_codecs = set(default_order).difference(settings.rtp.audio_codec_order)
-            removed_codecs = set(settings.rtp.audio_codec_order).difference(default_order)
+            added_codecs = set(SIPSimpleSettings.rtp.audio_codec_order.default).difference(settings.rtp.audio_codec_order)
+            removed_codecs = set(settings.rtp.audio_codec_order).difference(SIPSimpleSettings.rtp.audio_codec_order.default)
             if added_codecs:
                 settings.rtp.audio_codec_order = DefaultValue # reset codec order
+                settings.rtp.audio_codec_list  = DefaultValue # reset codec list
                 settings.save()
             elif removed_codecs:
                 codec_order = [codec for codec in settings.rtp.audio_codec_order if codec not in removed_codecs]
                 codec_list  = [codec for codec in settings.rtp.audio_codec_list if codec not in removed_codecs]
-                if codec_order == default_order:
+                if codec_order == SIPSimpleSettings.rtp.audio_codec_order.default:
                     codec_order = DefaultValue
-                if codec_list == default_list:
+                if codec_list == SIPSimpleSettings.rtp.audio_codec_list.default:
                     codec_list = DefaultValue
                 settings.rtp.audio_codec_order = codec_order
-                settings.rtp.audio_codec_order = codec_list
+                settings.rtp.audio_codec_list  = codec_list
                 settings.save()
 
         for account in (account for account in account_manager.iter_accounts() if account.rtp.audio_codec_order is not None):
             # user has a non-default codec order, we need to sync with the new settings
-            added_codecs = set(default_order).difference(account.rtp.audio_codec_order)
-            removed_codecs = set(account.rtp.audio_codec_order).difference(default_order)
+            added_codecs = set(SIPSimpleSettings.rtp.audio_codec_order.default).difference(account.rtp.audio_codec_order)
+            removed_codecs = set(account.rtp.audio_codec_order).difference(SIPSimpleSettings.rtp.audio_codec_order.default)
             if added_codecs:
                 account.rtp.audio_codec_order = DefaultValue # reset codec order
                 account.rtp.audio_codec_list  = DefaultValue # reset codec list
@@ -494,11 +545,48 @@ class PreferencesWindow(base_class, ui_class):
             elif removed_codecs:
                 codec_order = [codec for codec in account.rtp.audio_codec_order if codec not in removed_codecs]
                 codec_list  = [codec for codec in account.rtp.audio_codec_list if codec not in removed_codecs]
-                if codec_order == default_order and codec_list == default_list:
+                if codec_order == SIPSimpleSettings.rtp.audio_codec_order.default and codec_list == SIPSimpleSettings.rtp.audio_codec_list.default:
                     codec_order = DefaultValue
                     codec_list  = DefaultValue
                 account.rtp.audio_codec_order = codec_order
-                account.rtp.audio_codec_order = codec_list
+                account.rtp.audio_codec_list  = codec_list
+                account.save()
+
+        if settings.rtp.video_codec_order is not SIPSimpleSettings.rtp.video_codec_order.default or settings.rtp.video_codec_list is not SIPSimpleSettings.rtp.video_codec_list.default:
+            # user has a non-default codec order, we need to sync with the new settings
+            added_codecs = set(SIPSimpleSettings.rtp.video_codec_order.default).difference(settings.rtp.video_codec_order)
+            removed_codecs = set(settings.rtp.video_codec_order).difference(SIPSimpleSettings.rtp.video_codec_order.default)
+            if added_codecs:
+                settings.rtp.video_codec_order = DefaultValue # reset codec order
+                settings.rtp.video_codec_list  = DefaultValue # reset codec list
+                settings.save()
+            elif removed_codecs:
+                codec_order = [codec for codec in settings.rtp.video_codec_order if codec not in removed_codecs]
+                codec_list  = [codec for codec in settings.rtp.video_codec_list if codec not in removed_codecs]
+                if codec_order == SIPSimpleSettings.rtp.video_codec_order.default:
+                    codec_order = DefaultValue
+                if codec_list == SIPSimpleSettings.rtp.video_codec_list.default:
+                    codec_list = DefaultValue
+                settings.rtp.video_codec_order = codec_order
+                settings.rtp.video_codec_list  = codec_list
+                settings.save()
+
+        for account in (account for account in account_manager.iter_accounts() if account.rtp.video_codec_order is not None):
+            # user has a non-default codec order, we need to sync with the new settings
+            added_codecs = set(SIPSimpleSettings.rtp.video_codec_order.default).difference(account.rtp.video_codec_order)
+            removed_codecs = set(account.rtp.video_codec_order).difference(SIPSimpleSettings.rtp.video_codec_order.default)
+            if added_codecs:
+                account.rtp.video_codec_order = DefaultValue # reset codec order
+                account.rtp.video_codec_list  = DefaultValue # reset codec list
+                account.save()
+            elif removed_codecs:
+                codec_order = [codec for codec in account.rtp.video_codec_order if codec not in removed_codecs]
+                codec_list  = [codec for codec in account.rtp.video_codec_list if codec not in removed_codecs]
+                if codec_order == SIPSimpleSettings.rtp.video_codec_order.default and codec_list == SIPSimpleSettings.rtp.video_codec_list.default:
+                    codec_order = DefaultValue
+                    codec_list  = DefaultValue
+                account.rtp.video_codec_order = codec_order
+                account.rtp.video_codec_list  = codec_list
                 account.save()
 
     def load_audio_devices(self):
@@ -533,6 +621,20 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_alert_device_button.addItem(u'None', None)
         self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
 
+    def load_video_devices(self):
+        settings = SIPSimpleSettings()
+
+        class Separator: pass
+
+        self.video_camera_button.clear()
+        self.video_camera_button.addItem(u'System Default', 'system_default')
+        self.video_camera_button.insertSeparator(1)
+        self.video_camera_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
+        for device in SIPApplication.engine.video_devices:
+            self.video_camera_button.addItem(device, device)
+        self.video_camera_button.addItem(u'None', None)
+        self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
+
     def load_settings(self):
         """Load settings from configuration into the UI controls"""
         settings = SIPSimpleSettings()
@@ -562,6 +664,22 @@ class PreferencesWindow(base_class, ui_class):
         with blocked_qt_signals(self.max_recording):
             self.max_recording.setValue(settings.answering_machine.max_recording)
         # TODO: load unavailable message -Dan
+
+        # Video devices
+        self.load_video_devices()
+
+        self.video_resolution_button.setCurrentIndex(self.video_resolution_button.findData(unicode(settings.video.resolution)))
+        self.video_framerate_button.setCurrentIndex(self.video_framerate_button.findData(settings.video.framerate))
+
+        # Video codecs
+        with blocked_qt_signals(self.video_codecs_list):
+            self.video_codecs_list.clear()
+            for codec in settings.rtp.video_codec_order:
+                item = QListWidgetItem(codec, self.video_codecs_list)
+                item.setCheckState(Qt.Checked if codec in settings.rtp.video_codec_list else Qt.Unchecked)
+
+        self.h264_profile_button.setCurrentIndex(self.h264_profile_button.findData(unicode(settings.video.h264.profile)))
+        self.video_codec_bitrate_button.setCurrentIndex(self.video_codec_bitrate_button.findData(settings.video.max_bitrate))
 
         # Chat and SMS settings
         style_index = self.style_button.findText(blink_settings.chat_window.style)
@@ -671,9 +789,17 @@ class PreferencesWindow(base_class, ui_class):
             for codec in audio_codec_order:
                 item = QListWidgetItem(codec, self.account_audio_codecs_list)
                 item.setCheckState(Qt.Checked if codec in audio_codec_list else Qt.Unchecked)
+
+        with blocked_qt_signals(self.account_video_codecs_list):
+            self.account_video_codecs_list.clear()
+            video_codec_order = account.rtp.video_codec_order or settings.rtp.video_codec_order
+            video_codec_list = account.rtp.video_codec_list or settings.rtp.video_codec_list
+            for codec in video_codec_order:
+                item = QListWidgetItem(codec, self.account_video_codecs_list)
+                item.setCheckState(Qt.Checked if codec in video_codec_list else Qt.Unchecked)
+
         self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_order is not None)
-        self.reset_account_video_codecs_button.setEnabled(False)
-        self.account_video_codecs_list.setEnabled(False)
+        self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_order is not None)
 
         self.inband_dtmf_button.setChecked(account.rtp.inband_dtmf)
         self.srtp_encryption_button.setCurrentIndex(self.srtp_encryption_button.findText(account.rtp.srtp_encryption))
@@ -955,8 +1081,8 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_AccountAudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
         items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-        account.rtp.audio_codec_order = [item.text() for item in items]
         account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.audio_codec_order = [item.text() for item in items]
         account.save()
 
     def _SH_ResetAudioCodecsButtonClicked(self, checked):
@@ -973,6 +1099,36 @@ class PreferencesWindow(base_class, ui_class):
 
         account.rtp.audio_codec_list  = DefaultValue
         account.rtp.audio_codec_order = DefaultValue
+        account.save()
+
+    def _SH_AccountVideoCodecsListItemChanged(self, item):
+        account = self.selected_account
+        items = [self.account_video_codecs_list.item(row) for row in xrange(self.account_video_codecs_list.count())]
+        account.rtp.video_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.video_codec_order = [item.text() for item in items]
+        account.save()
+
+    def _SH_AccountVideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
+        account = self.selected_account
+        items = [self.account_video_codecs_list.item(row) for row in xrange(self.account_video_codecs_list.count())]
+        account.rtp.video_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.video_codec_order = [item.text() for item in items]
+        account.save()
+
+    def _SH_ResetVideoCodecsButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        account = self.selected_account
+
+        with blocked_qt_signals(self.account_video_codecs_list):
+            self.account_video_codecs_list.clear()
+            video_codec_order = settings.rtp.video_codec_order
+            video_codec_list = settings.rtp.video_codec_list
+            for codec in video_codec_order:
+                item = QListWidgetItem(codec, self.account_video_codecs_list)
+                item.setCheckState(Qt.Checked if codec in video_codec_list else Qt.Unchecked)
+
+        account.rtp.video_codec_list  = DefaultValue
+        account.rtp.video_codec_order = DefaultValue
         account.save()
 
     def _SH_InbandDTMFButtonClicked(self, checked):
@@ -1223,6 +1379,52 @@ class PreferencesWindow(base_class, ui_class):
         if settings.answering_machine.max_recording != value:
             settings.answering_machine.max_recording = value
             settings.save()
+
+    # Video devices signal handlers
+    def _SH_VideoCameraButtonActivated(self, index):
+        device = self.video_camera_button.itemData(index)
+        settings = SIPSimpleSettings()
+        settings.video.device = device
+        settings.save()
+
+    def _SH_VideoResolutionButtonActivated(self, index):
+        resolution = self.video_resolution_button.itemData(index)
+        settings = SIPSimpleSettings()
+        settings.video.resolution = resolution
+        settings.video.h264.level = self.h264_level_map[resolution]
+        settings.save()
+
+    def _SH_VideoFramerateButtonActivated(self, index):
+        framerate = self.video_framerate_button.itemData(index)
+        settings = SIPSimpleSettings()
+        settings.video.framerate = framerate
+        settings.save()
+
+    # Video codecs signal handlers
+    def _SH_VideoCodecsListItemChanged(self, item):
+        settings = SIPSimpleSettings()
+        item_iterator = (self.video_codecs_list.item(row) for row in xrange(self.video_codecs_list.count()))
+        settings.rtp.video_codec_list = [item.text() for item in item_iterator if item.checkState()==Qt.Checked]
+        settings.save()
+
+    def _SH_VideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
+        settings = SIPSimpleSettings()
+        items = [self.video_codecs_list.item(row) for row in xrange(self.video_codecs_list.count())]
+        settings.rtp.video_codec_order = [item.text() for item in items]
+        settings.rtp.video_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        settings.save()
+
+    def _SH_VideoCodecBitrateButtonActivated(self, index):
+        bitrate = self.video_codec_bitrate_button.itemData(index)
+        settings = SIPSimpleSettings()
+        settings.video.max_bitrate = bitrate
+        settings.save()
+
+    def _SH_H264ProfileButtonActivated(self, index):
+        profile = self.h264_profile_button.itemData(index)
+        settings = SIPSimpleSettings()
+        settings.video.h264.profile = profile
+        settings.save()
 
     # Chat and SMS signal handlers
     def _SH_StyleViewSizeChanged(self):
@@ -1490,10 +1692,19 @@ class PreferencesWindow(base_class, ui_class):
         self._sync_defaults()
         self.load_settings()
         notification.center.add_observer(self, name='AudioDevicesDidChange')
+        notification.center.add_observer(self, name='VideoDevicesDidChange')
+        notification.center.add_observer(self, name='VideoDeviceDidChangeCamera')
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
 
     def _NH_AudioDevicesDidChange(self, notification):
         self.load_audio_devices()
+
+    def _NH_VideoDevicesDidChange(self, notification):
+        self.load_video_devices()
+
+    def _NH_VideoDeviceDidChangeCamera(self, notification):
+        if self.camera_preview.isVisible():
+            self.camera_preview.producer = SIPApplication.video_device.producer
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
@@ -1517,6 +1728,8 @@ class PreferencesWindow(base_class, ui_class):
                 self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
             if 'sounds.play_message_alerts' in notification.data.modified:
                 self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
+            if 'video.device' in notification.data.modified:
+                self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
         elif notification.sender is self.selected_account is not None:
             account = notification.sender
             if 'enabled' in notification.data.modified:
@@ -1526,6 +1739,8 @@ class PreferencesWindow(base_class, ui_class):
                 self.display_name_editor.setText(account.display_name or u'')
             if 'rtp.audio_codec_list' in notification.data.modified:
                 self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_list is not None)
+            if 'rtp.video_codec_list' in notification.data.modified:
+                self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_list is not None)
 
 del ui_class, base_class
 

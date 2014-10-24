@@ -1100,10 +1100,10 @@ QToolButton:pressed {
                   <property name="verticalSpacing">
                    <number>2</number>
                   </property>
-                  <item row="0" column="0">
-                   <widget class="QLabel" name="status_title_label">
+                  <item row="9" column="0">
+                   <widget class="QLabel" name="screen_title_label">
                     <property name="text">
-                     <string>Status</string>
+                     <string>Screen</string>
                     </property>
                     <property name="role" stdset="0">
                      <string notr="true">title</string>
@@ -1126,6 +1126,16 @@ QToolButton:pressed {
                     </property>
                    </spacer>
                   </item>
+                  <item row="0" column="0">
+                   <widget class="QLabel" name="status_title_label">
+                    <property name="text">
+                     <string>Status</string>
+                    </property>
+                    <property name="role" stdset="0">
+                     <string notr="true">title</string>
+                    </property>
+                   </widget>
+                  </item>
                   <item row="1" column="1">
                    <widget class="DurationLabel" name="duration_value_label">
                     <property name="sizePolicy">
@@ -1145,7 +1155,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="11" column="0" colspan="2">
+                  <item row="13" column="0" colspan="2">
                    <spacer name="info_panel_spacer">
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
@@ -1239,17 +1249,7 @@ QToolButton:pressed {
                     </layout>
                    </widget>
                   </item>
-                  <item row="7" column="0">
-                   <widget class="QLabel" name="screen_title_label">
-                    <property name="text">
-                     <string>Screen</string>
-                    </property>
-                    <property name="role" stdset="0">
-                     <string notr="true">title</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="7" column="1">
+                  <item row="9" column="1">
                    <widget class="QWidget" name="screen_value_widget" native="true">
                     <property name="role" stdset="0">
                      <string notr="true">value</string>
@@ -1347,7 +1347,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="9" column="0" colspan="2">
+                  <item row="11" column="0" colspan="2">
                    <widget class="QWidget" name="packet_loss_widget" native="true">
                     <layout class="QVBoxLayout" name="packet_loss_layout">
                      <property name="spacing">
@@ -1420,7 +1420,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="10" column="0" colspan="2">
+                  <item row="12" column="0" colspan="2">
                    <widget class="QWidget" name="traffic_widget" native="true">
                     <layout class="QVBoxLayout" name="speed_layout">
                      <property name="spacing">
@@ -1636,7 +1636,7 @@ QToolButton:pressed {
                     </property>
                    </widget>
                   </item>
-                  <item row="8" column="0" colspan="2">
+                  <item row="10" column="0" colspan="2">
                    <widget class="QWidget" name="latency_widget" native="true">
                     <layout class="QVBoxLayout" name="latency_layout">
                      <property name="spacing">
@@ -1814,6 +1814,94 @@ QToolButton:pressed {
                     <property name="role" stdset="0">
                      <string notr="true">value</string>
                     </property>
+                   </widget>
+                  </item>
+                  <item row="7" column="0">
+                   <widget class="QLabel" name="video_title_label">
+                    <property name="text">
+                     <string>Video</string>
+                    </property>
+                    <property name="role" stdset="0">
+                     <string notr="true">title</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="7" column="1">
+                   <widget class="QWidget" name="video_value_widget" native="true">
+                    <property name="role" stdset="0">
+                     <string notr="true">value</string>
+                    </property>
+                    <layout class="QHBoxLayout" name="video_value_layout">
+                     <property name="spacing">
+                      <number>2</number>
+                     </property>
+                     <property name="leftMargin">
+                      <number>0</number>
+                     </property>
+                     <property name="topMargin">
+                      <number>0</number>
+                     </property>
+                     <property name="rightMargin">
+                      <number>4</number>
+                     </property>
+                     <property name="bottomMargin">
+                      <number>0</number>
+                     </property>
+                     <item>
+                      <widget class="ElidedLabel" name="video_value_label">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="text">
+                        <string>H264 25fps</string>
+                       </property>
+                       <property name="indent">
+                        <number>0</number>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="video_connection_label">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="text">
+                        <string/>
+                       </property>
+                       <property name="pixmap">
+                        <pixmap>icons/connection-direct.svg</pixmap>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLabel" name="video_encryption_label">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="text">
+                        <string/>
+                       </property>
+                       <property name="pixmap">
+                        <pixmap>icons/lock-grey-12.svg</pixmap>
+                       </property>
+                       <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
                    </widget>
                   </item>
                  </layout>
@@ -2044,7 +2132,7 @@ QToolButton:hover {
           <number>0</number>
          </property>
          <item>
-          <widget class="ChatWebView" name="chat_view">
+          <widget class="ChatWebView" name="chat_view" native="true">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -2060,7 +2148,7 @@ QToolButton:hover {
            <property name="focusPolicy">
             <enum>Qt::NoFocus</enum>
            </property>
-           <property name="url">
+           <property name="url" stdset="0">
             <url>
              <string>about:blank</string>
             </url>

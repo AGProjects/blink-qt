@@ -139,6 +139,7 @@ class MainWindow(base_class, ui_class):
         self.add_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
+        self.video_call_button.clicked.connect(self._SH_VideoCallButtonClicked)
         self.chat_session_button.clicked.connect(self._SH_ChatSessionButtonClicked)
         self.back_to_contacts_button.clicked.connect(self.search_box.clear) # this can be set in designer -Dan
         self.conference_button.makeConference.connect(self._SH_MakeConference)
@@ -192,6 +193,7 @@ class MainWindow(base_class, ui_class):
         self.output_devices_group.triggered.connect(self._AH_AudioOutputDeviceChanged)
         self.input_devices_group.triggered.connect(self._AH_AudioInputDeviceChanged)
         self.alert_devices_group.triggered.connect(self._AH_AudioAlertDeviceChanged)
+        self.video_devices_group.triggered.connect(self._AH_VideoDeviceChanged)
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
 
@@ -216,6 +218,7 @@ class MainWindow(base_class, ui_class):
         self.output_devices_group = QActionGroup(self)
         self.input_devices_group = QActionGroup(self)
         self.alert_devices_group = QActionGroup(self)
+        self.video_devices_group = QActionGroup(self)
 
         self.request_screen_action = QAction('Request screen', self, triggered=self._AH_RequestScreenActionTriggered)
         self.share_my_screen_action = QAction('Share my screen', self, triggered=self._AH_ShareMyScreenActionTriggered)
@@ -256,6 +259,7 @@ class MainWindow(base_class, ui_class):
 
     def enable_call_buttons(self, enabled):
         self.audio_call_button.setEnabled(enabled)
+        self.video_call_button.setEnabled(enabled)
         self.chat_session_button.setEnabled(enabled)
         self.screen_sharing_button.setEnabled(enabled)
 
@@ -310,6 +314,25 @@ class MainWindow(base_class, ui_class):
             if settings.audio.alert_device == action.data():
                 action.setChecked(True)
 
+    def load_video_devices(self):
+        settings = SIPSimpleSettings()
+
+        action = QAction(u'System default', self.video_devices_group)
+        action.setData(u'system_default')
+        self.video_camera_menu.addAction(action)
+        self.video_camera_menu.addSeparator()
+        for device in SIPApplication.engine.video_devices:
+            action = QAction(device, self.video_devices_group)
+            action.setData(device)
+            self.video_camera_menu.addAction(action)
+        action = QAction(u'None', self.video_devices_group)
+        action.setData(None)
+        self.video_camera_menu.addAction(action)
+        for action in self.video_devices_group.actions():
+            action.setCheckable(True)
+            if settings.video.device == action.data():
+                action.setChecked(True)
+
     def _AH_AccountActionTriggered(self, action, enabled):
         account = action.data()
         account.enabled = enabled
@@ -328,6 +351,11 @@ class MainWindow(base_class, ui_class):
     def _AH_AudioOutputDeviceChanged(self, action):
         settings = SIPSimpleSettings()
         settings.audio.output_device = action.data()
+        settings.save()
+
+    def _AH_VideoDeviceChanged(self, action):
+        settings = SIPSimpleSettings()
+        settings.video.device = action.data()
         settings.save()
 
     def _AH_AutoAcceptChatActionTriggered(self, checked):
@@ -494,6 +522,20 @@ class MainWindow(base_class, ui_class):
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
             session_manager = SessionManager()
             session_manager.create_session(contact, contact_uri, [StreamDescription('audio')])
+
+    def _SH_VideoCallButtonClicked(self):
+        list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
+        if list_view.detail_view.isVisible():
+            list_view.detail_view._AH_StartVideoCall()
+        else:
+            selected_indexes = list_view.selectionModel().selectedIndexes()
+            if selected_indexes:
+                contact = selected_indexes[0].data(Qt.UserRole)
+                contact_uri = contact.uri
+            else:
+                contact, contact_uri = URIUtils.find_contact(self.search_box.text())
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact_uri, [StreamDescription('audio'), StreamDescription('video')])
 
     def _SH_ChatSessionButtonClicked(self):
         list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
@@ -720,6 +762,7 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
+        self.load_video_devices()
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='AudioDevicesDidChange')
         blink_settings = BlinkSettings()
@@ -768,6 +811,9 @@ class MainWindow(base_class, ui_class):
                 action.setChecked(True)
             if 'audio.alert_device' in notification.data.modified:
                 action = (action for action in self.alert_devices_group.actions() if action.data() == settings.audio.alert_device).next()
+                action.setChecked(True)
+            if 'video.device' in notification.data.modified:
+                action = (action for action in self.video_devices_group.actions() if action.data() == settings.video.device).next()
                 action.setChecked(True)
             if 'answering_machine.enabled' in notification.data.modified:
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)
