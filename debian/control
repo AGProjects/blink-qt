@@ -9,7 +9,7 @@ Homepage: http://icanblink.com
 
 Package: blink
 Architecture: any
-Depends: ${python:Depends}, ${shlibs:Depends}, ${misc:Depends}, libavahi-compat-libdnssd1, python-application (>= 1.4.0), python-cjson, python-eventlib, python-lxml, python-qt4 (>= 4.7), python-sipsimple (>= 1.4.1), python-twisted-core, python-zope.interface, x11vnc
+Depends: ${python:Depends}, ${shlibs:Depends}, ${misc:Depends}, libavahi-compat-libdnssd1, python-application (>= 1.4.0), python-cjson, python-eventlib, python-lxml, python-qt4 (>= 4.7), python-sipsimple (>= 2.0.0), python-twisted-core, python-zope.interface, x11vnc
 Description: A state of the art, easy to use SIP client
  Blink is a fully featured SIP client written in Python and built on top of
  SIP SIMPLE client SDK. Blink provides real time applications based on SIP
