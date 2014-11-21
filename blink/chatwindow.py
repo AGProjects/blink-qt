@@ -1018,7 +1018,6 @@ class VideoWidget(VideoSurface, ui_class):
             self.mute_button.setChecked(settings.audio.muted)
 
     def _SH_CameraPreviewAdjusted(self, old_geometry, new_geometry):
-        print old_geometry, new_geometry
         if new_geometry.size() != old_geometry.size():
             default_height_for_size = (self.height() + 117) / 6
             self.camera_preview.scale_factor = new_geometry.height() / default_height_for_size
