@@ -1,3 +1,15 @@
+blink (1.0.0) unstable; urgency=medium
+
+  * Added video support
+  * Adapt to changes in streams API
+  * Get the stream failure reason from MediaStreamDidEnd
+  * Changed the order for the audio device menu entries
+  * Use timezone aware timestamps for call history
+  * Fixed regular expression for parameters in http URLs
+  * Fixed threading race condition when logging MSRP traces
+
+ -- Saul Ibarra <saul@ag-projects.com>  Fri, 21 Nov 2014 12:39:12 +0100
+
 blink (0.9.1) unstable; urgency=medium
 
   * Automatically transform URLs in the chat window into clickable links
