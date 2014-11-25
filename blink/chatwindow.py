@@ -484,6 +484,8 @@ class IconDescriptor(object):
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
 class ChatWidget(base_class, ui_class):
+    implements(IObserver)
+
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
 
     chat_template = open(Resources.get('chat/template.html')).read()
@@ -502,6 +504,9 @@ class ChatWidget(base_class, ui_class):
         self.composing_timer = QTimer()
         self.last_message = None
         self.session = session
+        if session is not None:
+            notification_center = NotificationCenter()
+            notification_center.add_observer(ObserverWeakrefProxy(self), sender=session.blink_session)
         # connect to signals
         self.chat_input.textChanged.connect(self._SH_ChatInputTextChanged)
         self.chat_input.textEntered.connect(self._SH_ChatInputTextEntered)
@@ -625,6 +630,21 @@ class ChatWidget(base_class, ui_class):
             chat_stream.send_composing_indication('idle')
         except Exception:
             pass
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self.composing_timer.stop()
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        self.setParent(None)
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        if notification.data.stream.type == 'chat':
+            self.composing_timer.stop()
 
 del ui_class, base_class
 
