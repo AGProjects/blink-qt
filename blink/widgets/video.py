@@ -123,7 +123,7 @@ class VideoSurface(QWidget):
                 else:
                     fast_scaler.scale(scale, scale)
                 rect = event.rect()
-                painter.drawPixmap(rect, QPixmap.fromImage(image).transformed(fast_scaler).scaledToHeight(self.height(), Qt.SmoothTransformation), rect)
+                painter.drawPixmap(rect, QPixmap.fromImage(image.transformed(fast_scaler)).scaledToHeight(self.height(), Qt.SmoothTransformation), rect)
             else:
                 transform = QTransform()
                 scale = min(self.width()/image.width(), self.height()/image.height())
