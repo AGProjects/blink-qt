@@ -71,10 +71,6 @@ class ServerSettings(SettingsGroup):
 class SoundSettings(SettingsGroup):
     inbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/inbound_ringtone.wav')), nillable=True)
     outbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/outbound_ringtone.wav')), nillable=True)
-    message_received = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/message_received.wav')), nillable=True)
-    message_sent = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/message_sent.wav')), nillable=True)
-    file_received = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/file_received.wav')), nillable=True)
-    file_sent = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/file_sent.wav')), nillable=True)
     play_message_alerts = Setting(type=bool, default=True)
     play_file_alerts = Setting(type=bool, default=True)
 
