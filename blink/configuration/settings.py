@@ -72,7 +72,6 @@ class SoundSettings(SettingsGroup):
     inbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/inbound_ringtone.wav')), nillable=True)
     outbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/outbound_ringtone.wav')), nillable=True)
     play_message_alerts = Setting(type=bool, default=True)
-    play_file_alerts = Setting(type=bool, default=True)
 
 
 class TLSSettingsExtension(TLSSettings):

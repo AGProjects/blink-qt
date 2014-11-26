@@ -2531,7 +2531,7 @@
              </property>
             </widget>
            </item>
-           <item row="2" column="0" colspan="3">
+           <item row="1" column="0" colspan="3">
             <spacer name="file_transfer_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -2555,13 +2555,6 @@
             <widget class="QLineEdit" name="download_directory_editor">
              <property name="readOnly">
               <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1" colspan="2">
-            <widget class="QCheckBox" name="file_transfer_alert_button">
-             <property name="text">
-              <string>Play a sound when a file transfer finishes</string>
              </property>
             </widget>
            </item>

@@ -310,7 +310,6 @@ class PreferencesWindow(base_class, ui_class):
 
         # File transfer
         self.download_directory_browse_button.clicked.connect(self._SH_DownloadDirectoryBrowseButtonClicked)
-        self.file_transfer_alert_button.clicked.connect(self._SH_FileTransferAlertButtonClicked)
 
         # File logging
         self.trace_sip_button.clicked.connect(self._SH_TraceSIPButtonClicked)
@@ -723,7 +722,6 @@ class PreferencesWindow(base_class, ui_class):
 
         # File transfer settings
         self.download_directory_editor.setText(settings.file_transfer.directory or u'')
-        self.file_transfer_alert_button.setChecked(settings.sounds.play_file_alerts)
 
         # File logging settings
         self.trace_sip_button.setChecked(settings.logs.trace_sip)
@@ -1544,11 +1542,6 @@ class PreferencesWindow(base_class, ui_class):
                 self.download_directory_editor.setText(directory)
                 settings.file_transfer.directory = directory
                 settings.save()
-
-    def _SH_FileTransferAlertButtonClicked(self, checked):
-        settings = SIPSimpleSettings()
-        settings.sounds.play_file_alerts = checked
-        settings.save()
 
     # File logging signal handlers
     def _SH_TraceSIPButtonClicked(self, checked):
