@@ -327,8 +327,6 @@ class PreferencesWindow(base_class, ui_class):
         self.tls_port.valueChanged[int].connect(self._SH_TLSPortValueChanged)
         self.media_ports_start.valueChanged[int].connect(self._SH_MediaPortsStartValueChanged)
         self.media_ports.valueChanged[int].connect(self._SH_MediaPortsValueChanged)
-        self.session_timeout.valueChanged[int].connect(self._SH_SessionTimeoutValueChanged)
-        self.rtp_timeout.valueChanged[int].connect(self._SH_RTPTimeoutValueChanged)
 
         # TLS
         self.tls_ca_file_editor.locationCleared.connect(self._SH_TLSCAFileEditorLocationCleared)
@@ -456,7 +454,7 @@ class PreferencesWindow(base_class, ui_class):
 
         # advanced settings
         font_metrics = self.transports_label.fontMetrics() # we assume all labels have the same font
-        labels = (self.transports_label, self.media_ports_label, self.session_timeout_label, self.rtp_timeout_label, self.tls_ca_file_label)
+        labels = (self.transports_label, self.media_ports_label, self.tls_ca_file_label)
         text_width = max(font_metrics.width(label.text()) for label in labels)
         self.transports_label.setMinimumWidth(text_width)
         self.tls_ca_file_label.setMinimumWidth(text_width)
@@ -751,11 +749,6 @@ class PreferencesWindow(base_class, ui_class):
             self.media_ports_start.setValue(settings.rtp.port_range.start)
         with blocked_qt_signals(self.media_ports):
             self.media_ports.setValue(settings.rtp.port_range.end - settings.rtp.port_range.start)
-
-        with blocked_qt_signals(self.session_timeout):
-            self.session_timeout.setValue(settings.sip.invite_timeout)
-        with blocked_qt_signals(self.rtp_timeout):
-            self.rtp_timeout.setValue(settings.rtp.timeout)
 
         self.tls_ca_file_editor.setText(settings.tls.ca_list or u'')
 
@@ -1631,24 +1624,6 @@ class PreferencesWindow(base_class, ui_class):
         port_range = PortRange(self.media_ports_start.value(), self.media_ports_start.value() + value)
         if settings.rtp.port_range != port_range:
             settings.rtp.port_range = port_range
-            settings.save()
-
-    def _SH_SessionTimeoutValueChanged(self, value):
-        settings = SIPSimpleSettings()
-        if settings.sip.invite_timeout != value:
-            settings.sip.invite_timeout = value
-            settings.save()
-
-    def _SH_RTPTimeoutValueChanged(self, value):
-        if value == 0:
-            self.rtp_timeout_seconds_label.setText(u'')
-        elif value == 1:
-            self.rtp_timeout_seconds_label.setText(u'second')
-        else:
-            self.rtp_timeout_seconds_label.setText(u'seconds')
-        settings = SIPSimpleSettings()
-        if settings.rtp.timeout != value:
-            settings.rtp.timeout = value
             settings.save()
 
     # TLS signal handlers
