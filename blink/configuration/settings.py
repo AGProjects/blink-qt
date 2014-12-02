@@ -10,7 +10,7 @@ import sys
 
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObject, SettingsObjectExtension
 from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger, PositiveInteger, Path, SampleRate, VideoCodecList
-from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, FileTransferSettings, LogsSettings, RTPSettings, TLSSettings
+from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, LogsSettings, RTPSettings, TLSSettings
 
 from blink import __version__
 from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, GraphTimeScale, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
@@ -39,10 +39,6 @@ class ChatSettingsExtension(ChatSettings):
     auto_accept = Setting(type=bool, default=False)
     sms_replication = Setting(type=bool, default=True)
     history_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('history'))
-
-
-class FileTransferSettingsExtension(FileTransferSettings):
-    directory = Setting(type=Path, default=Path('~/Downloads'))
 
 
 class GoogleContactsSettings(SettingsGroup):
@@ -82,7 +78,6 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
     answering_machine = AnsweringMachineSettings
     audio = AudioSettingsExtension
     chat = ChatSettingsExtension
-    file_transfer = FileTransferSettingsExtension
     google_contacts = GoogleContactsSettings
     logs = LogsSettingsExtension
     rtp = RTPSettingsExtension
@@ -110,14 +105,9 @@ class ChatWindowSettings(SettingsGroup):
 
 
 class BlinkScreenSharingSettings(SettingsGroup):
-    screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
     scale = Setting(type=bool, default=True)
     open_fullscreen = Setting(type=bool, default=False)
     open_viewonly = Setting(type=bool, default=False)
-
-
-class BlinkVideoSettings(SettingsGroup):
-    screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
 
 
 class BlinkPresenceSettings(SettingsGroup):
@@ -133,5 +123,7 @@ class BlinkSettings(SettingsObject):
     chat_window = ChatWindowSettings
     presence = BlinkPresenceSettings
     screen_sharing = BlinkScreenSharingSettings
-    video = BlinkVideoSettings
+
+    screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
+    transfers_directory = Setting(type=Path, default=Path('~/Downloads'))
 

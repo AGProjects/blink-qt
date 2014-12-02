@@ -653,7 +653,7 @@ class ScreensharingWindow(base_class, ui_class):
 
     def _SH_ScreenshotsFolderActionTriggered(self, pos):
         settings = BlinkSettings()
-        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.screen_sharing.screenshots_directory.normalized))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.screenshots_directory.normalized))
 
     def _SH_VNCClientTextCut(self, text):
         self.clipboard.blockSignals(True)
@@ -675,7 +675,7 @@ class Screenshot(object):
     @classmethod
     def filename_generator(cls):
         settings = BlinkSettings()
-        name = os.path.join(settings.screen_sharing.screenshots_directory.normalized, 'ScreenSharing-{:%Y%m%d-%H.%M.%S}'.format(datetime.now()))
+        name = os.path.join(settings.screenshots_directory.normalized, 'ScreenSharing-{:%Y%m%d-%H.%M.%S}'.format(datetime.now()))
         yield '%s.png' % name
         for x in count(1):
             yield "%s-%d.png" % (name, x)

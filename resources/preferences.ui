@@ -31,7 +31,7 @@
     <item row="0" column="0">
      <widget class="QStackedWidget" name="pages">
       <property name="currentIndex">
-       <number>2</number>
+       <number>6</number>
       </property>
       <widget class="QWidget" name="accounts_page">
        <layout class="QGridLayout" name="accounts_layout">
@@ -2441,10 +2441,14 @@
            <string>Screen Sharing Settings</string>
           </property>
           <layout class="QGridLayout" name="screen_sharing_box_layout">
-           <property name="horizontalSpacing">
-            <number>3</number>
-           </property>
-           <item row="4" column="0" colspan="3">
+           <item row="1" column="0">
+            <widget class="QCheckBox" name="screen_sharing_fullscreen_button">
+             <property name="text">
+              <string>Open the viewer window in fullscreen mode</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
             <spacer name="screen_sharing_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -2457,104 +2461,17 @@
              </property>
             </spacer>
            </item>
-           <item row="2" column="1" colspan="2">
-            <widget class="QCheckBox" name="screen_sharing_fullscreen_button">
-             <property name="text">
-              <string>Open the viewer window in fullscreen mode</string>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="1" colspan="2">
-            <widget class="QCheckBox" name="screen_sharing_viewonly_button">
-             <property name="text">
-              <string>Open the viewer window in view only mode</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1" colspan="2">
+           <item row="0" column="0">
             <widget class="QCheckBox" name="screen_sharing_scale_button">
              <property name="text">
               <string>Scale the remote screen to fit the viewer window</string>
              </property>
             </widget>
            </item>
-           <item row="0" column="1">
-            <widget class="QLineEdit" name="screenshots_directory_editor">
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="0">
-            <widget class="QLabel" name="screenshots_directory_label">
+           <item row="2" column="0">
+            <widget class="QCheckBox" name="screen_sharing_viewonly_button">
              <property name="text">
-              <string>Screenshots Directory:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="2">
-            <widget class="QPushButton" name="screenshots_directory_browse_button">
-             <property name="text">
-              <string>Browse</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
-       </layout>
-      </widget>
-      <widget class="QWidget" name="file_transfers_page">
-       <layout class="QVBoxLayout" name="file_transfer_layout">
-        <property name="margin">
-         <number>0</number>
-        </property>
-        <item>
-         <widget class="QGroupBox" name="file_transfer_group_box">
-          <property name="title">
-           <string>File Transfer Settings</string>
-          </property>
-          <layout class="QGridLayout" name="file_transfer_box_layout">
-           <property name="horizontalSpacing">
-            <number>3</number>
-           </property>
-           <item row="0" column="0">
-            <widget class="QLabel" name="download_directory_label">
-             <property name="text">
-              <string>Download Directory:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0" colspan="3">
-            <spacer name="file_transfer_spacer">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>40</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item row="0" column="2">
-            <widget class="QPushButton" name="download_directory_browse_button">
-             <property name="text">
-              <string>Browse</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="QLineEdit" name="download_directory_editor">
-             <property name="readOnly">
-              <bool>true</bool>
+              <string>Open the viewer window in view only mode</string>
              </property>
             </widget>
            </item>
@@ -2722,71 +2639,36 @@
          <number>0</number>
         </property>
         <item>
-         <widget class="QGroupBox" name="sip_group_box">
-          <property name="title">
-           <string>SIP and RTP settings</string>
-          </property>
-          <layout class="QGridLayout" name="sip_group_box_layout">
-           <item row="0" column="0">
-            <widget class="QLabel" name="transports_label">
-             <property name="minimumSize">
-              <size>
-               <width>130</width>
-               <height>0</height>
-              </size>
-             </property>
+         <widget class="QGroupBox" name="advanced_group_box">
+          <layout class="QGridLayout" name="advanced_group_box_layout">
+           <property name="margin">
+            <number>10</number>
+           </property>
+           <item row="9" column="6">
+            <widget class="QPushButton" name="transfers_directory_browse_button">
              <property name="text">
-              <string>Transports:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              <string>Browse</string>
              </property>
             </widget>
            </item>
-           <item row="0" column="1">
-            <widget class="QCheckBox" name="enable_udp_button">
-             <property name="text">
-              <string>Enable UDP</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="2">
-            <spacer name="transport_spacer">
+           <item row="13" column="0" colspan="7">
+            <widget class="Line" name="line_14">
              <property name="orientation">
               <enum>Qt::Horizontal</enum>
              </property>
-             <property name="sizeType">
-              <enum>QSizePolicy::Fixed</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
+            </widget>
            </item>
-           <item row="0" column="3">
-            <widget class="QLabel" name="udp_port_label">
+           <item row="9" column="0">
+            <widget class="QLabel" name="transfers_directory_label">
              <property name="text">
-              <string>UDP port:</string>
+              <string>Save received files to:</string>
              </property>
              <property name="alignment">
               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
              </property>
             </widget>
            </item>
-           <item row="0" column="4">
-            <widget class="SIPPortEditor" name="udp_port">
-             <property name="specialValueText">
-              <string>Auto</string>
-             </property>
-             <property name="maximum">
-              <number>65535</number>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="5" rowspan="2">
+           <item row="2" column="5" rowspan="2">
             <widget class="QLabel" name="port_note_label">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
@@ -2808,14 +2690,23 @@
              </property>
             </widget>
            </item>
-           <item row="1" column="1">
-            <widget class="QCheckBox" name="enable_tcp_button">
-             <property name="text">
-              <string>Enable TCP</string>
+           <item row="2" column="2">
+            <spacer name="transport_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
              </property>
-            </widget>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
            </item>
-           <item row="1" column="3">
+           <item row="3" column="3">
             <widget class="QLabel" name="tcp_port_label">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
@@ -2831,24 +2722,7 @@
              </property>
             </widget>
            </item>
-           <item row="1" column="4">
-            <widget class="SIPPortEditor" name="tcp_port">
-             <property name="specialValueText">
-              <string>Auto</string>
-             </property>
-             <property name="maximum">
-              <number>65535</number>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QCheckBox" name="enable_tls_button">
-             <property name="text">
-              <string>Enable TLS</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="3">
+           <item row="4" column="3">
             <widget class="QLabel" name="tls_port_label">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
@@ -2864,7 +2738,139 @@
              </property>
             </widget>
            </item>
-           <item row="2" column="4">
+           <item row="2" column="1">
+            <widget class="QCheckBox" name="enable_udp_button">
+             <property name="text">
+              <string>Enable UDP</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="4">
+            <widget class="QSpinBox" name="media_ports_start">
+             <property name="minimum">
+              <number>10000</number>
+             </property>
+             <property name="maximum">
+              <number>65000</number>
+             </property>
+             <property name="singleStep">
+              <number>1000</number>
+             </property>
+             <property name="value">
+              <number>50000</number>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="3">
+            <widget class="QLabel" name="udp_port_label">
+             <property name="text">
+              <string>UDP port:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="2" colspan="2">
+            <widget class="QLabel" name="starting_at_label">
+             <property name="text">
+              <string>starting at:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="14" column="1" colspan="5">
+            <widget class="LocationBar" name="tls_ca_file_editor">
+             <property name="toolTip">
+              <string>The cerfiticate authority used to validate TLS connections</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="15" column="0" colspan="7">
+            <spacer name="advanced_spacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>30</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="0" column="0" colspan="7">
+            <widget class="QLabel" name="sip_and_rtp_label">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>SIP and RTP</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="0" colspan="7">
+            <spacer name="files_spacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>815</width>
+               <height>25</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="4" column="1">
+            <widget class="QCheckBox" name="enable_tls_button">
+             <property name="text">
+              <string>Enable TLS</string>
+             </property>
+            </widget>
+           </item>
+           <item row="14" column="6">
+            <widget class="QPushButton" name="tls_ca_file_browse_button">
+             <property name="text">
+              <string>Browse</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="0">
+            <widget class="QLabel" name="screenshots_directory_label">
+             <property name="text">
+              <string>Save screenshots to:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1" colspan="5">
+            <widget class="QLineEdit" name="transfers_directory_editor">
+             <property name="toolTip">
+              <string>Where to save received files</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="4">
             <widget class="SIPPortEditor" name="tls_port">
              <property name="specialValueText">
               <string>Auto</string>
@@ -2874,7 +2880,41 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="0">
+           <item row="1" column="0" colspan="7">
+            <widget class="Line" name="line_12">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="4">
+            <widget class="SIPPortEditor" name="tcp_port">
+             <property name="specialValueText">
+              <string>Auto</string>
+             </property>
+             <property name="maximum">
+              <number>65535</number>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QCheckBox" name="enable_tcp_button">
+             <property name="text">
+              <string>Enable TCP</string>
+             </property>
+            </widget>
+           </item>
+           <item row="14" column="0">
+            <widget class="QLabel" name="tls_ca_file_label">
+             <property name="text">
+              <string>Certificate Authority:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
             <widget class="QLabel" name="media_ports_label">
              <property name="toolTip">
               <string>How many media ports to use and starting from what address</string>
@@ -2887,7 +2927,66 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="1">
+           <item row="6" column="0" colspan="7">
+            <spacer name="sip_spacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>815</width>
+               <height>25</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="12" column="0" colspan="7">
+            <widget class="QLabel" name="tls_settings_label">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>TLS settings</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="0" colspan="7">
+            <widget class="Line" name="line_13">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="0" colspan="7">
+            <widget class="QLabel" name="files_and_directories_label">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Files and directories</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="transports_label">
+             <property name="text">
+              <string>Transports:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
             <widget class="QSpinBox" name="media_ports">
              <property name="correctionMode">
               <enum>QAbstractSpinBox::CorrectToNearestValue</enum>
@@ -2906,93 +3005,32 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="2" colspan="2">
-            <widget class="QLabel" name="starting_at_label">
-             <property name="text">
-              <string>starting at:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="3" column="4">
-            <widget class="QSpinBox" name="media_ports_start">
-             <property name="minimum">
-              <number>10000</number>
+           <item row="2" column="4">
+            <widget class="SIPPortEditor" name="udp_port">
+             <property name="specialValueText">
+              <string>Auto</string>
              </property>
              <property name="maximum">
-              <number>65000</number>
-             </property>
-             <property name="singleStep">
-              <number>1000</number>
-             </property>
-             <property name="value">
-              <number>50000</number>
+              <number>65535</number>
              </property>
             </widget>
            </item>
-           <item row="4" column="0" colspan="6">
-            <spacer name="sip_spacer_2">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeType">
-              <enum>QSizePolicy::Fixed</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </widget>
-        </item>
-        <item>
-         <widget class="QGroupBox" name="tls_group_box">
-          <property name="title">
-           <string>TLS Settings</string>
-          </property>
-          <layout class="QGridLayout" name="tls_group_box_layout">
-           <item row="0" column="1">
-            <widget class="LocationBar" name="tls_ca_file_editor">
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="0">
-            <widget class="QLabel" name="tls_ca_file_label">
-             <property name="text">
-              <string>Certificate Authority File:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="2">
-            <widget class="QPushButton" name="tls_ca_file_browse_button">
+           <item row="10" column="6">
+            <widget class="QPushButton" name="screenshots_directory_browse_button">
              <property name="text">
               <string>Browse</string>
              </property>
             </widget>
            </item>
-           <item row="1" column="0" colspan="3">
-            <spacer name="tls_vertical_spacer">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
+           <item row="10" column="1" colspan="5">
+            <widget class="QLineEdit" name="screenshots_directory_editor">
+             <property name="toolTip">
+              <string>Where to save screenshots taken from video or screen sharing sessions</string>
              </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>40</height>
-              </size>
+             <property name="readOnly">
+              <bool>true</bool>
              </property>
-            </spacer>
+            </widget>
            </item>
           </layout>
          </widget>
@@ -3037,7 +3075,6 @@
    <addaction name="video_action"/>
    <addaction name="chat_action"/>
    <addaction name="screen_sharing_action"/>
-   <addaction name="file_transfer_action"/>
    <addaction name="logging_action"/>
    <addaction name="advanced_action"/>
   </widget>
@@ -3099,18 +3136,6 @@
    </property>
    <property name="text">
     <string>Screen Sharing</string>
-   </property>
-  </action>
-  <action name="file_transfer_action">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="icon">
-    <iconset>
-     <normaloff>icons/file-transfer.png</normaloff>icons/file-transfer.png</iconset>
-   </property>
-   <property name="text">
-    <string>File Transfer</string>
    </property>
   </action>
   <action name="logging_action">

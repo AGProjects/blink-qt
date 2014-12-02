@@ -14,8 +14,7 @@ from application.python import Null
 from application.system import makedirs
 from zope.interface import implements
 
-from sipsimple.configuration.settings import SIPSimpleSettings
-
+from blink.configuration.settings import BlinkSettings
 from blink.resources import Resources
 from blink.sessions import FileTransferDelegate, FileTransferModel
 from blink.widgets.util import ContextMenuActions
@@ -43,7 +42,7 @@ class FileTransferWindow(base_class, ui_class):
         self.actions.cancel_transfer = QAction("Cancel", self, triggered=self._AH_CancelTransfer)
         self.actions.retry_transfer = QAction("Retry", self, triggered=self._AH_RetryTransfer)
         self.actions.remove_entry = QAction("Remove From List", self, triggered=self._AH_RemoveEntry)
-        self.actions.open_downloads_folder = QAction("Open Downloads Folder", self, triggered=self._AH_OpenDownloadsFolder)
+        self.actions.open_downloads_folder = QAction("Open Transfers Folder", self, triggered=self._AH_OpenTransfersFolder)
         self.actions.clear_list = QAction("Clear List", self, triggered=self._AH_ClearList)
 
         self.model.itemAdded.connect(self.update_status)
@@ -55,9 +54,8 @@ class FileTransferWindow(base_class, ui_class):
         notification_center.add_observer(self, name='FileTransferDidEnd')
 
     def show(self, activate=True):
-        settings = SIPSimpleSettings()
-        directory = settings.file_transfer.directory.normalized
-        makedirs(directory)
+        settings = BlinkSettings()
+        makedirs(settings.transfers_directory.normalized)
         self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
         super(FileTransferWindow, self).show()
         self.raise_()
@@ -130,10 +128,9 @@ class FileTransferWindow(base_class, ui_class):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
         self.model.removeItem(item)
 
-    def _AH_OpenDownloadsFolder(self):
-        settings = SIPSimpleSettings()
-        directory = settings.file_transfer.directory.normalized
-        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
+    def _AH_OpenTransfersFolder(self):
+        settings = BlinkSettings()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.transfers_directory.normalized))
 
     def _AH_ClearList(self):
         self.model.clear_ended()

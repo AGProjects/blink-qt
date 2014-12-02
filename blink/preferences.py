@@ -303,13 +303,9 @@ class PreferencesWindow(base_class, ui_class):
         self.traffic_units_button.clicked.connect(self._SH_TrafficUnitsButtonClicked)
 
         # Screen sharing
-        self.screenshots_directory_browse_button.clicked.connect(self._SH_ScreenshotsDirectoryBrowseButtonClicked)
         self.screen_sharing_scale_button.clicked.connect(self._SH_ScreenSharingScaleButtonClicked)
         self.screen_sharing_fullscreen_button.clicked.connect(self._SH_ScreenSharingFullscreenButtonClicked)
         self.screen_sharing_viewonly_button.clicked.connect(self._SH_ScreenSharingViewonlyButtonClicked)
-
-        # File transfer
-        self.download_directory_browse_button.clicked.connect(self._SH_DownloadDirectoryBrowseButtonClicked)
 
         # File logging
         self.trace_sip_button.clicked.connect(self._SH_TraceSIPButtonClicked)
@@ -328,7 +324,11 @@ class PreferencesWindow(base_class, ui_class):
         self.media_ports_start.valueChanged[int].connect(self._SH_MediaPortsStartValueChanged)
         self.media_ports.valueChanged[int].connect(self._SH_MediaPortsValueChanged)
 
-        # TLS
+        # Files and directories
+        self.screenshots_directory_browse_button.clicked.connect(self._SH_ScreenshotsDirectoryBrowseButtonClicked)
+        self.transfers_directory_browse_button.clicked.connect(self._SH_TransfersDirectoryBrowseButtonClicked)
+
+        # TLS settings
         self.tls_ca_file_editor.locationCleared.connect(self._SH_TLSCAFileEditorLocationCleared)
         self.tls_ca_file_browse_button.clicked.connect(self._SH_TLSCAFileBrowseButtonClicked)
 
@@ -713,13 +713,9 @@ class PreferencesWindow(base_class, ui_class):
         self.traffic_units_button.setChecked(blink_settings.chat_window.session_info.bytes_per_second)
 
         # Screen sharing settings
-        self.screenshots_directory_editor.setText(blink_settings.screen_sharing.screenshots_directory or u'')
         self.screen_sharing_scale_button.setChecked(blink_settings.screen_sharing.scale)
         self.screen_sharing_fullscreen_button.setChecked(blink_settings.screen_sharing.open_fullscreen)
         self.screen_sharing_viewonly_button.setChecked(blink_settings.screen_sharing.open_viewonly)
-
-        # File transfer settings
-        self.download_directory_editor.setText(settings.file_transfer.directory or u'')
 
         # File logging settings
         self.trace_sip_button.setChecked(settings.logs.trace_sip)
@@ -750,6 +746,8 @@ class PreferencesWindow(base_class, ui_class):
         with blocked_qt_signals(self.media_ports):
             self.media_ports.setValue(settings.rtp.port_range.end - settings.rtp.port_range.start)
 
+        self.screenshots_directory_editor.setText(blink_settings.screenshots_directory or u'')
+        self.transfers_directory_editor.setText(blink_settings.transfers_directory or u'')
         self.tls_ca_file_editor.setText(settings.tls.ca_list or u'')
 
     def load_account_settings(self, account):
@@ -1499,13 +1497,12 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_ScreenshotsDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = BlinkSettings()
-        directory = settings.screen_sharing.screenshots_directory.normalized
-        directory = QFileDialog.getExistingDirectory(self, u'Select Screenshots Directory', directory) or None
+        directory = QFileDialog.getExistingDirectory(self, u'Select Screenshots Directory', settings.screenshots_directory.normalized) or None
         if directory is not None:
             directory = os.path.normpath(directory)
-            if directory != settings.screen_sharing.screenshots_directory:
+            if directory != settings.screenshots_directory:
                 self.screenshots_directory_editor.setText(directory)
-                settings.screen_sharing.screenshots_directory = directory
+                settings.screenshots_directory = directory
                 settings.save()
 
     def _SH_ScreenSharingScaleButtonClicked(self, checked):
@@ -1524,16 +1521,15 @@ class PreferencesWindow(base_class, ui_class):
         settings.save()
 
     # File transfer signal handlers
-    def _SH_DownloadDirectoryBrowseButtonClicked(self, checked):
+    def _SH_TransfersDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
-        settings = SIPSimpleSettings()
-        directory = settings.file_transfer.directory.normalized
-        directory = QFileDialog.getExistingDirectory(self, u'Select Download Directory', directory) or None
+        settings = BlinkSettings()
+        directory = QFileDialog.getExistingDirectory(self, u'Select Transfers Directory', settings.transfers_directory.normalized) or None
         if directory is not None:
             directory = os.path.normpath(directory)
-            if directory != settings.file_transfer.directory:
-                self.download_directory_editor.setText(directory)
-                settings.file_transfer.directory = directory
+            if directory != settings.transfers_directory:
+                self.transfers_directory_editor.setText(directory)
+                settings.transfers_directory = directory
                 settings.save()
 
     # File logging signal handlers

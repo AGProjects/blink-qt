@@ -1146,7 +1146,7 @@ class VideoWidget(VideoSurface, ui_class):
 
     def _SH_ScreenshotsFolderActionTriggered(self, pos):
         settings = BlinkSettings()
-        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.video.screenshots_directory.normalized))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.screenshots_directory.normalized))
 
     def _SH_DetachAnimationFinished(self):
         if self.detach_animation.direction() == QPropertyAnimation.Backward:
@@ -2155,7 +2155,7 @@ class VideoScreenshot(object):
     @classmethod
     def filename_generator(cls):
         settings = BlinkSettings()
-        name = os.path.join(settings.video.screenshots_directory.normalized, 'VideoCall-{:%Y%m%d-%H.%M.%S}'.format(datetime.now()))
+        name = os.path.join(settings.screenshots_directory.normalized, 'VideoCall-{:%Y%m%d-%H.%M.%S}'.format(datetime.now()))
         yield '%s.png' % name
         for x in count(1):
             yield "%s-%d.png" % (name, x)

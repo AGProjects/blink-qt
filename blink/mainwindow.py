@@ -416,14 +416,14 @@ class MainWindow(base_class, ui_class):
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def _AH_ReceivedFilesWindowActionTriggered(self, checked):
-        settings = SIPSimpleSettings()
-        directory = settings.file_transfer.directory.normalized
+        settings = BlinkSettings()
+        directory = settings.transfers_directory.normalized
         makedirs(directory)
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def _AH_ScreenshotsWindowActionTriggered(self, checked):
         settings = BlinkSettings()
-        directory = settings.screen_sharing.screenshots_directory.normalized
+        directory = settings.screenshots_directory.normalized
         makedirs(directory)
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 

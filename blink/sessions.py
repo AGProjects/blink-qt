@@ -3458,8 +3458,8 @@ class FileTransfer(object):
         self._file_selector = stream.file_selector
         self._local_hash = hashlib.sha1()
 
-        settings = SIPSimpleSettings()
-        directory = settings.file_transfer.directory.normalized
+        settings = BlinkSettings()
+        directory = settings.transfers_directory.normalized
         makedirs(directory)
         filename = os.path.basename(self._file_selector.name)
         for name in UniqueFilenameGenerator.generate(os.path.join(directory, filename)):
