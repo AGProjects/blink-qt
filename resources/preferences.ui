@@ -3144,7 +3144,7 @@
    </property>
    <property name="icon">
     <iconset>
-     <normaloff>icons/logs.png</normaloff>icons/logs.png</iconset>
+     <normaloff>icons/logging.png</normaloff>icons/logging.png</iconset>
    </property>
    <property name="text">
     <string>Logging</string>
