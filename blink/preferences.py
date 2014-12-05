@@ -452,13 +452,6 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_input_device_label.setMinimumWidth(text_width)
         self.answer_delay_label.setMinimumWidth(text_width)
 
-        # advanced settings
-        font_metrics = self.transports_label.fontMetrics() # we assume all labels have the same font
-        labels = (self.transports_label, self.media_ports_label, self.tls_ca_file_label)
-        text_width = max(font_metrics.width(label.text()) for label in labels)
-        self.transports_label.setMinimumWidth(text_width)
-        self.tls_ca_file_label.setMinimumWidth(text_width)
-
         # Adjust the combo boxes for themes with too much padding (like the default theme on Ubuntu 10.04)
         combo_box = self.audio_input_device_button
         option = QStyleOptionComboBox()
