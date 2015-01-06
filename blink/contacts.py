@@ -2210,6 +2210,9 @@ class ContactModel(QAbstractListModel):
     # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['application/x-blink-group-list', 'application/x-blink-contact-list', 'text/uri-list']
 
+    test_contacts = (dict(id='test_call',       name='Test Call',       preferred_media='audio+chat', uri='echo@conference.sip2sip.info', icon=Resources.get('icons/test-call.png')),
+                     dict(id='test_conference', name='Test Conference', preferred_media='audio+chat', uri='test@conference.sip2sip.info', icon=Resources.get('icons/test-conference.png')))
+
     def __init__(self, parent=None):
         super(ContactModel, self).__init__(parent)
         self.state = 'stopped'
@@ -2391,39 +2394,50 @@ class ContactModel(QAbstractListModel):
     def _NH_SIPApplicationWillStart(self, notification):
         from blink import Blink
         self.state = 'starting'
-        test_contacts = [{'id': 'test_audio',      'name': 'Test Call',         'preferred_media': 'audio', 'uri': '3333@sip2sip.info',            'icon': Resources.get('icons/test-call.png')},
-                         {'id': 'test_microphone', 'name': 'Test Microphone',   'preferred_media': 'audio', 'uri': '4444@sip2sip.info',            'icon': Resources.get('icons/test-echo.png')},
-                         {'id': 'test_conference', 'name': 'Test Conference',   'preferred_media': 'chat',  'uri': 'test@conference.sip2sip.info', 'icon': Resources.get('icons/test-conference.png')},
-                         {'id': 'test_zipdx',      'name': 'VUC http://vuc.me', 'preferred_media': 'audio', 'uri': '200901@login.zipdx.com',       'icon': Resources.get('icons/vuc-conference.png')}]
         blink = Blink()
-        icon_manager = IconManager()
         if blink.first_run:
-            def make_contact(id, name, preferred_media, uri, icon):
-                icon_manager.store_file(id, icon)
-                contact = addressbook.Contact(id)
-                contact.name = name
-                contact.preferred_media = preferred_media
-                contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
-                contact.icon = IconDescriptor(FileURL(icon), unicode(int(os.stat(icon).st_mtime)))
-                return contact
             test_group = addressbook.Group(id='test')
             test_group.name = 'Test'
-            test_group.contacts = [make_contact(**entry) for entry in test_contacts]
-            modified_settings = list(test_group.contacts) + [test_group]
-            self._atomic_update(save=modified_settings)
+            test_group.contacts = [self._create_contact(**entry) for entry in self.test_contacts]
+            changed_items = list(test_group.contacts) + [test_group]
+            self._atomic_update(save=changed_items)
         else:
             addressbook_manager = addressbook.AddressbookManager()
-            for entry in test_contacts:
+
+            # upgrade test contacts if test_call doesn't exist but test_audio and/or test_microphone do (test_call replaced test_audio + test_microphone). to be removed later -Dan
+
+            obsolete_contacts = [contact for contact in addressbook_manager.get_contacts() if contact.id in {'test_audio', 'test_microphone'}]
+            need_upgrade  = bool(obsolete_contacts and not addressbook_manager.has_contact('test_call'))
+
+            changed_items = deque()
+            deleted_items = obsolete_contacts if need_upgrade else []
+
+            if need_upgrade:
                 try:
-                    contact = addressbook_manager.get_contact(entry['id'])
+                    test_group = addressbook_manager.get_group('test')
                 except KeyError:
-                    continue
-                icon = entry['icon']
-                icon_descriptor = IconDescriptor(FileURL(icon), unicode(int(os.stat(icon).st_mtime)))
-                if contact.icon != icon_descriptor:
-                    icon_manager.store_file(contact.id, icon)
-                    contact.icon = icon_descriptor
-                    contact.save()
+                    test_group = addressbook.Group(id='test')
+                    test_group.name = 'Test'
+                changed_items.append(test_group)
+                for entry in self.test_contacts:
+                    try:
+                        contact = addressbook_manager.get_contact(entry['id'])
+                    except KeyError:
+                        contact = self._create_contact(**entry)
+                    else:
+                        self._update_contact(contact, **entry)
+                    test_group.contacts.add(contact)
+                    changed_items.appendleft(contact)
+            else:
+                for entry in self.test_contacts:
+                    try:
+                        contact = addressbook_manager.get_contact(entry['id'])
+                    except KeyError:
+                        continue
+                    else:
+                        if self._update_contact(contact, icon=entry['icon']):
+                            changed_items.appendleft(contact)
+            self._atomic_update(save=changed_items, delete=deleted_items)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.state = 'started'
@@ -2562,6 +2576,39 @@ class ContactModel(QAbstractListModel):
         with addressbook.AddressbookManager.transaction():
             [item.save() for item in save]
             [item.delete() for item in delete]
+
+    def _create_contact(self, id, name, preferred_media, uri, icon):
+        contact = addressbook.Contact(id)
+        contact.name = name
+        contact.preferred_media = preferred_media
+        contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
+        contact.icon = IconDescriptor(FileURL(icon), unicode(int(os.stat(icon).st_mtime)))
+        icon_manager = IconManager()
+        icon_manager.store_file(id, icon)
+        return contact
+
+    def _update_contact(self, contact, **data):
+        modified = False
+        if 'name' in data:
+            contact.name = data['name']
+            modified = True
+        if 'preferred_media' in data:
+            contact.preferred_media = data['preferred_media']
+            modified = True
+        if 'uri' in data and data['uri'] not in {uri.uri for uri in contact.uris}:
+            uri = addressbook.ContactURI(uri=data['uri'], type='SIP')
+            contact.uris.add(uri)
+            if len(contact.uris) > 1:
+                contact.uris.default = uri
+            modified = True
+        if 'icon' in data:
+            icon_descriptor = IconDescriptor(FileURL(data['icon']), unicode(int(os.stat(data['icon']).st_mtime)))
+            if contact.icon != icon_descriptor:
+                icon_manager = IconManager()
+                icon_manager.store_file(contact.id, data['icon'])
+                contact.icon = icon_descriptor
+                modified = True
+        return modified
 
     def _find_contact_move_point(self, contact):
         position = self.items.index(contact)
