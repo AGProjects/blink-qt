@@ -417,7 +417,7 @@ a:active
 	border-bottom: 2px solid;
 }
 
-img.fullSizeImage
+img.full-size
 {
 	width: auto;
 	height: auto;
@@ -425,7 +425,7 @@ img.fullSizeImage
 	max-width: 100%;
 }
 
-img.scaledToFitImage
+img.scaled-to-fit
 {
 	width: auto;
 	max-height: 10px;
