@@ -2216,14 +2216,14 @@ class AudioSessionModel(QAbstractListModel):
             self.addSession(session_item)
 
     def _NH_BlinkSessionDidNotAddStream(self, notification):
-        if notification.data.stream.type == 'audio':
+        if notification.data.stream.type == 'audio' and notification.sender.items.audio:
             session_item = notification.sender.items.audio
             session_item.pending_removal = True
             call_later(5, self.removeSession, session_item)
             self.structureChanged.emit()
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
-        if notification.data.stream.type == 'audio':
+        if notification.data.stream.type == 'audio' and notification.sender.items.audio:
             session_item = notification.sender.items.audio
             session_item.pending_removal = True
             call_later(5, self.removeSession, session_item)
