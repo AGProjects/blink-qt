@@ -579,13 +579,6 @@ class ChatWidget(base_class, ui_class):
                 self.composing_timer.start(10000)
 
     def _SH_ChatInputTextEntered(self, text):
-        #doc = QTextDocument()
-        #doc.setHtml(text)
-        #plain_text = doc.toPlainText()
-        #if len(plain_text) == 7 and plain_text[0] == '#':
-        #    body = self.chat_view.page().mainFrame().findFirstElement('body')
-        #    body.setStyleProperty('background', plain_text)
-        #    return
         self.composing_timer.stop()
         blink_session = self.session.blink_session
         if blink_session.state == 'initialized':
