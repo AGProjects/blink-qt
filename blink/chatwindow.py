@@ -1436,7 +1436,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.share_my_screen = QAction("Share my screen", self, triggered=self._AH_ShareMyScreen)
         self.control_button.actions.request_screen = QAction("Request screen", self, triggered=self._AH_RequestScreen)
         self.control_button.actions.end_screen_sharing = QAction("End screen sharing", self, triggered=self._AH_EndScreenSharing)
-        self.control_button.actions.dump_session = QAction("Dump session", self, triggered=self._AH_DumpSession) # remove later -Dan
         self.control_button.actions.main_window = QAction("Main Window", self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
 
         self.addAction(self.control_button.actions.main_window) # make this active even when it's not in the contol_button's menu
@@ -1571,7 +1570,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.share_my_screen)
                     elif stream_types != {'screen-sharing'}:
                         menu.addAction(self.control_button.actions.end_screen_sharing)
-            #menu.addAction(self.control_button.actions.dump_session) # remove this later -Dan
             self.control_button.setMenu(menu)
 
     def _update_panel_buttons(self):
@@ -2206,14 +2204,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _AH_EndScreenSharing(self):
         self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('screen-sharing'))
-
-    def _AH_DumpSession(self):
-        blink_session = self.selected_session.blink_session
-        print "state:   %r" % blink_session.state
-        print "streams: %r" % [stream for stream in blink_session.streams]
-        print "hold:    %r/%r" % (blink_session.local_hold, blink_session.remote_hold)
-        print "conf:    %r" % blink_session.client_conference
-        print "active:  %r" % blink_session.active
 
     def _AH_MainWindow(self):
         blink = QApplication.instance()
