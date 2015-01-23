@@ -10,6 +10,9 @@
     <height>521</height>
    </rect>
   </property>
+  <property name="acceptDrops">
+   <bool>true</bool>
+  </property>
   <property name="windowTitle">
    <string>Chat session</string>
   </property>
@@ -21,7 +24,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="ChatWebView" name="chat_view">
+    <widget class="ChatWebView" name="chat_view" native="true">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
        <horstretch>0</horstretch>
@@ -78,13 +81,13 @@
    <header>QtWebKit/QWebView</header>
   </customwidget>
   <customwidget>
-   <class>ChatTextInput</class>
-   <extends>QTextEdit</extends>
+   <class>ChatWebView</class>
+   <extends>QWebView</extends>
    <header>blink.chatwindow</header>
   </customwidget>
   <customwidget>
-   <class>ChatWebView</class>
-   <extends>QWebView</extends>
+   <class>ChatTextInput</class>
+   <extends>QTextEdit</extends>
    <header>blink.chatwindow</header>
   </customwidget>
  </customwidgets>

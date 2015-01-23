@@ -9,14 +9,15 @@ import os
 import re
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
+from PyQt4.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
 from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCursor, QTextDocument, QTextEdit, QToolButton
-from PyQt4.QtGui  import QApplication, QDesktopServices
+from PyQt4.QtGui  import QApplication, QDesktopServices, QImageReader, QKeyEvent
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy
 from application.python import Null, limit
+from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType
 from application.system import makedirs
 from collections import MutableSet
@@ -37,7 +38,7 @@ from blink.configuration.datatypes import FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.resources import IconManager, Resources
-from blink.sessions import ChatSessionModel, ChatSessionListView, StreamDescription
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
 from blink.util import run_in_gui_thread
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
@@ -389,6 +390,9 @@ class ChatWebView(QWebView):
         print "create window of type", window_type
         return None
 
+    def dragEnterEvent(self, event):
+        event.ignore() # let the parent process DND
+
     def resizeEvent(self, event):
         super(ChatWebView, self).resizeEvent(event)
         self.sizeChanged.emit()
@@ -410,6 +414,9 @@ class ChatTextInput(QTextEdit):
         document = self.document()
         last_block = document.lastBlock()
         return document.characterCount() <= 1 and not last_block.textList()
+
+    def dragEnterEvent(self, event):
+        event.ignore() # let the parent process DND
 
     def keyPressEvent(self, event):
         key, modifiers = event.key(), event.modifiers()
@@ -481,6 +488,60 @@ class IconDescriptor(object):
         raise AttributeError("attribute cannot be deleted")
 
 
+class Thumbnail(object):
+    def __new__(cls, filename):
+        image_reader = QImageReader(filename)
+        if image_reader.canRead():
+            instance = super(Thumbnail, cls).__new__(cls)
+            image_size = image_reader.size()
+            if image_size.height() > 720:
+                image_reader.setScaledSize(image_size * 720 / image_size.height())
+            image = QPixmap.fromImageReader(image_reader)
+            image_buffer = QBuffer()
+            image_format = 'png' if image.hasAlphaChannel() else 'jpeg'
+            image.save(image_buffer, image_format)
+            instance.__dict__['data'] = str(image_buffer.data())
+            instance.__dict__['type'] = 'image/{}'.format(image_format)
+        else:
+            instance = None
+        return instance
+
+    @property
+    def data(self):
+        return self.__dict__['data']
+
+    @property
+    def type(self):
+        return self.__dict__['type']
+
+
+class FileDescriptor(object):
+    filename  = WriteOnceAttribute()
+    thumbnail = WriteOnceAttribute()
+
+    def __init__(self, filename):
+        self.filename = filename
+        self.thumbnail = Thumbnail(filename)
+
+    def __hash__(self):
+        return hash(self.filename)
+
+    def __eq__(self, other):
+        if isinstance(other, FileDescriptor):
+            return self.filename == other.filename
+        return NotImplemented
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __repr__(self):
+        return 'FileDescriptor({})'.format(self.filename)
+
+    @property
+    def fileurl(self):
+        return QUrl.fromLocalFile(self.filename).toString()
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
 class ChatWidget(base_class, ui_class):
@@ -489,6 +550,8 @@ class ChatWidget(base_class, ui_class):
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
 
     chat_template = open(Resources.get('chat/template.html')).read()
+
+    image_data_re = re.compile(r"data:(?P<type>image/.+?);base64,(?P<data>.*)", re.I|re.U)
 
     def __init__(self, session, parent=None):
         super(ChatWidget, self).__init__(parent)
@@ -514,6 +577,10 @@ class ChatWidget(base_class, ui_class):
         self.chat_view.page().mainFrame().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
         self.composing_timer.timeout.connect(self._SH_ComposingTimerTimeout)
 
+    @property
+    def user_icon(self):
+        return IconManager().get('avatar') or self.default_user_icon
+
     def add_message(self, message):
         insertion_point = self.chat_element.findFirst('#insert')
         if message.is_related_to(self.last_message):
@@ -523,6 +590,22 @@ class ChatWidget(base_class, ui_class):
             insertion_point.removeFromDocument()
             self.chat_element.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class))
         self.last_message = message
+
+    def send_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None):
+        blink_session = self.session.blink_session
+
+        if blink_session.state in ('initialized', 'ended'):
+            blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, [StreamDescription('chat')], reinitialize=True)
+            blink_session.connect()
+        elif blink_session.state == 'connected/*':
+            if self.session.chat_stream is None:
+                self.session.blink_session.add_stream(StreamDescription('chat'))
+        elif blink_session.state == 'connecting/*' and self.session.chat_stream is not None:
+            pass
+        else:
+            raise RuntimeError("Cannot send messages in the '%s' state" % blink_session.state)
+
+        self.session.chat_stream.send_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
 
     def _align_chat(self, scroll=False):
         #frame_height = self.chat_view.page().mainFrame().contentsSize().height()
@@ -550,6 +633,79 @@ class ChatWidget(base_class, ui_class):
         frame = self.chat_view.page().mainFrame()
         print "%d out of %d, %d+%d=%d (%d)" % (frame.scrollBarValue(Qt.Vertical), frame.scrollBarMaximum(Qt.Vertical), frame.scrollBarValue(Qt.Vertical), self.chat_view.size().height(),
                                                frame.scrollBarValue(Qt.Vertical)+self.chat_view.size().height(), frame.contentsSize().height())
+
+    def dragEnterEvent(self, event):
+        mime_data = event.mimeData()
+        if mime_data.hasUrls() or mime_data.hasHtml() or mime_data.hasText():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        event.accept()
+
+    def dragMoveEvent(self, event):
+        if event.possibleActions() & (Qt.CopyAction | Qt.LinkAction):
+            event.accept(self.rect())
+        else:
+            event.ignore(self.rect())
+
+    def dropEvent(self, event):
+        event.acceptProposedAction()
+        mime_data = event.mimeData()
+        if mime_data.hasUrls():
+            urls = mime_data.urls()
+            schemes = {url.scheme() for url in urls}
+            if schemes == {'file'}:
+                self._DH_Files(urls)
+            else:
+                self._DH_Text('\n'.join(url.toString() for url in urls))
+        else:
+            mime_types = set(mime_data.formats())
+            if mime_types.issuperset({'text/html', 'text/_moz_htmlcontext'}):
+                text = unicode(mime_data.data('text/html'), encoding='utf16')
+            else:
+                text = mime_data.html() or mime_data.text()
+            self._DH_Text(text)
+
+    def _DH_Files(self, urls):
+        session_manager = SessionManager()
+        blink_session = self.session.blink_session
+
+        file_descriptors  = [FileDescriptor(url.toLocalFile()) for url in urls]
+        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
+        other_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is None]
+
+        for image in image_descriptors:
+            try:
+                self.send_message(image.thumbnail.data, content_type=image.thumbnail.type)
+            except Exception, e:
+                self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), e))) # decide what type to use here. -Dan
+            else:
+                content = u'''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image.thumbnail.data.encode('base64').rstrip())
+                sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
+                self.add_message(ChatMessage(content, sender, 'outgoing'))
+
+        for descriptor in other_descriptors:
+            session_manager.send_file(blink_session.contact, blink_session.contact_uri, descriptor.filename, account=blink_session.account)
+
+    def _DH_Text(self, text):
+        match = self.image_data_re.match(text)
+        if match is not None:
+            try:
+                self.send_message(match.group('data').decode('base64'), content_type=match.group('type'))
+            except Exception, e:
+                self.add_message(ChatStatus('Error sending image: %s' % e)) # decide what type to use here. -Dan
+            else:
+                account = self.session.blink_session.account
+                content = u'''<img src="{}" class="scaled-to-fit" />'''.format(text)
+                sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
+                self.add_message(ChatMessage(content, sender, 'outgoing'))
+        else:
+            user_text = self.chat_input.toHtml()
+            self.chat_input.setHtml(text)
+            self.chat_input.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, text=u'\r'))
+            self.chat_input.setHtml(user_text)
 
     def _SH_ChatViewSizeChanged(self):
         #print "chat view size changed"
@@ -580,41 +736,15 @@ class ChatWidget(base_class, ui_class):
 
     def _SH_ChatInputTextEntered(self, text):
         self.composing_timer.stop()
-        blink_session = self.session.blink_session
-        if blink_session.state == 'initialized':
-            blink_session.connect() # what if it was initialized, but is doesn't have a chat stream? -Dan
-        elif blink_session.state == 'ended':
-            blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, [StreamDescription('chat')], reinitialize=True)
-            blink_session.connect()
-        elif blink_session.state == 'connected/*':
-            if self.session.chat_stream is None:
-                self.session.blink_session.add_stream(StreamDescription('chat'))
-                if self.session.chat_stream is None:
-                    self.add_message(ChatStatus('Could not add chat stream'))
-                    return
-        else: # cannot send chat message in any other state (what about when connecting -Dan)
-            self.add_message(ChatStatus("Cannot send chat messages in the '%s' state" % blink_session.state))
-            return
-
-        chat_stream = self.session.chat_stream
         try:
-            chat_stream.send_message(text, content_type='text/html')
+            self.send_message(text, content_type='text/html')
         except Exception, e:
-            self.add_message(ChatStatus('Error sending chat message: %s' % e)) # decide what type to use here. -Dan
-            return
-        # TODO: cache this
-        identity = chat_stream.local_identity
-        if identity is not None:
-            display_name = identity.display_name
-            uri = '%s@%s' % (identity.uri.user, identity.uri.host)
+            self.add_message(ChatStatus('Error sending message: %s' % e)) # decide what type to use here. -Dan
         else:
-            account = chat_stream.blink_session.account
-            display_name = account.display_name
-            uri = account.id
-        icon = IconManager().get('avatar') or self.default_user_icon
-        sender = ChatSender(display_name, uri, icon.filename)
-        content = HtmlProcessor.autolink(text)
-        self.add_message(ChatMessage(content, sender, 'outgoing'))
+            account = self.session.blink_session.account
+            content = HtmlProcessor.autolink(text)
+            sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
+            self.add_message(ChatMessage(content, sender, 'outgoing'))
 
     def _SH_ComposingTimerTimeout(self):
         self.composing_timer.stop()
@@ -1820,28 +1950,36 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session
         session = blink_session.items.chat
+
         if session is None:
             return
+
         message = notification.data.message
-        if not message.content_type.startswith('text/'):
-            # TODO: check with OSX version what special messages we could get -Saul
-            return
+
         if message.body.startswith('?OTRv2?'):
             # TODO: add support for OTR -Saul
             return
+
+        if message.content_type.startswith('image/'):
+            content = u'''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.body.encode('base64').rstrip())
+        elif message.content_type.startswith('text/'):
+            content = HtmlProcessor.autolink(message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml())
+        else:
+            return
+
         uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
         account_manager = AccountManager()
         if account_manager.has_account(uri):
             account = account_manager.get_account(uri)
-            icon = IconManager().get('avatar') or session.chat_widget.default_user_icon
-            sender = ChatSender(message.sender.display_name or account.display_name, uri, icon.filename)
+            sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
         elif blink_session.remote_focus:
             contact, contact_uri = URIUtils.find_contact(uri)
             sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
-        content = HtmlProcessor.autolink(message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml())
+
         session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
+
         session.remote_composing = False
         settings = SIPSimpleSettings()
         if settings.sounds.play_message_alerts and self.selected_session is session:
@@ -2021,8 +2159,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _AH_Connect(self):
         blink_session = self.selected_session.blink_session
-        if blink_session.state == 'ended':
-            blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=[StreamDescription('chat')], reinitialize=True)
+        blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=[StreamDescription('chat')], reinitialize=True)
         blink_session.connect()
 
     def _AH_ConnectWithAudio(self):
