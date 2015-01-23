@@ -10,6 +10,7 @@ import os
 import re
 import string
 import sys
+import uuid
 
 from abc import ABCMeta, abstractproperty
 from collections import defaultdict, deque
@@ -3375,6 +3376,9 @@ ScreenSharingStream.ViewerHandler = EmbeddedVNCViewerHandler
 # File transfers
 #
 
+class RandomID: __metaclass__ = MarkerType
+
+
 class FileSizeFormatter(object):
     boundaries = [(             1024, '%d bytes',               1),
                   (          10*1024, '%.2f KB',           1024.0),  (        1024*1024, '%.1f KB',           1024.0),
@@ -3405,6 +3409,7 @@ class FileTransfer(object):
     tmp_file_suffix = '.download'
 
     def __init__(self):
+        self.id = None
         self.direction = None
         self.state = None
 
@@ -3423,12 +3428,13 @@ class FileTransfer(object):
         self._reason = None
 
     def __getstate__(self):
-        state = dict(direction=self.direction, state=self.state, filename=self.filename, _error=self._error, _finished=self._finished, _reason=self._reason)
+        state = dict(id=self.id, direction=self.direction, state=self.state, filename=self.filename, _error=self._error, _finished=self._finished, _reason=self._reason)
         return (self.account.id, self.contact.name, self.contact_uri.uri, state)
 
     def __setstate__(self, state):
         from blink.contacts import URIUtils
         account_id, contact_name, contact_uri, state = state
+        self.__init__()
         self.__dict__.update(state)
         account_manager = AccountManager()
         try:
@@ -3441,13 +3447,12 @@ class FileTransfer(object):
             self._uri = self._normalize_uri(contact_uri)
         else:
             self._local_hash = hashlib.sha1()
-        self.sip_session = None
-        self.stream = None
-        self._file_selector = None
 
     def init_incoming(self, contact, contact_uri, session, stream):
         assert self.state is None
         self.direction = 'incoming'
+
+        self.id = stream.transfer_id
 
         self.account = session.account
         self.contact = contact
@@ -3473,9 +3478,11 @@ class FileTransfer(object):
         notification_center.post_notification('FileTransferNewIncoming', sender=self)
         self.sip_session.accept([self.stream])
 
-    def init_outgoing(self, account, contact, contact_uri, filename):
+    def init_outgoing(self, account, contact, contact_uri, filename, transfer_id=RandomID):
         assert self.state is None
         self.direction = 'outgoing'
+
+        self.id = transfer_id if transfer_id is not RandomID else str(uuid.uuid4())
 
         self.account = account
         self.contact = contact
@@ -3716,7 +3723,7 @@ class FileTransfer(object):
         self.sip_session = Session(self.account)
         registry = MediaStreamRegistry()
         cls = registry.get('file-transfer')
-        self.stream = cls(self._file_selector, 'sendonly')
+        self.stream = cls(self._file_selector, 'sendonly', transfer_id=self.id)
         self.sip_session.connect(ToHeader(self._uri), routes, [self.stream])
 
     def _NH_DNSLookupDidFail(self, notification):
@@ -5210,7 +5217,7 @@ class SessionManager(object):
 
         return session
 
-    def send_file(self, contact, contact_uri, filename, account=None):
+    def send_file(self, contact, contact_uri, filename, transfer_id=RandomID, account=None):
         if account is None:
             if contact.type == 'bonjour':
                 account = BonjourAccount()
@@ -5221,7 +5228,7 @@ class SessionManager(object):
 
         transfer = FileTransfer()
         self.file_transfers.append(transfer)
-        transfer.init_outgoing(account, contact, contact_uri, filename)
+        transfer.init_outgoing(account, contact, contact_uri, filename, transfer_id)
         transfer.connect()
         return transfer
 
