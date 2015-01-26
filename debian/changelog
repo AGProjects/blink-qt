@@ -1,3 +1,21 @@
+blink (1.1.0) unstable; urgency=medium
+
+  * Added support for drag and drop on the chat window
+  * Improve the performance of painting the video preview
+  * Fix stopping composing timer when session is ended or chat is removed
+  * Removed unused settings
+  * Always play an audio alert when a file transfer finishes
+  * Removed session and RTP timeouts from preferences
+  * Reorganized preferences
+  * Better icons for chat, logging and advanced settings
+  * Removed no longer necessary code to adjust label sizes
+  * Do not allow the chat web view to get focus
+  * Updated test numbers
+  * Check for the audio session item existance before operating on it
+  * Added support for specifying the transfer_id for file transfers
+
+ -- Saul Ibarra <saul@ag-projects.com>  Mon, 26 Jan 2015 13:08:00 +0100
+
 blink (1.0.0) unstable; urgency=medium
 
   * Added video support
