@@ -355,12 +355,6 @@ img.full-size
 	max-width: 100%;
 }
 
-img.scaled-to-fit
-{
-	width: auto;
-	max-height: 10px;
-}
-
 .message.mention .x-message:before
 {
 	position: absolute;

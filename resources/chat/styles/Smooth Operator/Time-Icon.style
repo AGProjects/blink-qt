@@ -372,12 +372,6 @@ img.full-size
 	max-width: 100%;
 }
 
-img.scaled-to-fit
-{
-	width: auto;
-	max-height: 10px;
-}
-
 /* history */
 
 .history.message:not(.consecutive),
