@@ -491,7 +491,7 @@ class IconDescriptor(object):
 class Thumbnail(object):
     def __new__(cls, filename):
         image_reader = QImageReader(filename)
-        if image_reader.canRead():
+        if image_reader.canRead() and image_reader.size().isValid():
             if image_reader.supportsAnimation() and image_reader.imageCount() > 1:
                 image_format = str(image_reader.format())
                 image_data = str(image_reader.device().readAll())
