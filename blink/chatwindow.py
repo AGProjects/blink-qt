@@ -492,15 +492,20 @@ class Thumbnail(object):
     def __new__(cls, filename):
         image_reader = QImageReader(filename)
         if image_reader.canRead():
+            if image_reader.supportsAnimation() and image_reader.imageCount() > 1:
+                image_format = str(image_reader.format())
+                image_data = str(image_reader.device().readAll())
+            else:
+                image_size = image_reader.size()
+                if image_size.height() > 720:
+                    image_reader.setScaledSize(image_size * 720 / image_size.height())
+                image = QPixmap.fromImageReader(image_reader)
+                image_buffer = QBuffer()
+                image_format = 'png' if image.hasAlphaChannel() else 'jpeg'
+                image.save(image_buffer, image_format)
+                image_data = str(image_buffer.data())
             instance = super(Thumbnail, cls).__new__(cls)
-            image_size = image_reader.size()
-            if image_size.height() > 720:
-                image_reader.setScaledSize(image_size * 720 / image_size.height())
-            image = QPixmap.fromImageReader(image_reader)
-            image_buffer = QBuffer()
-            image_format = 'png' if image.hasAlphaChannel() else 'jpeg'
-            image.save(image_buffer, image_format)
-            instance.__dict__['data'] = str(image_buffer.data())
+            instance.__dict__['data'] = image_data
             instance.__dict__['type'] = 'image/{}'.format(image_format)
         else:
             instance = None
