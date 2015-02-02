@@ -962,26 +962,44 @@ class BlinkSession(QObject):
         elif self.streams.types.isdisjoint({'audio', 'video'}):
             self.unhold()
 
-    def _NH_AudioStreamICENegotiationStateDidChange(self, notification):
+    def _NH_RTPStreamICENegotiationStateDidChange(self, notification):
+        if notification.sender.type == 'audio':
+            info = self.info.streams.audio
+        elif notification.sender.type == 'video':
+            info = self.info.streams.video
+        else:
+            raise RuntimeError('Unexpected stream type: %s' % notification.sender.type)
         state = notification.data.state
         if state == 'GATHERING':
-            self.info.streams.audio.ice_status = 'gathering'
+            info.ice_status = 'gathering'
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
         if state == 'GATHERING_COMPLETE':
-            self.info.streams.audio.ice_status = 'gathering_complete'
+            info.ice_status = 'gathering_complete'
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
         elif state == 'NEGOTIATING':
-            self.info.streams.audio.ice_status = 'negotiating'
+            info.ice_status = 'negotiating'
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
-    def _NH_AudioStreamICENegotiationDidSucceed(self, notification):
-        self.info.streams.audio.ice_status = 'succeeded'
-        self.info.streams.audio.local_rtp_candidate = notification.sender.local_rtp_candidate
-        self.info.streams.audio.remote_rtp_candidate = notification.sender.remote_rtp_candidate
+    def _NH_RTPStreamICENegotiationDidSucceed(self, notification):
+        if notification.sender.type == 'audio':
+            info = self.info.streams.audio
+        elif notification.sender.type == 'video':
+            info = self.info.streams.video
+        else:
+            raise RuntimeError('Unexpected stream type: %s' % notification.sender.type)
+        info.ice_status = 'succeeded'
+        info.local_rtp_candidate = notification.sender.local_rtp_candidate
+        info.remote_rtp_candidate = notification.sender.remote_rtp_candidate
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
-    def _NH_AudioStreamICENegotiationDidFail(self, notification):
-        self.info.streams.audio.ice_status = 'failed'
+    def _NH_RTPStreamICENegotiationDidFail(self, notification):
+        if notification.sender.type == 'audio':
+            info = self.info.streams.audio
+        elif notification.sender.type == 'video':
+            info = self.info.streams.video
+        else:
+            raise RuntimeError('Unexpected stream type: %s' % notification.sender.type)
+        info.ice_status = 'failed'
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_AudioStreamGotDTMF(self, notification):
