@@ -1009,11 +1009,11 @@ class BlinkSession(QObject):
         SIPApplication.voice_audio_bridge.add(player)
         player.start()
 
-    def _NH_AudioStreamDidStartRecordingAudio(self, notification):
+    def _NH_AudioStreamDidStartRecording(self, notification):
         self.recording = True
         notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
 
-    def _NH_AudioStreamWillStopRecordingAudio(self, notification):
+    def _NH_AudioStreamWillStopRecording(self, notification):
         self.recording = False
         notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
 
