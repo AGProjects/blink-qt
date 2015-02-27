@@ -2,8 +2,6 @@
 Roadmap
 -------
 
-+ Video sessions
-+ Screen sharing
 - Add arbitrary SIP addresses to conferences
 - Add chat from audio call
 
@@ -25,11 +23,9 @@ Pro version
 - LDAP directory
 - Call transfer
 - Phone Number translations
-- Handle redirect 30X
 - Auto answer
 - External Alert URL handler
 - Answering machine
-- History browser
 
 
 Fixes and improvements
