@@ -1273,13 +1273,8 @@ class AudioSessionWidget(base_class, ui_class):
         self.selected = False
         self.drop_indicator = False
         self.position_in_conference = None
-        self._disable_dnd = False
         self.mute_button.hidden.connect(self._SH_MuteButtonHidden)
         self.mute_button.shown.connect(self._SH_MuteButtonShown)
-        self.mute_button.pressed.connect(self._SH_ToolButtonPressed)
-        self.hold_button.pressed.connect(self._SH_ToolButtonPressed)
-        self.record_button.pressed.connect(self._SH_ToolButtonPressed)
-        self.hangup_button.pressed.connect(self._SH_ToolButtonPressed)
         self.mute_button.hide()
         self.mute_button.setEnabled(False)
         self.hold_button.setEnabled(False)
@@ -1335,18 +1330,6 @@ class AudioSessionWidget(base_class, ui_class):
 
     def _SH_MuteButtonShown(self):
         self.hold_button.type = MiddleSegment
-
-    def _SH_ToolButtonPressed(self):
-        self._disable_dnd = True
-
-    def mousePressEvent(self, event):
-        self._disable_dnd = False
-        super(AudioSessionWidget, self).mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._disable_dnd:
-            return
-        super(AudioSessionWidget, self).mouseMoveEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)

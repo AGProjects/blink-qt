@@ -1598,11 +1598,9 @@ class GroupWidget(base_class, ui_class):
             self.setupUi(self)
         self.selected = False
         self.drop_indicator = None
-        self._disable_dnd = False
         self.label_widget.setFocusProxy(self)
         self.name_view.setCurrentWidget(self.label_widget)
         self.name_editor.editingFinished.connect(self._end_editing)
-        self.collapse_button.pressed.connect(self._collapse_button_pressed)
 
     @property
     def editing(self):
@@ -1656,18 +1654,6 @@ class GroupWidget(base_class, ui_class):
 
     def edit(self):
         self._start_editing()
-
-    def _collapse_button_pressed(self):
-        self._disable_dnd = True
-
-    def mousePressEvent(self, event):
-        self._disable_dnd = False
-        super(GroupWidget, self).mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._disable_dnd:
-            return
-        super(GroupWidget, self).mouseMoveEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
