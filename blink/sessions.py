@@ -15,7 +15,6 @@ import uuid
 from abc import ABCMeta, abstractproperty
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from functools import partial
 from itertools import chain, count
 from operator import attrgetter
 from threading import Event
@@ -1270,6 +1269,7 @@ class AudioSessionWidget(base_class, ui_class):
         self.hold_button.type = MiddleSegment
         self.record_button.type = MiddleSegment
         self.hangup_button.type = RightSegment
+        self.session = session
         self.selected = False
         self.drop_indicator = False
         self.position_in_conference = None
@@ -1792,7 +1792,7 @@ class AudioSessionDelegate(QStyledItemDelegate):
     def createEditor(self, parent, options, index):
         session = index.data(Qt.UserRole)
         session.widget = AudioSessionWidget(session, parent)
-        session.widget.hold_button.clicked.connect(partial(self._SH_HoldButtonClicked, session)) # this partial still creates a memory cycle -Dan
+        session.widget.hold_button.clicked.connect(self._SH_HoldButtonClicked)
         return session.widget
 
     def updateEditorGeometry(self, editor, option, index):
@@ -1808,7 +1808,9 @@ class AudioSessionDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         return self.size_hint
 
-    def _SH_HoldButtonClicked(self, session, checked):
+    def _SH_HoldButtonClicked(self, checked):
+        session_widget = self.sender().parent()
+        session = session_widget.session
         if session.client_conference is None and not session.active and not checked:
             session_list = self.parent()
             model = session_list.model()
