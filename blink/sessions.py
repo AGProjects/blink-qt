@@ -3542,14 +3542,14 @@ class FileTransfer(object):
         return self.__dict__['stream']
 
     def _set_stream(self, value):
-        old_session = self.__dict__.get('stream', None)
-        new_session = self.__dict__['stream'] = value
-        if new_session != old_session:
+        old_stream = self.__dict__.get('stream', None)
+        new_stream = self.__dict__['stream'] = value
+        if new_stream != old_stream:
             notification_center = NotificationCenter()
-            if old_session is not None:
-                notification_center.remove_observer(self, sender=old_session)
-            if new_session is not None:
-                notification_center.add_observer(self, sender=new_session)
+            if old_stream is not None:
+                notification_center.remove_observer(self, sender=old_stream)
+            if new_stream is not None:
+                notification_center.add_observer(self, sender=new_stream)
 
     stream = property(_get_stream, _set_stream)
     del _get_stream, _set_stream
