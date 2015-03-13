@@ -19,7 +19,6 @@ from blink.resources import Resources
 
 
 class Container(object): pass
-class Cursors(Container): pass
 
 
 class InteractionState(object):
@@ -53,7 +52,7 @@ class VideoSurface(QWidget):
         super(VideoSurface, self).__init__(parent)
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
         self.setMouseTracking(True)
-        self.cursors = Cursors()
+        self.cursors = Container()
         self.cursors.resize_top    = QCursor(QIcon(Resources.get('icons/resize-top.svg')).pixmap(16),    hotX=8,  hotY=0)
         self.cursors.resize_bottom = QCursor(QIcon(Resources.get('icons/resize-bottom.svg')).pixmap(16), hotX=8,  hotY=16)
         if framerate is not None:
