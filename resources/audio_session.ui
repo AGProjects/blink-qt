@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>275</width>
+    <width>296</width>
     <height>62</height>
    </rect>
   </property>
@@ -99,13 +99,10 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Signaling is encrypted using TLS</string>
+        <string>Session is encrypted using TLS</string>
        </property>
        <property name="pixmap">
-        <pixmap>icons/blue-lock.png</pixmap>
-       </property>
-       <property name="scaledContents">
-        <bool>true</bool>
+        <pixmap>icons/lock-blue-12.svg</pixmap>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -366,13 +363,10 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Media is encrypted using sRTP</string>
+        <string>Media is encrypted using SRTP</string>
        </property>
        <property name="pixmap">
-        <pixmap>icons/orange-lock.png</pixmap>
-       </property>
-       <property name="scaledContents">
-        <bool>true</bool>
+        <pixmap>icons/lock-orange-12.svg</pixmap>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -616,6 +610,11 @@ QToolButton:pressed {
  </widget>
  <customwidgets>
   <customwidget>
+   <class>DurationLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
+  </customwidget>
+  <customwidget>
    <class>SegmentButton</class>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
@@ -632,11 +631,6 @@ QToolButton:pressed {
   </customwidget>
   <customwidget>
    <class>PacketLossLabel</class>
-   <extends>QLabel</extends>
-   <header>blink.widgets.labels</header>
-  </customwidget>
-  <customwidget>
-   <class>DurationLabel</class>
    <extends>QLabel</extends>
    <header>blink.widgets.labels</header>
   </customwidget>

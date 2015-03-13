@@ -31,7 +31,7 @@
     <item row="0" column="0">
      <widget class="QStackedWidget" name="pages">
       <property name="currentIndex">
-       <number>6</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="accounts_page">
        <layout class="QGridLayout" name="accounts_layout">
@@ -140,7 +140,7 @@
         <item row="0" column="1">
          <widget class="QTabWidget" name="account_tab_widget">
           <property name="currentIndex">
-           <number>2</number>
+           <number>1</number>
           </property>
           <widget class="QWidget" name="account_information_tab">
            <attribute name="title">
@@ -252,147 +252,53 @@
             <property name="margin">
              <number>10</number>
             </property>
-            <item row="2" column="1">
-             <widget class="QListWidget" name="account_video_codecs_list">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="horizontalScrollBarPolicy">
-               <enum>Qt::ScrollBarAlwaysOff</enum>
-              </property>
-              <property name="dragEnabled">
-               <bool>true</bool>
-              </property>
-              <property name="dragDropMode">
-               <enum>QAbstractItemView::InternalMove</enum>
-              </property>
-              <item>
-               <property name="text">
-                <string>H264</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item row="0" column="0">
-             <widget class="QLabel" name="account_audio_codecs_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>Audio Codecs</string>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="1">
-             <widget class="QLabel" name="account_video_codecs_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>Video Codecs</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0">
-             <widget class="Line" name="line_6">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="Line" name="line_7">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="0" colspan="2">
-             <widget class="QWidget" name="reset_buttons_widget" native="true">
-              <layout class="QHBoxLayout" name="reset_buttons_widget_layout">
-               <property name="margin">
-                <number>0</number>
-               </property>
-               <item>
-                <widget class="QPushButton" name="reset_account_audio_codecs_button">
-                 <property name="text">
-                  <string>Reset</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="codecs_note_label">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="text">
-                  <string>Drag codecs to change their order</string>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignCenter</set>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="reset_account_video_codecs_button">
-                 <property name="text">
-                  <string>Reset</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </widget>
-            </item>
-            <item row="4" column="0" colspan="2">
-             <spacer name="media_spacer_2">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeType">
-               <enum>QSizePolicy::Fixed</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>25</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="8" column="0" colspan="2">
-             <spacer name="media_spacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
             <item row="5" column="0" colspan="2">
              <widget class="QWidget" name="rtp_options_widget" native="true">
               <layout class="QGridLayout" name="rtp_options_widget_layout">
                <property name="margin">
                 <number>0</number>
                </property>
+               <item row="2" column="1" colspan="2">
+                <widget class="QCheckBox" name="inband_dtmf_button">
+                 <property name="text">
+                  <string>Send inband DTMF</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QComboBox" name="key_negotiation_button">
+                 <item>
+                  <property name="text">
+                   <string>Opportunistic</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>ZRTP</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>SDES optional</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>SDES mandatory</string>
+                  </property>
+                 </item>
+                </widget>
+               </item>
+               <item row="4" column="0">
+                <widget class="QLabel" name="key_negotiation_label">
+                 <property name="text">
+                  <string>Encryption:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                </widget>
+               </item>
                <item row="0" column="0" colspan="3">
                 <widget class="QLabel" name="rtp_options_label">
                  <property name="font">
@@ -413,27 +319,8 @@
                  </property>
                 </widget>
                </item>
-               <item row="3" column="1">
-                <widget class="QComboBox" name="srtp_encryption_button">
-                 <item>
-                  <property name="text">
-                   <string>disabled</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>optional</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>mandatory</string>
-                  </property>
-                 </item>
-                </widget>
-               </item>
-               <item row="3" column="2">
-                <spacer name="srtp_spacer">
+               <item row="4" column="2">
+                <spacer name="key_negotiation_spacer">
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
                  </property>
@@ -445,24 +332,60 @@
                  </property>
                 </spacer>
                </item>
-               <item row="3" column="0">
-                <widget class="QLabel" name="srtp_encryption_label">
+               <item row="3" column="1" colspan="2">
+                <widget class="QCheckBox" name="rtp_encryption_button">
                  <property name="text">
-                  <string>sRTP Encryption:</string>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                 </property>
-                </widget>
-               </item>
-               <item row="2" column="1" colspan="2">
-                <widget class="QCheckBox" name="inband_dtmf_button">
-                 <property name="text">
-                  <string>Send inband DTMF</string>
+                  <string>Encrypt audio and video</string>
                  </property>
                 </widget>
                </item>
               </layout>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QLabel" name="account_audio_codecs_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>Audio Codecs</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="0" colspan="2">
+             <spacer name="media_spacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLabel" name="account_video_codecs_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>Video Codecs</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="Line" name="line_7">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
              </widget>
             </item>
             <item row="2" column="0">
@@ -538,6 +461,95 @@
                 <enum>Checked</enum>
                </property>
               </item>
+             </widget>
+            </item>
+            <item row="3" column="0" colspan="2">
+             <widget class="QWidget" name="reset_buttons_widget" native="true">
+              <layout class="QHBoxLayout" name="reset_buttons_widget_layout">
+               <property name="margin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="reset_account_audio_codecs_button">
+                 <property name="text">
+                  <string>Reset</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="codecs_note_label">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="text">
+                  <string>Drag codecs to change their order</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="reset_account_video_codecs_button">
+                 <property name="text">
+                  <string>Reset</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QListWidget" name="account_video_codecs_list">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <property name="dragEnabled">
+               <bool>true</bool>
+              </property>
+              <property name="dragDropMode">
+               <enum>QAbstractItemView::InternalMove</enum>
+              </property>
+              <item>
+               <property name="text">
+                <string>H264</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="4" column="0" colspan="2">
+             <spacer name="media_spacer_2">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>25</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="1" column="0">
+             <widget class="Line" name="line_6">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
              </widget>
             </item>
            </layout>

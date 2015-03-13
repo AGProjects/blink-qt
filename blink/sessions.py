@@ -52,6 +52,10 @@ from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
 from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
+from blink.widgets.zrtp import ZRTPWidget
+
+
+class Container(object): pass
 
 
 class RTPStreamInfo(object):
@@ -63,6 +67,10 @@ class RTPStreamInfo(object):
     def __init__(self):
         self.ice_status = None
         self.encryption = None
+        self.encryption_cipher = None
+        self.zrtp_sas = None
+        self.zrtp_verified = False
+        self.zrtp_peer_name = ''
         self.codec_name = None
         self.sample_rate = None
         self.local_address = None
@@ -91,7 +99,12 @@ class RTPStreamInfo(object):
             self.sample_rate = stream.sample_rate
             self.local_address = stream.local_rtp_address
             self.remote_address = stream.remote_rtp_address
-            self.encryption = 'SRTP' if stream.srtp_active else None
+            self.encryption = stream.encryption.type if stream.encryption.active else None
+            self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
+            if self.encryption == 'ZRTP':
+                self.zrtp_sas = stream.encryption.zrtp.sas
+                self.zrtp_verified = stream.encryption.zrtp.verified
+                self.zrtp_peer_name = stream.encryption.zrtp.peer_name
             if stream.session and not stream.session.account.nat_traversal.use_ice:
                 self.ice_status = 'disabled'
 
@@ -994,6 +1007,26 @@ class BlinkSession(QObject):
         self.recording = False
         notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
 
+    def _NH_RTPStreamZRTPReceivedSAS(self, notification):
+        self.info.streams[notification.sender.type]._update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_RTPStreamZRTPVerifiedStateChanged(self, notification):
+        self.info.streams[notification.sender.type]._update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_RTPStreamZRTPPeerNameChanged(self, notification):
+        self.info.streams[notification.sender.type]._update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_RTPStreamDidEnableEncryption(self, notification):
+        self.info.streams[notification.sender.type]._update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_RTPStreamDidNotEnableEncryption(self, notification):
+        self.info.streams[notification.sender.type]._update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
     def _NH_VideoStreamRemoteFormatDidChange(self, notification):
         self.info.streams.video._update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
@@ -1289,6 +1322,33 @@ class AudioSessionWidget(base_class, ui_class):
         self.tls_label.setVisible(bool(session.tls))
         self.srtp_label.setVisible(bool(session.srtp))
 
+        self.srtp_label.hovered = False
+        self.srtp_label.installEventFilter(self)
+
+        try:
+            self.pixmaps
+        except AttributeError:
+            self.__class__.pixmaps = Container()
+            self.pixmaps.blue_lock = QPixmap(Resources.get('icons/lock-blue-12.svg'))
+            self.pixmaps.grey_lock = QPixmap(Resources.get('icons/lock-grey-12.svg'))
+            self.pixmaps.green_lock = QPixmap(Resources.get('icons/lock-green-12.svg'))
+            self.pixmaps.orange_lock = QPixmap(Resources.get('icons/lock-orange-12.svg'))
+
+            def blended_pixmap(pixmap, color):
+                blended_pixmap = QPixmap(pixmap)
+                painter = QPainter(blended_pixmap)
+                painter.setRenderHint(QPainter.Antialiasing, True)
+                painter.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+                painter.fillRect(blended_pixmap.rect(), color)
+                painter.end()
+                return blended_pixmap
+
+            color = QColor(255, 255, 255, 64)
+            self.pixmaps.light_blue_lock = blended_pixmap(self.pixmaps.blue_lock, color)
+            self.pixmaps.light_grey_lock = blended_pixmap(self.pixmaps.grey_lock, color)
+            self.pixmaps.light_green_lock = blended_pixmap(self.pixmaps.green_lock, color)
+            self.pixmaps.light_orange_lock = blended_pixmap(self.pixmaps.orange_lock, color)
+
     def _get_selected(self):
         return self.__dict__['selected']
 
@@ -1330,6 +1390,54 @@ class AudioSessionWidget(base_class, ui_class):
 
     def _SH_MuteButtonShown(self):
         self.hold_button.type = MiddleSegment
+
+    def _EH_RTPEncryptionLabelClicked(self):
+        session = self.session
+        stream_info = session.blink_session.info.streams.audio
+        if session.audio_stream is not None and not session.audio_stream._done and stream_info.encryption == 'ZRTP':
+            rect = QRect(0, 0, 230, 300)
+            rect.moveTopRight(self.srtp_label.mapToGlobal(self.srtp_label.rect().bottomRight()))
+            rect.translate(0, 3)
+            screen_area = QApplication.desktop().screenGeometry(self.srtp_label)
+            if rect.bottom() > screen_area.bottom():
+                rect.moveBottom(self.srtp_label.mapToGlobal(self.srtp_label.rect().topRight()).y() - 3)
+            if rect.left() < screen_area.left():
+                rect.moveLeft(screen_area.left() + 3)
+            session.zrtp_widget.hide()
+            session.zrtp_widget.peer_name = stream_info.zrtp_peer_name
+            session.zrtp_widget.peer_verified = stream_info.zrtp_verified
+            session.zrtp_widget.sas = stream_info.zrtp_sas
+            session.zrtp_widget.setGeometry(rect)
+            session.zrtp_widget.show()
+            session.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
+
+    def _update_rtp_encryption_icon(self):
+        stream = self.session.audio_stream
+        stream_info = self.session.blink_session.info.streams.audio
+        if self.srtp_label.isEnabled() and stream_info.encryption == 'ZRTP':
+            if self.srtp_label.hovered and stream is not None and not stream._done:
+                self.srtp_label.setPixmap(self.pixmaps.light_green_lock if stream_info.zrtp_verified else self.pixmaps.light_orange_lock)
+            else:
+                self.srtp_label.setPixmap(self.pixmaps.green_lock if stream_info.zrtp_verified else self.pixmaps.orange_lock)
+        else:
+            self.srtp_label.setPixmap(self.pixmaps.grey_lock)
+
+    def eventFilter(self, watched, event):
+        event_type = event.type()
+        if watched is self.srtp_label:
+            if event_type == QEvent.Enter:
+                watched.hovered = True
+                self._update_rtp_encryption_icon()
+            elif event_type == QEvent.Leave:
+                watched.hovered = False
+                self._update_rtp_encryption_icon()
+            elif event_type == QEvent.EnabledChange and not watched.isEnabled():
+                watched.setPixmap(self.pixmaps.grey_lock)
+            elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
+                self._EH_RTPEncryptionLabelClicked()
+                event.accept()
+                return True
+        return False
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1491,10 +1599,16 @@ class AudioSessionItem(object):
         self.packet_loss = 0
         self.pending_removal = False
 
+        self.zrtp_widget = ZRTPWidget()
+        self.zrtp_widget.setWindowFlags(Qt.Popup | Qt.X11BypassWindowManagerHint)
+        self.zrtp_widget.nameChanged.connect(self._SH_ZRTPWidgetNameChanged)
+        self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
+
         self.__deleted__ = False
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.blink_session)
+        notification_center.add_observer(self, name='MediaStreamWillEnd')
 
     @property
     def audio_stream(self):
@@ -1646,6 +1760,7 @@ class AudioSessionItem(object):
     def delete(self):
         notification_center = NotificationCenter()
         notification_center.remove_observer(self, sender=self.blink_session)
+        notification_center.remove_observer(self, name='MediaStreamWillEnd')
         self.blink_session.items.audio = None
         self.blink_session = None
         self.widget = Null
@@ -1685,6 +1800,14 @@ class AudioSessionItem(object):
         else:
             self.blink_session.stop_recording()
 
+    def _SH_ZRTPWidgetNameChanged(self):
+        stream = self.blink_session.streams.get('audio', Null)
+        stream.encryption.zrtp.peer_name = self.zrtp_widget.peer_name
+
+    def _SH_ZRTPWidgetStatusChanged(self):
+        stream = self.blink_session.streams.get('audio', Null)
+        stream.encryption.zrtp.verified = self.zrtp_widget.peer_verified
+
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
@@ -1708,7 +1831,12 @@ class AudioSessionItem(object):
             audio_info = self.blink_session.info.streams.audio
             self.type = 'HD Audio' if audio_info.sample_rate >= 16000 else 'Audio'
             self.codec_info = audio_info.codec
-            self.srtp = audio_info.encryption == 'SRTP'
+            if audio_info.encryption is not None:
+                self.widget.srtp_label.setToolTip(u'Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
+            else:
+                self.widget.srtp_label.setToolTip(u'Media is not encrypted')
+            self.widget._update_rtp_encryption_icon()
+            self.srtp = audio_info.encryption is not None
         if 'statistics' in notification.data.elements:
             self.widget.duration_label.value = self.blink_session.info.duration
             # TODO: compute packet loss and latency statistics -Saul
@@ -1756,11 +1884,11 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionWillRemoveStream(self, notification):
         if notification.data.stream.type == 'audio':
+            self.status = Status('Ending...')
             self.widget.mute_button.setEnabled(False)
             self.widget.hold_button.setEnabled(False)
             self.widget.record_button.setEnabled(False)
             self.widget.hangup_button.setEnabled(False)
-            self.status = Status('Ending...')
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         if notification.data.stream.type == 'audio':
@@ -1768,11 +1896,11 @@ class AudioSessionItem(object):
             self._cleanup()
 
     def _NH_BlinkSessionWillEnd(self, notification):
+        self.status = Status('Ending...')
         self.widget.mute_button.setEnabled(False)
         self.widget.hold_button.setEnabled(False)
         self.widget.record_button.setEnabled(False)
         self.widget.hangup_button.setEnabled(False)
-        self.status = Status('Ending...')
 
     def _NH_BlinkSessionDidEnd(self, notification):
         if not self.__deleted__: # may have been removed by BlinkSessionDidRemoveStream less than 5 seconds before the session ended.
@@ -1781,6 +1909,11 @@ class AudioSessionItem(object):
             else:
                 self.status = Status(notification.data.reason)
             self._cleanup()
+
+    def _NH_MediaStreamWillEnd(self, notification):
+        stream = notification.sender
+        if stream.type == 'audio' and stream.blink_session.items.audio is self:
+            self.zrtp_widget.hide()
 
 
 class AudioSessionDelegate(QStyledItemDelegate):
@@ -2496,18 +2629,13 @@ class AudioSessionListView(QListView):
 # Chat sessions
 #
 
-class Container(object): pass
-class Palettes(Container): pass
-class PixmapContainer(Container): pass
-
-
 class ChatSessionIconLabel(QLabel):
     icon = QtDynamicProperty('icon', type=QIcon)
     selectedCompositionColor = QtDynamicProperty('selectedCompositionColor', type=QColor)
 
     def __init__(self, parent=None):
         super(ChatSessionIconLabel, self).__init__(parent)
-        self.pixmaps = PixmapContainer()
+        self.pixmaps = Container()
         self.icon = None
         self.icon_size = 12
         self.selectedCompositionColor = Qt.transparent
@@ -2554,7 +2682,7 @@ class ChatSessionWidget(base_class, ui_class):
         super(ChatSessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.palettes = Palettes()
+        self.palettes = Container()
         self.palettes.standard = self.palette()
         self.palettes.alternate = self.palette()
         self.palettes.selected = self.palette()
@@ -3920,7 +4048,7 @@ class FileTransferItemWidget(base_class, ui_class):
         super(FileTransferItemWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.palettes = Palettes()
+        self.palettes = Container()
         self.palettes.standard = self.palette()
         self.palettes.alternate = self.palette()
         self.palettes.selected = self.palette()
@@ -3928,7 +4056,7 @@ class FileTransferItemWidget(base_class, ui_class):
         self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
         self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
 
-        self.pixmaps = PixmapContainer()
+        self.pixmaps = Container()
         self.pixmaps.incoming_transfer = QPixmap(Resources.get('icons/folder-downloads.png'))
         self.pixmaps.outgoing_transfer = QPixmap(Resources.get('icons/folder-uploads.png'))
         self.pixmaps.failed_transfer = QPixmap(Resources.get('icons/file-broken.png'))

@@ -223,7 +223,8 @@ class PreferencesWindow(base_class, ui_class):
         self.account_video_codecs_list.model().rowsMoved.connect(self._SH_AccountVideoCodecsListModelRowsMoved)
         self.reset_account_video_codecs_button.clicked.connect(self._SH_ResetVideoCodecsButtonClicked)
         self.inband_dtmf_button.clicked.connect(self._SH_InbandDTMFButtonClicked)
-        self.srtp_encryption_button.activated[str].connect(self._SH_SRTPEncryptionButtonActivated)
+        self.rtp_encryption_button.clicked.connect(self._SH_RTPEncryptionButtonClicked)
+        self.key_negotiation_button.activated[int].connect(self._SH_KeyNegotiationButtonActivated)
 
         # Account server settings
         self.always_use_my_proxy_button.clicked.connect(self._SH_AlwaysUseMyProxyButtonClicked)
@@ -338,6 +339,13 @@ class PreferencesWindow(base_class, ui_class):
 
     def setupUi(self):
         super(PreferencesWindow, self).setupUi(self)
+
+        # Accounts
+        self.key_negotiation_button.clear()
+        self.key_negotiation_button.addItem(u'Opportunistic', 'opportunistic')
+        self.key_negotiation_button.addItem(u'ZRTP', 'zrtp')
+        self.key_negotiation_button.addItem(u'SDES optional', 'sdes_optional')
+        self.key_negotiation_button.addItem(u'SDES mandatory', 'sdes_mandatory')
 
         # Audio
 
@@ -784,7 +792,9 @@ class PreferencesWindow(base_class, ui_class):
         self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_order is not None)
 
         self.inband_dtmf_button.setChecked(account.rtp.inband_dtmf)
-        self.srtp_encryption_button.setCurrentIndex(self.srtp_encryption_button.findText(account.rtp.srtp_encryption))
+        self.rtp_encryption_button.setChecked(account.rtp.encryption.enabled)
+        self.key_negotiation_button.setEnabled(account.rtp.encryption.enabled)
+        self.key_negotiation_button.setCurrentIndex(self.key_negotiation_button.findData(account.rtp.encryption.key_negotiation))
 
         if account is not bonjour_account:
             # Server settings tab
@@ -1118,9 +1128,15 @@ class PreferencesWindow(base_class, ui_class):
         account.rtp.inband_dtmf = checked
         account.save()
 
-    def _SH_SRTPEncryptionButtonActivated(self, text):
+    def _SH_RTPEncryptionButtonClicked(self, checked):
+        self.key_negotiation_button.setEnabled(checked)
         account = self.selected_account
-        account.rtp.srtp_encryption = text
+        account.rtp.encryption.enabled = checked
+        account.save()
+
+    def _SH_KeyNegotiationButtonActivated(self, index):
+        account = self.selected_account
+        account.rtp.encryption.key_negotiation = self.key_negotiation_button.itemData(index)
         account.save()
 
     # Account server settings

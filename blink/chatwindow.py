@@ -44,6 +44,10 @@ from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.video import VideoSurface
+from blink.widgets.zrtp import ZRTPWidget
+
+
+class Container(object): pass
 
 
 # Chat style classes
@@ -1355,6 +1359,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_widget.installEventFilter(self)
         self.state_label.installEventFilter(self)
 
+        self.info_panel.installEventFilter(self)
+        self.audio_encryption_label.installEventFilter(self)
+        self.video_encryption_label.installEventFilter(self)
+
         self.latency_graph.installEventFilter(self)
         self.packet_loss_graph.installEventFilter(self)
         self.traffic_graph.installEventFilter(self)
@@ -1376,6 +1384,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_model.sessionRemoved.connect(self._SH_SessionModelSessionRemoved)
         self.session_model.sessionAboutToBeRemoved.connect(self._SH_SessionModelSessionAboutToBeRemoved)
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
+        self.zrtp_widget.nameChanged.connect(self._SH_ZRTPWidgetNameChanged)
+        self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
 
         geometry = QSettings().value("chat_window/geometry")
         if geometry:
@@ -1397,6 +1407,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MediaStreamDidStart')
         notification_center.add_observer(self, name='MediaStreamDidFail')
         notification_center.add_observer(self, name='MediaStreamDidEnd')
+        notification_center.add_observer(self, name='MediaStreamWillEnd')
 
         #self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -1406,14 +1417,44 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def setupUi(self):
         super(ChatWindow, self).setupUi(self)
 
+        self.session_list = ChatSessionListView(self)
+        self.session_list.setObjectName('session_list')
+
+        self.no_sessions_label = NoSessionsLabel(self)
+        self.no_sessions_label.setObjectName('no_sessions_label')
+
+        self.zrtp_widget = ZRTPWidget(self.info_panel)
+        self.zrtp_widget.setObjectName('zrtp_widget')
+        self.zrtp_widget.stream_type = None
+
         self.control_icon = QIcon(Resources.get('icons/cog.svg'))
         self.cancel_icon = QIcon(Resources.get('icons/cancel.png'))
-        self.lock_grey_icon = QIcon(Resources.get('icons/lock-grey-12.svg'))
-        self.lock_green_icon = QIcon(Resources.get('icons/lock-green-12.svg'))
 
-        self.direct_connection_pixmap = QPixmap(Resources.get('icons/connection-direct.svg'))
-        self.relay_connection_pixmap = QPixmap(Resources.get('icons/connection-relay.svg'))
-        self.unknown_connection_pixmap = QPixmap(Resources.get('icons/connection-unknown.svg'))
+        self.pixmaps = Container()
+
+        self.pixmaps.direct_connection = QPixmap(Resources.get('icons/connection-direct.svg'))
+        self.pixmaps.relay_connection = QPixmap(Resources.get('icons/connection-relay.svg'))
+        self.pixmaps.unknown_connection = QPixmap(Resources.get('icons/connection-unknown.svg'))
+
+        self.pixmaps.blue_lock = QPixmap(Resources.get('icons/lock-blue-12.svg'))
+        self.pixmaps.grey_lock = QPixmap(Resources.get('icons/lock-grey-12.svg'))
+        self.pixmaps.green_lock = QPixmap(Resources.get('icons/lock-green-12.svg'))
+        self.pixmaps.orange_lock = QPixmap(Resources.get('icons/lock-orange-12.svg'))
+
+        def blended_pixmap(pixmap, color):
+            blended_pixmap = QPixmap(pixmap)
+            painter = QPainter(blended_pixmap)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+            painter.fillRect(blended_pixmap.rect(), color)
+            painter.end()
+            return blended_pixmap
+
+        color = QColor(255, 255, 255, 64)
+        self.pixmaps.light_blue_lock = blended_pixmap(self.pixmaps.blue_lock, color)
+        self.pixmaps.light_grey_lock = blended_pixmap(self.pixmaps.grey_lock, color)
+        self.pixmaps.light_green_lock = blended_pixmap(self.pixmaps.green_lock, color)
+        self.pixmaps.light_orange_lock = blended_pixmap(self.pixmaps.orange_lock, color)
 
         # fix the SVG icons as the generated code loads them as pixmaps, losing their ability to scale -Dan
         def svg_icon(filename_off, filename_on):
@@ -1422,6 +1463,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             icon.addFile(filename_on,  mode=QIcon.Normal, state=QIcon.On)
             icon.addFile(filename_on,  mode=QIcon.Active, state=QIcon.On)
             return icon
+
         self.mute_button.setIcon(svg_icon(Resources.get('icons/mic-on.svg'), Resources.get('icons/mic-off.svg')))
         self.hold_button.setIcon(svg_icon(Resources.get('icons/pause.svg'), Resources.get('icons/paused.svg')))
         self.record_button.setIcon(svg_icon(Resources.get('icons/record.svg'), Resources.get('icons/recording.svg')))
@@ -1444,12 +1486,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.main_window = QAction("Main Window", self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
 
         self.addAction(self.control_button.actions.main_window) # make this active even when it's not in the contol_button's menu
-
-        self.session_list = ChatSessionListView(self)
-        self.session_list.setObjectName('session_list')
-
-        self.no_sessions_label = NoSessionsLabel(self)
-        self.no_sessions_label.setObjectName('no_sessions_label')
 
         self.slide_direction = self.session_details.RightToLeft # decide if we slide from one direction only -Dan
         self.slide_direction = self.session_details.Automatic
@@ -1479,6 +1515,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.session_list.hide()
 
+        self.zrtp_widget.hide()
         self.info_panel_files_button.hide()
         self.info_panel_participants_button.hide()
         self.participants_panel_files_button.hide()
@@ -1489,6 +1526,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.setEnabled(False)
 
         self.info_label.setForegroundRole(QPalette.Dark)
+
+        # prepare the RTP stream encryption labels so we can take over their behaviour
+        self.audio_encryption_label.hovered = False
+        self.video_encryption_label.hovered = False
+        self.audio_encryption_label.stream_type = 'audio'
+        self.video_encryption_label.stream_type = 'video'
 
         # prepare self.session_widget so we can take over some of its painting and behaviour
         self.session_widget.setAttribute(Qt.WA_Hover, True)
@@ -1501,6 +1544,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         old_session = self.__dict__.get('selected_session', None)
         new_session = self.__dict__['selected_session'] = session
         if new_session != old_session:
+            self.zrtp_widget.hide()
+            self.zrtp_widget.stream_type = None
             notification_center = NotificationCenter()
             if old_session is not None:
                 notification_center.remove_observer(self, sender=old_session)
@@ -1630,61 +1675,86 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.audio_value_label.setText(audio_info.codec or 'N/A')
             if audio_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (audio_info.local_rtp_candidate, audio_info.remote_rtp_candidate)}:
-                    self.audio_connection_label.setPixmap(self.relay_connection_pixmap)
+                    self.audio_connection_label.setPixmap(self.pixmaps.relay_connection)
                     self.audio_connection_label.setToolTip(u'Using relay')
                 else:
-                    self.audio_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.audio_connection_label.setPixmap(self.pixmaps.direct_connection)
                     self.audio_connection_label.setToolTip(u'Peer to peer')
             elif audio_info.ice_status == 'failed':
-                self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
                 self.audio_connection_label.setToolTip(u"Couldn't negotiate ICE")
             elif audio_info.ice_status == 'disabled':
                 if blink_session.contact.type == 'bonjour':
-                    self.audio_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.audio_connection_label.setPixmap(self.pixmaps.direct_connection)
                     self.audio_connection_label.setToolTip(u'Peer to peer')
                 else:
-                    self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
+                    self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
                     self.audio_connection_label.setToolTip(u'ICE is disabled')
             else:
-                self.audio_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
                 self.audio_connection_label.setToolTip(u'Negotiating ICE')
+
+            if audio_info.encryption is not None:
+                self.audio_encryption_label.setToolTip(u'Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
+            else:
+                self.audio_encryption_label.setToolTip(u'Media is not encrypted')
+            self._update_rtp_encryption_icon(self.audio_encryption_label)
+
             self.audio_connection_label.setVisible(audio_info.remote_address is not None)
             self.audio_encryption_label.setVisible(audio_info.encryption is not None)
 
             self.video_value_label.setText(video_info.codec or 'N/A')
             if video_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (video_info.local_rtp_candidate, video_info.remote_rtp_candidate)}:
-                    self.video_connection_label.setPixmap(self.relay_connection_pixmap)
+                    self.video_connection_label.setPixmap(self.pixmaps.relay_connection)
                     self.video_connection_label.setToolTip(u'Using relay')
                 else:
-                    self.video_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.video_connection_label.setPixmap(self.pixmaps.direct_connection)
                     self.video_connection_label.setToolTip(u'Peer to peer')
             elif video_info.ice_status == 'failed':
-                self.video_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
                 self.video_connection_label.setToolTip(u"Couldn't negotiate ICE")
             elif video_info.ice_status == 'disabled':
                 if blink_session.contact.type == 'bonjour':
-                    self.video_connection_label.setPixmap(self.direct_connection_pixmap)
+                    self.video_connection_label.setPixmap(self.pixmaps.direct_connection)
                     self.video_connection_label.setToolTip(u'Peer to peer')
                 else:
-                    self.video_connection_label.setPixmap(self.unknown_connection_pixmap)
+                    self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
                     self.video_connection_label.setToolTip(u'ICE is disabled')
             else:
-                self.video_connection_label.setPixmap(self.unknown_connection_pixmap)
+                self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
                 self.video_connection_label.setToolTip(u'Negotiating ICE')
+
+            if video_info.encryption is not None:
+                self.video_encryption_label.setToolTip(u'Media is encrypted using %s (%s)' % (video_info.encryption, video_info.encryption_cipher))
+            else:
+                self.video_encryption_label.setToolTip(u'Media is not encrypted')
+            self._update_rtp_encryption_icon(self.video_encryption_label)
+
             self.video_connection_label.setVisible(video_info.remote_address is not None)
             self.video_encryption_label.setVisible(video_info.encryption is not None)
 
+            if self.zrtp_widget.isVisibleTo(self.info_panel):
+                # refresh the zrtp widget (we need to hide/change/show because in certain configurations it flickers when changed while visible)
+                stream_info = blink_session.info.streams[self.zrtp_widget.stream_type]
+                self.zrtp_widget.hide()
+                self.zrtp_widget.peer_name = stream_info.zrtp_peer_name
+                self.zrtp_widget.peer_verified = stream_info.zrtp_verified
+                self.zrtp_widget.sas = stream_info.zrtp_sas
+                self.zrtp_widget.show()
+
             if any(len(path) > 1 for path in (chat_info.full_local_path, chat_info.full_remote_path)):
                 self.chat_value_label.setText(u'Using relay')
-                self.chat_connection_label.setPixmap(self.relay_connection_pixmap)
+                self.chat_connection_label.setPixmap(self.pixmaps.relay_connection)
                 self.chat_connection_label.setToolTip(u'Using relay')
             elif chat_info.full_local_path and chat_info.full_remote_path:
                 self.chat_value_label.setText(u'Peer to peer')
-                self.chat_connection_label.setPixmap(self.direct_connection_pixmap)
+                self.chat_connection_label.setPixmap(self.pixmaps.direct_connection)
                 self.chat_connection_label.setToolTip(u'Peer to peer')
             else:
                 self.chat_value_label.setText(u'N/A')
+
+            self.chat_encryption_label.setToolTip(u'Media is encrypted using TLS')
 
             self.chat_connection_label.setVisible(chat_info.remote_address is not None)
             self.chat_encryption_label.setVisible(chat_info.remote_address is not None and chat_info.transport=='tls')
@@ -1697,11 +1767,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.screen_value_label.setText(u'N/A')
 
             if any(len(path) > 1 for path in (screen_info.full_local_path, screen_info.full_remote_path)):
-                self.screen_connection_label.setPixmap(self.relay_connection_pixmap)
+                self.screen_connection_label.setPixmap(self.pixmaps.relay_connection)
                 self.screen_connection_label.setToolTip(u'Using relay')
             elif screen_info.full_local_path and screen_info.full_remote_path:
-                self.screen_connection_label.setPixmap(self.direct_connection_pixmap)
+                self.screen_connection_label.setPixmap(self.pixmaps.direct_connection)
                 self.screen_connection_label.setToolTip(u'Peer to peer')
+
+            self.screen_encryption_label.setToolTip(u'Media is encrypted using TLS')
 
             self.screen_connection_label.setVisible(screen_info.remote_address is not None)
             self.screen_encryption_label.setVisible(screen_info.remote_address is not None and screen_info.transport=='tls')
@@ -1717,6 +1789,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.latency_graph.update()
             self.packet_loss_graph.update()
             self.traffic_graph.update()
+
+    def _update_rtp_encryption_icon(self, encryption_label):
+        stream = self.selected_session.blink_session.streams.get(encryption_label.stream_type)
+        stream_info = self.selected_session.blink_session.info.streams[encryption_label.stream_type]
+        if encryption_label.isEnabled() and stream_info.encryption == 'ZRTP':
+            if encryption_label.hovered and stream is not None and not stream._done:
+                encryption_label.setPixmap(self.pixmaps.light_green_lock if stream_info.zrtp_verified else self.pixmaps.light_orange_lock)
+            else:
+                encryption_label.setPixmap(self.pixmaps.green_lock if stream_info.zrtp_verified else self.pixmaps.orange_lock)
+        else:
+            encryption_label.setPixmap(self.pixmaps.grey_lock)
 
     def show(self):
         super(ChatWindow, self).show()
@@ -1756,6 +1839,22 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 elif event.delta() < 0 and settings.chat_window.session_info.graph_time_scale < GraphTimeScale.max_value:
                     settings.chat_window.session_info.graph_time_scale += 1
                     settings.save()
+        elif watched in (self.audio_encryption_label, self.video_encryption_label):
+            if event_type == QEvent.Enter:
+                watched.hovered = True
+                self._update_rtp_encryption_icon(watched)
+            elif event_type == QEvent.Leave:
+                watched.hovered = False
+                self._update_rtp_encryption_icon(watched)
+            elif event_type == QEvent.EnabledChange and not watched.isEnabled():
+                watched.setPixmap(self.pixmaps.grey_lock)
+            elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
+                self._EH_RTPEncryptionLabelClicked(watched)
+        elif watched is self.info_panel:
+            if event_type == QEvent.Resize and self.zrtp_widget.isVisibleTo(self.info_panel):
+                rect = self.zrtp_widget.geometry()
+                rect.setWidth(self.info_panel.width())
+                self.zrtp_widget.setGeometry(rect)
         return False
 
     def drawSessionWidgetIndicators(self):
@@ -2049,6 +2148,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             session.chat_widget.add_message(ChatStatus('Disconnected'))
 
+    def _NH_MediaStreamWillEnd(self, notification):
+        stream = notification.sender
+        if stream.type == self.zrtp_widget.stream_type and stream.blink_session.items.chat is self.selected_session:
+            self.zrtp_widget.hide()
+            self.zrtp_widget.stream_type = None
+
     # signal handlers
     #
     def _SH_InfoButtonClicked(self, checked):
@@ -2160,6 +2265,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.participants_list.setModel(None)
             self.control_button.setEnabled(False)
 
+    def _SH_ZRTPWidgetNameChanged(self):
+        stream = self.selected_session.blink_session.streams.get(self.zrtp_widget.stream_type, Null)
+        stream.encryption.zrtp.peer_name = self.zrtp_widget.peer_name
+
+    def _SH_ZRTPWidgetStatusChanged(self):
+        stream = self.selected_session.blink_session.streams.get(self.zrtp_widget.stream_type, Null)
+        stream.encryption.zrtp.verified = self.zrtp_widget.peer_verified
+
     def _AH_Connect(self):
         blink_session = self.selected_session.blink_session
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=[StreamDescription('chat')], reinitialize=True)
@@ -2225,6 +2338,23 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.scrollToTop()
         self.session_list.show()
         self.session_list.animation.start()
+
+    def _EH_RTPEncryptionLabelClicked(self, encryption_label):
+        stream = self.selected_session.blink_session.streams.get(encryption_label.stream_type)
+        stream_info = self.selected_session.blink_session.info.streams[encryption_label.stream_type]
+        if stream is not None and not stream._done and stream_info.encryption == 'ZRTP':
+            if self.zrtp_widget.isVisible() and self.zrtp_widget.stream_type == encryption_label.stream_type:
+                self.zrtp_widget.hide()
+                self.zrtp_widget.stream_type = None
+            else:
+                self.zrtp_widget.hide()
+                self.zrtp_widget.peer_name = stream_info.zrtp_peer_name
+                self.zrtp_widget.peer_verified = stream_info.zrtp_verified
+                self.zrtp_widget.sas = stream_info.zrtp_sas
+                self.zrtp_widget.stream_type = encryption_label.stream_type
+                self.zrtp_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 300))
+                self.zrtp_widget.show()
+                self.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
 
 del ui_class, base_class
 
