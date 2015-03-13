@@ -1243,9 +1243,9 @@ class ServerConference(object):
 #
 
 # positions for sessions in a client conference.
-class Top(object): pass
-class Middle(object): pass
-class Bottom(object): pass
+class Top:    __metaclass__ = MarkerType
+class Middle: __metaclass__ = MarkerType
+class Bottom: __metaclass__ = MarkerType
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
