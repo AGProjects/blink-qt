@@ -300,12 +300,6 @@
    </property>
    <item>
     <widget class="QFrame" name="title">
-     <property name="frameShape">
-      <enum>QFrame::NoFrame</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Plain</enum>
-     </property>
      <layout class="QHBoxLayout" name="title_layout">
       <property name="spacing">
        <number>0</number>
@@ -351,12 +345,6 @@
    </item>
    <item>
     <widget class="QFrame" name="body">
-     <property name="frameShape">
-      <enum>QFrame::NoFrame</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Plain</enum>
-     </property>
      <layout class="QVBoxLayout" name="body_layout">
       <property name="spacing">
        <number>6</number>
