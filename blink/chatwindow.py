@@ -500,12 +500,14 @@ class Thumbnail(object):
                 image_format = str(image_reader.format())
                 image_data = str(image_reader.device().readAll())
             else:
+                file_format = str(image_reader.format())
+                file_size = image_reader.device().size()
                 image_size = image_reader.size()
                 if image_size.height() > 720:
                     image_reader.setScaledSize(image_size * 720 / image_size.height())
                 image = QPixmap.fromImageReader(image_reader)
                 image_buffer = QBuffer()
-                image_format = 'png' if image.hasAlphaChannel() else 'jpeg'
+                image_format = 'png' if image.hasAlphaChannel() or (file_format in {'png', 'tiff', 'ico'} and file_size <= 100*1024) else 'jpeg'
                 image.save(image_buffer, image_format)
                 image_data = str(image_buffer.data())
             instance = super(Thumbnail, cls).__new__(cls)
