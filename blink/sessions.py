@@ -2595,14 +2595,18 @@ class AudioSessionListView(QListView):
                 session.widget.drop_indicator = True
 
     def _SH_HangupShortcutActivated(self):
-        session = self.selectedIndexes()[0].data(Qt.UserRole)
-        if session.client_conference is None:
-            session.widget.hangup_button.click()
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.UserRole)
+            if session.client_conference is None:
+                session.widget.hangup_button.click()
 
     def _SH_HoldShortcutActivated(self):
-        session = self.selectedIndexes()[0].data(Qt.UserRole)
-        if session.client_conference is None:
-            session.widget.hold_button.click()
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.UserRole)
+            if session.client_conference is None:
+                session.widget.hold_button.click()
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
