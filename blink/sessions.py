@@ -974,6 +974,14 @@ class BlinkSession(QObject):
         elif self.streams.types.isdisjoint({'audio', 'video'}):
             self.unhold()
 
+    def _NH_MediaStreamDidStart(self, notification):
+        stream = notification.sender
+        audio_stream = self.streams.get('audio')
+        if stream.type == 'chat' and stream.session.remote_focus and 'com.ag-projects.zrtp-sas' in stream.chatroom_capabilities and audio_stream is not None:
+            secure_chat = stream.transport == 'tls' and all(len(path)==1 for path in (stream.msrp.full_local_path, stream.msrp.full_remote_path))  # tls & direct connection
+            if audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.sas is not None and not audio_stream.encryption.zrtp.verified and secure_chat:
+                stream.send_message(audio_stream.encryption.zrtp.sas, 'application/blink-zrtp-sas')
+
     def _NH_RTPStreamICENegotiationStateDidChange(self, notification):
         if notification.data.state in {'GATHERING', 'GATHERING_COMPLETE', 'NEGOTIATING'}:
             stream_info = self.info.streams[notification.sender.type]
@@ -1008,8 +1016,14 @@ class BlinkSession(QObject):
         notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
 
     def _NH_RTPStreamZRTPReceivedSAS(self, notification):
-        self.info.streams[notification.sender.type]._update(notification.sender)
+        stream = notification.sender
+        self.info.streams[stream.type]._update(stream)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+        chat_stream = self.streams.get('chat')
+        if stream.session.remote_focus and not notification.data.verified and chat_stream is not None and 'com.ag-projects.zrtp-sas' in chat_stream.chatroom_capabilities:
+            secure_chat = chat_stream.transport == 'tls' and all(len(path)==1 for path in (chat_stream.msrp.full_local_path, chat_stream.msrp.full_remote_path))  # tls & direct connection
+            if secure_chat:
+                chat_stream.send_message(notification.data.sas, 'application/blink-zrtp-sas')
 
     def _NH_RTPStreamZRTPVerifiedStateChanged(self, notification):
         self.info.streams[notification.sender.type]._update(notification.sender)
