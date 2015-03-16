@@ -2080,7 +2080,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
 
-        session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
+        is_status_message = any(h.name=='Message-Type' and h.value=='status' and h.namespace=='urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
+        if is_status_message:
+            session.chat_widget.add_message(ChatStatus(content))
+        else:
+            session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
