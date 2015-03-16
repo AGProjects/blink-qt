@@ -1644,6 +1644,9 @@ class GroupWidget(base_class, ui_class):
     drop_indicator = property(_get_drop_indicator, _set_drop_indicator)
     del _get_drop_indicator, _set_drop_indicator
 
+    def edit(self):
+        self._start_editing()
+
     def _start_editing(self):
         #self.name_editor.setText(self.name_label.text())
         self.name_editor.selectAll()
@@ -1653,9 +1656,6 @@ class GroupWidget(base_class, ui_class):
     def _end_editing(self):
         self.name_label.setText(self.name_editor.text())
         self.name_view.setCurrentWidget(self.label_widget)
-
-    def edit(self):
-        self._start_editing()
 
     def _collapse_button_pressed(self):
         self._disable_dnd = True
