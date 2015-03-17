@@ -4,7 +4,7 @@
 __all__ = ['Blink']
 
 
-__version__ = '1.2.0'
+__version__ = '1.2.1'
 __date__    = 'March 17th 2015'
 
 
