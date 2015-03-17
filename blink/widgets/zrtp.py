@@ -12,7 +12,7 @@ from PyQt4.QtGui  import QStyle, QStyleOption, QStylePainter
 from blink.resources import Resources
 
 
-ui_class, base_class = uic.loadUiType('resources/zrtp_widget.ui')
+ui_class, base_class = uic.loadUiType(Resources.get('zrtp_widget.ui'))
 
 class ZRTPWidget(base_class, ui_class):
     closed = pyqtSignal()
