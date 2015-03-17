@@ -6,7 +6,8 @@ __all__ = ['ZRTPWidget']
 
 
 from PyQt4 import uic
-from PyQt4.QtCore import pyqtSignal
+from PyQt4.QtCore import Qt, pyqtSignal
+from PyQt4.QtGui  import QStyle, QStyleOption, QStylePainter
 
 from blink.resources import Resources
 
@@ -67,6 +68,13 @@ class ZRTPWidget(base_class, ui_class):
         if not event.spontaneous():
             self.closed.emit()
             self._check_name_changes()
+
+    def paintEvent(self, event):
+        option = QStyleOption()
+        option.initFrom(self)
+        painter = QStylePainter(self)
+        painter.setRenderHint(QStylePainter.Antialiasing, True)
+        painter.drawPrimitive(QStyle.PE_Widget if self.testAttribute(Qt.WA_NoSystemBackground) else QStyle.PE_Frame, option)
 
     def _check_name_changes(self):
         peer_name = self.peer_name_value.text()
