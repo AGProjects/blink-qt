@@ -60,11 +60,10 @@ class Resources(object):
     @classproperty
     def directory(cls):
         if cls._cached_directory is None:
-            script = sys.argv[0]
-            if script == '':
-                application_directory = os.path.realpath(script) # executed in interactive interpreter
+            if sys.path[0] == '':
+                application_directory = os.path.realpath('') # executed in interactive interpreter
             else:
-                binary_directory = os.path.dirname(os.path.realpath(script))
+                binary_directory = os.path.dirname(os.path.realpath(sys.argv[0]))
                 if os.path.basename(binary_directory) == 'bin':
                     application_directory = os.path.dirname(binary_directory)
                 else:
