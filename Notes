@@ -1,3 +1,11 @@
+ZRTP
+----
+
+- decide between separate checkbox to enable/disable RTP encryption vs
+  having "Disabled" integrated in the combobox
+- key negotiation notes label in preferences
+
+
 Video fixes
 -----------
 
