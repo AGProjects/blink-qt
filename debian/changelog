@@ -1,3 +1,13 @@
+blink (1.2.0) unstable; urgency=medium
+
+  * Added ZRTP support
+  * Adapt to API changes in the middleware
+  * Ignore hold/hangup keyboard shortcuts if no session is selected
+  * Render status messages appropriately
+  * Optimized chat inline images to avoid compression artifacts
+
+ -- Saul Ibarra <saul@ag-projects.com>  Tue, 17 Mar 2015 11:02:23 +0100
+
 blink (1.1.0) unstable; urgency=medium
 
   * Added support for drag and drop on the chat window
