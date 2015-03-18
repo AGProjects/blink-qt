@@ -1825,6 +1825,7 @@ class AudioSessionItem(object):
         stream = self.blink_session.streams.get('audio', Null)
         stream.encryption.zrtp.verified = self.zrtp_widget.peer_verified
 
+    @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
@@ -1927,7 +1928,6 @@ class AudioSessionItem(object):
                 self.status = Status(notification.data.reason)
             self._cleanup()
 
-    @run_in_gui_thread
     def _NH_MediaStreamWillEnd(self, notification):
         stream = notification.sender
         if stream.type == 'audio' and stream.blink_session.items.audio is self:
