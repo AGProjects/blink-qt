@@ -1780,6 +1780,7 @@ class AudioSessionItem(object):
         notification_center.remove_observer(self, name='MediaStreamWillEnd')
         self.blink_session.items.audio = None
         self.blink_session = None
+        self.zrtp_widget = None
         self.widget = Null
 
     def send_dtmf(self, digit):
