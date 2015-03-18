@@ -1927,6 +1927,7 @@ class AudioSessionItem(object):
                 self.status = Status(notification.data.reason)
             self._cleanup()
 
+    @run_in_gui_thread
     def _NH_MediaStreamWillEnd(self, notification):
         stream = notification.sender
         if stream.type == 'audio' and stream.blink_session.items.audio is self:
