@@ -132,13 +132,13 @@ Traceback (most recent call last):
 ValueError: Unknown format code 'g' for object of type 'str'
 
 
-error: Exception occured in observer <blink.sessions.AudioSessionListView object at 0xab300a04> while handling notification 'BlinkActiveSessionDidChange'
+error: Exception occured in observer <blink.sessions.AudioSessionListView object at 0xab545464> while handling notification 'BlinkActiveSessionDidChange'
 Traceback (most recent call last):
   File "/usr/lib/python2.7/dist-packages/application/notification.py", line 216, in post_notification
     observer.handle_notification(notification)
-  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 2466, in handle_notification
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 2632, in handle_notification
     handler(notification)
-  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 2480, in _NH_BlinkActiveSessionDidChange
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 2646, in _NH_BlinkActiveSessionDidChange
     position = model.sessions.index(notification.data.active_session.items.audio)
 ValueError: None is not in list
 
