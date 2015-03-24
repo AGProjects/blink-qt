@@ -114,6 +114,20 @@ fullscreen: +12-15%
 
 - exceptions:
 
+error: Exception occured while calling function handle_notification in the GUI thread
+Traceback (most recent call last):
+  File "/home/dan/work/voip/blink-qt/blink/__init__.py", line 278, in _EH_CallFunctionEvent
+    event.function(*event.args, **event.kw)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 5531, in handle_notification
+    handler(notification)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 5589, in _NH_SIPSessionNewIncoming
+    session.send_ring_indication()
+  File "<string>", line 1, in send_ring_indication
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 118, in wrapper
+    raise IllegalStateError('cannot call %s in %s state' % (func.__name__, obj.state))
+IllegalStateError: cannot call send_ring_indication in terminated state
+
+
 error: Exception occured in observer <blink.chatwindow.ChatWindow object at 0xab33d5cc> while handling notification 'BlinkSessionInfoUpdated'
 Traceback (most recent call last):
   File "/usr/lib/python2.7/dist-packages/application/notification.py", line 216, in post_notification
