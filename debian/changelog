@@ -1,3 +1,11 @@
+blink (1.2.2) unstable; urgency=medium
+
+  * Fix hiding ZRTP widget from a non-GUI thread
+  * Reset zrtp_widget when we delete the audio session item
+  * Updated Windows installation instructions
+
+ -- Saul Ibarra <saul@ag-projects.com>  Wed, 25 Mar 2015 12:45:12 +0100
+
 blink (1.2.1) unstable; urgency=medium
 
   * Fix loading ZRTP widget UI file
