@@ -92,7 +92,7 @@ class MainWindow(base_class, ui_class):
         self.search_view.setCurrentWidget(self.search_list_panel)
 
         # System tray
-        if QSystemTrayIcon.isSystemTrayAvailable() and not os.getenv('XDG_CURRENT_DESKTOP', '').lower().startswith('unity'):
+        if QSystemTrayIcon.isSystemTrayAvailable():
             self.system_tray_icon = QSystemTrayIcon(QIcon(Resources.get('icons/blink.png')), self)
             self.system_tray_icon.activated.connect(self._SH_SystemTrayIconActivated)
             menu = QMenu(self)
