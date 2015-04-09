@@ -3798,15 +3798,15 @@ class FileTransfer(object):
         else:
             self._terminate()
 
-    def _NH_FileTransferStreamHashProgress(self, notification):
+    def _NH_FileTransferHashProgress(self, notification):
         progress = int(notification.data.processed * 100 / notification.data.total)
         notification.center.post_notification('FileTransferHashProgress', sender=self, data=NotificationData(progress=progress))
 
-    def _NH_FileTransferStreamProgress(self, notification):
+    def _NH_FileTransferProgress(self, notification):
         notification.center.post_notification('FileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes,
                                                                                                          total_bytes=notification.data.total_bytes))
 
-    def _NH_FileTransferStreamDidFinishTransfer(self, notification):
+    def _NH_FileTransferDidEnd(self, notification):
         if self.direction == 'incoming':
             # filename could have changed
             self.filename = os.path.splitext(notification.sender.file_selector.name)[0]
