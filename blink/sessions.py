@@ -3535,8 +3535,6 @@ class UniqueFilenameGenerator(object):
 class FileTransfer(object):
     implements(IObserver)
 
-    tmp_file_suffix = '.download'
-
     def __init__(self):
         self.id = None
         self.direction = None
