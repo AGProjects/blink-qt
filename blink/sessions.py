@@ -3532,7 +3532,7 @@ class UniqueFilenameGenerator(object):
             yield "%s-%d%s" % (prefix, x, extension)
 
 
-class FileTransfer(object):
+class BlinkFileTransfer(object):
     implements(IObserver)
 
     def __init__(self):
@@ -3590,7 +3590,7 @@ class FileTransfer(object):
 
         self.state = 'connecting'
         notification_center = NotificationCenter()
-        notification_center.post_notification('FileTransferNewIncoming', sender=self)
+        notification_center.post_notification('BlinkFileTransferNewIncoming', sender=self)
         self.sip_session.accept([self.stream])
 
     def init_outgoing(self, account, contact, contact_uri, filename, transfer_id=RandomID):
@@ -3610,7 +3610,7 @@ class FileTransfer(object):
 
         self.state = 'initialized'
         notification_center = NotificationCenter()
-        notification_center.post_notification('FileTransferNewOutgoing', self)
+        notification_center.post_notification('BlinkFileTransferNewOutgoing', self)
 
     def connect(self):
         assert self.direction == 'outgoing' and self.state in ('initialized', 'ended')
@@ -3626,7 +3626,7 @@ class FileTransfer(object):
             # TODO: remember hash and mtime to avoid re-computing hash -Saul
             self._file_selector = FileSelector.for_file(self.filename)
             self.state = 'initialized'
-            notification_center.post_notification('FileTransferWillRetry', self)
+            notification_center.post_notification('BlinkFileTransferWillRetry', self)
 
         settings = SIPSimpleSettings()
         if isinstance(self.account, Account):
@@ -3667,7 +3667,7 @@ class FileTransfer(object):
         old_state = self.__dict__.get('state', None)
         new_state = self.__dict__['state'] = value
         if new_state != old_state:
-            NotificationCenter().post_notification('FileTransferDidChangeState', sender=self, data=NotificationData(old_state=old_state, new_state=new_state))
+            NotificationCenter().post_notification('BlinkFileTransferDidChangeState', sender=self, data=NotificationData(old_state=old_state, new_state=new_state))
 
     state = property(_get_state, _set_state)
     del _get_state, _set_state
@@ -3722,7 +3722,7 @@ class FileTransfer(object):
 
         self.state = state
         notification_center = NotificationCenter()
-        notification_center.post_notification('FileTransferDidEnd', sender=self, data=NotificationData(reason=self._reason, error=self._error))
+        notification_center.post_notification('BlinkFileTransferDidEnd', sender=self, data=NotificationData(reason=self._reason, error=self._error))
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -3800,10 +3800,10 @@ class FileTransfer(object):
 
     def _NH_FileTransferHashProgress(self, notification):
         progress = int(notification.data.processed * 100 / notification.data.total)
-        notification.center.post_notification('FileTransferHashProgress', sender=self, data=NotificationData(progress=progress))
+        notification.center.post_notification('BlinkFileTransferHashProgress', sender=self, data=NotificationData(progress=progress))
 
     def _NH_FileTransferProgress(self, notification):
-        notification.center.post_notification('FileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes,
+        notification.center.post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes,
                                                                                                          total_bytes=notification.data.total_bytes))
 
     def _NH_FileTransferDidEnd(self, notification):
@@ -4097,7 +4097,7 @@ class FileTransferItem(object):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_FileTransferDidChangeState(self, notification):
+    def _NH_BlinkFileTransferDidChangeState(self, notification):
         state = notification.data.new_state
         if state == 'connecting/dns_lookup':
             self.status = u'Looking up destination...'
@@ -4117,7 +4117,7 @@ class FileTransferItem(object):
         self.widget.update_content(self)
         notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
-    def _NH_FileTransferHashProgress(self, notification):
+    def _NH_BlinkFileTransferHashProgress(self, notification):
         progress = notification.data.progress
         if self.progress is None or progress > self.progress:
             self.progress = progress
@@ -4125,7 +4125,7 @@ class FileTransferItem(object):
             self.widget.update_content(self)
             notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
-    def _NH_FileTransferProgress(self, notification):
+    def _NH_BlinkFileTransferProgress(self, notification):
         self.bytes = notification.data.bytes
         self.total_bytes = notification.data.total_bytes
         progress = int(self.bytes * 100 / self.total_bytes)
@@ -4136,14 +4136,14 @@ class FileTransferItem(object):
             self.widget.update_content(self)
             notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
-    def _NH_FileTransferWillRetry(self, notification):
+    def _NH_BlinkFileTransferWillRetry(self, notification):
         self.status = None
         self.progress = None
         self.bytes = 0
         self.total_bytes = 0
         self.widget.update_content(self, initial=True)
 
-    def _NH_FileTransferDidEnd(self, notification):
+    def _NH_BlinkFileTransferDidEnd(self, notification):
         self.status = notification.data.reason
         self.widget.update_content(self)
         notification.center.post_notification('FileTransferItemDidChange', sender=self)
@@ -4258,10 +4258,10 @@ class FileTransferModel(QAbstractListModel):
         self.items = []
         self.history = TransferHistory()
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='FileTransferNewIncoming')
-        notification_center.add_observer(self, name='FileTransferNewOutgoing')
-        notification_center.add_observer(self, name='FileTransferItemDidChange')
-        notification_center.add_observer(self, name='FileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkFileTransferNewIncoming')
+        notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
+        notification_center.add_observer(self, name='BlinkFileTransferItemDidChange')
+        notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
 
     @property
@@ -4316,23 +4316,23 @@ class FileTransferModel(QAbstractListModel):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_FileTransferNewIncoming(self, notification):
+    def _NH_BlinkFileTransferNewIncoming(self, notification):
         self.addItem(FileTransferItem(notification.sender))
 
-    def _NH_FileTransferNewOutgoing(self, notification):
+    def _NH_BlinkFileTransferNewOutgoing(self, notification):
         self.addItem(FileTransferItem(notification.sender))
 
-    def _NH_FileTransferItemDidChange(self, notification):
+    def _NH_BlinkFileTransferItemDidChange(self, notification):
         index = self.index(self.items.index(notification.sender))
         self.dataChanged.emit(index, index)
+
+    def _NH_BlinkFileTransferDidEnd(self, notification):
+        self.history.save(self.ended_items)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.beginResetModel()
         self.items = self.history.load()
         self.endResetModel()
-
-    def _NH_FileTransferDidEnd(self, notification):
-        self.history.save(self.ended_items)
 
 # Conference participants
 #
@@ -5199,9 +5199,9 @@ class SessionManager(object):
         notification_center.add_observer(self, name='SIPSessionProposalRejected')
         notification_center.add_observer(self, name='SIPSessionHadProposalFailure')
 
-        notification_center.add_observer(self, name='FileTransferDidChangeState')
-        notification_center.add_observer(self, name='FileTransferDidEnd')
-        notification_center.add_observer(self, name='FileTransferWillRetry')
+        notification_center.add_observer(self, name='BlinkFileTransferDidChangeState')
+        notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkFileTransferWillRetry')
 
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
@@ -5244,7 +5244,7 @@ class SessionManager(object):
 
         self.send_file_directory = os.path.dirname(filename)
 
-        transfer = FileTransfer()
+        transfer = BlinkFileTransfer()
         self.file_transfers.append(transfer)
         transfer.init_outgoing(account, contact, contact_uri, filename, transfer_id)
         transfer.connect()
@@ -5399,7 +5399,7 @@ class SessionManager(object):
             bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
-        transfer = FileTransfer()
+        transfer = BlinkFileTransfer()
         self.file_transfers.append(transfer)
         transfer.init_incoming(incoming_request.contact, incoming_request.contact_uri, incoming_request.session, incoming_request.stream)
 
@@ -5588,16 +5588,16 @@ class SessionManager(object):
             self.active_session = selected_session
             notification.center.post_notification('BlinkActiveSessionDidChange', sender=self, data=NotificationData(previous_active_session=old_active_session or None, active_session=selected_session))
 
-    def _NH_FileTransferDidChangeState(self, notification):
+    def _NH_BlinkFileTransferDidChangeState(self, notification):
         new_state = notification.data.new_state
         if new_state in ('connecting/ringing', 'connected'):
             self.update_ringtone()
 
-    def _NH_FileTransferWillRetry(self, notification):
+    def _NH_BlinkFileTransferWillRetry(self, notification):
         self.file_transfers.append(notification.sender)
         self.update_ringtone()
 
-    def _NH_FileTransferDidEnd(self, notification):
+    def _NH_BlinkFileTransferDidEnd(self, notification):
         self.file_transfers.remove(notification.sender)
         self.update_ringtone()
         if not notification.data.error and not self._filetransfer_tone_timer.isActive():

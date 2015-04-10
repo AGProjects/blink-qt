@@ -50,8 +50,8 @@ class FileTransferWindow(base_class, ui_class):
         self.model.modelReset.connect(self.update_status)
 
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='FileTransferWillRetry')
-        notification_center.add_observer(self, name='FileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkFileTransferWillRetry')
+        notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
 
     def show(self, activate=True):
         settings = BlinkSettings()
@@ -74,10 +74,10 @@ class FileTransferWindow(base_class, ui_class):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_FileTransferWillRetry(self, notification):
+    def _NH_BlinkFileTransferWillRetry(self, notification):
         self.update_status()
 
-    def _NH_FileTransferDidEnd(self, notification):
+    def _NH_BlinkFileTransferDidEnd(self, notification):
         self.update_status()
 
     def _SH_ContextMenuRequested(self, pos):
