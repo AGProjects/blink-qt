@@ -3809,7 +3809,7 @@ class FileTransfer(object):
     def _NH_FileTransferDidEnd(self, notification):
         if self.direction == 'incoming':
             # filename could have changed
-            self.filename = os.path.splitext(notification.sender.file_selector.name)[0]
+            self.filename = notification.sender.file_selector.name
         self._finished = True
         self._error = notification.data.error
         if not self._error:
