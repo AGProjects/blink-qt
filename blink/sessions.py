@@ -3524,15 +3524,6 @@ class FileSizeFormatter(object):
             return "%d bytes" % size
 
 
-class UniqueFilenameGenerator(object):
-    @classmethod
-    def generate(cls, name):
-        yield name
-        prefix, extension = os.path.splitext(name)
-        for x in count(1):
-            yield "%s-%d%s" % (prefix, x, extension)
-
-
 class BlinkFileTransfer(object):
     implements(IObserver)
 
