@@ -1034,7 +1034,7 @@ class PreferencesWindow(base_class, ui_class):
             else:
                 account_manager.default_account = None
 
-        if selected_account.tls.certificate.normalized.startswith(ApplicationData.directory):
+        if selected_account.tls.certificate is not None and selected_account.tls.certificate.normalized.startswith(ApplicationData.directory):
             try:
                 os.unlink(selected_account.tls.certificate.normalized)
             except (AttributeError, OSError, IOError):
