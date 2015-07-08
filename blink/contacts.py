@@ -704,7 +704,7 @@ class GoogleContactsManager(object):
                     else:
                         contact.name = name
                         contact.company = company
-                        contact.uris = uris
+                        contact.uris = GoogleContactURIList(uris)
                         if icon_url and contact.icon.etag != icon_etag != None:
                             try:
                                 contact.icon.data = self.client.Get(icon_url).read()
