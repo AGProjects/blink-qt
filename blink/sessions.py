@@ -139,17 +139,17 @@ class MSRPStreamInfo(object):
 
     def _update(self, stream):
         if stream is not None:
+            local_uri = stream.local_uri
             msrp_transport = stream.msrp
-            msrp_connector = stream.msrp_connector
             if msrp_transport is not None:
                 self.transport = stream.transport
                 self.local_address = msrp_transport.local_uri.host
                 self.remote_address = msrp_transport.next_host().host
                 self.full_local_path = msrp_transport.full_local_path
                 self.full_remote_path = msrp_transport.full_remote_path
-            elif msrp_connector is not None:
+            elif local_uri is not None:
                 self.transport = stream.transport
-                self.local_address = msrp_connector.local_uri.host
+                self.local_address = local_uri.host
 
     def _reset(self):
         self.__init__()
