@@ -104,7 +104,7 @@ class LogManager(object):
             self.notifications_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'notifications_trace.txt'))
         self._siptrace_start_time = datetime.now()
         self._siptrace_packet_count = 0
-        self.event_queue = EventQueue(handler=self._process_notification, name='Log handling')
+        self.event_queue = EventQueue(handler=self._process_notification, name='Blink LogManager')
         self.event_queue.start()
         while settings.logs.trace_notifications and self.notification_queue and self.notification_queue.notifications:
             notification = self.notification_queue.notifications.popleft()
