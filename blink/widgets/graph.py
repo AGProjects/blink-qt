@@ -21,7 +21,7 @@ class HeightScaler(object):
 
     @abstractmethod
     def get_height(self, max_value):
-        return NotImplemented
+        raise NotImplementedError
 
 
 class LogarithmicScaler(HeightScaler):
