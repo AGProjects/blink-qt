@@ -283,7 +283,7 @@ class BonjourNeighbourURIList(object):
         return len(self._uri_map)
     __hash__ = None
     def get(self, key, default=None):
-        return self._item_map.get(key, default)
+        return self._uri_map.get(key, default)
     def add(self, uri):
         self._uri_map[uri.id] = uri
     def pop(self, id, *args):
@@ -468,7 +468,7 @@ class GoogleContactURIList(object):
         return len(self._uri_map)
     __hash__ = None
     def get(self, key, default=None):
-        return self._item_map.get(key, default)
+        return self._uri_map.get(key, default)
     def add(self, uri):
         self._uri_map[uri.id] = uri
     def pop(self, id, *args):
@@ -850,7 +850,7 @@ class DummyContactURIList(object):
         return len(self._uri_map)
     __hash__ = None
     def get(self, key, default=None):
-        return self._item_map.get(key, default)
+        return self._uri_map.get(key, default)
     def add(self, uri):
         self._uri_map[uri.id] = uri
     def pop(self, id, *args):
