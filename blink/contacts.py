@@ -271,7 +271,7 @@ class BonjourNeighbourURI(object):
 
 
 class BonjourNeighbourURIList(object):
-    def __init__(self, uris=[]):
+    def __init__(self, uris):
         self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
     def __getitem__(self, id):
         return self._uri_map[id]
@@ -304,7 +304,7 @@ class BonjourPresence(object):
 class BonjourNeighbour(object):
     id = WriteOnceAttribute()
 
-    def __init__(self, id, name, hostname, uris=[], presence=None):
+    def __init__(self, id, name, hostname, uris, presence=None):
         self.id = BonjourNeighbourID(id) if isinstance(id, basestring) else id
         self.name = name
         self.hostname = hostname
@@ -456,7 +456,7 @@ class GoogleContactURI(object):
 
 
 class GoogleContactURIList(object):
-    def __init__(self, uris=[]):
+    def __init__(self, uris):
         self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
     def __getitem__(self, id):
         return self._uri_map[id]
@@ -838,7 +838,7 @@ class DummyContactURI(object):
 
 
 class DummyContactURIList(object):
-    def __init__(self, uris=[]):
+    def __init__(self, uris):
         self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
     def __getitem__(self, id):
         return self._uri_map[id]
