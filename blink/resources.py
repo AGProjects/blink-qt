@@ -44,7 +44,7 @@ class ApplicationData(object):
             elif platform.system() == 'Windows':
                 cls._cached_directory = os.path.join(os.environ['APPDATA'], 'Blink').decode(sys.getfilesystemencoding())
             else:
-                cls._cached_directory = Path('~/.blink').normalized
+                cls._cached_directory = Path(u'~/.blink').normalized
         return DirectoryContextManager(cls._cached_directory)
 
     @classmethod
