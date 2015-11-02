@@ -5,6 +5,7 @@ from __future__ import division
 
 __all__ = ['ChatWindow']
 
+import locale
 import os
 import re
 
@@ -239,11 +240,13 @@ class ChatContent(object):
 
     @property
     def date(self):
-        return self.timestamp.strftime('%d %b %Y')
+        language, encoding = locale.getlocale(locale.LC_TIME)
+        return self.timestamp.strftime('%d %b %Y').decode(encoding or 'ascii')
 
     @property
     def time(self):
-        return self.timestamp.strftime('%H:%M')
+        language, encoding = locale.getlocale(locale.LC_TIME)
+        return self.timestamp.strftime('%H:%M').decode(encoding or 'ascii')
 
     @property
     def text_direction(self):
