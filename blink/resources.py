@@ -42,7 +42,7 @@ class ApplicationData(object):
                 from Foundation import NSApplicationSupportDirectory, NSSearchPathForDirectoriesInDomains, NSUserDomainMask
                 cls._cached_directory = os.path.join(NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, True)[0], u'Blink')
             elif platform.system() == 'Windows':
-                cls._cached_directory = os.path.join(os.environ['APPDATA'], 'Blink').decode(sys.getfilesystemencoding())
+                cls._cached_directory = os.path.join(os.environ['APPDATA'].decode(sys.getfilesystemencoding()), u'Blink')
             else:
                 cls._cached_directory = Path(u'~/.blink').normalized
         return DirectoryContextManager(cls._cached_directory)
