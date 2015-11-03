@@ -853,10 +853,11 @@ class PreferencesWindow(base_class, ui_class):
 
         style = self.style_button.itemData(self.style_button.currentIndex())
         style_variant = self.style_variant_button.itemText(self.style_variant_button.currentIndex())
+        font_family = blink_settings.chat_window.font or style.font_family
+        font_size = blink_settings.chat_window.font_size or style.font_size
         user_icons = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
 
-        self.style_view.setChatFont(blink_settings.chat_window.font or style.font_family, blink_settings.chat_window.font_size or style.font_size)
-        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path)+'/', style_url=style_variant+'.style'))
+        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path)+'/', style_url=style_variant+'.style', font_family=font_family, font_size=font_size))
         chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
         chat_element.last_message = None
 

@@ -378,16 +378,6 @@ class ChatWebView(QWebView):
         self.setAttribute(Qt.WA_OpaquePaintEvent, False)
         self.settings().setAttribute(QWebSettings.DeveloperExtrasEnabled, True) # temporary for debugging -Dan
 
-    def setChatFont(self, family, size):
-        settings = self.settings()
-        settings.setFontFamily(QWebSettings.StandardFont, family)
-        settings.setFontFamily(QWebSettings.FixedFont, family)
-        settings.setFontFamily(QWebSettings.SerifFont, family)
-        settings.setFontFamily(QWebSettings.SansSerifFont, family)
-        settings.setFontSize(QWebSettings.DefaultFontSize, size)
-        settings.setFontSize(QWebSettings.DefaultFixedFontSize, size)
-        self.update()
-
     def contextMenuEvent(self, event):
         menu = self.page().createStandardContextMenu()
         if any(action.isVisible() and not action.isSeparator() for action in menu.actions()):
@@ -574,9 +564,10 @@ class ChatWidget(base_class, ui_class):
         blink_settings = BlinkSettings()
         self.style = ChatMessageStyle(blink_settings.chat_window.style)
         self.style_variant = blink_settings.chat_window.style_variant or self.style.default_variant
+        self.font_family = blink_settings.chat_window.font or self.style.font_family
+        self.font_size = blink_settings.chat_window.font_size or self.style.font_size
         self.user_icons_css_class = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
-        self.chat_view.setChatFont(blink_settings.chat_window.font or self.style.font_family, blink_settings.chat_window.font_size or self.style.font_size)
-        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path)+'/', style_url=self.style_variant+'.style'))
+        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path)+'/', style_url=self.style_variant+'.style', font_family=self.font_family, font_size=self.font_size))
         self.chat_element = self.chat_view.page().mainFrame().findFirstElement('#chat')
         self.composing_timer = QTimer()
         self.last_message = None
