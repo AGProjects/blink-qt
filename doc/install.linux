@@ -2,7 +2,7 @@
 Blink Qt Installation on Debian and Ubuntu Linux
 ------------------------------------------------
 
-Copyright (c) 2010-2014 AG Projects
+Copyright (c) 2010-2015 AG Projects
 http://ag-projects.com
 
 Home page: http://icanblink.com
@@ -20,29 +20,19 @@ Install the AG Projects debian software signing key:
 wget http://download.ag-projects.com/agp-debian-gpg.key
 sudo apt-key add agp-debian-gpg.key
 
-Add these lines to /etc/apt/sources.list:
+Add the appropriate repository to /etc/apt/sources.list, see:
+http://projects.ag-projects.com/projects/documentation/wiki/Repositories
 
 
-Debian Unstable (Sid)
+Note for Ubuntu users
 ---------------------
 
-deb     http://ag-projects.com/debian unstable main
-deb-src http://ag-projects.com/debian unstable main
+The "universe" repository needs to be enabled. See:
+https://help.ubuntu.com/community/Repositories/Ubuntu
 
 
-Ubuntu Karmic (9.10)
---------------------
-
-deb     http://ag-projects.com/ubuntu karmic main
-deb-src http://ag-projects.com/ubuntu karmic main
-
-
-Ubuntu Lucid (10.04) and Maverick (10.10)
------------------------------------------
-
-deb     http://ag-projects.com/ubuntu lucid main
-deb-src http://ag-projects.com/ubuntu lucid main
-
+Update package list
+-------------------
 
 Update the list of available packages:
 
