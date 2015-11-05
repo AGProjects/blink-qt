@@ -39,7 +39,8 @@ from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
 from sipsimple.session import Session
 from sipsimple.streams import MediaStreamRegistry
-from sipsimple.streams.msrp import FileSelector, ExternalVNCServerHandler, ExternalVNCViewerHandler, ScreenSharingStream
+from sipsimple.streams.msrp.filetransfer import FileSelector
+from sipsimple.streams.msrp.screensharing import ExternalVNCServerHandler, ExternalVNCViewerHandler, ScreenSharingStream
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
 
 from blink.configuration.settings import BlinkSettings
@@ -241,8 +242,7 @@ class StreamDescription(object):
         self.attributes = kw
 
     def create_stream(self):
-        registry = MediaStreamRegistry()
-        cls = registry.get(self.type)
+        cls = MediaStreamRegistry.get(self.type)
         return cls(**self.attributes)
 
     def __repr__(self):
@@ -3759,9 +3759,7 @@ class BlinkFileTransfer(object):
             self._terminate(failure_reason='Destination not found')
             return
         self.sip_session = Session(self.account)
-        registry = MediaStreamRegistry()
-        cls = registry.get('file-transfer')
-        self.stream = cls(self.file_selector, 'sendonly', transfer_id=self.id)
+        self.stream = MediaStreamRegistry.FileTransferStream(self.file_selector, 'sendonly', transfer_id=self.id)
         self.handler = self.stream.handler
         self.sip_session.connect(ToHeader(self._uri), routes, [self.stream])
 
