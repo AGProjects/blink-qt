@@ -2054,14 +2054,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         message = notification.data.message
 
-        if message.body.startswith('?OTRv2?'):
+        if message.content.startswith('?OTRv2?'):
             # TODO: add support for OTR -Saul
             return
 
         if message.content_type.startswith('image/'):
-            content = u'''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.body.encode('base64').rstrip())
+            content = u'''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.encode('base64').rstrip())
         elif message.content_type.startswith('text/'):
-            content = HtmlProcessor.autolink(message.body if message.content_type=='text/html' else QTextDocument(message.body).toHtml())
+            content = HtmlProcessor.autolink(message.content if message.content_type=='text/html' else QTextDocument(message.content).toHtml())
         else:
             return
 
