@@ -1622,7 +1622,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.info_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
         self.files_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
 
-    def _update_session_info_panel(self, elements={}, update_visibility=False):
+    def _update_session_info_panel(self, elements=set(), update_visibility=False):
         blink_session = self.selected_session.blink_session
         have_session = blink_session.state in ('connecting/*', 'connected/*', 'ending')
 
