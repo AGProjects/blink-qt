@@ -2153,7 +2153,7 @@ class ItemList(list):
             try:
                 operation, key = index
             except ValueError:
-                raise KeyError(key)
+                raise KeyError(index)
             if operation is GroupElement:
                 return self.__groupmap__[key]
             elif operation is GroupContacts:
