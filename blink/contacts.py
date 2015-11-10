@@ -2166,6 +2166,7 @@ class ItemList(list):
     def __iadd__(self, other):
         list.__iadd__(self, other)
         self.__groupmap__.update((item.settings, item) for item in other if isinstance(item, Group))
+        return self
 
     def __imul__(self, factor):
         raise NotImplementedError
