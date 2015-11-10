@@ -1333,7 +1333,7 @@ class ContactDetail(object):
         handler(notification)
 
     def _NH_AddressbookContactDidChange(self, notification):
-        if set(['icon', 'alternate_icon']).intersection(notification.data.modified):
+        if {'icon', 'alternate_icon'}.intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
