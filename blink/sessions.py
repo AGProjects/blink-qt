@@ -3623,7 +3623,7 @@ class BlinkFileTransfer(object):
             # Reinitialize to retry
             file_selector = FileSelector.for_file(self.filename)
             stat = os.fstat(file_selector.fd.fileno())
-            if stat.st_mtime == self._stat.st_mtime:
+            if self._stat is not None and stat.st_mtime == self._stat.st_mtime:
                 file_selector.hash = self.file_selector.hash
             self.file_selector = file_selector
             self._stat = stat
