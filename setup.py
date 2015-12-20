@@ -1,21 +1,24 @@
 #!/usr/bin/env python
 
+import os
+import re
+
 from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
-
-import os
-import re
 
 
 def get_version():
     return re.search(r"""__version__\s+=\s+(?P<quote>['"])(?P<version>.+?)(?P=quote)""", open('blink/__init__.py').read()).group('version')
 
+
 def find_packages(toplevel):
     return [directory.replace(os.path.sep, '.') for directory, subdirs, files in os.walk(toplevel) if '__init__.py' in files]
 
+
 def list_resources(directory, destination_directory):
     return [(dir.replace(directory, destination_directory), [os.path.join(dir, file) for file in files]) for dir, subdirs, files in os.walk(directory)]
+
 
 setup(name         = "blink",
       version      = get_version(),
@@ -36,5 +39,5 @@ setup(name         = "blink",
       ext_modules  = cythonize([Extension(name="blink.screensharing._rfb", sources=["blink/screensharing/_rfb.pyx"], libraries=["vncclient"])]),
       data_files   = list_resources('resources', destination_directory='share/blink'),
       scripts      = ['bin/blink']
-)
+      )
 
