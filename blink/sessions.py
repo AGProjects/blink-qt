@@ -15,7 +15,7 @@ import uuid
 from abc import ABCMeta, abstractproperty
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from itertools import chain, count
+from itertools import chain
 from operator import attrgetter
 
 from PyQt4 import uic

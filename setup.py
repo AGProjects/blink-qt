@@ -4,8 +4,6 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 
-from itertools import chain
-import glob
 import os
 import re
 
