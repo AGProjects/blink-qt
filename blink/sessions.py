@@ -2762,7 +2762,7 @@ class ChatSessionWidget(base_class, ui_class):
 
     def paintEvent(self, event):
         super(ChatSessionWidget, self).paintEvent(event)
-        if self.display_mode == self.SelectedDisplayMode and self.state_label.state is not None:
+        if self.display_mode is self.SelectedDisplayMode and self.state_label.state is not None:
             rect = self.state_label.geometry()
             rect.setWidth(self.width() - rect.x())
             gradient = QLinearGradient(0, 0, 1, 0)
