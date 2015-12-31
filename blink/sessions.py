@@ -26,7 +26,7 @@ from PyQt4.QtGui  import QStyle, QStyledItemDelegate, QStyleOption
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
-from application.python.weakref import weakobjectmap
+from application.python.weakref import weakobjectmap, defaultweakobjectmap
 from eventlib.proc import spawn
 from zope.interface import implements
 
@@ -353,14 +353,6 @@ class StreamContainer(StreamContainerView):
     def clear(self):
         for stream in self._stream_map.values():
             self.remove(stream)
-
-
-class defaultweakobjectmap(weakobjectmap):
-    def __init__(self, factory, *args, **kw):
-        self.default_factory = factory
-        super(defaultweakobjectmap, self).__init__(*args, **kw)
-    def __missing__(self, key):
-        return self.setdefault(key.object, self.default_factory())
 
 
 class StreamListDescriptor(object):
