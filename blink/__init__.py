@@ -58,7 +58,7 @@ from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
 
 
-if getattr(sys, 'frozen', False):
+if hasattr(sys, 'frozen'):
     output = sys.stdout
     makedirs(ApplicationData.get('logs'))
     sys.stdout = sys.stderr = open(ApplicationData.get('logs/output.log'), 'a')
