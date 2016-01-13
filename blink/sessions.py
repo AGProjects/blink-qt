@@ -3784,6 +3784,7 @@ class BlinkFileTransfer(object):
     def _NH_FileTransferHandlerProgress(self, notification):
         notification.center.post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes,
                                                                                                               total_bytes=notification.data.total_bytes))
+
     def _NH_FileTransferHandlerDidEnd(self, notification):
         if self.direction == 'incoming':
             call_later(3, self.sip_session.end)
