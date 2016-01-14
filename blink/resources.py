@@ -5,6 +5,7 @@
 
 __all__ = ['ApplicationData', 'Resources', 'IconManager']
 
+import __main__
 import imghdr
 import os
 import platform
@@ -60,10 +61,14 @@ class Resources(object):
     @classproperty
     def directory(cls):
         if cls._cached_directory is None:
-            if sys.path[0] == '':
-                application_directory = os.path.realpath('') # executed in interactive interpreter
+            try:
+                binary_directory = os.path.dirname(os.path.realpath(__main__.__file__))
+            except AttributeError:
+                if hasattr(sys, 'frozen'):
+                    application_directory = os.path.dirname(os.path.realpath(sys.executable))
+                else:
+                    application_directory = os.path.realpath('')  # executed in interactive interpreter
             else:
-                binary_directory = os.path.dirname(os.path.realpath(sys.argv[0]))
                 if os.path.basename(binary_directory) == 'bin':
                     application_directory = os.path.dirname(binary_directory)
                 else:
