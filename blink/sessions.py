@@ -3793,7 +3793,11 @@ class BlinkFileTransfer(object):
             call_later(3, self.sip_session.end)
         else:
             self.sip_session.end()
-        self._terminate(failure_reason=notification.data.reason)
+        if notification.data.error:
+            failure_reason = notification.data.reason or 'Failed'
+        else:
+            failure_reason = None
+        self._terminate(failure_reason=failure_reason)
 
 
 class TransferStateLabel(QLabel, ColorHelperMixin):
