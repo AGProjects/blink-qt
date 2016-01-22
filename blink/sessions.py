@@ -3774,6 +3774,9 @@ class BlinkFileTransfer(object):
     def _NH_SIPSessionDidStart(self, notification):
         self.state = 'connected'
 
+    def _NH_MediaStreamDidInitialize(self, notification):
+        notification.center.post_notification('BlinkFileTransferDidInitialize', sender=self)
+
     def _NH_MediaStreamDidNotInitialize(self, notification):
         self._terminate(failure_reason=notification.data.reason)
 
@@ -4082,6 +4085,12 @@ class FileTransferItem(object):
         else:
             self.status = None
         self.progress = None
+        self.widget.update_content(self)
+        notification.center.post_notification('FileTransferItemDidChange', sender=self)
+
+    def _NH_BlinkFileTransferDidInitialize(self, notification):
+        self.progress = None
+        self.status = u'Connecting...'
         self.widget.update_content(self)
         notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
