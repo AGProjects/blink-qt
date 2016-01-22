@@ -3785,8 +3785,7 @@ class BlinkFileTransfer(object):
         notification.center.post_notification('BlinkFileTransferHashProgress', sender=self, data=NotificationData(progress=progress))
 
     def _NH_FileTransferHandlerProgress(self, notification):
-        notification.center.post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes,
-                                                                                                              total_bytes=notification.data.total_bytes))
+        notification.center.post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(bytes=notification.data.transferred_bytes, total_bytes=notification.data.total_bytes))
 
     def _NH_FileTransferHandlerDidEnd(self, notification):
         if self.direction == 'incoming':
