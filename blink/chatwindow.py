@@ -2054,10 +2054,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         message = notification.data.message
 
-        if message.content.startswith('?OTRv2?'):
-            # TODO: add support for OTR -Saul
-            return
-
         if message.content_type.startswith('image/'):
             content = u'''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.encode('base64').rstrip())
         elif message.content_type.startswith('text/'):
