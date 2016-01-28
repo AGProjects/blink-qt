@@ -5263,12 +5263,6 @@ class SessionManager(object):
         else:
             outbound_ringtone = Null
 
-        if outbound_ringtone.type is self.PrimaryRingtone and self.inbound_ringtone.type is self.PrimaryRingtone:
-            self.inbound_ringtone = Null
-        if outbound_ringtone is not Null and self.hold_tone is not Null:
-            self.hold_tone = Null
-        self.outbound_ringtone = outbound_ringtone
-
         # Incoming ringtone
         if self.incoming_requests:
             try:
@@ -5278,9 +5272,9 @@ class SessionManager(object):
                 request = self.incoming_requests[0]
                 ringtone_type = self.SecondaryRingtone
 
-            if self.active_session is not None and self.active_session.state in ('connecting/ringing', 'connected/*'):
+            if outbound_ringtone.type is self.PrimaryRingtone or self.active_session is not None and self.active_session.state == 'connected/*':
                 ringtone_type = self.SecondaryRingtone
-                initial_delay = 1 # have a small delay to avoid sounds overlapping
+                initial_delay = 1  # have a small delay to avoid sounds overlapping
             else:
                 initial_delay = 0
 
@@ -5299,14 +5293,10 @@ class SessionManager(object):
         else:
             inbound_ringtone = Null
 
-        if inbound_ringtone is not Null and self.hold_tone is not Null:
-            self.hold_tone = Null
-        self.inbound_ringtone = inbound_ringtone
-
         # Hold tone
         connected_sessions = [session for session in self.sessions if session.state=='connected/*']
         connected_on_hold_sessions = [session for session in connected_sessions if session.on_hold]
-        if self.outbound_ringtone is Null and self.inbound_ringtone is Null and connected_sessions:
+        if outbound_ringtone is Null and inbound_ringtone is Null and connected_sessions:
             if len(connected_sessions) == len(connected_on_hold_sessions):
                 hold_tone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, volume=30, initial_delay=45, pause_time=45)
                 hold_tone.bridge = SIPApplication.alert_audio_bridge
@@ -5319,6 +5309,9 @@ class SessionManager(object):
                 hold_tone = Null
         else:
             hold_tone = Null
+
+        self.outbound_ringtone = outbound_ringtone
+        self.inbound_ringtone = inbound_ringtone
         self.hold_tone = hold_tone
 
     def _process_remote_proposal(self, blink_session):
