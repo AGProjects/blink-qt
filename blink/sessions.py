@@ -20,8 +20,8 @@ from operator import attrgetter
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QProcess, QPropertyAnimation, QRect, QRectF, QSize, QTimer, QUrl, pyqtSignal
-from PyQt4.QtGui  import QApplication, QBrush, QColor, QDesktopServices, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QShortcut
-from PyQt4.QtGui  import QStyle, QStyledItemDelegate, QStyleOption
+from PyQt4.QtGui  import QBrush, QColor, QDialog, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QShortcut
+from PyQt4.QtGui  import QApplication, QDesktopServices, QStyle, QStyledItemDelegate, QStyleOption
 
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python import Null, limit
@@ -4741,9 +4741,66 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
 # Session management
 #
 
+class DialogSlots(object):
+    def __init__(self, iterable):
+        self.all = set(iterable)
+        self.used = set()
+
+    def reserve(self):
+        try:
+            slot = min(self.all - self.used)
+        except ValueError:
+            return None
+        else:
+            self.used.add(slot)
+            return slot
+
+    def release(self, slot):
+        if slot is not None:
+            self.used.remove(slot)
+
+
+class IncomingDialogBase(QDialog):
+    _slots = DialogSlots(range(1, 100))
+
+    slot = None
+
+    def showEvent(self, event):
+        if not event.spontaneous():
+            self.slot = slot = self._slots.reserve()
+
+            blink = QApplication.instance()
+            screen_geometry = blink.desktop().screenGeometry(self)
+            available_geometry = blink.desktop().availableGeometry(self)
+            window_frame_size = blink.main_window.frameSize() - blink.main_window.size()
+
+            width = limit(self.sizeHint().width(), min=self.minimumSize().width(), max=min(self.maximumSize().width(), available_geometry.width() - window_frame_size.width()))
+            height = limit(self.sizeHint().height(), min=self.minimumSize().height(), max=min(self.maximumSize().height(), available_geometry.height() - window_frame_size.height()))
+            total_width = width + window_frame_size.width()
+            total_height = height + window_frame_size.height()
+
+            x = limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width)
+            if slot is None:
+                y = -1
+            elif slot % 2 == 0:
+                y = screen_geometry.center().y() + (slot-1)*total_height/2
+            else:
+                y = screen_geometry.center().y() - slot*total_height/2
+
+            if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
+                self.setGeometry(x, y, width, height)
+            else:
+                self.resize(width, height)
+
+    def hideEvent(self, event):
+        if not event.spontaneous():
+            self._slots.release(self.slot)
+            self.slot = None
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
 
-class IncomingDialog(base_class, ui_class):
+class IncomingDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingDialog, self).__init__(parent)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
@@ -4758,42 +4815,17 @@ class IncomingDialog(base_class, ui_class):
         font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
         self.note_label.setFont(font)
         self.reject_mode = 'ignore'
-        self.busy_button.released.connect(self._set_busy_mode)
-        self.reject_button.released.connect(self._set_reject_mode)
+        self.slot = None
         for stream in self.streams:
             stream.toggled.connect(self._update_accept_button)
             stream.hidden.connect(self._update_streams_layout)
             stream.shown.connect(self._update_streams_layout)
+        self.busy_button.released.connect(self._set_busy_mode)
+        self.reject_button.released.connect(self._set_reject_mode)
         self.screensharing_stream.hidden.connect(self.screensharing_label.hide)
         self.screensharing_stream.shown.connect(self.screensharing_label.show)
-        self.position = None
 
-    def show(self, activate=True, position=1):
-        blink = QApplication.instance()
-        screen_geometry = blink.desktop().screenGeometry(self)
-        available_geometry = blink.desktop().availableGeometry(self)
-        main_window_geometry = blink.main_window.geometry()
-        main_window_framegeometry = blink.main_window.frameGeometry()
-
-        horizontal_decorations = main_window_framegeometry.width() - main_window_geometry.width()
-        vertical_decorations = main_window_framegeometry.height() - main_window_geometry.height()
-        width = limit(self.sizeHint().width(), min=self.minimumSize().width(), max=min(self.maximumSize().width(), available_geometry.width()-horizontal_decorations))
-        height = limit(self.sizeHint().height(), min=self.minimumSize().height(), max=min(self.maximumSize().height(), available_geometry.height()-vertical_decorations))
-        total_width = width + horizontal_decorations
-        total_height = height + vertical_decorations
-        x = limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width)
-        if position is None:
-            y = -1
-        elif position % 2 == 0:
-            y = screen_geometry.center().y() + (position-1)*total_height/2
-        else:
-            y = screen_geometry.center().y() - position*total_height/2
-        if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
-            self.setGeometry(x, y, width, height)
-        else:
-            self.resize(width, height)
-
-        self.position = position
+    def show(self, activate=True):
         self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
         super(IncomingDialog, self).show()
 
@@ -4960,7 +4992,7 @@ class IncomingRequest(QObject):
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_filetransfer_dialog.ui'))
 
-class IncomingFileTransferDialog(base_class, ui_class):
+class IncomingFileTransferDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingFileTransferDialog, self).__init__(parent)
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
@@ -4974,35 +5006,11 @@ class IncomingFileTransferDialog(base_class, ui_class):
         font = self.file_label.font()
         font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
         self.file_label.setFont(font)
-        self.position = None
+        self.slot = None
         self.reject_mode = 'ignore'
         self.reject_button.released.connect(self._set_reject_mode)
 
-    def show(self, activate=True, position=1):
-        blink = QApplication.instance()
-        screen_geometry = blink.desktop().screenGeometry(self)
-        available_geometry = blink.desktop().availableGeometry(self)
-        main_window_geometry = blink.main_window.geometry()
-        main_window_framegeometry = blink.main_window.frameGeometry()
-
-        horizontal_decorations = main_window_framegeometry.width() - main_window_geometry.width()
-        vertical_decorations = main_window_framegeometry.height() - main_window_geometry.height()
-        width = limit(self.sizeHint().width(), min=self.minimumSize().width(), max=min(self.maximumSize().width(), available_geometry.width()-horizontal_decorations))
-        height = limit(self.sizeHint().height(), min=self.minimumSize().height(), max=min(self.maximumSize().height(), available_geometry.height()-vertical_decorations))
-        total_width = width + horizontal_decorations
-        total_height = height + vertical_decorations
-        x = limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width)
-        if position is None:
-            y = -1
-        elif position % 2 == 0:
-            y = screen_geometry.center().y() + (position-1)*total_height/2
-        else:
-            y = screen_geometry.center().y() - position*total_height/2
-        if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
-            self.setGeometry(x, y, width, height)
-        else:
-            self.resize(width, height)
-        self.position = position
+    def show(self, activate=True):
         self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
         super(IncomingFileTransferDialog, self).show()
 
@@ -5160,7 +5168,6 @@ class SessionManager(object):
     def __init__(self):
         self.sessions = []
         self.incoming_requests = []
-        self.dialog_positions = range(1, 100)
         self.file_transfers = []
         self.last_dialed_uri = None
         self.send_file_directory = Path('~').normalized
@@ -5333,18 +5340,13 @@ class SessionManager(object):
 
         dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
         incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
-        bisect.insort_right(self.incoming_requests, incoming_request)
         incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
         incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
-        try:
-            position = self.dialog_positions.pop(0)
-        except IndexError:
-            position = None
-        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
+
+        bisect.insort_right(self.incoming_requests, incoming_request)
+        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request) == 0)
 
     def _SH_IncomingRequestAccepted(self, incoming_request):
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
         accepted_streams = incoming_request.accepted_streams
@@ -5362,8 +5364,6 @@ class SessionManager(object):
             blink_session.init_incoming(incoming_request.session, accepted_streams, incoming_request.contact, incoming_request.contact_uri, reinitialize=reinitialize)
 
     def _SH_IncomingRequestRejected(self, incoming_request, mode):
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
         if incoming_request.proposal:
@@ -5374,8 +5374,6 @@ class SessionManager(object):
             incoming_request.session.reject(603)
 
     def _SH_IncomingFileTransferRequestAccepted(self, incoming_request):
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
         transfer = BlinkFileTransfer()
@@ -5383,8 +5381,6 @@ class SessionManager(object):
         transfer.init_incoming(incoming_request.contact, incoming_request.contact_uri, incoming_request.session, incoming_request.stream)
 
     def _SH_IncomingFileTransferRequestRejected(self, incoming_request, mode):
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
         if mode == 'reject':
@@ -5444,14 +5440,11 @@ class SessionManager(object):
             incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
             incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
-        bisect.insort_right(self.incoming_requests, incoming_request)
 
-        try:
-            position = self.dialog_positions.pop(0)
-        except IndexError:
-            position = None
-        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request)==0, position=position)
         session.send_ring_indication()
+
+        bisect.insort_right(self.incoming_requests, incoming_request)
+        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request) == 0)
         self.update_ringtone()
 
     def _NH_SIPSessionDidFail(self, notification):
@@ -5459,8 +5452,6 @@ class SessionManager(object):
             incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
         except StopIteration:
             return
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         incoming_request.dialog.hide()
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
@@ -5470,8 +5461,6 @@ class SessionManager(object):
             incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
         except StopIteration:
             return
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         incoming_request.dialog.hide()
         self.incoming_requests.remove(incoming_request)
         # Ringtone is updated in BlinkSessionDidEnd
@@ -5481,8 +5470,6 @@ class SessionManager(object):
             incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
         except StopIteration:
             return
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         incoming_request.dialog.hide()
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
@@ -5492,8 +5479,6 @@ class SessionManager(object):
             incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
         except StopIteration:
             return
-        if incoming_request.dialog.position is not None:
-            bisect.insort_left(self.dialog_positions, incoming_request.dialog.position)
         incoming_request.dialog.hide()
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
