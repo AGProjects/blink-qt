@@ -4766,8 +4766,6 @@ class IncomingDialog(base_class, ui_class):
             stream.shown.connect(self._update_streams_layout)
         self.screensharing_stream.hidden.connect(self.screensharing_label.hide)
         self.screensharing_stream.shown.connect(self.screensharing_label.show)
-        for stream in self.streams:
-            stream.hide()
         self.position = None
 
     def show(self, activate=True, position=1):
@@ -4874,19 +4872,16 @@ class IncomingRequest(QObject):
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
         if contact.pixmap:
             self.dialog.user_icon.setPixmap(contact.pixmap)
-        if self.audio_stream:
-            self.dialog.audio_stream.show()
-        if self.video_stream:
-            self.dialog.video_stream.show()
-        if self.chat_stream:
-            self.dialog.chat_stream.show()
-        if self.screensharing_stream:
+        self.dialog.audio_stream.setVisible(self.audio_stream is not None)
+        self.dialog.video_stream.setVisible(self.video_stream is not None)
+        self.dialog.chat_stream.setVisible(self.chat_stream is not None)
+        self.dialog.screensharing_stream.setVisible(self.screensharing_stream is not None)
+        if self.screensharing_stream is not None:
             if self.screensharing_stream.handler.type == 'active':
                 self.dialog.screensharing_label.setText(u'is offering to share his screen')
             else:
                 self.dialog.screensharing_label.setText(u'is asking to share your screen')
-                #self.dialog.screensharing_stream.accepted = True if proposal else False
-            self.dialog.screensharing_stream.show()
+                # self.dialog.screensharing_stream.accepted = bool(proposal)
         self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 
         self.dialog.accepted.connect(self._SH_DialogAccepted)
