@@ -5203,11 +5203,11 @@ class SessionManager(object):
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkFileTransferWillRetry')
 
-        notification_center.add_observer(self, name='BlinkSessionDidEnd')
-        notification_center.add_observer(self, name='BlinkSessionWasDeleted')
         notification_center.add_observer(self, name='BlinkSessionDidChangeState')
         notification_center.add_observer(self, name='BlinkSessionDidChangeHoldState')
         notification_center.add_observer(self, name='BlinkSessionDidRemoveStream')
+        notification_center.add_observer(self, name='BlinkSessionDidEnd')
+        notification_center.add_observer(self, name='BlinkSessionWasDeleted')
 
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
 
@@ -5500,6 +5500,22 @@ class SessionManager(object):
     def _NH_BlinkSessionWasDeleted(self, notification):
         self.sessions.remove(notification.sender)
 
+    def _NH_BlinkFileTransferDidChangeState(self, notification):
+        new_state = notification.data.new_state
+        if new_state in ('connecting/ringing', 'connected', 'ending'):
+            self.update_ringtone()
+
+    def _NH_BlinkFileTransferWillRetry(self, notification):
+        self.file_transfers.append(notification.sender)
+
+    def _NH_BlinkFileTransferDidEnd(self, notification):
+        self.file_transfers.remove(notification.sender)
+        if not notification.data.error and not self._filetransfer_tone_timer.isActive():
+            self._filetransfer_tone_timer.start()
+            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
+            SIPApplication.voice_audio_bridge.add(player)
+            player.start()
+
     def _NH_BlinkSessionListSelectionChanged(self, notification):
         selected_session = notification.data.selected_session
         deselected_session = notification.data.deselected_session
@@ -5528,20 +5544,4 @@ class SessionManager(object):
                 new_active_session.active = True
             self.active_session = selected_session
             notification.center.post_notification('BlinkActiveSessionDidChange', sender=self, data=NotificationData(previous_active_session=old_active_session or None, active_session=selected_session))
-
-    def _NH_BlinkFileTransferDidChangeState(self, notification):
-        new_state = notification.data.new_state
-        if new_state in ('connecting/ringing', 'connected', 'ending'):
-            self.update_ringtone()
-
-    def _NH_BlinkFileTransferWillRetry(self, notification):
-        self.file_transfers.append(notification.sender)
-
-    def _NH_BlinkFileTransferDidEnd(self, notification):
-        self.file_transfers.remove(notification.sender)
-        if not notification.data.error and not self._filetransfer_tone_timer.isActive():
-            self._filetransfer_tone_timer.start()
-            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
-            SIPApplication.voice_audio_bridge.add(player)
-            player.start()
 
