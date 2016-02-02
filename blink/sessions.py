@@ -5163,7 +5163,6 @@ class SessionManager(object):
     inbound_ringtone  = RingtoneDescriptor()
     outbound_ringtone = RingtoneDescriptor()
     hold_tone         = RingtoneDescriptor()
-    # have the hangup tone also a descriptor that is not reset to Null when it ends playing, but after the cooldown period -Dan
 
     def __init__(self):
         self.sessions = []
@@ -5177,7 +5176,7 @@ class SessionManager(object):
         self.outbound_ringtone = Null
         self.hold_tone = Null
 
-        self._hangup_tone_timer = QTimer() # we should consider replacing this with a timestamp -Dan
+        self._hangup_tone_timer = QTimer()
         self._hangup_tone_timer.setInterval(1000)
         self._hangup_tone_timer.setSingleShot(True)
 
