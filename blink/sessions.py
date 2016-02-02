@@ -5152,6 +5152,17 @@ class RingtoneDescriptor(object):
         raise AttributeError("Attribute cannot be deleted")
 
 
+class RequestList(list):
+    def __getitem__(self, key):
+        if isinstance(key, (int, long)):
+            return super(RequestList, self).__getitem__(key)
+        elif isinstance(key, tuple):
+            session, item_type = key
+            return [item for item in self if item.session is session and isinstance(item, item_type)]
+        else:
+            return [item for item in self if item.session is key]
+
+
 class SessionManager(object):
     __metaclass__ = Singleton
 
@@ -5166,8 +5177,8 @@ class SessionManager(object):
 
     def __init__(self):
         self.sessions = []
-        self.incoming_requests = []
         self.file_transfers = []
+        self.incoming_requests = RequestList()
         self.last_dialed_uri = None
         self.send_file_directory = Path('~').normalized
         self.active_session = None
@@ -5186,17 +5197,12 @@ class SessionManager(object):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
-        notification_center.add_observer(self, name='SIPSessionDidEnd')
         notification_center.add_observer(self, name='SIPSessionDidFail')
-        notification_center.add_observer(self, name='SIPSessionProposalRejected')
-        notification_center.add_observer(self, name='SIPSessionHadProposalFailure')
 
         notification_center.add_observer(self, name='BlinkFileTransferDidChangeState')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkFileTransferWillRetry')
 
-        notification_center.add_observer(self, name='BlinkSessionNewIncoming')
-        notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
         notification_center.add_observer(self, name='BlinkSessionDidEnd')
         notification_center.add_observer(self, name='BlinkSessionWasDeleted')
         notification_center.add_observer(self, name='BlinkSessionDidChangeState')
@@ -5447,48 +5453,27 @@ class SessionManager(object):
         self.update_ringtone()
 
     def _NH_SIPSessionDidFail(self, notification):
-        try:
-            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
-        except StopIteration:
-            return
-        incoming_request.dialog.hide()
-        self.incoming_requests.remove(incoming_request)
-        self.update_ringtone()
-
-    def _NH_SIPSessionDidEnd(self, notification):
-        try:
-            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
-        except StopIteration:
-            return
-        incoming_request.dialog.hide()
-        self.incoming_requests.remove(incoming_request)
-        # Ringtone is updated in BlinkSessionDidEnd
-
-    def _NH_SIPSessionProposalRejected(self, notification):
-        try:
-            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
-        except StopIteration:
-            return
-        incoming_request.dialog.hide()
-        self.incoming_requests.remove(incoming_request)
-        self.update_ringtone()
-
-    def _NH_SIPSessionHadProposalFailure(self, notification):
-        try:
-            incoming_request = next(incoming_request for incoming_request in self.incoming_requests if incoming_request.session is notification.sender)
-        except StopIteration:
-            return
-        incoming_request.dialog.hide()
-        self.incoming_requests.remove(incoming_request)
-        self.update_ringtone()
+        if notification.sender.direction == 'incoming':
+            for incoming_request in self.incoming_requests[notification.sender]:
+                incoming_request.dialog.hide()
+                self.incoming_requests.remove(incoming_request)
+            self.update_ringtone()
 
     def _NH_BlinkSessionDidChangeState(self, notification):
         new_state = notification.data.new_state
         if new_state == 'connected/received_proposal':
             self._process_remote_proposal(notification.sender)
-        if new_state in ('connecting/ringing', 'connecting/early_media', 'connected/*'):
-            self.update_ringtone()
+        if new_state == 'connected':
+            for request in self.incoming_requests[notification.sender.sip_session, IncomingRequest]:
+                request.dialog.hide()
+                self.incoming_requests.remove(request)
         elif new_state == 'ending':
+            for request in self.incoming_requests[notification.sender.sip_session]:
+                request.dialog.hide()
+                self.incoming_requests.remove(request)
+        if new_state in ('connecting/ringing', 'connecting/early_media', 'connected/*', 'ending'):
+            self.update_ringtone()
+        if new_state == 'ending':
             notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*') and notification.sender.streams.types.intersection({'audio', 'video'})
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
@@ -5496,12 +5481,6 @@ class SessionManager(object):
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hold_tone.wav'), loop_count=1, volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
-        self.update_ringtone()
-
-    def _NH_BlinkSessionNewIncoming(self, notification):
-        self.update_ringtone()
-
-    def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         self.update_ringtone()
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
@@ -5512,7 +5491,6 @@ class SessionManager(object):
             player.start()
 
     def _NH_BlinkSessionDidEnd(self, notification):
-        self.update_ringtone()
         if notification.sender._play_hangup_tone and not self._hangup_tone_timer.isActive():
             self._hangup_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
@@ -5553,16 +5531,14 @@ class SessionManager(object):
 
     def _NH_BlinkFileTransferDidChangeState(self, notification):
         new_state = notification.data.new_state
-        if new_state in ('connecting/ringing', 'connected'):
+        if new_state in ('connecting/ringing', 'connected', 'ending'):
             self.update_ringtone()
 
     def _NH_BlinkFileTransferWillRetry(self, notification):
         self.file_transfers.append(notification.sender)
-        self.update_ringtone()
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
         self.file_transfers.remove(notification.sender)
-        self.update_ringtone()
         if not notification.data.error and not self._filetransfer_tone_timer.isActive():
             self._filetransfer_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
