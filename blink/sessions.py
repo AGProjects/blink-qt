@@ -2169,7 +2169,7 @@ class AudioSessionModel(QAbstractListModel):
         session.blink_session.clientConferenceChanged.connect(self._SH_BlinkSessionClientConferenceChanged)
         self.sessionAboutToBeAdded.emit(session)
         self._add_session(session)
-        # not the right place to do this. the list should do it (else the model needs a backreference to the list), however in addSessionAndConference we can't avoid doing it -Dan
+        # not the right place to do this. the list should do it (else the model needs a back-reference to the list), however in addSessionAndConference we can't avoid doing it -Dan
         selection_model = self.session_list.selectionModel()
         selection_model.select(self.index(self.rowCount()-1), selection_model.ClearAndSelect)
         self.sessionAdded.emit(session)
@@ -2261,7 +2261,7 @@ class AudioSessionModel(QAbstractListModel):
         session_list.scrollToTop()
         self.structureChanged.emit()
 
-    def breakConference(self, conference): # replace this by an endConference (or termninate/hangupConference) functionality -Dan
+    def breakConference(self, conference):  # replace this by an endConference (or terminate/hangupConference) functionality -Dan
         sessions = [blink_session.items.audio for blink_session in conference.sessions]
         session_list = self.session_list
         selection_model = session_list.selectionModel()
