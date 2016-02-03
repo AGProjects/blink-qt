@@ -423,6 +423,8 @@ class BlinkSession(QObject):
     def __init__(self):
         super(BlinkSession, self).__init__()
         self._initialize()
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionWasCreated', sender=self)
 
     def _initialize(self, reinitialize=False):
         if not reinitialize:
@@ -3538,6 +3540,9 @@ class BlinkFileTransfer(object):
         # used for outgoing transfers
         self._uri = None
         self._stat = None
+
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkFileTransferWasCreated', sender=self)
 
     def __getstate__(self):
         # duplicate the selector, we cannot serialize the fd
