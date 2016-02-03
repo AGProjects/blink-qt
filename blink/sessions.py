@@ -411,7 +411,21 @@ class SessionItemsDescriptor(object):
         raise AttributeError("Attribute cannot be deleted")
 
 
-class BlinkSession(object):
+class BlinkSessionType(type):
+    def __call__(cls, *args, **kw):
+        instance = super(BlinkSessionType, cls).__call__(*args, **kw)
+        instance.__establish__()
+        return instance
+
+
+class BlinkSessionBase(object):
+    __metaclass__ = BlinkSessionType
+
+    def __establish__(self):
+        pass
+
+
+class BlinkSession(BlinkSessionBase):
     implements(IObserver)
 
     streams = StreamListDescriptor()
@@ -419,6 +433,8 @@ class BlinkSession(object):
 
     def __init__(self):
         self._initialize()
+
+    def __establish__(self):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkSessionWasCreated', sender=self)
 
@@ -3514,7 +3530,7 @@ class FileSizeFormatter(object):
             return "%d bytes" % size
 
 
-class BlinkFileTransfer(object):
+class BlinkFileTransfer(BlinkSessionBase):
     implements(IObserver)
 
     def __init__(self):
@@ -3535,6 +3551,7 @@ class BlinkFileTransfer(object):
         self._uri = None
         self._stat = None
 
+    def __establish__(self):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferWasCreated', sender=self)
 
