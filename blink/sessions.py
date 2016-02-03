@@ -5204,15 +5204,9 @@ class SessionManager(object):
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
         notification_center.add_observer(self, name='SIPSessionDidFail')
 
-        notification_center.add_observer(self, name='BlinkFileTransferDidChangeState')
-        notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkSessionWasCreated')
+        notification_center.add_observer(self, name='BlinkFileTransferWasCreated')
         notification_center.add_observer(self, name='BlinkFileTransferWillRetry')
-
-        notification_center.add_observer(self, name='BlinkSessionDidChangeState')
-        notification_center.add_observer(self, name='BlinkSessionDidChangeHoldState')
-        notification_center.add_observer(self, name='BlinkSessionDidRemoveStream')
-        notification_center.add_observer(self, name='BlinkSessionDidEnd')
-        notification_center.add_observer(self, name='BlinkSessionWasDeleted')
 
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
 
@@ -5228,7 +5222,6 @@ class SessionManager(object):
             reinitialize = True
         except StopIteration:
             session = BlinkSession()
-            self.sessions.append(session)
             reinitialize = False
 
         session.init_outgoing(account, contact, contact_uri, streams, sibling=sibling, reinitialize=reinitialize)
@@ -5248,7 +5241,6 @@ class SessionManager(object):
         self.send_file_directory = os.path.dirname(filename)
 
         transfer = BlinkFileTransfer()
-        self.file_transfers.append(transfer)
         transfer.init_outgoing(account, contact, contact_uri, filename, transfer_id)
         transfer.connect()
         return transfer
@@ -5369,7 +5361,6 @@ class SessionManager(object):
                 reinitialize = True
             except StopIteration:
                 blink_session = BlinkSession()
-                self.sessions.append(blink_session)
                 reinitialize = False
             blink_session.init_incoming(incoming_request.session, accepted_streams, incoming_request.contact, incoming_request.contact_uri, reinitialize=reinitialize)
 
@@ -5387,7 +5378,6 @@ class SessionManager(object):
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
         transfer = BlinkFileTransfer()
-        self.file_transfers.append(transfer)
         transfer.init_incoming(incoming_request.contact, incoming_request.contact_uri, incoming_request.session, incoming_request.stream)
 
     def _SH_IncomingFileTransferRequestRejected(self, incoming_request, mode):
@@ -5441,7 +5431,6 @@ class SessionManager(object):
                     reinitialize = True
                 except StopIteration:
                     blink_session = BlinkSession()
-                    self.sessions.append(blink_session)
                     reinitialize = False
                 blink_session.init_incoming(session, [chat_stream], contact, contact_uri, reinitialize=reinitialize)
                 return
@@ -5463,6 +5452,10 @@ class SessionManager(object):
                 incoming_request.dialog.hide()
                 self.incoming_requests.remove(incoming_request)
             self.update_ringtone()
+
+    def _NH_BlinkSessionWasCreated(self, notification):
+        self.sessions.append(notification.sender)
+        notification.center.add_observer(self, sender=notification.sender)
 
     def _NH_BlinkSessionDidChangeState(self, notification):
         new_state = notification.data.new_state
@@ -5504,17 +5497,24 @@ class SessionManager(object):
 
     def _NH_BlinkSessionWasDeleted(self, notification):
         self.sessions.remove(notification.sender)
+        notification.center.remove_observer(self, sender=notification.sender)
+
+    def _NH_BlinkFileTransferWasCreated(self, notification):
+        self.file_transfers.append(notification.sender)
+        notification.center.add_observer(self, sender=notification.sender)
+
+    def _NH_BlinkFileTransferWillRetry(self, notification):
+        self.file_transfers.append(notification.sender)
+        notification.center.add_observer(self, sender=notification.sender)
 
     def _NH_BlinkFileTransferDidChangeState(self, notification):
         new_state = notification.data.new_state
         if new_state in ('connecting/ringing', 'connected', 'ending'):
             self.update_ringtone()
 
-    def _NH_BlinkFileTransferWillRetry(self, notification):
-        self.file_transfers.append(notification.sender)
-
     def _NH_BlinkFileTransferDidEnd(self, notification):
         self.file_transfers.remove(notification.sender)
+        notification.center.remove_observer(self, sender=notification.sender)
         if not notification.data.error and not self._filetransfer_tone_timer.isActive():
             self._filetransfer_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
