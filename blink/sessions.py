@@ -411,17 +411,13 @@ class SessionItemsDescriptor(object):
         raise AttributeError("Attribute cannot be deleted")
 
 
-class BlinkSession(QObject):
+class BlinkSession(object):
     implements(IObserver)
-
-    # check what should be a signal and what a notification -Dan
-    clientConferenceChanged = pyqtSignal(object, object) # old_conference, new_conference
 
     streams = StreamListDescriptor()
     items = SessionItemsDescriptor()
 
     def __init__(self):
-        super(BlinkSession, self).__init__()
         self._initialize()
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkSessionWasCreated', sender=self)
@@ -561,7 +557,8 @@ class BlinkSession(QObject):
             self.unhold()
         elif not self.active:
             self.hold()
-        self.clientConferenceChanged.emit(old_conference, new_conference)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkSessionDidChangeClientConference', sender=self, data=NotificationData(old_conference=old_conference, new_conference=new_conference))
 
     client_conference = property(_get_client_conference, _set_client_conference)
     del _get_client_conference, _set_client_conference
@@ -1991,6 +1988,7 @@ class AudioSessionModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkSessionDidNotAddStream')
         notification_center.add_observer(self, name='BlinkSessionDidRemoveStream')
         notification_center.add_observer(self, name='BlinkSessionDidEnd')
+        notification_center.add_observer(self, name='BlinkSessionDidChangeClientConference')
 
     @property
     def active_sessions(self):
@@ -2166,7 +2164,6 @@ class AudioSessionModel(QAbstractListModel):
     def addSession(self, session):
         if session in self.sessions:
             return
-        session.blink_session.clientConferenceChanged.connect(self._SH_BlinkSessionClientConferenceChanged)
         self.sessionAboutToBeAdded.emit(session)
         self._add_session(session)
         # not the right place to do this. the list should do it (else the model needs a back-reference to the list), however in addSessionAndConference we can't avoid doing it -Dan
@@ -2180,7 +2177,6 @@ class AudioSessionModel(QAbstractListModel):
             return
         if sibling not in self.sessions:
             raise ValueError('sibling %r not in sessions list' % sibling)
-        session.blink_session.clientConferenceChanged.connect(self._SH_BlinkSessionClientConferenceChanged)
         self.sessionAboutToBeAdded.emit(session)
         session_list = self.session_list
         if sibling.client_conference is not None:
@@ -2236,7 +2232,6 @@ class AudioSessionModel(QAbstractListModel):
             else:
                 session.client_conference = None
 
-        session.blink_session.clientConferenceChanged.disconnect(self._SH_BlinkSessionClientConferenceChanged)
         session.delete()
 
         self.sessionRemoved.emit(session)
@@ -2279,29 +2274,6 @@ class AudioSessionModel(QAbstractListModel):
             session.active = session is selected_session
         session_list.scrollToBottom()
         self.structureChanged.emit()
-
-    def _SH_BlinkSessionClientConferenceChanged(self, old_conference, new_conference): # would this better be handled by the audio session item itself? (apparently not) -Dan
-        blink_session = self.sender()
-        session = blink_session.items.audio
-
-        if not new_conference:
-            session.widget.position_in_conference = None
-            session.widget.mute_button.hide()
-        if session.widget.mute_button.isChecked():
-            session.widget.mute_button.click()
-
-        for conference in (conference for conference in (old_conference, new_conference) if conference):
-            session_count = len(conference.sessions)
-            if session_count == 1:
-                blink_session = conference.sessions[0]
-                session = blink_session.items.audio
-                session.widget.position_in_conference = None
-                session.widget.mute_button.hide()
-            elif session_count > 1:
-                for blink_session in conference.sessions:
-                    session = blink_session.items.audio
-                    session.widget.position_in_conference = Top if blink_session is conference.sessions[0] else Bottom if blink_session is conference.sessions[-1] else Middle
-                    session.widget.mute_button.show()
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -2368,6 +2340,28 @@ class AudioSessionModel(QAbstractListModel):
         session_item = notification.sender.items.audio
         if session_item is not None:
             self.removeSession(session_item)
+
+    def _NH_BlinkSessionDidChangeClientConference(self, notification):  # would this better be handled by the audio session item itself? (apparently not) -Dan
+        session = notification.sender.items.audio
+
+        if not notification.data.new_conference:
+            session.widget.position_in_conference = None
+            session.widget.mute_button.hide()
+        if session.widget.mute_button.isChecked():
+            session.widget.mute_button.click()
+
+        for conference in (conference for conference in (notification.data.old_conference, notification.data.new_conference) if conference):
+            session_count = len(conference.sessions)
+            if session_count == 1:
+                blink_session = conference.sessions[0]
+                session = blink_session.items.audio
+                session.widget.position_in_conference = None
+                session.widget.mute_button.hide()
+            elif session_count > 1:
+                for blink_session in conference.sessions:
+                    session = blink_session.items.audio
+                    session.widget.position_in_conference = Top if blink_session is conference.sessions[0] else Bottom if blink_session is conference.sessions[-1] else Middle
+                    session.widget.mute_button.show()
 
 
 # workaround class because passing context to the QShortcut constructor segfaults (fixed upstreams on 09-Apr-2013) -Dan
