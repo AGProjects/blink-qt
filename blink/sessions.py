@@ -5259,7 +5259,7 @@ class SessionManager(object):
     def update_ringtone(self):
         # Outgoing ringtone
         outgoing_sessions_or_proposals = [session for session in self.sessions if session.state=='connecting/ringing' and session.direction=='outgoing' or session.state=='connected/sent_proposal']
-        outgoing_file_transfers = [transfer for transfer in self.file_transfers if transfer.state=='connecting/ringing']
+        outgoing_file_transfers = [transfer for transfer in self.file_transfers if transfer.state=='connecting/ringing' and transfer.direction=='outgoing']
         if any(not session.on_hold for session in outgoing_sessions_or_proposals) or outgoing_file_transfers:
             settings = SIPSimpleSettings()
             outbound_ringtone = settings.sounds.outbound_ringtone
