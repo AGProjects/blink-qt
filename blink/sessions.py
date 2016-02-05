@@ -5289,9 +5289,12 @@ class SessionManager(object):
                 request = self.incoming_requests[0]
                 ringtone_type = self.SecondaryRingtone
 
-            if outbound_ringtone.type is self.PrimaryRingtone or self.active_session is not None and self.active_session.state == 'connected/*':
+            if outbound_ringtone.type is self.PrimaryRingtone:
                 ringtone_type = self.SecondaryRingtone
                 initial_delay = 1  # have a small delay to avoid sounds overlapping
+            elif self.active_session is not None and self.active_session.state == 'connected/*':
+                ringtone_type = self.SecondaryRingtone
+                initial_delay = 0
             else:
                 initial_delay = 0
 
