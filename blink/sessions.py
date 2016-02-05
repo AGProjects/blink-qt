@@ -1028,9 +1028,11 @@ class BlinkSession(BlinkSessionBase):
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
         chat_stream = self.streams.get('chat')
         if stream.session.remote_focus and not notification.data.verified and chat_stream is not None and 'com.ag-projects.zrtp-sas' in chat_stream.chatroom_capabilities:
-            secure_chat = chat_stream.transport == 'tls' and all(len(path)==1 for path in (chat_stream.msrp.full_local_path, chat_stream.msrp.full_remote_path))  # tls & direct connection
-            if secure_chat:
-                chat_stream.send_message(notification.data.sas, 'application/blink-zrtp-sas')
+            msrp_transport = chat_stream.msrp
+            if msrp_transport is not None:
+                secure_chat = chat_stream.transport == 'tls' and all(len(path) == 1 for path in (msrp_transport.full_local_path, msrp_transport.full_remote_path))  # tls & direct connection
+                if secure_chat:
+                    chat_stream.send_message(notification.data.sas, 'application/blink-zrtp-sas')
 
     def _NH_RTPStreamZRTPVerifiedStateChanged(self, notification):
         self.info.streams[notification.sender.type]._update(notification.sender)
