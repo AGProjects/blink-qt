@@ -3055,7 +3055,7 @@ class ContactListView(QListView):
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
         self.drop_indicator_index = QModelIndex()
         self.needs_restore = False
-        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
+        self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
 
     def selectionChanged(self, selected, deselected):
         super(ContactListView, self).selectionChanged(selected, deselected)
@@ -3479,7 +3479,7 @@ class ContactSearchListView(QListView):
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
         self.drop_indicator_index = QModelIndex()
-        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
+        self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
 
     def selectionChanged(self, selected, deselected):
         super(ContactSearchListView, self).selectionChanged(selected, deselected)
@@ -3779,7 +3779,7 @@ class ContactDetailView(QListView):
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
         self.drop_indicator_index = QModelIndex()
-        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
+        self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
         contact_list.installEventFilter(self)
 
     def setModel(self, model):
