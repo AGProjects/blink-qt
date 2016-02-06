@@ -5156,7 +5156,7 @@ class RingtoneDescriptor(object):
             return self
         return self.values[obj]
 
-    def __set__(self, obj, ringtone): # review this again -Dan
+    def __set__(self, obj, ringtone):
         old_ringtone = self.values.get(obj, Null)
         if ringtone is not Null and ringtone.type == old_ringtone.type:
             return
