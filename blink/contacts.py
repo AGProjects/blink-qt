@@ -4063,7 +4063,7 @@ class ContactURIItem(object):
 class URITypeComboBox(QComboBox):
     builtin_types = (None, "Mobile", "Home", "Work", "SIP", "XMPP", "Other")
 
-    def __init__(self, parent=None, types=[]):
+    def __init__(self, parent=None, types=()):
         super(URITypeComboBox, self).__init__(parent)
         self.setEditable(True)
         self.addItems(self.builtin_types)
