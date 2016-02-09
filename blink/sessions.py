@@ -3327,8 +3327,6 @@ class ChatSessionListView(QListView):
 
     def dropEvent(self, event):
         model = self.model()
-        if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
         if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
             event.accept()
         super(ChatSessionListView, self).dropEvent(event)
@@ -4734,8 +4732,6 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
 
     def dropEvent(self, event):
         model = self.model()
-        if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
         if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
             event.accept()
         super(ConferenceParticipantListView, self).dropEvent(event)
