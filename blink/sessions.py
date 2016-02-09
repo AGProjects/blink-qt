@@ -1804,8 +1804,8 @@ class AudioSessionItem(object):
         self.widget.record_button.setEnabled(False)
         self.widget.hangup_button.setEnabled(False)
 
-    def _reset_status(self):
-        if not self.__deleted__ and not self.blink_session.on_hold:
+    def _reset_status(self, expected_status):
+        if self.status == expected_status:
             self.status = None
 
     def _SH_HangupButtonClicked(self):
@@ -1891,7 +1891,7 @@ class AudioSessionItem(object):
             self.widget.record_button.setEnabled(True)
             self.widget.hangup_button.setEnabled(True)
             self.status = Status('Connected')
-            call_later(3, self._reset_status)
+            call_later(3, self._reset_status, self.status)  # reset status 3 seconds later if it hasn't changed until then
         else:
             self.status = Status('Audio refused', color='#900000')
             self._cleanup()
@@ -1903,7 +1903,7 @@ class AudioSessionItem(object):
             self.widget.record_button.setEnabled(True)
             self.widget.hangup_button.setEnabled(True)
             self.status = Status('Connected')
-            call_later(3, self._reset_status)
+            call_later(3, self._reset_status, self.status)  # reset status 3 seconds later if it hasn't changed until then
 
     def _NH_BlinkSessionDidNotAddStream(self, notification):
         if notification.data.stream.type == 'audio':
