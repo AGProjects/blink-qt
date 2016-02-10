@@ -2496,7 +2496,7 @@ class AudioSessionListView(QListView):
             pixmap = QPixmap(rect.size())
             pixmap.fill(Qt.transparent)
             widget = DraggedAudioSessionWidget(self.dragged_session.widget, None)
-            widget.resize(rect.size())
+            widget.setFixedSize(rect.size())
             widget.render(pixmap)
             drag = QDrag(self)
             drag.setPixmap(pixmap)
