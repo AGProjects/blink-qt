@@ -4881,6 +4881,7 @@ del ui_class, base_class
 
 
 class IncomingRequest(QObject):
+    finished = pyqtSignal(object)
     accepted = pyqtSignal(object)
     rejected = pyqtSignal(object, str)
 
@@ -4920,6 +4921,7 @@ class IncomingRequest(QObject):
                 # self.dialog.screensharing_stream.accepted = bool(proposal)
         self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 
+        self.dialog.finished.connect(self._SH_DialogFinished)
         self.dialog.accepted.connect(self._SH_DialogAccepted)
         self.dialog.rejected.connect(self._SH_DialogRejected)
 
@@ -4987,6 +4989,9 @@ class IncomingRequest(QObject):
     def stream_types(self):
         return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream) if stream is not None}
 
+    def _SH_DialogFinished(self):
+        self.finished.emit(self)
+
     def _SH_DialogAccepted(self):
         self.accepted.emit(self)
 
@@ -5025,6 +5030,7 @@ del ui_class, base_class
 
 
 class IncomingFileTransferRequest(QObject):
+    finished = pyqtSignal(object)
     accepted = pyqtSignal(object)
     rejected = pyqtSignal(object, str)
 
@@ -5053,6 +5059,7 @@ class IncomingFileTransferRequest(QObject):
         else:
             self.dialog.file_label.setText(u'File: %s' % filename)
 
+        self.dialog.finished.connect(self._SH_DialogFinished)
         self.dialog.accepted.connect(self._SH_DialogAccepted)
         self.dialog.rejected.connect(self._SH_DialogRejected)
 
@@ -5073,6 +5080,9 @@ class IncomingFileTransferRequest(QObject):
 
     def __ge__(self, other):
         return self.priority >= other.priority
+
+    def _SH_DialogFinished(self):
+        self.finished.emit(self)
 
     def _SH_DialogAccepted(self):
         self.accepted.emit(self)
@@ -5344,15 +5354,18 @@ class SessionManager(object):
 
         dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
         incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+        incoming_request.finished.connect(self._SH_IncomingRequestFinished)
         incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
         incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
 
         bisect.insort_right(self.incoming_requests, incoming_request)
         incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request) == 0)
 
-    def _SH_IncomingRequestAccepted(self, incoming_request):
+    def _SH_IncomingRequestFinished(self, incoming_request):
         self.incoming_requests.remove(incoming_request)
         self.update_ringtone()
+
+    def _SH_IncomingRequestAccepted(self, incoming_request):
         accepted_streams = incoming_request.accepted_streams
         if incoming_request.proposal:
             blink_session = next(session for session in self.sessions if session.sip_session is incoming_request.session)
@@ -5367,8 +5380,6 @@ class SessionManager(object):
             blink_session.init_incoming(incoming_request.session, accepted_streams, incoming_request.contact, incoming_request.contact_uri, reinitialize=reinitialize)
 
     def _SH_IncomingRequestRejected(self, incoming_request, mode):
-        self.incoming_requests.remove(incoming_request)
-        self.update_ringtone()
         if incoming_request.proposal:
             incoming_request.session.reject_proposal(488)
         elif mode == 'busy':
@@ -5377,14 +5388,10 @@ class SessionManager(object):
             incoming_request.session.reject(603)
 
     def _SH_IncomingFileTransferRequestAccepted(self, incoming_request):
-        self.incoming_requests.remove(incoming_request)
-        self.update_ringtone()
         transfer = BlinkFileTransfer()
         transfer.init_incoming(incoming_request.contact, incoming_request.contact_uri, incoming_request.session, incoming_request.stream)
 
     def _SH_IncomingFileTransferRequestRejected(self, incoming_request, mode):
-        self.incoming_requests.remove(incoming_request)
-        self.update_ringtone()
         if mode == 'reject':
             incoming_request.session.reject(603)
 
@@ -5417,6 +5424,7 @@ class SessionManager(object):
         if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
             dialog = IncomingFileTransferDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
             incoming_request = IncomingFileTransferRequest(dialog, contact, contact_uri, session, filetransfer_streams[0])
+            incoming_request.finished.connect(self._SH_IncomingRequestFinished)
             incoming_request.accepted.connect(self._SH_IncomingFileTransferRequestAccepted)
             incoming_request.rejected.connect(self._SH_IncomingFileTransferRequestRejected)
         else:
@@ -5439,6 +5447,7 @@ class SessionManager(object):
 
             dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
             incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
+            incoming_request.finished.connect(self._SH_IncomingRequestFinished)
             incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
             incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
 
