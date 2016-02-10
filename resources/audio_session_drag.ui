@@ -54,7 +54,7 @@
       </sizepolicy>
      </property>
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Drop&lt;/span&gt;: Conference &amp;nbsp;&lt;span style=&quot; font-weight:600;&quot;&gt;Alt+Drop&lt;/span&gt;: Transfer&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Drop&lt;/span&gt;:&amp;nbsp;Conference&amp;nbsp; &lt;span style=&quot; font-weight:600;&quot;&gt;Alt+Drop&lt;/span&gt;:&amp;nbsp;Transfer&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
