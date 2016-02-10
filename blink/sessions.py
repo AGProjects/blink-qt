@@ -1318,8 +1318,6 @@ class AudioSessionWidget(base_class, ui_class):
         font = self.latency_label.font()
         font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
         self.latency_label.setFont(font)
-        font = self.packet_loss_label.font()
-        font.setPointSizeF(self.status_label.fontInfo().pointSizeF() - 1)
         self.packet_loss_label.setFont(font)
         self.duration_label.setMinimumWidth(self.duration_label.fontMetrics().width('0:00:00') + 1)  # prevent the status from shifting left/right when duration changes
         self.mute_button.type = LeftSegment
