@@ -1306,6 +1306,7 @@ class Bottom: __metaclass__ = MarkerType
 
 ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
 
+
 class AudioSessionWidget(base_class, ui_class):
     def __init__(self, session, parent=None):
         super(AudioSessionWidget, self).__init__(parent)
@@ -1541,34 +1542,23 @@ class AudioSessionWidget(base_class, ui_class):
         super(AudioSessionWidget, self).paintEvent(event)
 
 
+ui_class, base_class = uic.loadUiType(Resources.get('audio_session_drag.ui'))
+
+
 class DraggedAudioSessionWidget(base_class, ui_class):
-    """Used to draw a dragged session item"""
     def __init__(self, session_widget, parent=None):
         super(DraggedAudioSessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        # add a left margin for the colored band
-        self.address_layout.setContentsMargins(8, -1, -1, -1)
-        self.stream_layout.setContentsMargins(8, -1, -1, -1)
-        self.bottom_layout.setContentsMargins(8, -1, -1, -1)
-        self.mute_button.hide()
-        self.hold_button.hide()
-        self.record_button.hide()
-        self.hangup_button.hide()
-        self.tls_label.hide()
-        self.srtp_label.hide()
-        self.latency_label.hide()
-        self.packet_loss_label.hide()
-        self.duration_label.hide()
-        self.stream_info_label.setText(u'')
-        self.address_label.setText(session_widget.address_label.text())
+
         self.selected = session_widget.selected
         self.in_conference = session_widget.position_in_conference is not None
+
+        self.address_label.setText(session_widget.address_label.text())
         if self.in_conference:
-            self.status_label.setText(u'Drop outside the conference to detach')
+            self.note_label.setText(u'Drop outside the conference to detach')
         else:
-            self.status_label.setText(u'Drop over a session to conference them')
-        self.status_label.show()
+            self.note_label.setText(u'Drop on a session to conference them')
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1597,6 +1587,7 @@ class DraggedAudioSessionWidget(base_class, ui_class):
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
         painter.end()
         super(DraggedAudioSessionWidget, self).paintEvent(event)
+
 
 del ui_class, base_class
 
