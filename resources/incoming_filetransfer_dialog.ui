@@ -302,7 +302,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Refuse the call and stop ringing on any other device</string>
+        <string>Refuse the file and stop ringing on any other device</string>
        </property>
        <property name="text">
         <string>Reject</string>
