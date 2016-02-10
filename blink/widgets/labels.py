@@ -221,14 +221,15 @@ class PacketLossLabel(QLabel):
 
 
 class Status(unicode):
-    def __new__(cls, value, color='black'):
+    def __new__(cls, value, color='black', context=None):
         instance = super(Status, cls).__new__(cls, value)
         instance.color = color
+        instance.context = context
         return instance
 
     def __eq__(self, other):
         if isinstance(other, Status):
-            return super(Status, self).__eq__(other) and self.color == other.color
+            return super(Status, self).__eq__(other) and self.color == other.color and self.context == other.context
         elif isinstance(other, basestring):
             return super(Status, self).__eq__(other)
         return NotImplemented
