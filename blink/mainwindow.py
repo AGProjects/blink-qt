@@ -54,6 +54,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='SIPAccountGotPendingWatcher')
         notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForOutgoing')
+        notification_center.add_observer(self, name='BlinkSessionTransferNewOutgoing')
         notification_center.add_observer(self, name='BlinkFileTransferNewIncoming')
         notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
         notification_center.add_observer(self, sender=AccountManager())
@@ -906,6 +907,10 @@ class MainWindow(base_class, ui_class):
 
     def _NH_BlinkSessionDidReinitializeForOutgoing(self, notification):
         self.search_box.clear()
+
+    def _NH_BlinkSessionTransferNewOutgoing(self, notification):
+        self.search_box.clear()
+        self.switch_view_button.view = SwitchViewButton.SessionView
 
     def _NH_BlinkFileTransferNewIncoming(self, notification):
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)

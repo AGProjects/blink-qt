@@ -37,7 +37,7 @@ from sipsimple.configuration.datatypes import Path
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
-from sipsimple.session import Session
+from sipsimple.session import Session, IllegalStateError
 from sipsimple.streams import MediaStreamRegistry
 from sipsimple.streams.msrp.filetransfer import FileSelector
 from sipsimple.streams.msrp.screensharing import ExternalVNCServerHandler, ExternalVNCViewerHandler, ScreenSharingStream
@@ -470,6 +470,9 @@ class BlinkSession(BlinkSessionBase):
         self.remote_hold = False
         self.recording = False
 
+        self.transfer_state = None
+        self.transfer_direction = None
+
         self.info = SessionInfo()
 
         self._sibling = None
@@ -655,6 +658,43 @@ class BlinkSession(BlinkSessionBase):
             notification_center.post_notification('BlinkSessionNewOutgoing', sender=self)
         notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media', 'statistics'}))
 
+    def init_transfer(self, sip_session, streams, contact, contact_uri, reinitialize=False):
+        assert self.state in (None, 'initialized', 'ended')
+        assert self.contact is None or contact.settings is self.contact.settings
+        notification_center = NotificationCenter()
+        if reinitialize:
+            notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
+            self._initialize(reinitialize=True)
+        else:
+            self._delete_when_done = len(streams) == 1 and streams[0].type == 'audio'
+        self.direction = 'outgoing'
+        self.sip_session = sip_session
+        self.account = sip_session.account
+        self.contact = contact
+        self.contact_uri = contact_uri
+        self.uri = self._normalize_uri(contact_uri.uri)
+        self.stream_descriptions = StreamSet(StreamDescription(stream.type) for stream in streams)
+
+        self.state = 'initialized'
+        if reinitialize:
+            notification_center.post_notification('BlinkSessionDidReinitializeForOutgoing', sender=self)
+        else:
+            notification_center.post_notification('BlinkSessionNewOutgoing', sender=self)
+
+        self.streams.extend(streams)
+
+        self.info._update(self)
+        notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media', 'statistics'}))
+
+        self.state = 'connecting/dns_lookup'
+        notification_center.post_notification('BlinkSessionWillConnect', sender=self, data=NotificationData(sibling=None))
+        notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='dns_lookup'))
+
+        self.stream_descriptions = None
+
+        self.state = 'connecting'
+        notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
+
     def connect(self):
         assert self.direction == 'outgoing' and self.state == 'initialized'
         notification_center = NotificationCenter()
@@ -767,6 +807,15 @@ class BlinkSession(BlinkSessionBase):
         if audio_stream is not None:
             self.recording = False
             audio_stream.stop_recording()
+
+    def transfer(self, contact_uri, replaced_session=None):
+        if self.state != 'connected':
+            return
+        replaced_sip_session = None if replaced_session is None else replaced_session.sip_session
+        try:
+            self.sip_session.transfer(self._parse_uri(contact_uri.uri), replaced_session=replaced_sip_session)
+        except IllegalStateError:
+            pass
 
     def end(self, delete=False):
         if self.state == 'ending':
@@ -980,6 +1029,30 @@ class BlinkSession(BlinkSessionBase):
             self.end()
         elif self.streams.types.isdisjoint({'audio', 'video'}):
             self.unhold()
+
+    def _NH_SIPSessionTransferNewIncoming(self, notification):
+        self.transfer_state = 'active'
+        self.transfer_direction = 'incoming'
+        notification.center.post_notification('BlinkSessionTransferNewIncoming', sender=self, data=notification.data)
+
+    def _NH_SIPSessionTransferNewOutgoing(self, notification):
+        self.transfer_state = 'active'
+        self.transfer_direction = 'outgoing'
+        notification.center.post_notification('BlinkSessionTransferNewOutgoing', sender=self, data=notification.data)
+
+    def _NH_SIPSessionTransferDidStart(self, notification):
+        notification.center.post_notification('BlinkSessionTransferDidStart', sender=self, data=notification.data)
+
+    def _NH_SIPSessionTransferDidEnd(self, notification):
+        self.transfer_state = 'completed'
+        notification.center.post_notification('BlinkSessionTransferDidEnd', sender=self, data=notification.data)
+
+    def _NH_SIPSessionTransferDidFail(self, notification):
+        self.transfer_state = 'failed'
+        notification.center.post_notification('BlinkSessionTransferDidFail', sender=self, data=notification.data)
+
+    def _NH_SIPSessionTransferGotProgress(self, notification):
+        notification.center.post_notification('BlinkSessionTransferGotProgress', sender=self, data=notification.data)
 
     def _NH_MediaStreamDidStart(self, notification):
         stream = notification.sender
@@ -1558,7 +1631,7 @@ class DraggedAudioSessionWidget(base_class, ui_class):
         if self.in_conference:
             self.note_label.setText(u'Drop outside the conference to detach')
         else:
-            self.note_label.setText(u'Drop on a session to conference them')
+            self.note_label.setText(u'<p><b>Drop</b>:&nbsp;Conference&nbsp; <b>Alt+Drop</b>:&nbsp;Transfer</p>')
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1601,6 +1674,9 @@ class AudioSessionItem(object):
         self.uri = session.uri
         self.blink_session = session
         self.blink_session.items.audio = self
+
+        self.status_context = None
+        self.__saved_status = None  # to store skipped status messages during a context change
 
         self.widget = Null
         self.status = None
@@ -1676,8 +1752,17 @@ class AudioSessionItem(object):
         return self.__dict__['status']
 
     def _set_status(self, value):
-        if self.__dict__.get('status', Null) == value:
+        old_status = self.__dict__.get('status', Null)
+        new_status = value
+        if old_status == new_status:
             return
+        if old_status is not None and old_status is not Null:
+            context = None if new_status is None else new_status.context
+            if self.status_context == old_status.context != context:
+                self.__saved_status = value       # preserve the status that is skipped because of context mismatch
+                return
+            elif old_status.context != context and context is not None:
+                self.__saved_status = old_status  # preserve the status that was there prior to switching the context
         self.__dict__['status'] = value
         self.widget.status_label.value = value
 
@@ -1796,7 +1881,8 @@ class AudioSessionItem(object):
 
     def _reset_status(self, expected_status):
         if self.status == expected_status:
-            self.status = None
+            self.status = self.__saved_status
+        self.__saved_status = None
 
     def _SH_HangupButtonClicked(self):
         self.end()
@@ -1928,6 +2014,26 @@ class AudioSessionItem(object):
                 self.status = Status(notification.data.reason)
             self._cleanup()
 
+    def _NH_BlinkSessionTransferNewOutgoing(self, notification):
+        if self.blink_session.state == 'connected':
+            self.status_context = 'transfer'
+            self.status = Status('Transfer: Trying', context='transfer')
+
+    def _NH_BlinkSessionTransferDidEnd(self, notification):
+        if self.blink_session.transfer_direction == 'outgoing':
+            self.status = Status('Transfer: Succeeded', context='transfer')
+
+    def _NH_BlinkSessionTransferDidFail(self, notification):
+        if self.blink_session.state == 'connected' and self.blink_session.transfer_direction == 'outgoing':
+            reason = 'Decline' if notification.data.code == 603 else notification.data.reason
+            self.status = Status("Transfer: {}".format(reason), context='transfer')
+            call_later(3, self._reset_status, self.status)
+        self.status_context = None
+
+    def _NH_BlinkSessionTransferGotProgress(self, notification):
+        if self.blink_session.state == 'connected' and notification.data.code < 200:  # final answers are handled in DidEnd and DiDFail
+            self.status = Status("Transfer: {}".format(notification.data.reason), context='transfer')
+
     def _NH_MediaStreamWillEnd(self, notification):
         stream = notification.sender
         if stream.type == 'audio' and stream.blink_session.items.audio is self:
@@ -2022,7 +2128,7 @@ class AudioSessionModel(QAbstractListModel):
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction | Qt.MoveAction
+        return Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
 
     def mimeTypes(self):
         return ['application/x-blink-session-list']
@@ -2057,7 +2163,10 @@ class AudioSessionModel(QAbstractListModel):
         selection_model = session_list.selectionModel()
         source = session_list.dragged_session
         target = self.sessions[index.row()] if index.isValid() else None
-        if source.client_conference is None:  # the dragged session is not in a conference yet
+
+        if action == Qt.LinkAction:  # call transfer
+            source.blink_session.transfer(target.blink_session.contact_uri, replaced_session=target.blink_session)
+        elif source.client_conference is None:  # the dragged session is not in a conference yet
             if target.client_conference is not None:
                 source_row = self.sessions.index(source)
                 target_row = self.sessions.index(target.client_conference.sessions[-1].items.audio) + 1
@@ -2088,6 +2197,7 @@ class AudioSessionModel(QAbstractListModel):
                 session.active = source.active or target.active
             if source.active:
                 source.client_conference.unhold()
+            self.structureChanged.emit()
         else:  # the dragged session is in a conference
             dragged = source
             sibling = next(session.items.audio for session in dragged.client_conference.sessions if session.items.audio is not dragged)
@@ -2127,7 +2237,7 @@ class AudioSessionModel(QAbstractListModel):
                 session_list.scrollTo(self.index(self.sessions.index(sibling)), session_list.PositionAtCenter)
             dragged.widget.selected = False
             dragged.active = False
-        self.structureChanged.emit()
+            self.structureChanged.emit()
         return True
 
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
@@ -2515,10 +2625,8 @@ class AudioSessionListView(QListView):
         if not acceptable_mime_types:
             event.ignore()
         elif event_source is not self and 'application/x-blink-session-list' in provided_mime_types:
-            event.ignore() # we don't handle drops for blink sessions from other sources
+            event.ignore()  # we don't handle drops for blink sessions from other sources
         else:
-            if event_source is self:
-                event.setDropAction(Qt.MoveAction)
             event.accept()
 
     def dragLeaveEvent(self, event):
@@ -2528,8 +2636,6 @@ class AudioSessionListView(QListView):
 
     def dragMoveEvent(self, event):
         super(AudioSessionListView, self).dragMoveEvent(event)
-        if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
 
         model = self.model()
 
@@ -2551,7 +2657,10 @@ class AudioSessionListView(QListView):
     def dropEvent(self, event):
         model = self.model()
         if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
+            if event.keyboardModifiers() & Qt.AltModifier:
+                event.setDropAction(Qt.LinkAction)
+            else:
+                event.setDropAction(Qt.MoveAction)
         for session in self.model().sessions:
             session.widget.drop_indicator = False
         if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
@@ -2565,9 +2674,19 @@ class AudioSessionListView(QListView):
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(len(model.sessions)-1)).bottom())
             if dragged_session.client_conference is not None:
+                event.setDropAction(Qt.MoveAction)
                 event.accept(rect)
             else:
                 event.ignore(rect)
+        elif event.keyboardModifiers() & Qt.AltModifier and dragged_session.client_conference is None:
+            if dragged_session is session or session.client_conference is not None or session.blink_session.state != 'connected':
+                event.ignore(rect)
+            elif dragged_session.blink_session.transfer_state in ('active', 'completed') or session.blink_session.transfer_state in ('active', 'completed'):
+                event.ignore(rect)
+            else:
+                session.widget.drop_indicator = True
+                event.setDropAction(Qt.LinkAction)  # it might not be LinkAction if other keyboard modifiers are active
+                event.accept(rect)
         else:
             conference = dragged_session.client_conference or Null
             if dragged_session is session or session.blink_session in conference.sessions:
@@ -2579,6 +2698,7 @@ class AudioSessionListView(QListView):
                             sibling.items.audio.widget.drop_indicator = True
                     else:
                         session.widget.drop_indicator = True
+                event.setDropAction(Qt.MoveAction)
                 event.accept(rect)
 
     def _DH_ApplicationXBlinkContactList(self, event, index, rect, session):
@@ -5091,6 +5211,88 @@ class IncomingFileTransferRequest(QObject):
         self.rejected.emit(self, self.dialog.reject_mode)
 
 
+ui_class, base_class = uic.loadUiType(Resources.get('incoming_calltransfer_dialog.ui'))
+
+class IncomingCallTransferDialog(IncomingDialogBase, ui_class):
+    def __init__(self, parent=None):
+        super(IncomingCallTransferDialog, self).__init__(parent)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        with Resources.directory:
+            self.setupUi(self)
+        font = self.username_label.font()
+        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() + 3)
+        font.setFamily("Sans Serif")
+        self.username_label.setFont(font)
+        font = self.transfer_label.font()
+        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
+        self.transfer_label.setFont(font)
+        self.slot = None
+        self.reject_mode = 'reject'
+
+    def show(self, activate=True):
+        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        super(IncomingCallTransferDialog, self).show()
+
+del ui_class, base_class
+
+
+class IncomingCallTransferRequest(QObject):
+    finished = pyqtSignal(object)
+    accepted = pyqtSignal(object)
+    rejected = pyqtSignal(object, str)
+
+    priority = 0
+    stream_types = {'audio'}
+
+    def __init__(self, dialog, contact, contact_uri, session):
+        super(IncomingCallTransferRequest, self).__init__()
+        self.dialog = dialog
+        self.contact = contact
+        self.contact_uri = contact_uri
+        self.session = session
+
+        self.dialog.setWindowTitle(u'Incoming Call Transfer')
+        self.dialog.setWindowIconText(u'Incoming Call Transfer')
+
+        self.dialog.uri_label.setText(contact_uri.uri)
+        self.dialog.username_label.setText(contact.name)
+        if contact.pixmap:
+            self.dialog.user_icon.setPixmap(contact.pixmap)
+        self.dialog.transfer_label.setText(u'would like to transfer you to {.uri}'.format(contact_uri))
+
+        self.dialog.finished.connect(self._SH_DialogFinished)
+        self.dialog.accepted.connect(self._SH_DialogAccepted)
+        self.dialog.rejected.connect(self._SH_DialogRejected)
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __gt__(self, other):
+        return self.priority > other.priority
+
+    def __ge__(self, other):
+        return self.priority >= other.priority
+
+    def _SH_DialogFinished(self):
+        self.finished.emit(self)
+
+    def _SH_DialogAccepted(self):
+        self.accepted.emit(self)
+
+    def _SH_DialogRejected(self):
+        self.rejected.emit(self, self.dialog.reject_mode)
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
 
 class ConferenceDialog(base_class, ui_class):
@@ -5210,6 +5412,7 @@ class SessionManager(object):
         self._filetransfer_tone_timer.setSingleShot(True)
 
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPSessionNewOutgoing')
         notification_center.add_observer(self, name='SIPSessionNewIncoming')
         notification_center.add_observer(self, name='SIPSessionDidFail')
 
@@ -5395,6 +5598,18 @@ class SessionManager(object):
         if mode == 'reject':
             incoming_request.session.reject(603)
 
+    def _SH_IncomingCallTransferRequestAccepted(self, incoming_request):
+        try:
+            incoming_request.session.accept_transfer()
+        except IllegalStateError:
+            pass
+
+    def _SH_IncomingCallTransferRequestRejected(self, incoming_request, mode):
+        try:
+            incoming_request.session.reject_transfer()
+        except IllegalStateError:
+            pass
+
     @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -5457,6 +5672,20 @@ class SessionManager(object):
         incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request) == 0)
         self.update_ringtone()
 
+    def _NH_SIPSessionNewOutgoing(self, notification):
+        sip_session = notification.sender
+        if sip_session.transfer_info is not None:
+            from blink.contacts import URIUtils
+
+            contact, contact_uri = URIUtils.find_contact(sip_session.remote_identity.uri)
+            try:
+                blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
+                reinitialize = True
+            except StopIteration:
+                blink_session = BlinkSession()
+                reinitialize = False
+            blink_session.init_transfer(sip_session, notification.data.streams, contact, contact_uri, reinitialize=reinitialize)
+
     def _NH_SIPSessionDidFail(self, notification):
         if notification.sender.direction == 'incoming':
             for incoming_request in self.incoming_requests[notification.sender]:
@@ -5509,6 +5738,28 @@ class SessionManager(object):
     def _NH_BlinkSessionWasDeleted(self, notification):
         self.sessions.remove(notification.sender)
         notification.center.remove_observer(self, sender=notification.sender)
+
+    def _NH_BlinkSessionTransferNewIncoming(self, notification):
+        from blink.contacts import URIUtils
+
+        session = notification.sender.sip_session
+        contact, contact_uri = URIUtils.find_contact(notification.data.transfer_destination)
+
+        dialog = IncomingCallTransferDialog()  # Build the dialog without a parent in order to be displayed on the current workspace on Linux.
+        incoming_request = IncomingCallTransferRequest(dialog, contact, contact_uri, session)
+        incoming_request.finished.connect(self._SH_IncomingRequestFinished)
+        incoming_request.accepted.connect(self._SH_IncomingCallTransferRequestAccepted)
+        incoming_request.rejected.connect(self._SH_IncomingCallTransferRequestRejected)
+
+        bisect.insort_right(self.incoming_requests, incoming_request)
+        incoming_request.dialog.show(activate=QApplication.activeWindow() is not None and self.incoming_requests.index(incoming_request) == 0)
+        self.update_ringtone()
+
+    def _NH_BlinkSessionTransferDidFail(self, notification):
+        for request in self.incoming_requests[notification.sender.sip_session, IncomingCallTransferRequest]:
+            request.dialog.hide()
+            self.incoming_requests.remove(request)
+        self.update_ringtone()
 
     def _NH_BlinkFileTransferWasCreated(self, notification):
         self.file_transfers.append(notification.sender)

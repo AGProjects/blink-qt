@@ -3030,6 +3030,8 @@ class ContactDetailModel(QAbstractListModel):
 
 
 class ContactListView(QListView):
+    implements(IObserver)
+
     def __init__(self, parent=None):
         super(ContactListView, self).__init__(parent)
         self.setItemDelegate(ContactDelegate(self))
@@ -3053,9 +3055,14 @@ class ContactListView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
+        self.actions.transfer_call = QAction("Transfer Active Call", self, triggered=self._AH_TransferCall)
         self.drop_indicator_index = QModelIndex()
         self.needs_restore = False
         self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, 'BlinkSessionDidChangeState')
+        notification_center.add_observer(self, 'BlinkSessionDidRemoveStream')
+        notification_center.add_observer(self, 'BlinkActiveSessionDidChange')
 
     def selectionChanged(self, selected, deselected):
         super(ContactListView, self).selectionChanged(selected, deselected)
@@ -3125,6 +3132,7 @@ class ContactListView(QListView):
             menu.addAction(self.actions.send_files)
             menu.addAction(self.actions.request_screen)
             menu.addAction(self.actions.share_my_screen)
+            menu.addAction(self.actions.transfer_call)
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
@@ -3133,7 +3141,9 @@ class ContactListView(QListView):
             menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             account_manager = AccountManager()
+            session_manager = SessionManager()
             can_call = account_manager.default_account is not None and contact.uri is not None
+            can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
             self.actions.start_audio_call.setEnabled(can_call)
             self.actions.start_video_call.setEnabled(can_call)
             self.actions.start_chat_session.setEnabled(can_call)
@@ -3141,6 +3151,7 @@ class ContactListView(QListView):
             self.actions.send_files.setEnabled(can_call)
             self.actions.request_screen.setEnabled(can_call)
             self.actions.share_my_screen.setEnabled(can_call)
+            self.actions.transfer_call.setEnabled(can_transfer)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
@@ -3385,6 +3396,11 @@ class ContactListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
+    def _AH_TransferCall(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.active_session.transfer(contact.uri)
+
     def _DH_ApplicationXBlinkGroupList(self, event, index, rect, item):
         model = self.model()
         groups = model.items[GroupList]
@@ -3455,8 +3471,39 @@ class ContactListView(QListView):
             session_manager = SessionManager()
             session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
 
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidChangeState(self, notification):
+        session_manager = SessionManager()
+        if notification.sender is session_manager.active_session and self.context_menu.isVisible():
+            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
+                contact = selected_items[0]
+                self.actions.transfer_call.setEnabled(contact.uri is not None and notification.sender.state == 'connected')
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        session_manager = SessionManager()
+        if notification.sender is session_manager.active_session and self.context_menu.isVisible():
+            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
+                contact = selected_items[0]
+                self.actions.transfer_call.setEnabled(contact.uri is not None and 'audio' in notification.sender.streams)
+
+    def _NH_BlinkActiveSessionDidChange(self, notification):
+        if self.context_menu.isVisible():
+            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
+                contact = selected_items[0]
+                active_session = notification.data.active_session
+                self.actions.transfer_call.setEnabled(contact.uri is not None and active_session is not None and active_session.state == 'connected')
+
 
 class ContactSearchListView(QListView):
+    implements(IObserver)
+
     def __init__(self, parent=None):
         super(ContactSearchListView, self).__init__(parent)
         self.setItemDelegate(ContactDelegate(self))
@@ -3478,8 +3525,13 @@ class ContactSearchListView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
+        self.actions.transfer_call = QAction("Transfer Active Call", self, triggered=self._AH_TransferCall)
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, 'BlinkSessionDidChangeState')
+        notification_center.add_observer(self, 'BlinkSessionDidRemoveStream')
+        notification_center.add_observer(self, 'BlinkActiveSessionDidChange')
 
     def selectionChanged(self, selected, deselected):
         super(ContactSearchListView, self).selectionChanged(selected, deselected)
@@ -3536,13 +3588,16 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.send_files)
             menu.addAction(self.actions.request_screen)
             menu.addAction(self.actions.share_my_screen)
+            menu.addAction(self.actions.transfer_call)
             menu.addSeparator()
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             account_manager = AccountManager()
+            session_manager = SessionManager()
             can_call = account_manager.default_account is not None and contact.uri is not None
+            can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
             self.actions.start_audio_call.setEnabled(can_call)
             self.actions.start_video_call.setEnabled(can_call)
             self.actions.start_chat_session.setEnabled(can_call)
@@ -3550,6 +3605,7 @@ class ContactSearchListView(QListView):
             self.actions.send_files.setEnabled(can_call)
             self.actions.request_screen.setEnabled(can_call)
             self.actions.share_my_screen.setEnabled(can_call)
+            self.actions.transfer_call.setEnabled(can_transfer)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
@@ -3730,6 +3786,11 @@ class ContactSearchListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
+    def _AH_TransferCall(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.active_session.transfer(contact.uri)
+
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
             event.accept(rect)
@@ -3746,8 +3807,39 @@ class ContactSearchListView(QListView):
             session_manager = SessionManager()
             session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
 
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidChangeState(self, notification):
+        session_manager = SessionManager()
+        if notification.sender is session_manager.active_session and self.context_menu.isVisible():
+            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
+                contact = selected_items[0]
+                self.actions.transfer_call.setEnabled(contact.uri is not None and notification.sender.state == 'connected')
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        session_manager = SessionManager()
+        if notification.sender is session_manager.active_session and self.context_menu.isVisible():
+            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
+                contact = selected_items[0]
+                self.actions.transfer_call.setEnabled(contact.uri is not None and 'audio' in notification.sender.streams)
+
+    def _NH_BlinkActiveSessionDidChange(self, notification):
+        if self.context_menu.isVisible():
+            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
+                contact = selected_items[0]
+                active_session = notification.data.active_session
+                self.actions.transfer_call.setEnabled(contact.uri is not None and active_session is not None and active_session.state == 'connected')
+
 
 class ContactDetailView(QListView):
+    implements(IObserver)
+
     def __init__(self, contact_list):
         super(ContactDetailView, self).__init__(contact_list.parent())
         palette = self.palette()
@@ -3778,9 +3870,14 @@ class ContactDetailView(QListView):
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
+        self.actions.transfer_call = QAction("Transfer Active Call", self, triggered=self._AH_TransferCall)
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
         contact_list.installEventFilter(self)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, 'BlinkSessionDidChangeState')
+        notification_center.add_observer(self, 'BlinkSessionDidRemoveStream')
+        notification_center.add_observer(self, 'BlinkActiveSessionDidChange')
 
     def setModel(self, model):
         old_model = self.model() or Null
@@ -3812,6 +3909,7 @@ class ContactDetailView(QListView):
 
     def contextMenuEvent(self, event):
         account_manager = AccountManager()
+        session_manager = SessionManager()
         model = self.model()
         selected_indexes = self.selectionModel().selectedIndexes()
         selected_item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
@@ -3825,6 +3923,7 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.send_files)
         menu.addAction(self.actions.request_screen)
         menu.addAction(self.actions.share_my_screen)
+        menu.addAction(self.actions.transfer_call)
         menu.addSeparator()
         if isinstance(selected_item, ContactURI) and model.contact_detail.editable:
             menu.addAction(self.actions.make_uri_default)
@@ -3832,6 +3931,7 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.edit_contact)
         menu.addAction(self.actions.delete_contact)
         can_call = account_manager.default_account is not None and contact_has_uris
+        can_transfer = contact_has_uris and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
         self.actions.start_audio_call.setEnabled(can_call)
         self.actions.start_video_call.setEnabled(can_call)
         self.actions.start_chat_session.setEnabled(can_call)
@@ -3839,6 +3939,7 @@ class ContactDetailView(QListView):
         self.actions.send_files.setEnabled(can_call)
         self.actions.request_screen.setEnabled(can_call)
         self.actions.share_my_screen.setEnabled(can_call)
+        self.actions.transfer_call.setEnabled(can_transfer)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
         self.actions.delete_contact.setEnabled(model.contact_detail.deletable)
         menu.exec_(event.globalPos())
@@ -4004,6 +4105,17 @@ class ContactDetailView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
+    def _AH_TransferCall(self):
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = contact.uri
+        session_manager = SessionManager()
+        session_manager.active_session.transfer(selected_uri)
+
     def _DH_ApplicationXBlinkSession(self, event, index, rect, item):
         event.ignore(rect)
 
@@ -4043,6 +4155,29 @@ class ContactDetailView(QListView):
             selected_uri = contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidChangeState(self, notification):
+        session_manager = SessionManager()
+        if notification.sender is session_manager.active_session and self.context_menu.isVisible():
+            contact_has_uris = self.model().rowCount() > 1
+            self.actions.transfer_call.setEnabled(contact_has_uris and notification.sender.state == 'connected')
+
+    def _NH_BlinkSessionDidRemoveStream(self, notification):
+        session_manager = SessionManager()
+        if notification.sender is session_manager.active_session and self.context_menu.isVisible():
+            contact_has_uris = self.model().rowCount() > 1
+            self.actions.transfer_call.setEnabled(contact_has_uris and 'audio' in notification.sender.streams)
+
+    def _NH_BlinkActiveSessionDidChange(self, notification):
+        if self.context_menu.isVisible():
+            contact_has_uris = self.model().rowCount() > 1
+            active_session = notification.data.active_session
+            self.actions.transfer_call.setEnabled(contact_has_uris and active_session is not None and active_session.state == 'connected')
 
 
 # The contact editor dialog
