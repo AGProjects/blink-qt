@@ -5352,7 +5352,7 @@ class SessionManager(object):
         chat_stream = proposed_streams.get('chat')
         screensharing_stream = proposed_streams.get('screen-sharing')
 
-        dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+        dialog = IncomingDialog()  # Build the dialog without a parent in order to be displayed on the current workspace on Linux.
         incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
         incoming_request.finished.connect(self._SH_IncomingRequestFinished)
         incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
@@ -5422,7 +5422,7 @@ class SessionManager(object):
         contact, contact_uri = URIUtils.find_contact(session.remote_identity.uri, display_name=session.remote_identity.display_name, exact=False)
 
         if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
-            dialog = IncomingFileTransferDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+            dialog = IncomingFileTransferDialog()  # Build the dialog without a parent in order to be displayed on the current workspace on Linux.
             incoming_request = IncomingFileTransferRequest(dialog, contact, contact_uri, session, filetransfer_streams[0])
             incoming_request.finished.connect(self._SH_IncomingRequestFinished)
             incoming_request.accepted.connect(self._SH_IncomingFileTransferRequestAccepted)
@@ -5445,7 +5445,7 @@ class SessionManager(object):
                 blink_session.init_incoming(session, [chat_stream], contact, contact_uri, reinitialize=reinitialize)
                 return
 
-            dialog = IncomingDialog() # The dialog is constructed without the main window as parent so that on Linux it is displayed on the current workspace rather than the one where the main window is.
+            dialog = IncomingDialog()  # Build the dialog without a parent in order to be displayed on the current workspace on Linux.
             incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             incoming_request.finished.connect(self._SH_IncomingRequestFinished)
             incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
