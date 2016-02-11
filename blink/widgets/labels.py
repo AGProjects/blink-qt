@@ -272,8 +272,9 @@ class ElidedLabel(QLabel):
         font_metrics = QFontMetrics(self.font())
         if font_metrics.width(self.text()) > self.contentsRect().width():
             label_width = self.size().width()
+            fade_start = 1 - 50.0/label_width if label_width > 50 else 0.0
             gradient = QLinearGradient(0, 0, label_width, 0)
-            gradient.setColorAt(1-50.0/label_width, self.palette().color(self.foregroundRole()))
+            gradient.setColorAt(fade_start, self.palette().color(self.foregroundRole()))
             gradient.setColorAt(1.0, Qt.transparent)
             painter.setPen(QPen(QBrush(gradient), 1.0))
         painter.drawText(self.contentsRect(), Qt.TextSingleLine | int(self.alignment()), self.text())

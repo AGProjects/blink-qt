@@ -1963,9 +1963,11 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
                 painter.drawText(text_rect, Qt.TextSingleLine | Qt.AlignRight | Qt.AlignVCenter, contact_uri.uri.type)
                 text_rect.adjust(0, 0, -option.fontMetrics.width(contact_uri.uri.type) - 5, 0)
             text_color = option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text)
-            if option.fontMetrics.width(contact_uri.uri.uri) > text_rect.width():
+            text_width = text_rect.width()
+            if option.fontMetrics.width(contact_uri.uri.uri) > text_width:
+                fade_start = 1 - 50.0/text_width if text_width > 50 else 0.0
                 gradient = QLinearGradient(text_rect.x(), 0, text_rect.right(), 0)
-                gradient.setColorAt(1-50.0/text_rect.width(), text_color)
+                gradient.setColorAt(fade_start, text_color)
                 gradient.setColorAt(1.0, Qt.transparent)
                 painter.setClipRect(text_rect)
                 painter.setPen(QPen(QBrush(gradient), 1.0))
@@ -4280,8 +4282,9 @@ class ContactURIDelegate(QItemDelegate):
             text_margin = option.widget.style().pixelMetric(QStyle.PM_FocusFrameHMargin, None, option.widget) + 1
             text_rect = rect.adjusted(text_margin, 0, -text_margin, 0) # remove width padding
             width = text_rect.width()
+            fade_start = 1 - 50.0/width if width > 50 else 0.0
             gradient = QLinearGradient(0, 0, width, 0)
-            gradient.setColorAt(1-50.0/width, option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text))
+            gradient.setColorAt(fade_start, option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text))
             gradient.setColorAt(1.0, Qt.transparent)
             painter.save()
             painter.setPen(QPen(QBrush(gradient), 1.0))
