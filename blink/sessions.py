@@ -5041,8 +5041,6 @@ class IncomingRequest(QObject):
         self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 
         self.dialog.finished.connect(self._SH_DialogFinished)
-        self.dialog.accepted.connect(self._SH_DialogAccepted)
-        self.dialog.rejected.connect(self._SH_DialogRejected)
 
     def __eq__(self, other):
         return self is other
@@ -5108,14 +5106,12 @@ class IncomingRequest(QObject):
     def stream_types(self):
         return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream) if stream is not None}
 
-    def _SH_DialogFinished(self):
+    def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-
-    def _SH_DialogAccepted(self):
-        self.accepted.emit(self)
-
-    def _SH_DialogRejected(self):
-        self.rejected.emit(self, self.dialog.reject_mode)
+        if result == QDialog.Accepted:
+            self.accepted.emit(self)
+        elif result == QDialog.Rejected:
+            self.rejected.emit(self, self.dialog.reject_mode)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_filetransfer_dialog.ui'))
@@ -5179,8 +5175,6 @@ class IncomingFileTransferRequest(QObject):
             self.dialog.file_label.setText(u'File: %s' % filename)
 
         self.dialog.finished.connect(self._SH_DialogFinished)
-        self.dialog.accepted.connect(self._SH_DialogAccepted)
-        self.dialog.rejected.connect(self._SH_DialogRejected)
 
     def __eq__(self, other):
         return self is other
@@ -5200,14 +5194,12 @@ class IncomingFileTransferRequest(QObject):
     def __ge__(self, other):
         return self.priority >= other.priority
 
-    def _SH_DialogFinished(self):
+    def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-
-    def _SH_DialogAccepted(self):
-        self.accepted.emit(self)
-
-    def _SH_DialogRejected(self):
-        self.rejected.emit(self, self.dialog.reject_mode)
+        if result == QDialog.Accepted:
+            self.accepted.emit(self)
+        elif result == QDialog.Rejected:
+            self.rejected.emit(self, self.dialog.reject_mode)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_calltransfer_dialog.ui'))
@@ -5261,8 +5253,6 @@ class IncomingCallTransferRequest(QObject):
         self.dialog.transfer_label.setText(u'would like to transfer you to {.uri}'.format(contact_uri))
 
         self.dialog.finished.connect(self._SH_DialogFinished)
-        self.dialog.accepted.connect(self._SH_DialogAccepted)
-        self.dialog.rejected.connect(self._SH_DialogRejected)
 
     def __eq__(self, other):
         return self is other
@@ -5282,14 +5272,12 @@ class IncomingCallTransferRequest(QObject):
     def __ge__(self, other):
         return self.priority >= other.priority
 
-    def _SH_DialogFinished(self):
+    def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-
-    def _SH_DialogAccepted(self):
-        self.accepted.emit(self)
-
-    def _SH_DialogRejected(self):
-        self.rejected.emit(self, self.dialog.reject_mode)
+        if result == QDialog.Accepted:
+            self.accepted.emit(self)
+        elif result == QDialog.Rejected:
+            self.rejected.emit(self, self.dialog.reject_mode)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
