@@ -2024,7 +2024,9 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionTransferDidFail(self, notification):
         if self.blink_session.transfer_direction == 'outgoing':
-            reason = 'Decline' if notification.data.code == 603 else notification.data.reason
+            reason_map = {403: 'Forbidden', 404: 'Not Found', 408: 'Timeout', 480: 'Unavailable', 486: 'Busy',
+                          487: 'Cancelled', 488: 'Not Acceptable', 600: 'Busy', 603: 'Declined'}
+            reason = reason_map.get(notification.data.code, 'Failed')
             self.status = Status("Transfer: {}".format(reason), context='transfer')
             call_later(3, self._reset_status, self.status)
             self.status_context = None
