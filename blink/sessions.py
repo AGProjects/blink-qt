@@ -2015,23 +2015,22 @@ class AudioSessionItem(object):
             self._cleanup()
 
     def _NH_BlinkSessionTransferNewOutgoing(self, notification):
-        if self.blink_session.state == 'connected':
-            self.status_context = 'transfer'
-            self.status = Status('Transfer: Trying', context='transfer')
+        self.status_context = 'transfer'
+        self.status = Status('Transfer: Trying', context='transfer')
 
     def _NH_BlinkSessionTransferDidEnd(self, notification):
         if self.blink_session.transfer_direction == 'outgoing':
             self.status = Status('Transfer: Succeeded', context='transfer')
 
     def _NH_BlinkSessionTransferDidFail(self, notification):
-        if self.blink_session.state == 'connected' and self.blink_session.transfer_direction == 'outgoing':
+        if self.blink_session.transfer_direction == 'outgoing':
             reason = 'Decline' if notification.data.code == 603 else notification.data.reason
             self.status = Status("Transfer: {}".format(reason), context='transfer')
             call_later(3, self._reset_status, self.status)
-        self.status_context = None
+            self.status_context = None
 
     def _NH_BlinkSessionTransferGotProgress(self, notification):
-        if self.blink_session.state == 'connected' and notification.data.code < 200:  # final answers are handled in DidEnd and DiDFail
+        if notification.data.code < 200:  # final answers are handled in DidEnd and DiDFail
             self.status = Status("Transfer: {}".format(notification.data.reason), context='transfer')
 
     def _NH_MediaStreamWillEnd(self, notification):
