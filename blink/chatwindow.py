@@ -1420,7 +1420,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.no_sessions_label.setObjectName('no_sessions_label')
 
         self.zrtp_widget = ZRTPWidget(self.info_panel)
-        self.zrtp_widget.setObjectName('zrtp_widget')
         self.zrtp_widget.stream_type = None
 
         self.control_icon = QIcon(Resources.get('icons/cog.svg'))
