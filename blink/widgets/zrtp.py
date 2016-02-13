@@ -46,10 +46,10 @@ class ZRTPWidget(base_class, ui_class):
         self.__dict__['peer_verified'] = verified
         if verified:
             self.validate_button.setText(u'Invalidate')
-            self.status_value.setText(u'<span style=\"color: #55ff00;\">Verified</span>')
+            self.status_value.setText(u'<span style="color: #55ff00;">Verified</span>')
         else:
             self.validate_button.setText(u'Validate')
-            self.status_value.setText(u'<span style=\"color: #ff5500;\">Not verified</span>')
+            self.status_value.setText(u'<span style="color: #ff5500;">Not verified</span>')
         self.validate_button.setChecked(verified)
 
     peer_verified = property(_get_peer_verified, _set_peer_verified)
