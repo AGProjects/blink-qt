@@ -50,7 +50,7 @@ class LineEdit(QLineEdit):
 
     @property
     def left_margin(self):
-        return self.left_widget.sizeHint().width() + 2*self.right_layout.spacing()
+        return self.left_widget.sizeHint().width() + 2*self.left_layout.spacing()
 
     @property
     def right_margin(self):
