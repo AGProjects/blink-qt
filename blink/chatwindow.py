@@ -12,7 +12,7 @@ import re
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
 from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCursor, QTextDocument, QTextEdit, QToolButton
-from PyQt4.QtGui  import QApplication, QDesktopServices, QImageReader, QKeyEvent
+from PyQt4.QtGui  import QApplication, QDesktopServices, QImageReader, QKeyEvent, QTextCharFormat
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
@@ -462,6 +462,10 @@ class ChatTextInput(QTextEdit):
 
     def _SH_DocumentLayoutSizeChanged(self, new_size):
         self.setFixedHeight(min(new_size.height()+self.contentsMargins().top()+self.contentsMargins().bottom(), self.parent().height()/2))
+
+    def clear(self):
+        super(ChatTextInput, self).clear()
+        self.setCurrentCharFormat(QTextCharFormat())  # clear() doesn't clear the text formatting, only the content
 
     def setHtml(self, text):
         super(ChatTextInput, self).setHtml(text)
