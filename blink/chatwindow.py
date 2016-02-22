@@ -388,7 +388,7 @@ class ChatWebView(QWebView):
         return None
 
     def dragEnterEvent(self, event):
-        event.ignore() # let the parent process DND
+        event.ignore()  # let the parent process DND
 
     def resizeEvent(self, event):
         super(ChatWebView, self).resizeEvent(event)
@@ -403,7 +403,7 @@ class ChatTextInput(QTextEdit):
         self.setTabStopWidth(22)
         self.document().documentLayout().documentSizeChanged.connect(self._SH_DocumentLayoutSizeChanged)
         self.history = []
-        self.history_index = 0 # negative indexes with 0 indicating the text being typed.
+        self.history_index = 0  # negative indexes with 0 indicating the text being typed.
         self.stashed_content = None
 
     @property
@@ -413,7 +413,7 @@ class ChatTextInput(QTextEdit):
         return document.characterCount() <= 1 and not last_block.textList()
 
     def dragEnterEvent(self, event):
-        event.ignore() # let the parent process DND
+        event.ignore()  # let the parent process DND
 
     def keyPressEvent(self, event):
         key, modifiers = event.key(), event.modifiers()
@@ -478,13 +478,16 @@ class IconDescriptor(object):
     def __init__(self, filename):
         self.filename = filename
         self.icon = None
+
     def __get__(self, obj, objtype):
         if self.icon is None:
             self.icon = QIcon(self.filename)
             self.icon.filename = self.filename
         return self.icon
+
     def __set__(self, obj, value):
         raise AttributeError("attribute cannot be set")
+
     def __delete__(self, obj):
         raise AttributeError("attribute cannot be deleted")
 
@@ -551,6 +554,7 @@ class FileDescriptor(object):
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
+
 
 class ChatWidget(base_class, ui_class):
     implements(IObserver)
