@@ -92,7 +92,7 @@ class RTPStreamInfo(object):
     def codec(self):
         raise NotImplementedError
 
-    def _update(self, stream):
+    def update(self, stream):
         if stream is not None:
             self.codec_name = stream.codec
             self.sample_rate = stream.sample_rate
@@ -107,7 +107,7 @@ class RTPStreamInfo(object):
             if stream.session and not stream.session.account.nat_traversal.use_ice:
                 self.ice_status = 'disabled'
 
-    def _update_statistics(self, statistics):
+    def update_statistics(self, statistics):
         if statistics:
             packets = statistics['rx']['packets'] - self._total_packets
             packets_lost = statistics['rx']['packets_lost'] - self._total_packets_lost
@@ -124,7 +124,7 @@ class RTPStreamInfo(object):
             self.bytes_received = statistics['rx']['bytes']
             self.packet_loss.append(sum(self._average_loss_queue) / self.average_interval)
 
-    def _reset(self):
+    def reset(self):
         self.__init__()
 
 
@@ -138,7 +138,7 @@ class MSRPStreamInfo(object):
         self.full_local_path = []
         self.full_remote_path = []
 
-    def _update(self, stream):
+    def update(self, stream):
         if stream is not None:
             local_uri = stream.local_uri
             msrp_transport = stream.msrp
@@ -152,7 +152,7 @@ class MSRPStreamInfo(object):
                 self.transport = stream.transport
                 self.local_address = local_uri.host
 
-    def _reset(self):
+    def reset(self):
         self.__init__()
 
 
@@ -171,8 +171,8 @@ class VideoStreamInfo(RTPStreamInfo):
     def codec(self):
         return '{0.codec_name} {0.framerate:.3g}fps'.format(self) if self.codec_name else None
 
-    def _update(self, stream):
-        super(VideoStreamInfo, self)._update(stream)
+    def update(self, stream):
+        super(VideoStreamInfo, self).update(stream)
         try:
             self.framerate = stream.producer.framerate
         except AttributeError:
@@ -188,8 +188,8 @@ class ScreenSharingStreamInfo(MSRPStreamInfo):
         super(ScreenSharingStreamInfo, self).__init__()
         self.mode = None
 
-    def _update(self, stream):
-        super(ScreenSharingStreamInfo, self)._update(stream)
+    def update(self, stream):
+        super(ScreenSharingStreamInfo, self).update(stream)
         if stream is not None:
             self.mode = stream.handler.type
 
@@ -210,11 +210,11 @@ class StreamsInfo(object):
         except AttributeError:
             raise KeyError(key)
 
-    def _update(self, streams):
-        self.audio._update(streams.get('audio'))
-        self.video._update(streams.get('video'))
-        self.chat._update(streams.get('chat'))
-        self.screen_sharing._update(streams.get('screen-sharing'))
+    def update(self, streams):
+        self.audio.update(streams.get('audio'))
+        self.video.update(streams.get('video'))
+        self.chat.update(streams.get('chat'))
+        self.screen_sharing.update(streams.get('screen-sharing'))
 
 
 class SessionInfo(object):
@@ -226,14 +226,14 @@ class SessionInfo(object):
         self.remote_user_agent = None
         self.streams = StreamsInfo()
 
-    def _update(self, session):
+    def update(self, session):
         sip_session = session.sip_session
         if sip_session is not None:
             self.transport = sip_session.transport
             self.local_address = session.account.contact[self.transport].host
             self.remote_address = sip_session.peer_address # consider reading from sip_session.route if peer_address is None (route can also be None) -Dan
             self.remote_user_agent = sip_session.remote_user_agent
-        self.streams._update(session.streams)
+        self.streams.update(session.streams)
 
 
 class StreamDescription(object):
@@ -622,7 +622,7 @@ class BlinkSession(BlinkSessionBase):
         self.contact_uri = contact_uri
         self.uri = self._parse_uri(contact_uri.uri)
         self.streams.extend(streams)
-        self.info._update(self)
+        self.info.update(self)
         self.state = 'connecting'
         if reinitialize:
             notification_center.post_notification('BlinkSessionDidReinitializeForIncoming', sender=self)
@@ -651,7 +651,7 @@ class BlinkSession(BlinkSessionBase):
         self.stream_descriptions = StreamSet(stream_descriptions)
         self._sibling = sibling
         self.state = 'initialized'
-        self.info._update(self)
+        self.info.update(self)
         if reinitialize:
             notification_center.post_notification('BlinkSessionDidReinitializeForOutgoing', sender=self)
         else:
@@ -683,7 +683,7 @@ class BlinkSession(BlinkSessionBase):
 
         self.streams.extend(streams)
 
-        self.info._update(self)
+        self.info.update(self)
         notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media', 'statistics'}))
 
         self.state = 'connecting/dns_lookup'
@@ -728,7 +728,7 @@ class BlinkSession(BlinkSessionBase):
         for stream_description in stream_descriptions:
             if stream_description.type in self.streams:
                 raise RuntimeError('session already has a stream of type %s' % stream_description.type)
-            self.info.streams[stream_description.type]._reset()
+            self.info.streams[stream_description.type].reset()
         streams = [stream_description.create_stream() for stream_description in stream_descriptions]
         self.sip_session.add_streams(streams)
         self.streams.extend(streams)
@@ -754,7 +754,7 @@ class BlinkSession(BlinkSessionBase):
         self.sip_session.accept_proposal(streams)
         notification_center = NotificationCenter()
         for stream in streams:
-            self.info.streams[stream.type]._reset()
+            self.info.streams[stream.type].reset()
             notification_center.post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream))
         notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media', 'statistics'}))
 
@@ -901,8 +901,8 @@ class BlinkSession(BlinkSessionBase):
 
     def _SH_TimerFired(self):
         self.info.duration += timedelta(seconds=1)
-        self.info.streams.audio._update_statistics(self.streams.get('audio', Null).statistics)
-        self.info.streams.video._update_statistics(self.streams.get('video', Null).statistics)
+        self.info.streams.audio.update_statistics(self.streams.get('audio', Null).statistics)
+        self.info.streams.video.update_statistics(self.streams.get('video', Null).statistics)
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'statistics'}))
 
@@ -928,7 +928,7 @@ class BlinkSession(BlinkSessionBase):
 
     def _NH_SIPSessionNewOutgoing(self, notification):
         self.state = 'connecting'
-        self.info._update(self)
+        self.info.update(self)
         notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session'}))
 
@@ -939,12 +939,12 @@ class BlinkSession(BlinkSessionBase):
         elif notification.data.code == 183:
             self.state = 'connecting/early_media'
             notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='early_media'))
-        self.info._update(self)
+        self.info.update(self)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media'}))
 
     def _NH_SIPSessionWillStart(self, notification):
         self.state = 'connecting/starting'
-        self.info._update(self)
+        self.info.update(self)
         notification.center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='starting'))
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media'}))
 
@@ -956,7 +956,7 @@ class BlinkSession(BlinkSessionBase):
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
             self.timer.start()
-            self.info._update(self)
+            self.info.update(self)
             notification.center.post_notification('BlinkSessionDidConnect', sender=self)
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media'}))
 
@@ -1001,7 +1001,7 @@ class BlinkSession(BlinkSessionBase):
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
         if accepted_streams:
-            self.info.streams._update(self.streams)
+            self.info.streams.update(self.streams)
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_SIPSessionProposalRejected(self, notification):
@@ -1097,7 +1097,7 @@ class BlinkSession(BlinkSessionBase):
 
     def _NH_RTPStreamZRTPReceivedSAS(self, notification):
         stream = notification.sender
-        self.info.streams[stream.type]._update(stream)
+        self.info.streams[stream.type].update(stream)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
         chat_stream = self.streams.get('chat')
         if stream.session.remote_focus and not notification.data.verified and chat_stream is not None and 'com.ag-projects.zrtp-sas' in chat_stream.chatroom_capabilities:
@@ -1108,23 +1108,23 @@ class BlinkSession(BlinkSessionBase):
                     chat_stream.send_message(notification.data.sas, 'application/blink-zrtp-sas')
 
     def _NH_RTPStreamZRTPVerifiedStateChanged(self, notification):
-        self.info.streams[notification.sender.type]._update(notification.sender)
+        self.info.streams[notification.sender.type].update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_RTPStreamZRTPPeerNameChanged(self, notification):
-        self.info.streams[notification.sender.type]._update(notification.sender)
+        self.info.streams[notification.sender.type].update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_RTPStreamDidEnableEncryption(self, notification):
-        self.info.streams[notification.sender.type]._update(notification.sender)
+        self.info.streams[notification.sender.type].update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_RTPStreamDidNotEnableEncryption(self, notification):
-        self.info.streams[notification.sender.type]._update(notification.sender)
+        self.info.streams[notification.sender.type].update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_VideoStreamRemoteFormatDidChange(self, notification):
-        self.info.streams.video._update(notification.sender)
+        self.info.streams.video.update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_BlinkContactDidChange(self, notification):
@@ -1206,7 +1206,7 @@ class ConferenceParticipant(object):
     request_status = property(_get_request_status, _set_request_status)
     del _get_request_status, _set_request_status
 
-    def _update(self, data):
+    def update(self, data):
         old_values = dict(active_media=self.active_media.copy(), display_name=self.display_name, on_hold=self.on_hold)
         self.display_name = data.display_text.value if data.display_text else None
         self.active_media.clear()
@@ -1307,17 +1307,17 @@ class ServerConference(object):
 
         for participant in confirmed_participants:
             participant.request_status = None
-            participant._update(users[participant.uri])
+            participant.update(users[participant.uri])
             self.pending_additions.remove(participant)
             notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
 
         for participant in updated_participants:
-            participant._update(users[participant.uri])
+            participant.update(users[participant.uri])
 
         for uri in added_users:
             contact, contact_uri = URIUtils.find_contact(uri)
             participant = ConferenceParticipant(contact, contact_uri)
-            participant._update(users[participant.uri])
+            participant.update(users[participant.uri])
             self.participants[participant.uri] = participant
             notification.center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
             notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
@@ -1507,7 +1507,7 @@ class AudioSessionWidget(base_class, ui_class):
             session.zrtp_widget.show()
             session.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
 
-    def _update_rtp_encryption_icon(self):
+    def update_rtp_encryption_icon(self):
         stream = self.session.audio_stream
         stream_info = self.session.blink_session.info.streams.audio
         if self.srtp_label.isEnabled() and stream_info.encryption == 'ZRTP':
@@ -1523,10 +1523,10 @@ class AudioSessionWidget(base_class, ui_class):
         if watched is self.srtp_label:
             if event_type == QEvent.Enter:
                 watched.hovered = True
-                self._update_rtp_encryption_icon()
+                self.update_rtp_encryption_icon()
             elif event_type == QEvent.Leave:
                 watched.hovered = False
-                self._update_rtp_encryption_icon()
+                self.update_rtp_encryption_icon()
             elif event_type == QEvent.EnabledChange and not watched.isEnabled():
                 watched.setPixmap(self.pixmaps.grey_lock)
             elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
@@ -1939,7 +1939,7 @@ class AudioSessionItem(object):
                 self.widget.srtp_label.setToolTip(u'Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
             else:
                 self.widget.srtp_label.setToolTip(u'Media is not encrypted')
-            self.widget._update_rtp_encryption_icon()
+            self.widget.update_rtp_encryption_icon()
             self.srtp = audio_info.encryption is not None
         if 'statistics' in notification.data.elements:
             self.widget.duration_label.value = self.blink_session.info.duration
