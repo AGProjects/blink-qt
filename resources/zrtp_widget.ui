@@ -388,7 +388,7 @@
          </sizepolicy>
         </property>
         <property name="role" stdset="0">
-         <string>editable-value</string>
+         <string notr="true">editable-value</string>
         </property>
        </widget>
       </item>
@@ -426,7 +426,7 @@
          <bool>true</bool>
         </property>
         <property name="role" stdset="0">
-         <string>selectable-value</string>
+         <string notr="true">selectable-value</string>
         </property>
        </widget>
       </item>
@@ -452,7 +452,7 @@
          <string>&lt;span style=&quot;color: #ff5500;&quot;&gt;Not verified&lt;/span&gt;</string>
         </property>
         <property name="role" stdset="0">
-         <string>value</string>
+         <string notr="true">value</string>
         </property>
        </widget>
       </item>
@@ -479,7 +479,7 @@
          <bool>true</bool>
         </property>
         <property name="role" stdset="0">
-         <string>note</string>
+         <string notr="true">note</string>
         </property>
        </widget>
       </item>
@@ -501,7 +501,7 @@
          <bool>true</bool>
         </property>
         <property name="role" stdset="0">
-         <string>action-button</string>
+         <string notr="true">action-button</string>
         </property>
        </widget>
       </item>
