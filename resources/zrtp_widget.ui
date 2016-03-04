@@ -449,7 +449,7 @@
       <item>
        <widget class="QLabel" name="status_value">
         <property name="text">
-         <string>&lt;span style=&quot;color: #ff5500;&quot;&gt;Not verified&lt;/span&gt;</string>
+         <string>&lt;span style=&quot;color: hsv(20, 85%, 100%);&quot;&gt;Not verified&lt;/span&gt;</string>
         </property>
         <property name="role" stdset="0">
          <string notr="true">value</string>
