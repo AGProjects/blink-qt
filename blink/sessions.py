@@ -180,7 +180,25 @@ class VideoStreamInfo(RTPStreamInfo):
 
 
 class ChatStreamInfo(MSRPStreamInfo):
-    pass
+    def __init__(self):
+        super(ChatStreamInfo, self).__init__()
+        self.encryption = None
+        self.encryption_cipher = None
+        self.otr_key_fingerprint = None
+        self.otr_peer_fingerprint = None
+        self.otr_peer_name = ''
+        self.otr_verified = False
+
+    def update(self, stream):
+        super(ChatStreamInfo, self).update(stream)
+        if stream is not None:
+            self.encryption = 'OTR' if stream.encryption.active else None
+            self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
+            if self.encryption == 'OTR':
+                self.otr_key_fingerprint = stream.encryption.key_fingerprint
+                self.otr_peer_fingerprint = stream.encryption.peer_fingerprint
+                self.otr_peer_name = stream.encryption.peer_name
+                self.otr_verified = stream.encryption.verified
 
 
 class ScreenSharingStreamInfo(MSRPStreamInfo):
@@ -1125,6 +1143,18 @@ class BlinkSession(BlinkSessionBase):
 
     def _NH_VideoStreamRemoteFormatDidChange(self, notification):
         self.info.streams.video.update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_ChatStreamOTREncryptionStateChanged(self, notification):
+        self.info.streams.chat.update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_ChatStreamOTRVerifiedStateChanged(self, notification):
+        self.info.streams.chat.update(notification.sender)
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+
+    def _NH_ChatStreamOTRPeerNameChanged(self, notification):
+        self.info.streams.chat.update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_BlinkContactDidChange(self, notification):
