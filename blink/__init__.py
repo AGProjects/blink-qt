@@ -17,7 +17,7 @@ sip.setapi('QString',  2)
 sip.setapi('QVariant', 2)
 
 from PyQt4.QtCore import Qt, QEvent
-from PyQt4.QtGui  import QApplication
+from PyQt4.QtGui  import QApplication, QMessageBox
 
 QApplication.setAttribute(Qt.AA_X11InitThreads, True)
 
@@ -307,4 +307,9 @@ class Blink(QApplication):
     def _NH_SIPApplicationDidEnd(self, notification):
         self.presence_manager.stop()
 
+    @run_in_gui_thread
+    def _NH_SIPApplicationGotFatalError(self, notification):
+        log.error('Fatal error:\n{}'.format(notification.data.traceback))
+        QMessageBox.critical(self.main_window, u"Fatal Error", u"A fatal error occurred, {} will now exit.".format(self.applicationName()))
+        sys.exit(1)
 
