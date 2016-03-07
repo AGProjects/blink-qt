@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>lock_widget</class>
+ <widget class="QWidget" name="lock_widget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>655</width>
+    <height>22</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Lock</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">#lock_widget {
+	background: hsva(0, 0, 100%, 80%);
+	border: 0px;
+	border-radius: 3px;
+}
+
+#note_label {
+	margin: 0px;
+	padding-left: 4px;
+}
+
+#confirm_button {
+	background: hsv(20, 67%, 100%);
+	background-origin: border;
+	border: 0px;
+	border-left: 1px solid palette(dark);
+	border-top-right-radius: 3px;
+	border-bottom-right-radius: 3px;
+	margin: 0px;
+	padding: 0px 5px 0px 5px;
+}
+
+#confirm_button:hover {
+	background: hsv(20, 60%, 100%);
+}
+
+#confirm_button:pressed {
+	background: hsv(20, 60%, 90%);
+}
+</string>
+  </property>
+  <layout class="QHBoxLayout" name="lock_layout">
+   <property name="margin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="ElidedLabel" name="note_label">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="text">
+      <string>Encryption has been terminated by the other party</string>
+     </property>
+     <property name="indent">
+      <number>0</number>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QToolButton" name="confirm_button">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="focusPolicy">
+      <enum>Qt::NoFocus</enum>
+     </property>
+     <property name="text">
+      <string>Confirm</string>
+     </property>
+     <property name="autoRaise">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ElidedLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

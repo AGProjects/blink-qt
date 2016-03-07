@@ -15,6 +15,7 @@ import uuid
 from abc import ABCMeta, abstractproperty
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
+from enum import Enum
 from itertools import chain
 from operator import attrgetter
 
@@ -23,6 +24,7 @@ from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEven
 from PyQt4.QtGui  import QBrush, QColor, QDialog, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QShortcut
 from PyQt4.QtGui  import QApplication, QDesktopServices, QStyle, QStyledItemDelegate, QStyleOption
 
+from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
@@ -39,6 +41,7 @@ from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
 from sipsimple.session import Session, IllegalStateError
 from sipsimple.streams import MediaStreamRegistry
+from sipsimple.streams.msrp.chat import OTRState, SMPStatus
 from sipsimple.streams.msrp.filetransfer import FileSelector
 from sipsimple.streams.msrp.screensharing import ExternalVNCServerHandler, ExternalVNCViewerHandler, ScreenSharingStream
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
@@ -188,6 +191,7 @@ class ChatStreamInfo(MSRPStreamInfo):
         self.otr_peer_fingerprint = None
         self.otr_peer_name = ''
         self.otr_verified = False
+        self.smp_status = SMPVerification.Unavailable
 
     def update(self, stream):
         super(ChatStreamInfo, self).update(stream)
@@ -494,6 +498,8 @@ class BlinkSession(BlinkSessionBase):
         self.info = SessionInfo()
 
         self._sibling = None
+
+        self._smp_handler = Null
 
     def _get_state(self):
         return self.__dict__['state']
@@ -917,6 +923,11 @@ class BlinkSession(BlinkSessionBase):
                     uri.user = self.account.pstn.prefix + uri.user
         return uri
 
+    def _sync_chat_peer_name(self):
+        chat_stream = self.streams.active.get('chat', Null)
+        if chat_stream.encryption.active and chat_stream.encryption.peer_name == u'':
+            chat_stream.encryption.peer_name = self.info.streams.audio.zrtp_peer_name
+
     def _SH_TimerFired(self):
         self.info.duration += timedelta(seconds=1)
         self.info.streams.audio.update_statistics(self.streams.get('audio', Null).statistics)
@@ -1080,6 +1091,11 @@ class BlinkSession(BlinkSessionBase):
             if audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.sas is not None and not audio_stream.encryption.zrtp.verified and secure_chat:
                 stream.send_message(audio_stream.encryption.zrtp.sas, 'application/blink-zrtp-sas')
 
+    def _NH_MediaStreamWillEnd(self, notification):
+        if notification.sender.type == 'chat':
+            self._smp_handler.stop()
+            self._smp_handler = Null
+
     def _NH_RTPStreamICENegotiationStateDidChange(self, notification):
         if notification.data.state in {'GATHERING', 'GATHERING_COMPLETE', 'NEGOTIATING'}:
             stream_info = self.info.streams[notification.sender.type]
@@ -1124,14 +1140,18 @@ class BlinkSession(BlinkSessionBase):
                 secure_chat = chat_stream.transport == 'tls' and all(len(path) == 1 for path in (msrp_transport.full_local_path, msrp_transport.full_remote_path))  # tls & direct connection
                 if secure_chat:
                     chat_stream.send_message(notification.data.sas, 'application/blink-zrtp-sas')
+        self._sync_chat_peer_name()
+        self._smp_handler.handle_notification(notification)
 
     def _NH_RTPStreamZRTPVerifiedStateChanged(self, notification):
         self.info.streams[notification.sender.type].update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+        self._smp_handler.handle_notification(notification)
 
     def _NH_RTPStreamZRTPPeerNameChanged(self, notification):
         self.info.streams[notification.sender.type].update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+        self._sync_chat_peer_name()
 
     def _NH_RTPStreamDidEnableEncryption(self, notification):
         self.info.streams[notification.sender.type].update(notification.sender)
@@ -1148,6 +1168,13 @@ class BlinkSession(BlinkSessionBase):
     def _NH_ChatStreamOTREncryptionStateChanged(self, notification):
         self.info.streams.chat.update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
+        if notification.data.new_state is OTRState.Encrypted:
+            self._smp_handler = SMPVerificationHandler(self)
+            self._smp_handler.start()
+        elif notification.data.old_state is OTRState.Encrypted:
+            self._smp_handler.stop()
+            self._smp_handler = Null
+        self._sync_chat_peer_name()
 
     def _NH_ChatStreamOTRVerifiedStateChanged(self, notification):
         self.info.streams.chat.update(notification.sender)
@@ -1157,8 +1184,110 @@ class BlinkSession(BlinkSessionBase):
         self.info.streams.chat.update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
+    def _NH_ChatStreamSMPVerificationDidNotStart(self, notification):
+        self._smp_handler.handle_notification(notification)
+
+    def _NH_ChatStreamSMPVerificationDidStart(self, notification):
+        self._smp_handler.handle_notification(notification)
+
+    def _NH_ChatStreamSMPVerificationDidEnd(self, notification):
+        self._smp_handler.handle_notification(notification)
+
     def _NH_BlinkContactDidChange(self, notification):
         notification.center.post_notification('BlinkSessionContactDidChange', sender=self)
+
+
+class SMPVerification(Enum):
+    Unavailable = u'Unavailable'
+    InProgress = u'In progress'
+    Succeeded = u'Succeeded'
+    Failed = u'Failed'
+
+
+class SMPVerificationHandler(object):
+    implements(IObserver)
+
+    question = u'What is the ZRTP authentication string?'.encode('utf-8')
+
+    def __init__(self, blink_session):
+        """@type blink_session: BlinkSession"""
+        self.blink_session = blink_session
+        self.chat_stream = self.blink_session.streams.get('chat')
+        self.delay = 0 if self.chat_stream.encryption.key_fingerprint > self.chat_stream.encryption.peer_fingerprint else 1
+        self.tries = 5
+
+    @property
+    def audio_stream(self):
+        return self.blink_session.streams.get('audio', Null)
+
+    def start(self):
+        call_later(self.delay, self._do_smp)
+
+    def stop(self):
+        if self.blink_session.info.streams.chat.smp_status is SMPVerification.InProgress:
+            self.blink_session.info.streams.chat.smp_status = SMPVerification.Unavailable
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkSessionInfoUpdated', sender=self.blink_session, data=NotificationData(elements={'media'}))
+        self.chat_stream = Null
+
+    def _do_smp(self):
+        if self.blink_session.info.streams.chat.smp_status in (SMPVerification.InProgress, SMPVerification.Succeeded, SMPVerification.Failed):
+            return
+        audio_stream = self.audio_stream
+        if audio_stream.encryption.active and audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.verified:
+            self.chat_stream.encryption.smp_verify(audio_stream.encryption.zrtp.sas, question=self.question)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_ChatStreamSMPVerificationDidNotStart(self, notification):
+        if notification.data.reason == 'in progress' and self.blink_session.info.streams.chat.smp_status is not SMPVerification.InProgress:
+            # another SMP exchange prevented us from starting, but it was not accepted. reschedule ours as to not lose our attempt.
+            call_later(0, self._do_smp)
+
+    def _NH_ChatStreamSMPVerificationDidStart(self, notification):
+        if notification.data.originator == 'local':
+            self.blink_session.info.streams.chat.smp_status = SMPVerification.InProgress
+            notification.center.post_notification('BlinkSessionInfoUpdated', sender=self.blink_session, data=NotificationData(elements={'media'}))
+            return
+        if self.blink_session.info.streams.chat.smp_status is SMPVerification.Failed or notification.data.question != self.question:
+            self.chat_stream.encryption.smp_abort()
+            return
+        audio_stream = self.audio_stream
+        if audio_stream.encryption.active and audio_stream.encryption.type == 'ZRTP':
+            self.chat_stream.encryption.smp_answer(audio_stream.encryption.zrtp.sas)
+            if self.blink_session.info.streams.chat.smp_status not in (SMPVerification.Succeeded, SMPVerification.Failed):
+                self.blink_session.info.streams.chat.smp_status = SMPVerification.InProgress
+                notification.center.post_notification('BlinkSessionInfoUpdated', sender=self.blink_session, data=NotificationData(elements={'media'}))
+        else:
+            self.chat_stream.encryption.smp_abort()
+
+    def _NH_ChatStreamSMPVerificationDidEnd(self, notification):
+        if self.blink_session.info.streams.chat.smp_status in (SMPVerification.Succeeded, SMPVerification.Failed):
+            return
+        if notification.data.status == SMPStatus.Success:
+            if notification.data.same_secrets:
+                self.blink_session.info.streams.chat.smp_status = SMPVerification.Succeeded if self.blink_session.info.streams.audio.zrtp_verified else SMPVerification.Unavailable
+            else:
+                self.blink_session.info.streams.chat.smp_status = SMPVerification.Failed
+        else:
+            self.blink_session.info.streams.chat.smp_status = SMPVerification.Unavailable
+        if notification.data.status is SMPStatus.ProtocolError and notification.data.reason == 'startup collision':
+            self.tries -= 1
+            self.delay *= 2
+            if self.tries > 0:
+                call_later(self.delay, self._do_smp)
+        elif notification.data.status is SMPStatus.ProtocolError:
+            log.warning("SMP exchange got protocol error: {}".format(notification.data.reason))
+        notification.center.post_notification('BlinkSessionInfoUpdated', sender=self.blink_session, data=NotificationData(elements={'media'}))
+
+    def _NH_RTPStreamZRTPReceivedSAS(self, notification):
+        call_later(self.delay, self._do_smp)
+
+    def _NH_RTPStreamZRTPVerifiedStateChanged(self, notification):
+        call_later(self.delay, self._do_smp)
 
 
 class ClientConference(object):

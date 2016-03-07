@@ -3,16 +3,14 @@
 
 from __future__ import division
 
-__all__ = ['ChatWindow']
-
 import locale
 import os
 import re
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
-from PyQt4.QtGui  import QAction, QBrush, QColor, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCursor, QTextDocument, QTextEdit, QToolButton
-from PyQt4.QtGui  import QApplication, QDesktopServices, QImageReader, QKeyEvent, QTextCharFormat
+from PyQt4.QtGui import QApplication, QDesktopServices, QAction, QImageReader, QKeyEvent, QLabel, QListView, QMenu, QTextCursor, QTextDocument, QTextEdit, QToolButton
+from PyQt4.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QStyle, QStyleOption, QStylePainter, QTextCharFormat
 from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
 
 from abc import ABCMeta, abstractmethod
@@ -21,7 +19,7 @@ from application.python import Null, limit
 from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType
 from application.system import makedirs
-from collections import MutableSet
+from collections import MutableSet, deque
 from datetime import datetime, timedelta
 from itertools import count
 from lxml import etree, html
@@ -33,19 +31,24 @@ from sipsimple.account import AccountManager
 from sipsimple.application import SIPApplication
 from sipsimple.audio import WavePlayer
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.streams.msrp.chat import OTRState
 from sipsimple.threading import run_in_thread
 
 from blink.configuration.datatypes import FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.resources import IconManager, Resources
-from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, SMPVerification
 from blink.util import run_in_gui_thread
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
+from blink.widgets.otr import OTRWidget
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.video import VideoSurface
 from blink.widgets.zrtp import ZRTPWidget
+
+
+__all__ = ['ChatWindow']
 
 
 class Container(object): pass
@@ -395,13 +398,58 @@ class ChatWebView(QWebView):
         self.sizeChanged.emit()
 
 
+ui_class, base_class = uic.loadUiType(Resources.get('chat_input_lock.ui'))
+
+
+class ChatInputLock(base_class, ui_class):
+    def __init__(self, parent=None):
+        super(ChatInputLock, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        if parent is not None:
+            parent.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Resize:
+            self.setGeometry(watched.contentsRect())
+        return False
+
+    def dragEnterEvent(self, event):
+        event.ignore()  # let the parent process DND
+
+    def paintEvent(self, event):
+        option = QStyleOption()
+        option.initFrom(self)
+        painter = QStylePainter(self)
+        painter.setRenderHint(QStylePainter.Antialiasing, True)
+        painter.drawPrimitive(QStyle.PE_Widget, option)
+
+
+class LockType(object):
+    __metaclass__ = MarkerType
+
+    note_text = None
+    button_text = None
+
+
+class EncryptionLock(LockType):
+    note_text = u'Encryption has been terminated by the other party'
+    button_text = u'Confirm'
+
+
 class ChatTextInput(QTextEdit):
     textEntered = pyqtSignal(unicode)
+    lockEngaged = pyqtSignal(object)
+    lockReleased = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super(ChatTextInput, self).__init__(parent)
         self.setTabStopWidth(22)
+        self.lock_widget = ChatInputLock(self)
+        self.lock_widget.hide()
+        self.lock_widget.confirm_button.clicked.connect(self._SH_LockWidgetConfirmButtonClicked)
         self.document().documentLayout().documentSizeChanged.connect(self._SH_DocumentLayoutSizeChanged)
+        self.lock_queue = deque()
         self.history = []
         self.history_index = 0  # negative indexes with 0 indicating the text being typed.
         self.stashed_content = None
@@ -412,12 +460,18 @@ class ChatTextInput(QTextEdit):
         last_block = document.lastBlock()
         return document.characterCount() <= 1 and not last_block.textList()
 
+    @property
+    def locked(self):
+        return bool(self.lock_queue)
+
     def dragEnterEvent(self, event):
         event.ignore()  # let the parent process DND
 
     def keyPressEvent(self, event):
         key, modifiers = event.key(), event.modifiers()
-        if key in (Qt.Key_Enter, Qt.Key_Return) and modifiers == Qt.NoModifier:
+        if self.isReadOnly():
+            event.ignore()
+        elif key in (Qt.Key_Enter, Qt.Key_Return) and modifiers == Qt.NoModifier:
             document = self.document()
             last_block = document.lastBlock()
             if document.characterCount() > 1 or last_block.textList():
@@ -462,6 +516,33 @@ class ChatTextInput(QTextEdit):
 
     def _SH_DocumentLayoutSizeChanged(self, new_size):
         self.setFixedHeight(min(new_size.height()+self.contentsMargins().top()+self.contentsMargins().bottom(), self.parent().height()/2))
+
+    def _SH_LockWidgetConfirmButtonClicked(self):
+        self.lockReleased.emit(self.lock_queue.popleft())
+        if self.locked:
+            lock_type = self.lock_queue[0]
+            self.lock_widget.note_label.setText(lock_type.note_text)
+            self.lock_widget.confirm_button.setText(lock_type.button_text)
+            self.lockEngaged.emit(lock_type)
+        else:
+            self.lock_widget.hide()
+            self.setReadOnly(False)
+
+    def lock(self, lock_type):
+        if lock_type in self.lock_queue:
+            raise ValueError("already locked with {}".format(lock_type))
+        if not self.locked:
+            self.lock_widget.note_label.setText(lock_type.note_text)
+            self.lock_widget.confirm_button.setText(lock_type.button_text)
+            self.lock_widget.show()
+            self.setReadOnly(True)
+            self.lockEngaged.emit(lock_type)
+        self.lock_queue.append(lock_type)
+
+    def reset_locks(self):
+        self.setReadOnly(False)
+        self.lock_widget.hide()
+        self.lock_queue.clear()
 
     def clear(self):
         super(ChatTextInput, self).clear()
@@ -586,6 +667,7 @@ class ChatWidget(base_class, ui_class):
         # connect to signals
         self.chat_input.textChanged.connect(self._SH_ChatInputTextChanged)
         self.chat_input.textEntered.connect(self._SH_ChatInputTextEntered)
+        self.chat_input.lockReleased.connect(self._SH_ChatInputLockReleased)
         self.chat_view.sizeChanged.connect(self._SH_ChatViewSizeChanged)
         self.chat_view.page().mainFrame().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
         self.composing_timer.timeout.connect(self._SH_ComposingTimerTimeout)
@@ -759,6 +841,10 @@ class ChatWidget(base_class, ui_class):
             sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
             self.add_message(ChatMessage(content, sender, 'outgoing'))
 
+    def _SH_ChatInputLockReleased(self, lock_type):
+        if lock_type is EncryptionLock:
+            self.session.chat_stream.encryption.stop()
+
     def _SH_ComposingTimerTimeout(self):
         self.composing_timer.stop()
         chat_stream = self.session.chat_stream or Null
@@ -774,6 +860,7 @@ class ChatWidget(base_class, ui_class):
 
     def _NH_BlinkSessionDidEnd(self, notification):
         self.composing_timer.stop()
+        self.chat_input.reset_locks()
 
     def _NH_BlinkSessionWasDeleted(self, notification):
         self.setParent(None)
@@ -781,6 +868,7 @@ class ChatWidget(base_class, ui_class):
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         if notification.data.stream.type == 'chat':
             self.composing_timer.stop()
+            self.chat_input.reset_locks()
 
 del ui_class, base_class
 
@@ -1366,6 +1454,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.info_panel.installEventFilter(self)
         self.audio_encryption_label.installEventFilter(self)
         self.video_encryption_label.installEventFilter(self)
+        self.chat_encryption_label.installEventFilter(self)
 
         self.latency_graph.installEventFilter(self)
         self.packet_loss_graph.installEventFilter(self)
@@ -1388,6 +1477,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_model.sessionRemoved.connect(self._SH_SessionModelSessionRemoved)
         self.session_model.sessionAboutToBeRemoved.connect(self._SH_SessionModelSessionAboutToBeRemoved)
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
+        self.otr_widget.nameChanged.connect(self._SH_OTRWidgetNameChanged)
+        self.otr_widget.statusChanged.connect(self._SH_OTRWidgetStatusChanged)
         self.zrtp_widget.nameChanged.connect(self._SH_ZRTPWidgetNameChanged)
         self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
 
@@ -1406,6 +1497,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='ChatStreamDidSendMessage')
         notification_center.add_observer(self, name='ChatStreamDidDeliverMessage')
         notification_center.add_observer(self, name='ChatStreamDidNotDeliverMessage')
+        notification_center.add_observer(self, name='ChatStreamOTREncryptionStateChanged')
+        notification_center.add_observer(self, name='ChatStreamOTRError')
         notification_center.add_observer(self, name='MediaStreamDidInitialize')
         notification_center.add_observer(self, name='MediaStreamDidNotInitialize')
         notification_center.add_observer(self, name='MediaStreamDidStart')
@@ -1427,6 +1520,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.no_sessions_label = NoSessionsLabel(self)
         self.no_sessions_label.setObjectName('no_sessions_label')
 
+        self.otr_widget = OTRWidget(self.info_panel)
         self.zrtp_widget = ZRTPWidget(self.info_panel)
         self.zrtp_widget.stream_type = None
 
@@ -1518,6 +1612,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.session_list.hide()
 
+        self.otr_widget.hide()
         self.zrtp_widget.hide()
         self.info_panel_files_button.hide()
         self.info_panel_participants_button.hide()
@@ -1536,6 +1631,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.audio_encryption_label.stream_type = 'audio'
         self.video_encryption_label.stream_type = 'video'
 
+        self.chat_encryption_label.hovered = False
+
         # prepare self.session_widget so we can take over some of its painting and behaviour
         self.session_widget.setAttribute(Qt.WA_Hover, True)
         self.session_widget.hovered = False
@@ -1547,6 +1644,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         old_session = self.__dict__.get('selected_session', None)
         new_session = self.__dict__['selected_session'] = session
         if new_session != old_session:
+            self.otr_widget.hide()
             self.zrtp_widget.hide()
             self.zrtp_widget.stream_type = None
             notification_center = NotificationCenter()
@@ -1738,7 +1836,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.video_encryption_label.setVisible(video_info.encryption is not None)
 
             if self.zrtp_widget.isVisibleTo(self.info_panel):
-                # refresh the zrtp widget (we need to hide/change/show because in certain configurations it flickers when changed while visible)
+                # refresh the ZRTP widget (we need to hide/change/show because in certain configurations it flickers when changed while visible)
                 stream_info = blink_session.info.streams[self.zrtp_widget.stream_type]
                 self.zrtp_widget.hide()
                 self.zrtp_widget.peer_name = stream_info.zrtp_peer_name
@@ -1757,10 +1855,29 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 self.chat_value_label.setText(u'N/A')
 
-            self.chat_encryption_label.setToolTip(u'Media is encrypted using TLS')
+            if chat_info.encryption is not None and chat_info.transport == 'tls':
+                self.chat_encryption_label.setToolTip(u'Media is encrypted using TLS and {0.encryption} ({0.encryption_cipher})'.format(chat_info))
+            elif chat_info.encryption is not None:
+                self.chat_encryption_label.setToolTip(u'Media is encrypted using {0.encryption} ({0.encryption_cipher})'.format(chat_info))
+            elif chat_info.transport == 'tls':
+                self.chat_encryption_label.setToolTip(u'Media is encrypted using TLS')
+            else:
+                self.chat_encryption_label.setToolTip(u'Media is not encrypted')
+            self._update_chat_encryption_icon()
 
             self.chat_connection_label.setVisible(chat_info.remote_address is not None)
-            self.chat_encryption_label.setVisible(chat_info.remote_address is not None and chat_info.transport=='tls')
+            self.chat_encryption_label.setVisible(chat_info.remote_address is not None and (chat_info.encryption is not None or chat_info.transport == 'tls'))
+
+            if self.otr_widget.isVisibleTo(self.info_panel):
+                # refresh the OTR widget (we need to hide/change/show because in certain configurations it flickers when changed while visible)
+                stream_info = blink_session.info.streams.chat
+                self.otr_widget.hide()
+                self.otr_widget.peer_name = stream_info.otr_peer_name
+                self.otr_widget.peer_verified = stream_info.otr_verified
+                self.otr_widget.peer_fingerprint = stream_info.otr_peer_fingerprint
+                self.otr_widget.my_fingerprint = stream_info.otr_key_fingerprint
+                self.otr_widget.smp_status = stream_info.smp_status
+                self.otr_widget.show()
 
             if screen_info.remote_address is not None and screen_info.mode == 'active':
                 self.screen_value_label.setText(u'Viewing remote')
@@ -1803,6 +1920,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 encryption_label.setPixmap(self.pixmaps.green_lock if stream_info.zrtp_verified else self.pixmaps.orange_lock)
         else:
             encryption_label.setPixmap(self.pixmaps.grey_lock)
+
+    def _update_chat_encryption_icon(self):
+        stream = self.selected_session.chat_stream
+        stream_info = self.selected_session.blink_session.info.streams.chat
+        if self.chat_encryption_label.isEnabled() and stream_info.encryption == 'OTR':
+            if self.chat_encryption_label.hovered and stream is not None and not stream._done:
+                self.chat_encryption_label.setPixmap(self.pixmaps.light_green_lock if stream_info.otr_verified else self.pixmaps.light_orange_lock)
+            else:
+                self.chat_encryption_label.setPixmap(self.pixmaps.green_lock if stream_info.otr_verified else self.pixmaps.orange_lock)
+        else:
+            self.chat_encryption_label.setPixmap(self.pixmaps.grey_lock)
 
     def show(self):
         super(ChatWindow, self).show()
@@ -1853,11 +1981,27 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 watched.setPixmap(self.pixmaps.grey_lock)
             elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
                 self._EH_RTPEncryptionLabelClicked(watched)
+        elif watched is self.chat_encryption_label:
+            if event_type == QEvent.Enter:
+                watched.hovered = True
+                self._update_chat_encryption_icon()
+            elif event_type == QEvent.Leave:
+                watched.hovered = False
+                self._update_chat_encryption_icon()
+            elif event_type == QEvent.EnabledChange and not watched.isEnabled():
+                watched.setPixmap(self.pixmaps.grey_lock)
+            elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
+                self._EH_ChatEncryptionLabelClicked()
         elif watched is self.info_panel:
-            if event_type == QEvent.Resize and self.zrtp_widget.isVisibleTo(self.info_panel):
-                rect = self.zrtp_widget.geometry()
-                rect.setWidth(self.info_panel.width())
-                self.zrtp_widget.setGeometry(rect)
+            if event_type == QEvent.Resize:
+                if self.zrtp_widget.isVisibleTo(self.info_panel):
+                    rect = self.zrtp_widget.geometry()
+                    rect.setWidth(self.info_panel.width())
+                    self.zrtp_widget.setGeometry(rect)
+                if self.otr_widget.isVisibleTo(self.info_panel):
+                    rect = self.otr_widget.geometry()
+                    rect.setWidth(self.info_panel.width())
+                    self.otr_widget.setGeometry(rect)
         return False
 
     def drawSessionWidgetIndicators(self):
@@ -2116,6 +2260,25 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         # TODO: implement -Saul
 
+    def _NH_ChatStreamOTREncryptionStateChanged(self, notification):
+        session = notification.sender.blink_session.items.chat
+        if session is None:
+            return
+        if notification.data.new_state is OTRState.Encrypted:
+            session.chat_widget.add_message(ChatStatus('Encryption enabled'))
+        elif notification.data.old_state is OTRState.Encrypted:
+            session.chat_widget.add_message(ChatStatus('Encryption disabled'))
+            self.otr_widget.hide()
+        if notification.data.new_state is OTRState.Finished:
+            session.chat_widget.chat_input.lock(EncryptionLock)
+            # todo: play sound here?
+
+    def _NH_ChatStreamOTRError(self, notification):
+        session = notification.sender.blink_session.items.chat
+        if session is not None:
+            message = "OTR Error: {.error}".format(notification.data)
+            session.chat_widget.add_message(ChatStatus(message))
+
     def _NH_MediaStreamDidInitialize(self, notification):
         if notification.sender.type != 'chat':
             return
@@ -2153,6 +2316,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_MediaStreamWillEnd(self, notification):
         stream = notification.sender
+        if stream.type == 'chat' and stream.blink_session.items.chat is self.selected_session:
+            self.otr_widget.hide()
         if stream.type == self.zrtp_widget.stream_type and stream.blink_session.items.chat is self.selected_session:
             self.zrtp_widget.hide()
             self.zrtp_widget.stream_type = None
@@ -2268,6 +2433,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.participants_list.setModel(None)
             self.control_button.setEnabled(False)
 
+    def _SH_OTRWidgetNameChanged(self):
+        stream = self.selected_session.chat_stream or Null
+        stream.encryption.peer_name = self.otr_widget.peer_name
+
+    def _SH_OTRWidgetStatusChanged(self):
+        stream = self.selected_session.chat_stream or Null
+        stream.encryption.verified = self.otr_widget.peer_verified
+
     def _SH_ZRTPWidgetNameChanged(self):
         stream = self.selected_session.blink_session.streams.get(self.zrtp_widget.stream_type, Null)
         stream.encryption.zrtp.peer_name = self.zrtp_widget.peer_name
@@ -2341,6 +2514,25 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.scrollToTop()
         self.session_list.show()
         self.session_list.animation.start()
+
+    def _EH_ChatEncryptionLabelClicked(self):
+        stream = self.selected_session.chat_stream
+        stream_info = self.selected_session.blink_session.info.streams.chat
+        if stream is not None and not stream._done and stream_info.encryption == 'OTR':
+            if self.otr_widget.isVisible():
+                self.otr_widget.hide()
+            else:
+                encryption_label = self.chat_encryption_label
+                self.zrtp_widget.hide()
+                self.otr_widget.peer_name = stream_info.otr_peer_name
+                self.otr_widget.peer_verified = stream_info.otr_verified
+                self.otr_widget.peer_fingerprint = stream_info.otr_peer_fingerprint
+                self.otr_widget.my_fingerprint = stream_info.otr_key_fingerprint
+                self.otr_widget.smp_status = stream_info.smp_status
+                self.otr_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 300))
+                self.otr_widget.verification_stack.setCurrentWidget(self.otr_widget.smp_panel)
+                self.otr_widget.show()
+                self.otr_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
 
     def _EH_RTPEncryptionLabelClicked(self, encryption_label):
         stream = self.selected_session.blink_session.streams.get(encryption_label.stream_type)
