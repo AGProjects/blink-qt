@@ -1,3 +1,60 @@
+blink (2.0.0) unstable; urgency=medium
+
+  * Use identity check for marker
+  * Use defaultweakobjectmap from python-application
+  * Multiple internal code improvements/cleanups and PEP-8 compliance fixes
+  * Open stdout/stderr in unbuffered mode when frozen
+  * Enhanced detection of the application resources directory
+  * Fixed file transfer status if not answer is received
+  * Don't rely on a failed transfer reason being set
+  * Simplified update_ringtone logic and made it more readable
+  * Show/hide stream icons in a single place in the code
+  * Automated incoming dialog slot allocation
+  * Simplified updating ringtones on session state changes
+  * Added new notification when a blink session is created
+  * Improved tracking of blink sessions from the session manager
+  * Refactored BlinkSession inheritance and event signaling
+  * Post the session creation notifications after instantiation only
+  * Fixed file transfer indicator minimum width
+  * Fixed condition for outgoing file transfers
+  * Fixed race condition in the automatic ZRTP SAS validation
+  * Fixed spurious ringtone delay in certain cases
+  * Do not allow dialing contacts without URIs
+  * Simplified logic of resetting statuses with limited lifetimes
+  * Added context attribute to status messages
+  * Prevent the status message from shifting left/right when duration changes
+  * Added a separate UI file for the dragged audio session
+  * Added a finished signal to incoming requests
+  * Prevent the dragged audio session widget's content from overflowing
+  * Fixed tooltip for reject button
+  * Adjusted note text breaking points
+  * Implemented call transfer
+  * Make sure the gradient color position is in the 0..1 range
+  * Removed export info from svg files
+  * Added icons for modifier keys
+  * Fixed conditions tested for displaying transfer status messages
+  * Fixed processing of the incoming dialog signals
+  * Optimized transfer failure status message for space
+  * Removed unnecessary character escaping
+  * Reset chat input text formatting between messages
+  * Removed Dark style variant from the Smooth Operator theme
+  * Synced widget height in code and the UI file
+  * Fixed ZRTP widget role properties to be not translatable
+  * Adjusted ZRTPWidget colors to be more readable
+  * Added encryption and OTR related attributes to ChatStreamInfo
+  * Added OTR encryption support for chat
+  * Added switch icon
+  * Show a modal dialog if the application gets a fatal error and exit
+  * Removed copyright and license notices from the top of every source file
+  * Fixed potentially uninitialized data variable
+  * Added __info__ module
+  * Updated docs
+  * Fixed error in debian changelog trailing lines
+  * Added debian files to MANIFEST.in
+  * Updated debian package dependencies
+
+ -- Dan Pascu <dan@ag-projects.com>  Tue, 08 Mar 2016 17:19:38 +0200
+
 blink (1.4.2) unstable; urgency=medium
 
   * Fixed unicode problem with certain locales
