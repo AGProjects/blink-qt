@@ -36,7 +36,7 @@ from blink.configuration.datatypes import FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.resources import IconManager, Resources
-from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, SMPVerification
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
 from blink.util import run_in_gui_thread
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
