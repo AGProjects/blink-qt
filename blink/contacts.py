@@ -1,5 +1,3 @@
-# Copyright (C) 2010-2013 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['Group', 'Contact', 'BonjourNeighbour', 'GoogleContact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'GoogleContactsDialog', 'URIUtils']
 

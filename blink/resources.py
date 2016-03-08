@@ -1,5 +1,3 @@
-# Copyright (C) 2010-2013 AG Projects. See LICENSE for details.
-#
 
 """Provide access to Blink's resources"""
 

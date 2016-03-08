@@ -1,5 +1,3 @@
-# Copyright (c) 2010 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 

@@ -1,6 +1,3 @@
-# Copyright (C) 2010 AG Projects. See LICENSE for details.
-# This module will be replaced by an improved logging system. -Luci
-#
 
 __all__ = ['LogManager']
 

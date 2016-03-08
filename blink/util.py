@@ -1,5 +1,3 @@
-# Copyright (C) 2010 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread']
 

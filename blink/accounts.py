@@ -1,5 +1,3 @@
-# Copyright (C) 2010 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountDialog', 'ServerToolsAccountModel', 'ServerToolsWindow']
 

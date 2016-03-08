@@ -1,5 +1,3 @@
-# Copyright (c) 2010 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'RecordButton', 'SwitchViewButton',
            'StateButton', 'AccountState']

@@ -1,5 +1,3 @@
-# Copyright (C) 2014 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['ScreensharingWindow', 'VNCViewer', 'VNCClient', 'RFBSettings', 'ServerDefault', 'TrueColor', 'HighColor', 'LowColor']
 

@@ -1,5 +1,3 @@
-# Copyright (c) 2012 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin']
 

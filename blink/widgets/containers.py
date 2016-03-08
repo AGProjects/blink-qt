@@ -1,5 +1,3 @@
-# Copyright (c) 2014 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['SlidingStackedWidget']
 

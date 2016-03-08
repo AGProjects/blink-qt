@@ -1,3 +1,4 @@
+include LICENSE
 include MANIFEST.in
 
 include build_inplace

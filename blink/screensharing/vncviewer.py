@@ -1,5 +1,3 @@
-# Copyright (C) 2014 AG Projects. See LICENSE for details.
-#
 
 from __future__ import division
 

@@ -1,5 +1,3 @@
-# Copyright (c) 2010-2013 AG Projects. See LICENSE for details.
-#
 
 __all__ = ['QtDynamicProperty', 'ContextMenuActions']
 
