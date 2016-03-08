@@ -21,8 +21,8 @@ def find_packages(root):
     return [directory.replace(os.path.sep, '.') for directory, sub_dirs, files in os.walk(root) if '__init__.py' in files]
 
 
-def list_resources(directory, destination_directory):
-    return [(directory.replace(directory, destination_directory), [os.path.join(directory, file) for file in files]) for directory, sub_dirs, files in os.walk(directory)]
+def list_resources(source_directory, destination_directory):
+    return [(directory.replace(source_directory, destination_directory), [os.path.join(directory, file) for file in files]) for directory, sub_dirs, files in os.walk(source_directory)]
 
 
 package_info = PackageInfo(os.path.join('blink', '__info__.py'))
