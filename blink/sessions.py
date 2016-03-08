@@ -1,6 +1,4 @@
 
-__all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
-
 import bisect
 import cPickle as pickle
 import contextlib
@@ -55,7 +53,11 @@ from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.zrtp import ZRTPWidget
 
 
-class Container(object): pass
+__all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
+
+
+class Container(object):
+    pass
 
 
 class RTPStreamInfo(object):
@@ -119,8 +121,8 @@ class RTPStreamInfo(object):
             self._total_packets_discarded += packets_discarded
             self.latency.append(statistics['rtt']['last'] / 1000 / 2)
             self.jitter.append(statistics['rx']['jitter']['last'] / 1000)
-            self.incoming_traffic.append(float(statistics['rx']['bytes'] - self.bytes_received)) # bytes/second
-            self.outgoing_traffic.append(float(statistics['tx']['bytes'] - self.bytes_sent))     # bytes/second
+            self.incoming_traffic.append(float(statistics['rx']['bytes'] - self.bytes_received))  # bytes/second
+            self.outgoing_traffic.append(float(statistics['tx']['bytes'] - self.bytes_sent))      # bytes/second
             self.bytes_sent = statistics['tx']['bytes']
             self.bytes_received = statistics['rx']['bytes']
             self.packet_loss.append(sum(self._average_loss_queue) / self.average_interval)
@@ -251,7 +253,7 @@ class SessionInfo(object):
         if sip_session is not None:
             self.transport = sip_session.transport
             self.local_address = session.account.contact[self.transport].host
-            self.remote_address = sip_session.peer_address # consider reading from sip_session.route if peer_address is None (route can also be None) -Dan
+            self.remote_address = sip_session.peer_address  # consider reading from sip_session.route if peer_address is None (route can also be None) -Dan
             self.remote_user_agent = sip_session.remote_user_agent
         self.streams.update(session.streams)
 
@@ -379,10 +381,10 @@ class StreamListDescriptor(object):
     def __init__(self):
         self.values = defaultweakobjectmap(StreamMap)
 
-    def __get__(self, obj, objtype):
-        if obj is None:
+    def __get__(self, instance, owner):
+        if instance is None:
             return self
-        return StreamContainer(obj, self.values[obj])
+        return StreamContainer(instance, self.values[instance])
 
     def __set__(self, obj, value):
         raise AttributeError("Attribute cannot be set")
@@ -421,8 +423,8 @@ class SessionItemsDescriptor(object):
     def __init__(self):
         self.values = defaultweakobjectmap(self.SessionItems)
 
-    def __get__(self, obj, objtype):
-        return self.values[obj] if obj is not None else None
+    def __get__(self, instance, owner):
+        return self.values[instance] if instance is not None else None
 
     def __set__(self, obj, value):
         raise AttributeError("Attribute cannot be set")
@@ -636,7 +638,7 @@ class BlinkSession(BlinkSessionBase):
             notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
             self._initialize(reinitialize=True)
         else:
-            self._delete_when_done = len(streams)==1 and streams[0].type=='audio'
+            self._delete_when_done = len(streams) == 1 and streams[0].type == 'audio'
         self.direction = 'incoming'
         self.sip_session = sip_session
         self.account = sip_session.account
@@ -662,7 +664,7 @@ class BlinkSession(BlinkSessionBase):
             notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
             self._initialize(reinitialize=True)
         else:
-            self._delete_when_done = len(stream_descriptions)==1 and stream_descriptions[0].type=='audio'
+            self._delete_when_done = len(stream_descriptions) == 1 and stream_descriptions[0].type == 'audio'
         self.direction = 'outgoing'
         self.account = account
         self.contact = contact
@@ -998,7 +1000,7 @@ class BlinkSession(BlinkSessionBase):
         self._terminate(reason=reason, error=True)
 
     def _NH_SIPSessionDidEnd(self, notification):
-        self._terminate('Call ended' if notification.data.originator=='local' else 'Call ended by remote')
+        self._terminate('Call ended' if notification.data.originator == 'local' else 'Call ended by remote')
 
     def _NH_SIPSessionDidChangeHoldState(self, notification):
         if notification.data.originator == 'remote':
@@ -1085,7 +1087,7 @@ class BlinkSession(BlinkSessionBase):
         stream = notification.sender
         audio_stream = self.streams.get('audio')
         if stream.type == 'chat' and stream.session.remote_focus and 'com.ag-projects.zrtp-sas' in stream.chatroom_capabilities and audio_stream is not None:
-            secure_chat = stream.transport == 'tls' and all(len(path)==1 for path in (stream.msrp.full_local_path, stream.msrp.full_remote_path))  # tls & direct connection
+            secure_chat = stream.transport == 'tls' and all(len(path) == 1 for path in (stream.msrp.full_local_path, stream.msrp.full_remote_path))  # tls & direct connection
             if audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.sas is not None and not audio_stream.encryption.zrtp.verified and secure_chat:
                 stream.send_message(audio_stream.encryption.zrtp.sas, 'application/blink-zrtp-sas')
 
@@ -1372,8 +1374,8 @@ class ConferenceParticipant(object):
                 self.active_media.add('chat')
             else:
                 self.active_media.add(media.media_type.value)
-        audio_endpoints = [endpt for endpt in data if any(media.media_type=='audio' for media in endpt)]
-        self.on_hold = all(endpt.status=='on-hold' for endpt in audio_endpoints) if audio_endpoints else False
+        audio_endpoints = [endpt for endpt in data if any(media.media_type == 'audio' for media in endpt)]
+        self.on_hold = all(endpt.status == 'on-hold' for endpt in audio_endpoints) if audio_endpoints else False
         for attr, value in old_values.iteritems():
             if value != getattr(self, attr):
                 NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
@@ -1742,7 +1744,7 @@ class AudioSessionWidget(base_class, ui_class):
             if self.drop_indicator:
                 painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             elif self.selected:
-                painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0)) # or #2070c0 (next best look) or gray: #606060
+                painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0))  # or #2070c0 (next best look) or gray: #606060
 
             if self.position_in_conference is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
@@ -1758,7 +1760,7 @@ class AudioSessionWidget(base_class, ui_class):
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
         elif self.position_in_conference is not None:
             painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0)) # or 237523, #2b8f2b
+            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0))  # or 237523, #2b8f2b
             if self.position_in_conference is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
             elif self.position_in_conference is Middle:
@@ -2008,7 +2010,7 @@ class AudioSessionItem(object):
         if self.audio_stream in self.blink_session.streams.proposed and self.blink_session.state == 'connected/sent_proposal':
             self.blink_session.sip_session.cancel_proposal()
         # review this -Dan
-        #elif len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
+        # elif len(self.blink_session.streams) > 1 and self.blink_session.state == 'connected':
         #    self.blink_session.remove_stream(self.audio_stream)
         elif 'chat' in self.blink_session.streams and self.blink_session.state == 'connected':
             self.blink_session.remove_streams([stream for stream in self.blink_session.streams if stream.type != 'chat'])
@@ -2078,7 +2080,7 @@ class AudioSessionItem(object):
         if stage == 'dns_lookup':
             self.status = Status('Looking up destination...')
         elif stage == 'connecting':
-            self.tls = self.blink_session.transport=='tls'
+            self.tls = self.blink_session.transport == 'tls'
             self.status = Status('Connecting...')
         elif stage == 'ringing':
             self.status = Status('Ringing...')
@@ -2117,7 +2119,7 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionDidConnect(self, notification):
         session = notification.sender
-        self.tls = session.transport=='tls'
+        self.tls = session.transport == 'tls'
         if 'audio' in session.streams:
             self.widget.mute_button.setEnabled(True)
             self.widget.hold_button.setEnabled(True)
@@ -2140,7 +2142,7 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionDidNotAddStream(self, notification):
         if notification.data.stream.type == 'audio':
-            self.status = Status('Audio refused', color='#900000') # where can we get the reason from? (rejected, cancelled, failed, ...) -Dan
+            self.status = Status('Audio refused', color='#900000')  # where can we get the reason from? (rejected, cancelled, failed, ...) -Dan
             self._cleanup()
 
     def _NH_BlinkSessionWillRemoveStream(self, notification):
@@ -2334,7 +2336,7 @@ class AudioSessionModel(QAbstractListModel):
                     self.sessions.insert(insert_point, source)
                     self.endMoveRows()
                 source.client_conference = target.client_conference
-                session_list.scrollTo(self.index(self.sessions.index(source)), session_list.EnsureVisible) # is this even needed? -Dan
+                session_list.scrollTo(self.index(self.sessions.index(source)), session_list.EnsureVisible)  # is this even needed? -Dan
             else:
                 target_row = self.sessions.index(target)
                 if self.beginMoveRows(QModelIndex(), target_row, target_row, QModelIndex(), 0):
@@ -2347,7 +2349,7 @@ class AudioSessionModel(QAbstractListModel):
                     self.sessions.insert(1, source)
                     self.endMoveRows()
                 conference = ClientConference()
-                target.client_conference = conference # must add them to the conference in the same order they are in the list (target is first, source is last)
+                target.client_conference = conference  # must add them to the conference in the same order they are in the list (target is first, source is last)
                 source.client_conference = conference
                 session_list.scrollToTop()
             for session in source.client_conference.sessions:
@@ -2364,12 +2366,12 @@ class AudioSessionModel(QAbstractListModel):
             if len(dragged.client_conference.sessions) == 2:
                 dragged.client_conference = None
                 sibling.client_conference = None
-                ## eventually only move past the last conference to minimize movement. see how this feels during usage. (or sort them alphabetically with conferences at the top) -Dan
-                #for position, session in enumerate(self.sessions):
+                # # maybe only move past the last conference to minimize movement. see how this feels during usage. (or sort them alphabetically with conferences at the top) -Dan
+                # for position, session in enumerate(self.sessions):
                 #    if session not in (dragged, sibling) and session.client_conference is None:
                 #        move_point = position
                 #        break
-                #else:
+                # else:
                 #    move_point = len(self.sessions)
                 move_point = len(self.sessions)
                 dragged_row = self.sessions.index(dragged)
@@ -2462,7 +2464,7 @@ class AudioSessionModel(QAbstractListModel):
             self.endInsertRows()
             session_list.openPersistentEditor(self.index(position))
             session.client_conference = sibling.client_conference
-            session_list.scrollTo(self.index(position), session_list.EnsureVisible) # or PositionAtBottom (is this even needed? -Dan)
+            session_list.scrollTo(self.index(position), session_list.EnsureVisible)  # or PositionAtBottom (is this even needed? -Dan)
         else:
             sibling_row = self.sessions.index(sibling)
             if self.beginMoveRows(QModelIndex(), sibling_row, sibling_row, QModelIndex(), 0):
@@ -2474,7 +2476,7 @@ class AudioSessionModel(QAbstractListModel):
             self.endInsertRows()
             session_list.openPersistentEditor(self.index(1))
             conference = ClientConference()
-            sibling.client_conference = conference # must add them to the conference in the same order they are in the list (sibling first, new session last)
+            sibling.client_conference = conference  # must add them to the conference in the same order they are in the list (sibling first, new session last)
             session.client_conference = conference
             if sibling.active:
                 conference.unhold()
@@ -2747,7 +2749,7 @@ class AudioSessionListView(QListView):
         else:
             self.setCurrentIndex(self.model().index(-1))
         self.context_menu.hide()
-        #print "-- audio selection changed %s -> %s (ignore=%s)" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()], self.ignore_selection_changes)
+        # print "-- audio selection changed %s -> %s (ignore=%s)" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()], self.ignore_selection_changes)
         if self.ignore_selection_changes:
             return
         notification_center = NotificationCenter()
@@ -2911,14 +2913,14 @@ class AudioSessionListView(QListView):
         if notification.data.active_session is None:
             selection = selection_model.selection()
             # check the code in this if branch if it's needed -Dan
-            #selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
-            #if notification.data.previous_active_session is selected_blink_session:
+            # selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
+            # if notification.data.previous_active_session is selected_blink_session:
             #    print "-- audio session list updating selection to None None"
             #    selection_model.clearSelection()
         else:
             model = self.model()
             position = model.sessions.index(notification.data.active_session.items.audio)
-            #print "-- audio session list updating selection to", position, notification.data.active_session
+            # print "-- audio session list updating selection to", position, notification.data.active_session
             selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.ignore_selection_changes = False
 
@@ -2983,9 +2985,9 @@ class ChatSessionWidget(base_class, ui_class):
         self.palettes.standard = self.palette()
         self.palettes.alternate = self.palette()
         self.palettes.selected = self.palette()
-        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
         self.setBackgroundRole(QPalette.Window)
         self.display_mode = self.StandardDisplayMode
         self.hold_icon.installEventFilter(self)
@@ -2996,8 +2998,8 @@ class ChatSessionWidget(base_class, ui_class):
         self.screen_sharing_icon.installEventFilter(self)
         self.widget_layout.invalidate()
         self.widget_layout.activate()
-        #self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
-        #self.show()
+        # self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
+        # self.show()
 
     def _get_display_mode(self):
         return self.__dict__['display_mode']
@@ -3227,9 +3229,9 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         super(ChatSessionDelegate, self).__init__(parent)
 
     def editorEvent(self, event, model, option, index):
-        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
-            arrow_rect = option.rect.adjusted(option.rect.width()-14, option.rect.height()/2, 0, 0)  # bottom half of the rightmost 14 pixels
-            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2) # top half of the rightmost 14 pixels
+        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
+            arrow_rect = option.rect.adjusted(option.rect.width()-14, option.rect.height()/2, 0, 0)   # bottom half of the rightmost 14 pixels
+            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2)  # top half of the rightmost 14 pixels
             if arrow_rect.contains(event.pos()):
                 session_list = self.parent()
                 session_list.animation.setDirection(QPropertyAnimation.Backward)
@@ -3277,8 +3279,8 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
             gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
             contrast_color = QBrush(gradient)
         else:
-            #foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-            #background_color = option.palette.color(QPalette.Window)
+            # foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            # background_color = option.palette.color(QPalette.Window)
             foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
             background_color = widget.palette().color(widget.backgroundRole())
             contrast_color = self.calc_light_color(background_color)
@@ -3374,7 +3376,7 @@ class ChatSessionModel(QAbstractListModel):
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction# | Qt.MoveAction
+        return Qt.CopyAction  # | Qt.MoveAction
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
         # this is here just to keep the default Qt DnD API happy
@@ -3465,11 +3467,11 @@ class ChatSessionListView(QListView):
         self.setAutoFillBackground(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        #self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded) # default
+        # self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # default
         self.setDragEnabled(False) # default
-        #self.setDropIndicatorShown(True)
+        # self.setDropIndicatorShown(True)
         self.setDragDropMode(QListView.DropOnly)
-        self.setSelectionMode(QListView.SingleSelection) # default
+        self.setSelectionMode(QListView.SingleSelection)  # default
 
         self.setStyleSheet("""QListView { border: 1px inset palette(dark); border-radius: 3px; }""")
         self.animation = QPropertyAnimation(self, 'geometry')
@@ -3480,7 +3482,7 @@ class ChatSessionListView(QListView):
         self.actions = ContextMenuActions()
         self.drop_indicator_index = QModelIndex()
         self.ignore_selection_changes = False
-        self.doubleClicked.connect(self._SH_DoubleClicked) # activated is emitted on single click
+        self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
         chat_window.session_panel.installEventFilter(self)
 
         notification_center = NotificationCenter()
@@ -3514,7 +3516,7 @@ class ChatSessionListView(QListView):
             return selection_model.NoUpdate
         elif event.type() == QEvent.MouseButtonRelease:
             index_rect = self.visualRect(index)
-            cross_rect = index_rect.adjusted(index_rect.width()-14, 0, 0, -index_rect.height()/2) # the top half of the rightmost 14 pixels
+            cross_rect = index_rect.adjusted(index_rect.width()-14, 0, 0, -index_rect.height()/2)  # the top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
                 return selection_model.NoUpdate
             else:
@@ -3638,14 +3640,14 @@ class ChatSessionListView(QListView):
         if notification.data.active_session is None:
             selection = selection_model.selection()
             # check the code in this if branch if it's needed -Dan (if not also remove previous_active_session maybe)
-            #selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
-            #if notification.data.previous_active_session is selected_blink_session:
+            # selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
+            # if notification.data.previous_active_session is selected_blink_session:
             #    print "-- chat session list updating selection to None None"
             #    selection_model.clearSelection()
         else:
             model = self.model()
             position = model.sessions.index(notification.data.active_session.items.chat)
-            #print "-- chat session list updating selection to", position, notification.data.active_session
+            # print "-- chat session list updating selection to", position, notification.data.active_session
             selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.ignore_selection_changes = False
 
@@ -4096,6 +4098,7 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
 
     def _get_display_mode(self):
         return self.__dict__['display_mode']
+
     def _set_display_mode(self, value):
         if value not in (self.ProgressDisplayMode, self.InactiveDisplayMode):
             raise ValueError("invalid display_mode: %r" % value)
@@ -4103,34 +4106,41 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
         new_value = self.__dict__['display_mode'] = value
         if new_value != old_value:
             self.update()
+
     display_mode = property(_get_display_mode, _set_display_mode)
     del _get_display_mode, _set_display_mode
 
     def _get_show_cancel_button(self):
         return self.__dict__['show_cancel_button']
+
     def _set_show_cancel_button(self, value):
         old_value = self.__dict__.get('show_cancel_button', False)
         new_value = self.__dict__['show_cancel_button'] = bool(value)
         if new_value != old_value:
             self.update()
+
     show_cancel_button = property(_get_show_cancel_button, _set_show_cancel_button)
     del _get_show_cancel_button, _set_show_cancel_button
 
     def _get_show_retry_button(self):
         return self.__dict__['show_retry_button']
+
     def _set_show_retry_button(self, value):
         old_value = self.__dict__.get('show_retry_button', False)
         new_value = self.__dict__['show_retry_button'] = bool(value)
         if new_value != old_value:
             self.update()
+
     show_retry_button = property(_get_show_retry_button, _set_show_retry_button)
     del _get_show_retry_button, _set_show_retry_button
 
     def _get_progress(self):
         return self.__dict__['progress']
+
     def _set_progress(self, value):
         self.__dict__['progress'] = value
         self.update()
+
     progress = property(_get_progress, _set_progress)
     del _get_progress, _set_progress
 
@@ -4208,6 +4218,7 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
 
 ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_item.ui'))
 
+
 class FileTransferItemWidget(base_class, ui_class):
     class StandardDisplayMode:  __metaclass__ = MarkerType
     class AlternateDisplayMode: __metaclass__ = MarkerType
@@ -4221,9 +4232,9 @@ class FileTransferItemWidget(base_class, ui_class):
         self.palettes.standard = self.palette()
         self.palettes.alternate = self.palette()
         self.palettes.selected = self.palette()
-        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))          # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase)) # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))     # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
 
         self.pixmaps = Container()
         self.pixmaps.incoming_transfer = QPixmap(Resources.get('icons/folder-downloads.png'))
@@ -4419,7 +4430,7 @@ class FileTransferDelegate(QStyledItemDelegate):
         super(FileTransferDelegate, self).__init__(parent)
 
     def editorEvent(self, event, model, option, index):
-        if event.type()==QEvent.MouseButtonDblClick and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
+        if event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
             item = index.data(Qt.UserRole)
             if item.ended and not item.failed:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
@@ -4436,7 +4447,7 @@ class FileTransferDelegate(QStyledItemDelegate):
                 if not rect.contains(event.pos()):
                     QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
                     return True
-        elif event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
+        elif event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
             item = index.data(Qt.UserRole)
             indicator = item.widget.state_indicator
             margin = indicator.margin()
@@ -4588,7 +4599,7 @@ class FileTransferModel(QAbstractListModel):
     def _NH_BlinkFileTransferNewIncoming(self, notification):
         transfer = notification.sender
         with self.history.transaction():
-            for item in (item for item in self.items if item.failed and item.direction=='incoming'):
+            for item in (item for item in self.items if item.failed and item.direction == 'incoming'):
                 if item.transfer.contact == transfer.contact and item.transfer.hash == transfer.hash:
                     self.removeItem(item)
                     break
@@ -4696,8 +4707,8 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         super(ConferenceParticipantDelegate, self).__init__(parent)
 
     def editorEvent(self, event, model, option, index):
-        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier:
-            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2) # top half of the rightmost 14 pixels
+        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
+            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2)  # top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
                 item = index.data(Qt.UserRole)
                 model.session.server_conference.remove_participant(item.participant)
@@ -4813,7 +4824,7 @@ class ConferenceParticipantModel(QAbstractListModel):
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction# | Qt.MoveAction
+        return Qt.CopyAction  # | Qt.MoveAction
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
         # this is here just to keep the default Qt DnD API happy
@@ -4902,7 +4913,7 @@ class ConferenceParticipantModel(QAbstractListModel):
     def addParticipant(self, participant):
         if participant in self.participants:
             return
-        participant.participant.participant_item = participant # add a back reference to this item so we can find it later without iterating all participants
+        participant.participant.participant_item = participant  # add a back reference to this item so we can find it later without iterating all participants
         self.participantAboutToBeAdded.emit(participant)
         self._add_participant(participant)
         self.participantAdded.emit(participant)
@@ -4954,13 +4965,13 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
     def paintEvent(self, event):
         super(ConferenceParticipantListView, self).paintEvent(event)
         if self.paint_drop_indicator:
-            rect = self.viewport().rect() # or should this be self.contentsRect() ? -Dan
-            #color = QColor('#b91959')
-            #color = QColor('#00aaff')
-            #color = QColor('#55aaff')
-            #color = QColor('#00aa00')
-            #color = QColor('#aa007f')
-            #color = QColor('#dd44aa')
+            rect = self.viewport().rect()  # or should this be self.contentsRect() ? -Dan
+            # color = QColor('#b91959')
+            # color = QColor('#00aaff')
+            # color = QColor('#55aaff')
+            # color = QColor('#00aa00')
+            # color = QColor('#aa007f')
+            # color = QColor('#dd44aa')
             color = QColor('#aa007f')
             pen_color = self.color_with_alpha(color, 120)
             brush_color = self.color_with_alpha(color, 10)
@@ -5016,8 +5027,8 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
 
     def _DH_TextUriList(self, event):
         event.ignore(self.viewport().rect())
-        #event.accept(self.viewport().rect())
-        #self.paint_drop_indicator = True
+        # event.accept(self.viewport().rect())
+        # self.paint_drop_indicator = True
 
 
 # Session management
@@ -5082,6 +5093,7 @@ class IncomingDialogBase(QDialog):
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
 
+
 class IncomingDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingDialog, self).__init__(parent)
@@ -5113,7 +5125,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
 
     @property
     def streams(self):
-        return (self.audio_stream, self.chat_stream, self.screensharing_stream, self.video_stream)
+        return self.audio_stream, self.chat_stream, self.screensharing_stream, self.video_stream
 
     @property
     def accepted_streams(self):
@@ -5363,6 +5375,7 @@ class IncomingFileTransferRequest(QObject):
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_calltransfer_dialog.ui'))
 
+
 class IncomingCallTransferDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingCallTransferDialog, self).__init__(parent)
@@ -5441,6 +5454,7 @@ class IncomingCallTransferRequest(QObject):
 
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
 
+
 class ConferenceDialog(base_class, ui_class):
     def __init__(self, parent=None):
         super(ConferenceDialog, self).__init__(parent)
@@ -5495,10 +5509,10 @@ class RingtoneDescriptor(object):
     def __init__(self):
         self.values = weakobjectmap()
 
-    def __get__(self, obj, objtype):
-        if obj is None:
+    def __get__(self, instance, owner):
+        if instance is None:
             return self
-        return self.values[obj]
+        return self.values[instance]
 
     def __set__(self, obj, ringtone):
         old_ringtone = self.values.get(obj, Null)
@@ -5659,7 +5673,7 @@ class SessionManager(object):
             inbound_ringtone = Null
 
         # Hold tone
-        connected_sessions = [session for session in self.sessions if session.state=='connected/*']
+        connected_sessions = [session for session in self.sessions if session.state == 'connected/*']
         connected_on_hold_sessions = [session for session in connected_sessions if session.on_hold]
         if outbound_ringtone is Null and inbound_ringtone is Null and connected_sessions:
             if len(connected_sessions) == len(connected_on_hold_sessions):
@@ -5934,7 +5948,7 @@ class SessionManager(object):
         deselected_session = notification.data.deselected_session
         old_active_session = self.active_session
 
-        if selected_session is self.active_session: # both None or both the same session. nothing to do in either case.
+        if selected_session is self.active_session:  # both None or both the same session. nothing to do in either case.
             return
         elif selected_session is None and deselected_session is old_active_session is not None:
             self.active_session = None

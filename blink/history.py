@@ -1,6 +1,4 @@
 
-__all__ = ['HistoryManager']
-
 import bisect
 import cPickle as pickle
 import re
@@ -21,6 +19,9 @@ from sipsimple.util import ISOTimestamp
 
 from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread
+
+
+__all__ = ['HistoryManager']
 
 
 class HistoryManager(object):
@@ -86,13 +87,16 @@ class IconDescriptor(object):
     def __init__(self, filename):
         self.filename = filename
         self.icon = None
-    def __get__(self, obj, objtype):
+
+    def __get__(self, instance, owner):
         if self.icon is None:
             self.icon = QIcon(self.filename)
             self.icon.filename = self.filename
         return self.icon
+
     def __set__(self, obj, value):
         raise AttributeError("attribute cannot be set")
+
     def __delete__(self, obj):
         raise AttributeError("attribute cannot be deleted")
 
@@ -116,7 +120,7 @@ class HistoryEntry(object):
         self.reason = reason
 
     def __reduce__(self):
-        return (self.__class__, (self.direction, self.name, self.uri, self.account_id, self.call_time, self.duration, self.failed, self.reason))
+        return self.__class__, (self.direction, self.name, self.uri, self.account_id, self.call_time, self.duration, self.failed, self.reason)
 
     def __eq__(self, other):
         return self is other
@@ -174,7 +178,7 @@ class HistoryEntry(object):
     @classmethod
     def from_session(cls, session):
         if session.start_time is None and session.end_time is not None:
-            # Session may have anded before it fully started
+            # Session may have ended before it fully started
             session.start_time = session.end_time
         call_time = session.start_time or ISOTimestamp.now()
         if session.start_time and session.end_time:

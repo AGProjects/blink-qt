@@ -1,11 +1,12 @@
 
-__all__ = ['BackgroundFrame']
-
 from PyQt4.QtCore import Qt, QEvent, QPoint, QRect, QSize
 from PyQt4.QtGui import QColor, QFrame, QPainter, QPixmap
 
 from blink.resources import Resources
 from blink.widgets.util import QtDynamicProperty
+
+
+__all__ = ['BackgroundFrame']
 
 
 class BackgroundFrame(QFrame):
@@ -28,7 +29,7 @@ class BackgroundFrame(QFrame):
     @property
     def image_size(self):
         if self.imageGeometry is not None:
-            size = self.imageGeometry.size().expandedTo(QSize(0, 0)) # requested size with negative values turned to 0
+            size = self.imageGeometry.size().expandedTo(QSize(0, 0))  # requested size with negative values turned to 0
             if size.isNull():
                 return size if self.pixmap is None else self.pixmap.size()
             elif size.width() == 0:
@@ -69,5 +70,4 @@ class BackgroundFrame(QFrame):
         if self.scaled_pixmap is not None:
             painter.drawPixmap(self.image_position, self.scaled_pixmap)
         painter.end()
-
 

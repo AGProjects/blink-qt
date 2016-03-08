@@ -1,7 +1,4 @@
 
-__all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment', 'RecordButton', 'SwitchViewButton',
-           'StateButton', 'AccountState']
-
 from PyQt4.QtCore import Qt, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, pyqtSignature
 from PyQt4.QtGui  import QAction, QBrush, QColor, QCommonStyle, QLinearGradient, QIcon, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap
 from PyQt4.QtGui  import QPolygonF, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
@@ -10,8 +7,13 @@ from blink.resources import Resources
 from blink.widgets.color import ColorScheme, ColorUtils, ColorHelperMixin
 
 
+__all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment',
+           'RecordButton', 'SwitchViewButton', 'StateButton', 'AccountState']
+
+
 class ToolButton(QToolButton):
     """A custom QToolButton that doesn't show a menu indicator arrow"""
+
     def paintEvent(self, event):
         painter = QStylePainter(self)
         option = QStyleOptionToolButton()
@@ -102,9 +104,11 @@ class SegmentTypeMeta(type):
     def __repr__(cls):
         return cls.__name__
 
+
 class SegmentType(object):
     __metaclass__ = SegmentTypeMeta
     style_sheet = ''
+
 
 class SingleSegment(SegmentType):
     style_sheet = """
@@ -121,6 +125,7 @@ class SingleSegment(SegmentType):
                          border-style: inset;
                      }
                   """
+
 
 class LeftSegment(SegmentType):
     style_sheet = """
@@ -139,6 +144,7 @@ class LeftSegment(SegmentType):
                      }
                   """
 
+
 class MiddleSegment(SegmentType):
     style_sheet = """
                      QToolButton {
@@ -154,6 +160,7 @@ class MiddleSegment(SegmentType):
                          border-style: inset;
                      }
                   """
+
 
 class RightSegment(SegmentType):
     style_sheet = """
@@ -285,7 +292,7 @@ class SwitchViewButton(QPushButton):
         self.setAcceptDrops(True)
         self.__dict__['dnd_active'] = False
         self.view = self.ContactView
-        self.original_height = 20 # used to restore button size after DND
+        self.original_height = 20  # used to restore button size after DND
         self.dnd_timer = QTimer(self)
         self.dnd_timer.setInterval(100)
         self.dnd_timer.timeout.connect(self._update_dnd)
@@ -355,16 +362,16 @@ class SwitchViewButton(QPushButton):
 
     def dragLeaveEvent(self, event):
         if self.dnd_active:
-           self.dnd_timer.stop()
-           self.dnd_timer.phase = 0
-           self.setStyleSheet(self.dnd_style_sheet1)
+            self.dnd_timer.stop()
+            self.dnd_timer.phase = 0
+            self.setStyleSheet(self.dnd_style_sheet1)
         super(SwitchViewButton, self).dragLeaveEvent(event)
 
     def dropEvent(self, event):
         if self.dnd_active:
-           self.dnd_timer.stop()
-           self.dnd_timer.phase = 0
-           self.setStyleSheet(self.dnd_style_sheet1)
+            self.dnd_timer.stop()
+            self.dnd_timer.phase = 0
+            self.setStyleSheet(self.dnd_style_sheet1)
         event.ignore()
 
 
@@ -387,7 +394,7 @@ class StateButtonStyle(QCommonStyle, ColorHelperMixin):
             return super(StateButtonStyle, self).sizeFromContents(element, option, size, widget)
 
     def toolButtonSizeFromContents(self, option, size, widget):
-        # Make width >= height to avoid super-skiny buttons
+        # Make width >= height to avoid super-skinny buttons
         margin = 2 * (self._pixel_metrics[QStyle.PM_DefaultFrameWidth] + self._pixel_metrics[QStyle.PM_ButtonMargin])
         if option.features & QStyleOptionToolButton.MenuButtonPopup:
             margin_size = QSize(margin+1, margin)
@@ -448,12 +455,12 @@ class StateButtonStyle(QCommonStyle, ColorHelperMixin):
             blend.setColorAt(0.9, self.color_with_alpha(focus_color, 0x45))
             blend.setColorAt(1.0, self.color_with_alpha(ColorUtils.mix(focus_color, shadow_color, 0.4), 0x55))
         else:
-            blend.setColorAt(0.0, Qt.transparent) # or @0.5
+            blend.setColorAt(0.0, Qt.transparent)  # or @0.5
             blend.setColorAt(0.9, self.color_with_alpha(shadow_color, 0x10))
-            #blend.setColorAt(1-4.0/glow_rect.height(), self.color_with_alpha(shadow_color, 0x10)) # this is for exactly 4 pixels from bottom
+            # blend.setColorAt(1-4.0/glow_rect.height(), self.color_with_alpha(shadow_color, 0x10))  # this is for exactly 4 pixels from bottom
             blend.setColorAt(1.0, self.color_with_alpha(shadow_color, 0x30)) # 0x25, 0x30 or 0x35
         painter.setBrush(blend)
-        painter.drawRoundedRect(glow_rect, 5, 5) # 5 or 6
+        painter.drawRoundedRect(glow_rect, 5, 5)  # 5 or 6
 
         # shadow
         painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
@@ -466,7 +473,7 @@ class StateButtonStyle(QCommonStyle, ColorHelperMixin):
             blend.setColorAt(0.00, self.color_with_alpha(shadow_color, 0x10))
             blend.setColorAt(1.00, self.color_with_alpha(shadow_color, 0x80))
             painter.setBrush(blend)
-        painter.drawRoundedRect(shadow_rect, 4, 4) # 4 or 5
+        painter.drawRoundedRect(shadow_rect, 4, 4)  # 4 or 5
 
         # border
         painter.setCompositionMode(QPainter.CompositionMode_Source)
@@ -510,12 +517,12 @@ class StateButtonStyle(QCommonStyle, ColorHelperMixin):
         blend.setColorAt(0.0, self.color_with_alpha(shadow_color, 0x80))
         blend.setColorAt(1.0, self.color_with_alpha(shadow_color, 0x20))
         painter.setBrush(blend)
-        painter.drawRoundedRect(hole_rect, 4, 4) # 4 or 5
+        painter.drawRoundedRect(hole_rect, 4, 4)  # 4 or 5
 
         # shadow
         painter.setCompositionMode(QPainter.CompositionMode_Source)
         painter.setBrush(content_grad)
-        painter.drawRoundedRect(shadow_rect, 4, 4) # 5 or 6
+        painter.drawRoundedRect(shadow_rect, 4, 4)  # 5 or 6
         painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
         blend = QLinearGradient(shadow_rect.topLeft(), shadow_rect.bottomLeft())
         blend.setColorAt(0.0, self.color_with_alpha(shadow_color, 0x40))
@@ -523,7 +530,7 @@ class StateButtonStyle(QCommonStyle, ColorHelperMixin):
         blend.setColorAt(0.9, self.color_with_alpha(shadow_color, 0x07))
         blend.setColorAt(1.0, shade_color)
         painter.setBrush(blend)
-        painter.drawRoundedRect(shadow_rect, 4, 4) # 5 or 6
+        painter.drawRoundedRect(shadow_rect, 4, 4)  # 5 or 6
 
         # content
         painter.setCompositionMode(QPainter.CompositionMode_Source)
@@ -685,6 +692,7 @@ class AccountState(StateButton):
 
     def _get_history(self):
         return [(action.state.name, action.note) for action in self.menu().actions()[5:]]
+
     def _set_history(self, values):
         menu = self.menu()
         for action in menu.actions()[5:]:
@@ -698,6 +706,7 @@ class AccountState(StateButton):
             action.state = state
             action.note = note
             menu.addAction(action)
+
     history = property(_get_history, _set_history)
     del _get_history, _set_history
 

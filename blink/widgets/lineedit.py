@@ -1,6 +1,4 @@
 
-__all__ = ['LineEdit', 'ValidatingLineEdit', 'SearchBox', 'LocationBar']
-
 import re
 
 from PyQt4.QtCore import Qt, QEvent, pyqtSignal
@@ -8,6 +6,9 @@ from PyQt4.QtGui import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLa
 
 from blink.resources import Resources
 from blink.widgets.util import QtDynamicProperty
+
+
+__all__ = ['LineEdit', 'ValidatingLineEdit', 'SearchBox', 'LocationBar']
 
 
 class SideWidget(QWidget):
@@ -64,7 +65,7 @@ class LineEdit(QLineEdit):
         spacing = self.right_layout.spacing()
         text_rect = self.style().subElementRect(QStyle.SE_LineEditContents, option, self)
         text_rect.adjust(spacing, 0, -spacing, 0)
-        mid_height = text_rect.center().y() + 1 - (text_rect.height() % 2) # need -1 correction for odd heights -Dan
+        mid_height = text_rect.center().y() + 1 - (text_rect.height() % 2)  # need -1 correction for odd heights -Dan
         if self.left_layout.count() > 0:
             left_height = mid_height - self.left_widget.height()/2
             left_width = self.left_widget.width()
@@ -244,7 +245,7 @@ class ClearButton(QAbstractButton):
 
             # Mid is darker than Dark. Go figure... -Dan
             bg_color = palette.color(QPalette.Mid) if self.isDown() else palette.color(QPalette.Dark)
-            fg_color = palette.color(QPalette.Window) # or QPalette.Base for white
+            fg_color = palette.color(QPalette.Window)  # or QPalette.Base for white
 
             painter.setRenderHint(QPainter.Antialiasing, True)
             painter.setBrush(bg_color)
@@ -306,5 +307,4 @@ class LocationBar(LineEdit):
 
     def _SH_TextChanged(self, text):
         self.clear_button.setVisible(bool(text))
-
 

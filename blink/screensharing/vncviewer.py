@@ -1,10 +1,6 @@
 
 from __future__ import division
 
-
-__all__ = ['ScreensharingWindow', 'VNCViewer']
-
-
 import os
 import platform
 
@@ -28,6 +24,9 @@ from blink.resources import Resources
 from blink.screensharing.vncclient import ServerDefault, TrueColor, HighColor, LowColor
 
 
+__all__ = ['ScreensharingWindow', 'VNCViewer']
+
+
 class ButtonMaskMapper(dict):
     class qt:
         NoButton    = Qt.NoButton
@@ -42,12 +41,12 @@ class ButtonMaskMapper(dict):
         RightButton = 0b00000100
         WheelUp     = 0b00001000
         WheelDown   = 0b00010000
-        WheelLeft   = 0b00100000 # not sure about the horizontal wheel button mappings as button 6&7 -Dan
-        WheelRight  = 0b01000000 # it seems different on windows (i.e. buttons 6&7 do not translate to horizontal wheel) -Dan
+        WheelLeft   = 0b00100000  # not sure about the horizontal wheel button mappings as button 6&7 -Dan
+        WheelRight  = 0b01000000  # it seems different on windows (i.e. buttons 6&7 do not translate to horizontal wheel) -Dan
 
     def __init__(self):
         mapping = {self.qt.NoButton: self.vnc.NoButton, self.qt.LeftButton: self.vnc.LeftButton, self.qt.MidButton: self.vnc.MidButton, self.qt.RightButton: self.vnc.RightButton}
-        super(ButtonMaskMapper, self).__init__({int(b1|b2|b3): mapping[b1]|mapping[b2]|mapping[b3] for b1 in mapping for b2 in mapping for b3 in mapping})
+        super(ButtonMaskMapper, self).__init__({int(b1 | b2 | b3): mapping[b1] | mapping[b2] | mapping[b3] for b1 in mapping for b2 in mapping for b3 in mapping})
         self._button_mask = int(self.qt.LeftButton|self.qt.MidButton|self.qt.RightButton)
 
     def __getitem__(self, key):
@@ -61,63 +60,63 @@ class VNCNativeKeyMap(object):
 
 class VNCWindowsKeyMap(object):
     __keymap__ = {
-        0x10: 0xffe1, # VK_SHIFT    : XK_Shift_L
-        0x11: 0xffe3, # VK_CONTROL  : XK_Control_L
-        0x12: 0xffe9, # VK_MENU     : XK_Alt_L
-        0x5b: 0xffe7, # VK_LWIN     : XK_Meta_L
-        0x1b: 0xff1b, # VK_ESCAPE   : XK_Escape
-        0x09: 0xff09, # VK_TAB      : XK_Tab
-        0x08: 0xff08, # VK_BACK     : XK_BackSpace
-        0x0d: 0xff0d, # VK_RETURN   : XK_Return
-        0x2d: 0xff63, # VK_INSERT   : XK_Insert
-        0x2e: 0xffff, # VK_DELETE   : XK_Delete
-        0x13: 0xff13, # VK_PAUSE    : XK_Pause
-        0x2c: 0xff61, # VK_SNAPSHOT : XK_Print
-        0x24: 0xff50, # VK_HOME     : XK_Home
-        0x23: 0xff57, # VK_END      : XK_End
-        0x25: 0xff51, # VK_LEFT     : XK_Left
-        0x26: 0xff52, # VK_UP       : XK_Up
-        0x27: 0xff53, # VK_RIGHT    : XK_Right
-        0x28: 0xff54, # VK_DOWN     : XK_Down
-        0x21: 0xff55, # VK_PRIOR    : XK_Prior
-        0x22: 0xff56, # VK_NEXT     : XK_Next
-        0x14: 0xffe5, # VK_CAPITAL  : XK_Caps_Lock
-        0x90: 0xff7f, # VK_NUMLOCK  : XK_Num_Lock
-        0x91: 0xff14, # VK_SCROLL   : XK_Scroll_Lock
-        0x5d: 0xff67, # VK_APPS     : XK_Menu
-        0x2f: 0xff6a, # VK_HELP     : XK_Help
-        0x1f: 0xff7e, # VK_MODECHANGE : XK_Mode_switch
+        0x10: 0xffe1,  # VK_SHIFT    : XK_Shift_L
+        0x11: 0xffe3,  # VK_CONTROL  : XK_Control_L
+        0x12: 0xffe9,  # VK_MENU     : XK_Alt_L
+        0x5b: 0xffe7,  # VK_LWIN     : XK_Meta_L
+        0x1b: 0xff1b,  # VK_ESCAPE   : XK_Escape
+        0x09: 0xff09,  # VK_TAB      : XK_Tab
+        0x08: 0xff08,  # VK_BACK     : XK_BackSpace
+        0x0d: 0xff0d,  # VK_RETURN   : XK_Return
+        0x2d: 0xff63,  # VK_INSERT   : XK_Insert
+        0x2e: 0xffff,  # VK_DELETE   : XK_Delete
+        0x13: 0xff13,  # VK_PAUSE    : XK_Pause
+        0x2c: 0xff61,  # VK_SNAPSHOT : XK_Print
+        0x24: 0xff50,  # VK_HOME     : XK_Home
+        0x23: 0xff57,  # VK_END      : XK_End
+        0x25: 0xff51,  # VK_LEFT     : XK_Left
+        0x26: 0xff52,  # VK_UP       : XK_Up
+        0x27: 0xff53,  # VK_RIGHT    : XK_Right
+        0x28: 0xff54,  # VK_DOWN     : XK_Down
+        0x21: 0xff55,  # VK_PRIOR    : XK_Prior
+        0x22: 0xff56,  # VK_NEXT     : XK_Next
+        0x14: 0xffe5,  # VK_CAPITAL  : XK_Caps_Lock
+        0x90: 0xff7f,  # VK_NUMLOCK  : XK_Num_Lock
+        0x91: 0xff14,  # VK_SCROLL   : XK_Scroll_Lock
+        0x5d: 0xff67,  # VK_APPS     : XK_Menu
+        0x2f: 0xff6a,  # VK_HELP     : XK_Help
+        0x1f: 0xff7e,  # VK_MODECHANGE : XK_Mode_switch
 
-        0x70: 0xffbe, # VK_F1  : XK_F1
-        0x71: 0xffbf, # VK_F2  : XK_F2
-        0x72: 0xffc0, # VK_F3  : XK_F3
-        0x73: 0xffc1, # VK_F4  : XK_F4
-        0x74: 0xffc2, # VK_F5  : XK_F5
-        0x75: 0xffc3, # VK_F6  : XK_F6
-        0x76: 0xffc4, # VK_F7  : XK_F7
-        0x77: 0xffc5, # VK_F8  : XK_F8
-        0x78: 0xffc6, # VK_F9  : XK_F9
-        0x79: 0xffc7, # VK_F10 : XK_F10
-        0x7a: 0xffc8, # VK_F11 : XK_F11
-        0x7b: 0xffc9, # VK_F12 : XK_F12
-        0x7c: 0xffca, # VK_F13 : XK_F13
-        0x7d: 0xffcb, # VK_F14 : XK_F14
-        0x7e: 0xffcc, # VK_F15 : XK_F15
-        0x7f: 0xffcd, # VK_F16 : XK_F16
-        0x80: 0xffce, # VK_F17 : XK_F17
-        0x81: 0xffcf, # VK_F18 : XK_F18
-        0x82: 0xffd0, # VK_F19 : XK_F19
-        0x83: 0xffd1, # VK_F20 : XK_F20
-        0x84: 0xffd2, # VK_F21 : XK_F21
-        0x85: 0xffd3, # VK_F22 : XK_F22
-        0x86: 0xffd4, # VK_F23 : XK_F23
-        0x87: 0xffd5, # VK_F24 : XK_F24
+        0x70: 0xffbe,  # VK_F1  : XK_F1
+        0x71: 0xffbf,  # VK_F2  : XK_F2
+        0x72: 0xffc0,  # VK_F3  : XK_F3
+        0x73: 0xffc1,  # VK_F4  : XK_F4
+        0x74: 0xffc2,  # VK_F5  : XK_F5
+        0x75: 0xffc3,  # VK_F6  : XK_F6
+        0x76: 0xffc4,  # VK_F7  : XK_F7
+        0x77: 0xffc5,  # VK_F8  : XK_F8
+        0x78: 0xffc6,  # VK_F9  : XK_F9
+        0x79: 0xffc7,  # VK_F10 : XK_F10
+        0x7a: 0xffc8,  # VK_F11 : XK_F11
+        0x7b: 0xffc9,  # VK_F12 : XK_F12
+        0x7c: 0xffca,  # VK_F13 : XK_F13
+        0x7d: 0xffcb,  # VK_F14 : XK_F14
+        0x7e: 0xffcc,  # VK_F15 : XK_F15
+        0x7f: 0xffcd,  # VK_F16 : XK_F16
+        0x80: 0xffce,  # VK_F17 : XK_F17
+        0x81: 0xffcf,  # VK_F18 : XK_F18
+        0x82: 0xffd0,  # VK_F19 : XK_F19
+        0x83: 0xffd1,  # VK_F20 : XK_F20
+        0x84: 0xffd2,  # VK_F21 : XK_F21
+        0x85: 0xffd3,  # VK_F22 : XK_F22
+        0x86: 0xffd4,  # VK_F23 : XK_F23
+        0x87: 0xffd5,  # VK_F24 : XK_F24
 
-        0x93: 0xff2c, # VK_OEM_FJ_MASSHOU : XK_Massyo
-        0x94: 0xff2b, # VK_OEM_FJ_TOUROKU : XK_Touroku
+        0x93: 0xff2c,  # VK_OEM_FJ_MASSHOU : XK_Massyo
+        0x94: 0xff2b,  # VK_OEM_FJ_TOUROKU : XK_Touroku
     }
 
-    __capsmodifier__ = 0x100 # the native CapsLock modifier
+    __capsmodifier__ = 0x100  # the native CapsLock modifier
 
     def __getitem__(self, event):
         key = event.key()
@@ -125,7 +124,7 @@ class VNCWindowsKeyMap(object):
             if bool(event.modifiers() & Qt.ShiftModifier) ^ bool(event.nativeModifiers() & self.__capsmodifier__):
                 return key
             else:
-                return key + 0x20 # make it lowercase
+                return key + 0x20  # make it lowercase
         else:
             native_key = event.nativeVirtualKey()
             return self.__keymap__.get(native_key, native_key)
@@ -172,14 +171,14 @@ class VNCViewer(QWidget):
         super(VNCViewer, self).__init__(parent)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.WheelFocus)
-        #self.setCursor(Qt.BlankCursor)
+        # self.setCursor(Qt.BlankCursor)
         self.client = vncclient or parent.client
         self.client.started.connect(self._SH_ClientStarted)
         self.client.finished.connect(self._SH_ClientFinished)
         self.client.imageSizeChanged.connect(self._SH_ImageSizeChanged)
         self.client.imageChanged.connect(self._SH_ImageUpdated)
         self.client.passwordRequested.connect(self._SH_PasswordRequested, Qt.BlockingQueuedConnection)
-        self.colors_8bit = [qRgb((i&0x07) << 5, (i&0x38) << 2, i&0xc0) for i in range(256)]
+        self.colors_8bit = [qRgb((i & 0x07) << 5, (i & 0x38) << 2, i & 0xc0) for i in range(256)]
         self.scale = False
         self.view_only = False
         self._client_active = False
@@ -188,6 +187,7 @@ class VNCViewer(QWidget):
 
     def _get_scale(self):
         return self.__dict__['scale']
+
     def _set_scale(self, scale):
         self.__dict__['scale'] = scale
         if not scale:
@@ -197,11 +197,13 @@ class VNCViewer(QWidget):
         elif self.parent() is not None:
             self.resize(self.parent().size())
         self.update()
+
     scale = property(_get_scale, _set_scale)
     del _get_scale, _set_scale
 
     def _get_view_only(self):
         return self.__dict__['view_only']
+
     def _set_view_only(self, view_only):
         old_value = self.__dict__.get('view_only', None)
         new_value = self.__dict__['view_only'] = view_only
@@ -211,6 +213,7 @@ class VNCViewer(QWidget):
             self.grabKeyboard()
         else:
             self.releaseKeyboard()
+
     view_only = property(_get_view_only, _set_view_only)
     del _get_view_only, _set_view_only
 
@@ -307,25 +310,25 @@ class VNCViewer(QWidget):
         button_mask = self.button_mask_map[event.buttons()]
         if event.type() == QEvent.Wheel:
             if event.delta() > 0:
-                wheel_button_mask = self.button_mask_map.vnc.WheelUp if event.orientation()==Qt.Vertical else self.button_mask_map.vnc.WheelLeft
+                wheel_button_mask = self.button_mask_map.vnc.WheelUp if event.orientation() == Qt.Vertical else self.button_mask_map.vnc.WheelLeft
             else:
-                wheel_button_mask = self.button_mask_map.vnc.WheelDown if event.orientation()==Qt.Vertical else self.button_mask_map.vnc.WheelRight
+                wheel_button_mask = self.button_mask_map.vnc.WheelDown if event.orientation() == Qt.Vertical else self.button_mask_map.vnc.WheelRight
             self.client.mouse_event(x, y, button_mask | wheel_button_mask)
         self.client.mouse_event(x, y, button_mask)
 
     def keyEvent(self, event):
         vnc_key = VNCKey.from_event(event)
-        key_down = event.type()==QEvent.KeyPress
+        key_down = event.type() == QEvent.KeyPress
         if vnc_key:
             expected_modifiers = self._active_keys.modifiers
             keyboard_modifiers = event.modifiers()
             if vnc_key.qt_key in VNCKey.__modifiermap__ and vnc_key.qt_key != Qt.Key_AltGr and vnc_key != 0xffe7:
-                keyboard_modifiers ^= vnc_key.qt_modifier # we want the modifier mask as it was before this modifier key was pressed/released
+                keyboard_modifiers ^= vnc_key.qt_modifier  # we want the modifier mask as it was before this modifier key was pressed/released
             if (keyboard_modifiers ^ expected_modifiers) & expected_modifiers:
                 self._reset_keyboard(preserve_modifiers=keyboard_modifiers)
             if key_down:
                 if vnc_key in self._active_keys:
-                    self.client.key_event(vnc_key, False) # key was already pressed and now we got another press event. emulate the missing key release event.
+                    self.client.key_event(vnc_key, False)  # key was already pressed and now we got another press event. emulate the missing key release event.
                 else:
                     self._active_keys.add(vnc_key)
                 self.client.key_event(vnc_key, True)
@@ -376,6 +379,7 @@ class VNCViewer(QWidget):
 
 ui_class, base_class = uic.loadUiType(Resources.get('screensharing_dialog.ui'))
 
+
 class ScreensharingDialog(base_class, ui_class):
     def __init__(self, parent=None):
         super(ScreensharingDialog, self).__init__(parent)
@@ -399,7 +403,7 @@ class ScreensharingDialog(base_class, ui_class):
         self.setMinimumHeight(190)
         self.resize(self.minimumSize())
         result = self.exec_()
-        return (self.username_editor.text(), self.password_editor.text()) if result==self.Accepted else (None, None)
+        return (self.username_editor.text(), self.password_editor.text()) if result == self.Accepted else (None, None)
 
     def get_password(self):
         self.message_label.setText(u'Screen sharing requires a password')
@@ -411,12 +415,13 @@ class ScreensharingDialog(base_class, ui_class):
         self.setMinimumHeight(165)
         self.resize(self.minimumSize())
         result = self.exec_()
-        return self.password_editor.text() if result==self.Accepted else None
+        return self.password_editor.text() if result == self.Accepted else None
 
 del ui_class, base_class
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('screensharing_toolbox.ui'))
+
 
 class ScreensharingToolbox(base_class, ui_class):
     exposedPixels = 3
@@ -429,7 +434,7 @@ class ScreensharingToolbox(base_class, ui_class):
         self.animation = QPropertyAnimation(self, 'pos')
         self.animation.setDuration(250)
         self.animation.setDirection(QPropertyAnimation.Forward)
-        self.animation.setEasingCurve(QEasingCurve.Linear) # or OutCirc with 300ms
+        self.animation.setEasingCurve(QEasingCurve.Linear)  # or OutCirc with 300ms
         self.retract_timer = QTimer(self)
         self.retract_timer.setInterval(3000)
         self.retract_timer.setSingleShot(True)
@@ -503,7 +508,7 @@ class ScreensharingToolbox(base_class, ui_class):
         super(ScreensharingToolbox, self).leaveEvent(event)
         self.retract_timer.start()
 
-    def paintEvent(self, event): # make the widget style aware
+    def paintEvent(self, event):  # make the widget style aware
         option = QStyleOption()
         option.init(self)
         painter = QStylePainter(self)
@@ -530,6 +535,7 @@ del ui_class, base_class
 
 ui_class, base_class = uic.loadUiType(Resources.get('screensharing_window.ui'))
 
+
 class ScreensharingWindow(base_class, ui_class):
     def __init__(self, vncclient, parent=None):
         super(ScreensharingWindow, self).__init__(parent)
@@ -553,7 +559,7 @@ class ScreensharingWindow(base_class, ui_class):
     def setupUi(self):
         super(ScreensharingWindow, self).setupUi(self)
         self.scroll_area.viewport().setObjectName('vnc_viewport')
-        self.scroll_area.viewport().setStyleSheet('QWidget#vnc_viewport { background-color: #101010; }') # #101010, #004488, #004480, #0044aa, #0055ff, #0066cc, #3366cc, #0066d5
+        self.scroll_area.viewport().setStyleSheet('QWidget#vnc_viewport { background-color: #101010; }')  # #101010, #004488, #004480, #0044aa, #0055ff, #0066cc, #3366cc, #0066d5
 
         self.vncviewer = VNCViewer(self.vncclient)
         self.vncviewer.setGeometry(self.scroll_area.viewport().geometry())

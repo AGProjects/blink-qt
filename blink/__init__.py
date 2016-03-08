@@ -1,10 +1,6 @@
 
-__all__ = ['Blink']
-
-
 __version__ = '1.4.2'
 __date__    = 'December 4th 2015'
-
 
 import os
 import sys
@@ -42,6 +38,7 @@ try:
     from blink import branding
 except ImportError:
     branding = Null
+
 from blink.chatwindow import ChatWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.addressbook import ContactExtension, GroupExtension
@@ -54,6 +51,9 @@ from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager
 from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
+
+
+__all__ = ['Blink']
 
 
 if hasattr(sys, 'frozen'):
@@ -293,7 +293,7 @@ class Blink(QApplication):
         self.main_window.show()
         settings = SIPSimpleSettings()
         accounts = AccountManager().get_accounts()
-        if not accounts or (self.first_run and accounts==[BonjourAccount()]):
+        if not accounts or (self.first_run and accounts == [BonjourAccount()]):
             self.main_window.preferences_window.show_create_account_dialog()
         if settings.google_contacts.authorization_token is InvalidToken:
             self.main_window.google_contacts_dialog.open_for_incorrect_password()

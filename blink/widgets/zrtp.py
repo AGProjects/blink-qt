@@ -1,7 +1,4 @@
 
-__all__ = ['ZRTPWidget']
-
-
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, pyqtSignal
 from PyQt4.QtGui  import QStyle, QStyleOption, QStylePainter
@@ -9,7 +6,11 @@ from PyQt4.QtGui  import QStyle, QStyleOption, QStylePainter
 from blink.resources import Resources
 
 
+__all__ = ['ZRTPWidget']
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('zrtp_widget.ui'))
+
 
 class ZRTPWidget(base_class, ui_class):
     closed = pyqtSignal()

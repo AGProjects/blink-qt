@@ -112,7 +112,7 @@ class Link(object):
 
 class OrderedSet(MutableSet):
     def __init__(self, iterable=None):
-        self.__hardroot = Link() # sentinel node for doubly linked list
+        self.__hardroot = Link()  # sentinel node for doubly linked list
         self.__root = root = proxy(self.__hardroot)
         root.prev = root.next = root
         self.__map = {}
@@ -171,10 +171,10 @@ class ChatContentBooleanOption(object):
     def __init__(self, name):
         self.name = name
 
-    def __get__(self, obj, objtype):
-        if obj is None:
+    def __get__(self, instance, owner):
+        if instance is None:
             return self
-        return self.name in obj.__cssclasses__
+        return self.name in instance.__cssclasses__
 
     def __set__(self, obj, value):
         if value:
@@ -188,6 +188,7 @@ class ChatContentBooleanOption(object):
 
 class AnyValue: __metaclass__ = MarkerType
 
+
 class ChatContentStringAttribute(object):
     """A string attribute that is also added as a css class"""
 
@@ -195,11 +196,11 @@ class ChatContentStringAttribute(object):
         self.name = name
         self.allowed_values = allowed_values
 
-    def __get__(self, obj, objtype):
-        if obj is None:
+    def __get__(self, instance, owner):
+        if instance is None:
             return self
         try:
-            return obj.__dict__[self.name]
+            return instance.__dict__[self.name]
         except KeyError:
             raise AttributeError("'{}' attribute is not set".format(self.name))
 
@@ -221,12 +222,12 @@ class ChatContent(object):
 
     __cssclasses__ = ()
 
-    continuation_interval = timedelta(0, 5*60) # 5 minutes
+    continuation_interval = timedelta(0, 5*60)  # 5 minutes
 
     history = ChatContentBooleanOption('history')
     focus = ChatContentBooleanOption('focus')
     consecutive = ChatContentBooleanOption('consecutive')
-    mention = ChatContentBooleanOption('mention') # keep it here? or keep it at all? -Dan
+    mention = ChatContentBooleanOption('mention')  # keep it here? or keep it at all? -Dan
 
     def __init__(self, message, history=False, focus=False):
         self.__cssclasses__ = OrderedSet(self.__class__.__cssclasses__)
@@ -338,10 +339,10 @@ class ChatWebPage(QWebPage):
         super(ChatWebPage, self).__init__(parent)
         self.setLinkDelegationPolicy(QWebPage.DelegateAllLinks)
         self.linkClicked.connect(self._SH_LinkClicked)
-        #self.downloadRequested.connect(self._SH_DownloadRequested)
-        #self.setForwardUnsupportedContent(True)
-        #self.unsupportedContent.connect(self._SH_UnsupportedContent)
-        #allowed_actions = {QWebPage.InspectElement, QWebPage.CopyLinkToClipboard, QWebPage.CopyImageToClipboard, QWebPage.CopyImageUrlToClipboard}
+        # self.downloadRequested.connect(self._SH_DownloadRequested)
+        # self.setForwardUnsupportedContent(True)
+        # self.unsupportedContent.connect(self._SH_UnsupportedContent)
+        # allowed_actions = {QWebPage.InspectElement, QWebPage.CopyLinkToClipboard, QWebPage.CopyImageToClipboard, QWebPage.CopyImageUrlToClipboard}
         disable_actions = {QWebPage.OpenLink, QWebPage.OpenLinkInNewWindow, QWebPage.DownloadLinkToDisk, QWebPage.OpenImageInNewWindow, QWebPage.DownloadImageToDisk,
                            QWebPage.Back, QWebPage.Forward, QWebPage.Stop, QWebPage.Reload}
         for action in (self.action(action) for action in disable_actions):
@@ -360,10 +361,10 @@ class ChatWebPage(QWebPage):
     def _SH_LinkClicked(self, url):
         QDesktopServices.openUrl(url)
 
-    #def _SH_DownloadRequested(self, request):
+    # def _SH_DownloadRequested(self, request):
     #    print "-- download requested", request.url().toString()
 
-    #def _SH_UnsupportedContent(self, reply):
+    # def _SH_UnsupportedContent(self, reply):
     #    print "-- unsupported", reply.url().toString()
 
 
@@ -377,7 +378,7 @@ class ChatWebView(QWebView):
         self.setPalette(palette)
         self.setPage(ChatWebPage(self))
         self.setAttribute(Qt.WA_OpaquePaintEvent, False)
-        self.settings().setAttribute(QWebSettings.DeveloperExtrasEnabled, True) # temporary for debugging -Dan
+        self.settings().setAttribute(QWebSettings.DeveloperExtrasEnabled, True)  # temporary for debugging -Dan
 
     def contextMenuEvent(self, event):
         menu = self.page().createStandardContextMenu()
@@ -558,7 +559,7 @@ class IconDescriptor(object):
         self.filename = filename
         self.icon = None
 
-    def __get__(self, obj, objtype):
+    def __get__(self, instance, owner):
         if self.icon is None:
             self.icon = QIcon(self.filename)
             self.icon.filename = self.filename
@@ -701,10 +702,10 @@ class ChatWidget(base_class, ui_class):
         self.session.chat_stream.send_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
 
     def _align_chat(self, scroll=False):
-        #frame_height = self.chat_view.page().mainFrame().contentsSize().height()
+        # frame_height = self.chat_view.page().mainFrame().contentsSize().height()
         widget_height = self.chat_view.size().height()
         content_height = self.chat_element.geometry().height()
-        #print widget_height, frame_height, content_height
+        # print widget_height, frame_height, content_height
         if widget_height > content_height:
             self.chat_element.setStyleProperty('position', 'relative')
             self.chat_element.setStyleProperty('top', '%dpx' % (widget_height-content_height))
@@ -713,10 +714,10 @@ class ChatWidget(base_class, ui_class):
             self.chat_element.setStyleProperty('top', None)
         frame = self.chat_view.page().mainFrame()
         if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height*0.2:
-            #print "scroll requested or scrollbar is closer than %dpx to the bottom" % (widget_height*0.2)
-            #self._print_scrollbar_position()
+            # print "scroll requested or scrollbar is closer than %dpx to the bottom" % (widget_height*0.2)
+            # self._print_scrollbar_position()
             self._scroll_to_bottom()
-            #self._print_scrollbar_position()
+            # self._print_scrollbar_position()
 
     def _scroll_to_bottom(self):
         frame = self.chat_view.page().mainFrame()
@@ -773,7 +774,7 @@ class ChatWidget(base_class, ui_class):
             try:
                 self.send_message(image.thumbnail.data, content_type=image.thumbnail.type)
             except Exception, e:
-                self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), e))) # decide what type to use here. -Dan
+                self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), e)))  # decide what type to use here. -Dan
             else:
                 content = u'''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image.thumbnail.data.encode('base64').rstrip())
                 sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
@@ -788,7 +789,7 @@ class ChatWidget(base_class, ui_class):
             try:
                 self.send_message(match.group('data').decode('base64'), content_type=match.group('type'))
             except Exception, e:
-                self.add_message(ChatStatus('Error sending image: %s' % e)) # decide what type to use here. -Dan
+                self.add_message(ChatStatus('Error sending image: %s' % e))  # decide what type to use here. -Dan
             else:
                 account = self.session.blink_session.account
                 content = u'''<img src="{}" class="scaled-to-fit" />'''.format(text)
@@ -801,11 +802,11 @@ class ChatWidget(base_class, ui_class):
             self.chat_input.setHtml(user_text)
 
     def _SH_ChatViewSizeChanged(self):
-        #print "chat view size changed"
+        # print "chat view size changed"
         self._align_chat(scroll=True)
 
     def _SH_ChatViewFrameContentsSizeChanged(self, size):
-        #print "frame contents size changed to %r (current=%r)" % (size, self.chat_view.page().mainFrame().contentsSize())
+        # print "frame contents size changed to %r (current=%r)" % (size, self.chat_view.page().mainFrame().contentsSize())
         self._align_chat(scroll=True)
 
     def _SH_ChatInputTextChanged(self):
@@ -832,7 +833,7 @@ class ChatWidget(base_class, ui_class):
         try:
             self.send_message(text, content_type='text/html')
         except Exception, e:
-            self.add_message(ChatStatus('Error sending message: %s' % e)) # decide what type to use here. -Dan
+            self.add_message(ChatStatus('Error sending message: %s' % e))  # decide what type to use here. -Dan
         else:
             account = self.session.blink_session.account
             content = HtmlProcessor.autolink(text)
@@ -882,6 +883,7 @@ class VideoToolButton(QToolButton):
 
 ui_class, base_class = uic.loadUiType(Resources.get('video_widget.ui'))
 
+
 class VideoWidget(VideoSurface, ui_class):
     implements(IObserver)
 
@@ -922,7 +924,7 @@ class VideoWidget(VideoSurface, ui_class):
 
         self.no_flicker_widget = QLabel()
         self.no_flicker_widget.setWindowFlags(Qt.FramelessWindowHint)
-        #self.no_flicker_widget.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        # self.no_flicker_widget.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
         self.camera_preview = VideoSurface(self, framerate=10)
         self.camera_preview.interactive = True
@@ -935,7 +937,7 @@ class VideoWidget(VideoSurface, ui_class):
 
         self.detach_animation = QPropertyAnimation(self, 'geometry')
         self.detach_animation.setDuration(200)
-        #self.detach_animation.setEasingCurve(QEasingCurve.Linear)
+        # self.detach_animation.setEasingCurve(QEasingCurve.Linear)
 
         self.preview_animation = QPropertyAnimation(self.camera_preview, 'geometry')
         self.preview_animation.setDuration(500)
@@ -1031,7 +1033,7 @@ class VideoWidget(VideoSurface, ui_class):
         super(VideoWidget, self).mousePressEvent(event)
         if self._interaction.active:
             for button in self.active_tool_buttons:
-                button.show() # show or hide the toolbuttons while we move/resize? -Dan
+                button.show()  # show or hide the tool buttons while we move/resize? -Dan
             self.idle_timer.stop()
 
     def mouseReleaseEvent(self, event):
@@ -1251,7 +1253,7 @@ class VideoWidget(VideoSurface, ui_class):
             self.preview_animation.start()
 
     def _NH_VideoDeviceDidChangeCamera(self, notification):
-        #self.camera_preview.producer = SIPApplication.video_device.producer
+        # self.camera_preview.producer = SIPApplication.video_device.producer
         self.camera_preview.producer = notification.data.new_camera
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
@@ -1275,19 +1277,19 @@ class VideoWidget(VideoSurface, ui_class):
                 geometry = self.rect().translated(self.mapToGlobal(QPoint(0, 0)))
                 self.setParent(None)
                 self.setGeometry(geometry)
-                self.show() # without this, showFullScreen below doesn't work properly
+                self.show()  # without this, showFullScreen below doesn't work properly
             self.detach_button.active = False
             self.mute_button.active = True
             self.hold_button.active = True
             self.close_button.active = True
             self.showFullScreen()
-            self.fullscreen_button.hide() # it seems the leave event after the button is pressed doesn't register and starting the idle timer here doesn't work well either -Dan
+            self.fullscreen_button.hide()  # it seems the leave event after the button is pressed doesn't register and starting the idle timer here doesn't work well either -Dan
             self.fullscreen_button.show()
         else:
             if not self.detach_button.isChecked():
-                self.setGeometry(self.geometryHint(self.parent_widget)) # force a geometry change before reparenting, else we will get a change from (-1, -1) to the parent geometry hint
-                self.setParent(self.parent_widget)                      # this is probably because since it unmaps when it's reparented, the geometry change won't appear from fullscreen
-                self.setGeometry(self.geometryHint())                   # to the new size, since we changed the geometry after returning from fullscreen, while invisible
+                self.setGeometry(self.geometryHint(self.parent_widget))  # force a geometry change before re-parenting, else we will get a change from (-1, -1) to the parent geometry hint
+                self.setParent(self.parent_widget)                       # this is probably because since it unmaps when it's re-parented, the geometry change won't appear from fullscreen
+                self.setGeometry(self.geometryHint())                    # to the new size, since we changed the geometry after returning from fullscreen, while invisible
                 self.mute_button.active = False
                 self.hold_button.active = False
                 self.close_button.active = False
@@ -1335,7 +1337,7 @@ class VideoWidget(VideoSurface, ui_class):
 
             self.detach_animation.setDirection(QPropertyAnimation.Backward)
             self.detach_animation.setEasingCurve(QEasingCurve.InQuad)
-            self.detach_animation.setStartValue(final_geometry) # start and end are reversed because we go backwards
+            self.detach_animation.setStartValue(final_geometry)  # start and end are reversed because we go backwards
             self.detach_animation.setEndValue(start_geometry)
             self.detach_animation.start()
         self.fullscreen_button.setChecked(False)
@@ -1378,20 +1380,20 @@ class VideoWidget(VideoSurface, ui_class):
             self.no_flicker_widget.setGeometry(self.geometry())
             self.no_flicker_widget.show()
             self.no_flicker_widget.raise_()
-            #self.no_flicker_widget.repaint()
-            #self.repaint()
+            # self.no_flicker_widget.repaint()
+            # self.repaint()
             self.setParent(self.parent_widget)
             self.setGeometry(self.geometryHint())
             self.show() # solve the flicker -Dan
-            #self.repaint()
-            #self.no_flicker_widget.lower()
+            # self.repaint()
+            # self.no_flicker_widget.lower()
             self.no_flicker_widget.hide()
-            #self.window().show()
+            # self.window().show()
             self.mute_button.active = False
             self.hold_button.active = False
             self.close_button.active = False
         else:
-            self.detach_button.hide() # it seems the leave event after the button is pressed doesn't register and starting the idle timer here doesn't work well either -Dan
+            self.detach_button.hide()  # it seems the leave event after the button is pressed doesn't register and starting the idle timer here doesn't work well either -Dan
             self.detach_button.show()
             self.mute_button.active = True
             self.hold_button.active = True
@@ -1430,6 +1432,7 @@ class NoSessionsLabel(QLabel):
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_window.ui'))
+
 
 class ChatWindow(base_class, ui_class, ColorHelperMixin):
     implements(IObserver)
@@ -1504,7 +1507,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MediaStreamDidEnd')
         notification_center.add_observer(self, name='MediaStreamWillEnd')
 
-        #self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
+        # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
     def _SH_SplitterMoved(self, pos, index):
         print "-- splitter:", pos, index, self.splitter.sizes()
@@ -1580,9 +1583,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.end_screen_sharing = QAction("End screen sharing", self, triggered=self._AH_EndScreenSharing)
         self.control_button.actions.main_window = QAction("Main Window", self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
 
-        self.addAction(self.control_button.actions.main_window) # make this active even when it's not in the contol_button's menu
+        self.addAction(self.control_button.actions.main_window)  # make this active even when it's not in the control_button's menu
 
-        self.slide_direction = self.session_details.RightToLeft # decide if we slide from one direction only -Dan
+        self.slide_direction = self.session_details.RightToLeft  # decide if we slide from one direction only -Dan
         self.slide_direction = self.session_details.Automatic
         self.session_details.animationDuration = 300
         self.session_details.animationEasingCurve = QEasingCurve.OutCirc
@@ -1604,8 +1607,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.traffic_graph.add_graph(self.incoming_traffic_graph)
         self.traffic_graph.add_graph(self.outgoing_traffic_graph)
 
-        self.dummy_tab = None   # will be replaced by a dummy ChatWidget during SIPApplicationDidStart (creating a ChatWidget needs access to settings)
-        self.tab_widget.clear() # remove the tab(s) added in designer
+        self.dummy_tab = None    # will be replaced by a dummy ChatWidget during SIPApplicationDidStart (creating a ChatWidget needs access to settings)
+        self.tab_widget.clear()  # remove the tab(s) added in designer
         self.tab_widget.tabBar().hide()
 
         self.session_list.hide()
@@ -1652,7 +1655,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if new_session is not None:
                 notification_center.add_observer(self, sender=new_session)
                 notification_center.add_observer(self, sender=new_session.blink_session)
-                self._update_widgets_for_session() # clean this up -Dan (too many functions called in 3 different places: on selection changed, here and on notifications handlers)
+                self._update_widgets_for_session()  # clean this up -Dan (too many functions called in 3 different places: on selection changed, here and on notifications handlers)
                 self._update_control_menu()
                 self._update_panel_buttons()
                 self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
@@ -1689,7 +1692,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         menu.hide()
         blink_session = self.selected_session.blink_session
         state = blink_session.state
-        if state=='connecting/*' and blink_session.direction=='outgoing' or state=='connected/sent_proposal':
+        if state=='connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
             self.control_button.setMenu(None)
             self.control_button.setIcon(self.cancel_icon)
         elif state == 'connected/received_proposal':
@@ -1894,7 +1897,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.screen_encryption_label.setToolTip(u'Media is encrypted using TLS')
 
             self.screen_connection_label.setVisible(screen_info.remote_address is not None)
-            self.screen_encryption_label.setVisible(screen_info.remote_address is not None and screen_info.transport=='tls')
+            self.screen_encryption_label.setVisible(screen_info.remote_address is not None and screen_info.transport == 'tls')
 
         if 'statistics' in elements:
             self.duration_value_label.value = session_info.duration
@@ -1955,7 +1958,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     self._EH_CloseSession()
                 else:
                     self._EH_ShowSessions()
-            elif event_type == QEvent.Paint: # and self.session_widget.hovered:
+            elif event_type == QEvent.Paint:  # and self.session_widget.hovered:
                 watched.event(event)
                 self.drawSessionWidgetIndicators()
                 return True
@@ -2140,7 +2143,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         position = model.sessions.index(notification.sender.items.chat)
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
-        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
+        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible)  # or PositionAtCenter
         if notification.sender.streams.types.intersection(self.__streamtypes__):
             self.show()
 
@@ -2149,7 +2152,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         position = model.sessions.index(notification.sender.items.chat)
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
-        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
+        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible)  # or PositionAtCenter
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             self.show()
 
@@ -2206,7 +2209,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if message.content_type.startswith('image/'):
             content = u'''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.encode('base64').rstrip())
         elif message.content_type.startswith('text/'):
-            content = HtmlProcessor.autolink(message.content if message.content_type=='text/html' else QTextDocument(message.content).toHtml())
+            content = HtmlProcessor.autolink(message.content if message.content_type == 'text/html' else QTextDocument(message.content).toHtml())
         else:
             return
 
@@ -2221,7 +2224,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
 
-        is_status_message = any(h.name=='Message-Type' and h.value=='status' and h.namespace=='urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
+        is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
         if is_status_message:
             session.chat_widget.add_message(ChatStatus(content))
         else:
@@ -2283,7 +2286,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
-        #session.chat_widget.add_message(ChatStatus('Connecting...')) # disable it until we can replace it in the DOM -Dan
+        # session.chat_widget.add_message(ChatStatus('Connecting...'))  # disable it until we can replace it in the DOM -Dan
 
     def _NH_MediaStreamDidNotInitialize(self, notification):
         if notification.sender.type != 'chat':
@@ -2413,12 +2416,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _SH_SessionModelSessionAboutToBeRemoved(self, session):
         # choose another one to select (a chat only or ended session if available, else one with audio but keep audio on hold? or select nothing and display the dummy tab?)
-        #selection_model = self.session_list.selectionModel()
-        #selection_model.clearSelection()
+        # selection_model = self.session_list.selectionModel()
+        # selection_model.clearSelection()
         pass
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
-        #print "-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()])
+        # print "-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()])
         self.selected_session = selected[0].topLeft().data(Qt.UserRole) if selected else None
         if self.selected_session is not None:
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
@@ -2556,7 +2559,7 @@ del ui_class, base_class
 #
 
 class HtmlProcessor(object):
-    _autolink_re = [#re.compile(r"(?P<body>https?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?(?:/[\w/%!$@#*&='~():;,.+-]*(?:\?[\w%!$@*&='~():;,.+-]*)?)?)", re.I|re.U),
+    _autolink_re = [  # re.compile(r"(?P<body>https?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?(?:/[\w/%!$@#*&='~():;,.+-]*(?:\?[\w%!$@*&='~():;,.+-]*)?)?)", re.I|re.U),
                     re.compile(r"""
                                 (?P<body>
                                   https?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?    # scheme :// [ user [ : password ] @ ] host [ : port ]

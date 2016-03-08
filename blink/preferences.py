@@ -1,6 +1,4 @@
 
-__all__ = ['PreferencesWindow', 'AccountListView', 'SIPPortEditor']
-
 import os
 import urlparse
 
@@ -30,6 +28,8 @@ from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
+
+__all__ = ['PreferencesWindow', 'AccountListView', 'SIPPortEditor']
 
 
 # LineEdit and ComboBox validators
@@ -100,20 +100,20 @@ class SIPPortEditor(QSpinBox):
     def __init__(self, parent=None):
         super(SIPPortEditor, self).__init__(parent)
         self.setRange(0, 65535)
-        self.sibling = Null # if there is a sibling port, its value is invalid for this port
+        self.sibling = Null  # if there is a sibling port, its value is invalid for this port
 
     def stepBy(self, steps):
         value = self.value()
         sibling_value = self.sibling.value()
         if value+steps == sibling_value != 0:
-            steps += steps/abs(steps) # add one more unit in the right direction
+            steps += steps/abs(steps)  # add one more unit in the right direction
         if 0 < value+steps < 1024:
             if steps < 0:
                 steps = -value
             else:
                 steps = 1024 - value
         if value+steps == sibling_value != 0:
-            steps += steps/abs(steps) # add one more unit in the right direction
+            steps += steps/abs(steps)  # add one more unit in the right direction
         return super(SIPPortEditor, self).stepBy(steps)
 
     def validate(self, input, pos):
@@ -139,7 +139,7 @@ class AccountListView(QListView):
     def __init__(self, parent=None):
         super(AccountListView, self).__init__(parent)
         self.setItemDelegate(AccountDelegate(self))
-        #self.setDropIndicatorShown(False)
+        # self.setDropIndicatorShown(False)
 
     def selectionChanged(self, selected, deselected):
         super(AccountListView, self).selectionChanged(selected, deselected)
@@ -153,9 +153,11 @@ class AccountListView(QListView):
 class blocked_qt_signals(object):
     def __init__(self, qobject):
         self.qobject = qobject
+
     def __enter__(self):
         self.qobject.blockSignals(True)
         return self.qobject
+
     def __exit__(self, type, value, traceback):
         self.qobject.blockSignals(False)
 
@@ -173,6 +175,7 @@ class UnspecifiedMSRPRelay(object):
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('preferences.ui'))
+
 
 class PreferencesWindow(base_class, ui_class):
     __metaclass__ = QSingleton
@@ -331,7 +334,7 @@ class PreferencesWindow(base_class, ui_class):
         self.tls_ca_file_editor.locationCleared.connect(self._SH_TLSCAFileEditorLocationCleared)
         self.tls_ca_file_browse_button.clicked.connect(self._SH_TLSCAFileBrowseButtonClicked)
 
-        # Setup initial state (show the acounts page right after start)
+        # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
         self.account_tab_widget.setCurrentIndex(0)
 
@@ -433,7 +436,7 @@ class PreferencesWindow(base_class, ui_class):
         # Adjust some minimum label widths in order to better align settings in different group boxes, widgets or tabs
 
         # account server and network tab
-        font_metrics = self.outbound_proxy_label.fontMetrics() # we assume all labels have the same font
+        font_metrics = self.outbound_proxy_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.outbound_proxy_label, self.auth_username_label, self.msrp_relay_label,
                   self.voicemail_uri_label, self.xcap_root_label, self.server_tools_url_label,
                   self.conference_server_label, self.msrp_transport_label)
@@ -442,7 +445,7 @@ class PreferencesWindow(base_class, ui_class):
         self.msrp_transport_label.setMinimumWidth(text_width)
 
         # account advanced tab
-        font_metrics = self.register_interval_label.fontMetrics() # we assume all labels have the same font
+        font_metrics = self.register_interval_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.register_interval_label, self.publish_interval_label, self.subscribe_interval_label,
                   self.idd_prefix_label, self.prefix_label, self.account_tls_cert_file_label)
         text_width = max(font_metrics.width(label.text()) for label in labels) + 15
@@ -451,7 +454,7 @@ class PreferencesWindow(base_class, ui_class):
         self.account_tls_cert_file_label.setMinimumWidth(text_width)
 
         # audio settings
-        font_metrics = self.answer_delay_label.fontMetrics() # we assume all labels have the same font
+        font_metrics = self.answer_delay_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.audio_input_device_label, self.audio_output_device_label, self.audio_alert_device_label, self.audio_sample_rate_label,
                   self.answer_delay_label, self.max_recording_label, self.unavailable_message_label)
         text_width = max(font_metrics.width(label.text()) for label in labels)
@@ -516,8 +519,8 @@ class PreferencesWindow(base_class, ui_class):
             added_codecs = set(SIPSimpleSettings.rtp.audio_codec_order.default).difference(settings.rtp.audio_codec_order)
             removed_codecs = set(settings.rtp.audio_codec_order).difference(SIPSimpleSettings.rtp.audio_codec_order.default)
             if added_codecs:
-                settings.rtp.audio_codec_order = DefaultValue # reset codec order
-                settings.rtp.audio_codec_list  = DefaultValue # reset codec list
+                settings.rtp.audio_codec_order = DefaultValue  # reset codec order
+                settings.rtp.audio_codec_list  = DefaultValue  # reset codec list
                 settings.save()
             elif removed_codecs:
                 codec_order = [codec for codec in settings.rtp.audio_codec_order if codec not in removed_codecs]
@@ -535,8 +538,8 @@ class PreferencesWindow(base_class, ui_class):
             added_codecs = set(SIPSimpleSettings.rtp.audio_codec_order.default).difference(account.rtp.audio_codec_order)
             removed_codecs = set(account.rtp.audio_codec_order).difference(SIPSimpleSettings.rtp.audio_codec_order.default)
             if added_codecs:
-                account.rtp.audio_codec_order = DefaultValue # reset codec order
-                account.rtp.audio_codec_list  = DefaultValue # reset codec list
+                account.rtp.audio_codec_order = DefaultValue  # reset codec order
+                account.rtp.audio_codec_list  = DefaultValue  # reset codec list
                 account.save()
             elif removed_codecs:
                 codec_order = [codec for codec in account.rtp.audio_codec_order if codec not in removed_codecs]
@@ -553,8 +556,8 @@ class PreferencesWindow(base_class, ui_class):
             added_codecs = set(SIPSimpleSettings.rtp.video_codec_order.default).difference(settings.rtp.video_codec_order)
             removed_codecs = set(settings.rtp.video_codec_order).difference(SIPSimpleSettings.rtp.video_codec_order.default)
             if added_codecs:
-                settings.rtp.video_codec_order = DefaultValue # reset codec order
-                settings.rtp.video_codec_list  = DefaultValue # reset codec list
+                settings.rtp.video_codec_order = DefaultValue  # reset codec order
+                settings.rtp.video_codec_list  = DefaultValue  # reset codec list
                 settings.save()
             elif removed_codecs:
                 codec_order = [codec for codec in settings.rtp.video_codec_order if codec not in removed_codecs]
@@ -572,8 +575,8 @@ class PreferencesWindow(base_class, ui_class):
             added_codecs = set(SIPSimpleSettings.rtp.video_codec_order.default).difference(account.rtp.video_codec_order)
             removed_codecs = set(account.rtp.video_codec_order).difference(SIPSimpleSettings.rtp.video_codec_order.default)
             if added_codecs:
-                account.rtp.video_codec_order = DefaultValue # reset codec order
-                account.rtp.video_codec_list  = DefaultValue # reset codec list
+                account.rtp.video_codec_order = DefaultValue  # reset codec order
+                account.rtp.video_codec_list  = DefaultValue  # reset codec list
                 account.save()
             elif removed_codecs:
                 codec_order = [codec for codec in account.rtp.video_codec_order if codec not in removed_codecs]
@@ -593,7 +596,7 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_input_device_button.clear()
         self.audio_input_device_button.addItem(u'System Default', 'system_default')
         self.audio_input_device_button.insertSeparator(1)
-        self.audio_input_device_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
+        self.audio_input_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.input_devices:
             self.audio_input_device_button.addItem(device, device)
         self.audio_input_device_button.addItem(u'None', None)
@@ -602,7 +605,7 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_output_device_button.clear()
         self.audio_output_device_button.addItem(u'System Default', 'system_default')
         self.audio_output_device_button.insertSeparator(1)
-        self.audio_output_device_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
+        self.audio_output_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_output_device_button.addItem(device, device)
         self.audio_output_device_button.addItem(u'None', None)
@@ -611,7 +614,7 @@ class PreferencesWindow(base_class, ui_class):
         self.audio_alert_device_button.clear()
         self.audio_alert_device_button.addItem(u'System Default', 'system_default')
         self.audio_alert_device_button.insertSeparator(1)
-        self.audio_alert_device_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
+        self.audio_alert_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_alert_device_button.addItem(device, device)
         self.audio_alert_device_button.addItem(u'None', None)
@@ -625,7 +628,7 @@ class PreferencesWindow(base_class, ui_class):
         self.video_camera_button.clear()
         self.video_camera_button.addItem(u'System Default', 'system_default')
         self.video_camera_button.insertSeparator(1)
-        self.video_camera_button.setItemData(1, Separator) # prevent the separator from being selected (must have different itemData than the None device)
+        self.video_camera_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.video_devices:
             self.video_camera_button.addItem(device, device)
         self.video_camera_button.addItem(u'None', None)
@@ -653,7 +656,7 @@ class PreferencesWindow(base_class, ui_class):
                 item = QListWidgetItem(codec, self.audio_codecs_list)
                 item.setCheckState(Qt.Checked if codec in settings.rtp.audio_codec_list else Qt.Unchecked)
 
-        # Asnwering Machine settings
+        # Answering Machine settings
         self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
         with blocked_qt_signals(self.answer_delay):
             self.answer_delay.setValue(settings.answering_machine.answer_delay)
@@ -729,9 +732,9 @@ class PreferencesWindow(base_class, ui_class):
         for button in self.sip_transports_button_group.buttons():
             button.setChecked(button.name in settings.sip.transport_list)
 
-        if settings.sip.tcp_port and settings.sip.tcp_port==settings.sip.tls_port:
+        if settings.sip.tcp_port and settings.sip.tcp_port == settings.sip.tls_port:
             log.warning("the SIP TLS and TCP ports cannot be the same")
-            settings.sip.tls_port = settings.sip.tcp_port+1 if settings.sip.tcp_port<65535 else 65534
+            settings.sip.tls_port = settings.sip.tcp_port+1 if settings.sip.tcp_port < 65535 else 65534
             settings.save()
 
         with blocked_qt_signals(self.udp_port):
@@ -893,7 +896,7 @@ class PreferencesWindow(base_class, ui_class):
             account_manager = AccountManager()
             default_account = account_manager.default_account
             try:
-                index = (index for index, account in enumerate(model.accounts) if account==default_account).next()
+                index = next(index for index, account in enumerate(model.accounts) if account is default_account)
             except StopIteration:
                 index = 0
             selection_model.select(model.index(index), selection_model.ClearAndSelect)
@@ -944,7 +947,7 @@ class PreferencesWindow(base_class, ui_class):
     def _update_pstn_example_label(self):
         prefix = self.prefix_button.currentText()
         idd_prefix = self.idd_prefix_button.currentText()
-        self.pstn_example_transformed_label.setText(u"%s%s442079460000" % ('' if prefix=='None' else prefix, idd_prefix))
+        self.pstn_example_transformed_label.setText(u"%s%s442079460000" % ('' if prefix == 'None' else prefix, idd_prefix))
 
     def _align_style_preview(self, scroll=False):
         chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
@@ -1065,14 +1068,14 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_AccountAudioCodecsListItemChanged(self, item):
         account = self.selected_account
         items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.audio_codec_order = [item.text() for item in items]
         account.save()
 
     def _SH_AccountAudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
         items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
-        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.audio_codec_order = [item.text() for item in items]
         account.save()
 
@@ -1095,14 +1098,14 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_AccountVideoCodecsListItemChanged(self, item):
         account = self.selected_account
         items = [self.account_video_codecs_list.item(row) for row in xrange(self.account_video_codecs_list.count())]
-        account.rtp.video_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.video_codec_order = [item.text() for item in items]
         account.save()
 
     def _SH_AccountVideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
         items = [self.account_video_codecs_list.item(row) for row in xrange(self.account_video_codecs_list.count())]
-        account.rtp.video_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.video_codec_order = [item.text() for item in items]
         account.save()
 
@@ -1260,7 +1263,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_IDDPrefixButtonActivated(self, text):
         self._update_pstn_example_label()
         account = self.selected_account
-        idd_prefix = None if text=='+' else text
+        idd_prefix = None if text == '+' else text
         if account.pstn.idd_prefix != idd_prefix:
             account.pstn.idd_prefix = idd_prefix
             account.save()
@@ -1268,7 +1271,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_PrefixButtonActivated(self, text):
         self._update_pstn_example_label()
         account = self.selected_account
-        prefix = None if text=='None' else text
+        prefix = None if text == 'None' else text
         if account.pstn.prefix != prefix:
             account.pstn.prefix = prefix
             account.save()
@@ -1342,14 +1345,14 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_AudioCodecsListItemChanged(self, item):
         settings = SIPSimpleSettings()
         item_iterator = (self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count()))
-        settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState()==Qt.Checked]
+        settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.Checked]
         settings.save()
 
     def _SH_AudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
         items = [self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count())]
         settings.rtp.audio_codec_order = [item.text() for item in items]
-        settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         settings.save()
 
     # Answering machine signal handlers
@@ -1371,7 +1374,7 @@ class PreferencesWindow(base_class, ui_class):
             settings.save()
 
     def _SH_MaxRecordingValueChanged(self, value):
-        self.max_recording_minutes_label.setText(u'minute' if value==1 else u'minutes')
+        self.max_recording_minutes_label.setText(u'minute' if value == 1 else u'minutes')
         settings = SIPSimpleSettings()
         if settings.answering_machine.max_recording != value:
             settings.answering_machine.max_recording = value
@@ -1401,14 +1404,14 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_VideoCodecsListItemChanged(self, item):
         settings = SIPSimpleSettings()
         item_iterator = (self.video_codecs_list.item(row) for row in xrange(self.video_codecs_list.count()))
-        settings.rtp.video_codec_list = [item.text() for item in item_iterator if item.checkState()==Qt.Checked]
+        settings.rtp.video_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.Checked]
         settings.save()
 
     def _SH_VideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
         items = [self.video_codecs_list.item(row) for row in xrange(self.video_codecs_list.count())]
         settings.rtp.video_codec_order = [item.text() for item in items]
-        settings.rtp.video_codec_list = [item.text() for item in items if item.checkState()==Qt.Checked]
+        settings.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         settings.save()
 
     def _SH_VideoCodecBitrateButtonActivated(self, index):

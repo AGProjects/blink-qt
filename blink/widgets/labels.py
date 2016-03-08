@@ -1,6 +1,4 @@
 
-__all__ = ['DurationLabel', 'IconSelector', 'LatencyLabel', 'PacketLossLabel', 'Status', 'StatusLabel', 'StreamInfoLabel', 'ElidedLabel', 'ContactState']
-
 import os
 from datetime import timedelta
 
@@ -14,6 +12,9 @@ from sipsimple.configuration.datatypes import Path
 from blink.resources import IconManager
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import QtDynamicProperty, ContextMenuActions
+
+
+__all__ = ['DurationLabel', 'IconSelector', 'LatencyLabel', 'PacketLossLabel', 'Status', 'StatusLabel', 'StreamInfoLabel', 'ElidedLabel', 'ContactState']
 
 
 class IconSelector(QLabel):
@@ -283,6 +284,7 @@ class StateColor(QColor):
     def stroke(self):
         return self.darker(200)
 
+
 class StateColorMapping(dict):
     def __missing__(self, key):
         if key == 'offline':
@@ -294,7 +296,7 @@ class StateColorMapping(dict):
         elif key == 'busy':
             return self.setdefault(key, StateColor('#ff0000'))
         else:
-            return StateColor(Qt.transparent) #StateColor('#d0d0d0')
+            return StateColor(Qt.transparent)  # StateColor('#d0d0d0')
 
 
 class ContactState(QLabel, ColorHelperMixin):
@@ -322,5 +324,4 @@ class ContactState(QLabel, ColorHelperMixin):
         gradient.setColorAt(1.0, color.stroke)
         painter.setPen(QPen(QBrush(gradient), 1))
         painter.drawRoundedRect(-4, 0, self.width()+4, self.height(), 3.7, 3.7)
-
 

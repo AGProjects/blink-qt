@@ -1,6 +1,4 @@
 
-__all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountDialog', 'ServerToolsAccountModel', 'ServerToolsWindow']
-
 import os
 import re
 import sys
@@ -10,9 +8,9 @@ from collections import defaultdict
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QUrl
-from PyQt4.QtGui  import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QMovie, QSortFilterProxyModel
+from PyQt4.QtGui import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QMovie, QSortFilterProxyModel
 from PyQt4.QtNetwork import QNetworkAccessManager
-from PyQt4.QtWebKit  import QWebView
+from PyQt4.QtWebKit import QWebView
 
 import cjson
 from application.notification import IObserver, NotificationCenter
@@ -31,17 +29,23 @@ from blink.widgets.labels import Status
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
 
+__all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountDialog', 'ServerToolsAccountModel', 'ServerToolsWindow']
+
+
 class IconDescriptor(object):
     def __init__(self, filename):
         self.filename = filename
         self.icon = None
-    def __get__(self, obj, objtype):
+
+    def __get__(self, instance, owner):
         if self.icon is None:
             self.icon = QIcon(self.filename)
             self.icon.filename = self.filename
         return self.icon
+
     def __set__(self, obj, value):
         raise AttributeError("attribute cannot be set")
+
     def __delete__(self, obj):
         raise AttributeError("attribute cannot be deleted")
 
@@ -222,6 +226,7 @@ class AccountSelector(QComboBox):
 
 ui_class, base_class = uic.loadUiType(Resources.get('add_account.ui'))
 
+
 class AddAccountDialog(base_class, ui_class):
     __metaclass__ = QSingleton
 
@@ -241,9 +246,9 @@ class AddAccountDialog(base_class, ui_class):
         font.setFamily("Sans Serif")
         self.title_label.setFont(font)
         font_metrics = self.create_status_label.fontMetrics()
-        self.create_status_label.setMinimumHeight(font_metrics.height() + 2*(font_metrics.height() + font_metrics.leading())) # reserve space for 3 lines
+        self.create_status_label.setMinimumHeight(font_metrics.height() + 2*(font_metrics.height() + font_metrics.leading()))   # reserve space for 3 lines
         font_metrics = self.email_note_label.fontMetrics()
-        self.email_note_label.setMinimumWidth(font_metrics.width(u'The E-mail address is used when sending voicemail')) # hack to make text justification look nice everywhere
+        self.email_note_label.setMinimumWidth(font_metrics.width(u'The E-mail address is used when sending voicemail'))  # hack to make text justification look nice everywhere
         self.add_account_button.setChecked(True)
         self.panel_view.setCurrentWidget(self.add_account_panel)
         self.new_password_editor.textChanged.connect(self._SH_PasswordTextChanged)
@@ -259,7 +264,7 @@ class AddAccountDialog(base_class, ui_class):
         self.email_address_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
         self.display_name_editor.regexp = re.compile('^.*$')
         self.name_editor.regexp = re.compile('^.+$')
-        self.username_editor.regexp = re.compile('^\w(?<=[^0_])[\w.-]{4,31}(?<=[^_.-])$', re.IGNORECASE) # in order to enable unicode characters add re.UNICODE to flags
+        self.username_editor.regexp = re.compile('^\w(?<=[^0_])[\w.-]{4,31}(?<=[^_.-])$', re.IGNORECASE)  # in order to enable unicode characters add re.UNICODE to flags
         self.sip_address_editor.regexp = re.compile('^[^@\s]+@[^@\s]+$')
         self.password_editor.regexp = re.compile('^.*$')
         self.new_password_editor.regexp = re.compile('^.{8,}$')
@@ -587,6 +592,7 @@ class ServerToolsWebView(QWebView):
 
 ui_class, base_class = uic.loadUiType(Resources.get('server_tools.ui'))
 
+
 class ServerToolsWindow(base_class, ui_class):
     __metaclass__ = QSingleton
 
@@ -599,7 +605,7 @@ class ServerToolsWindow(base_class, ui_class):
         self.spinner_label.hide()
         self.progress_bar.hide()
         while self.tab_widget.count():
-            self.tab_widget.removeTab(0) # remove the tab(s) added in designer
+            self.tab_widget.removeTab(0)  # remove the tab(s) added in designer
         self.tab_widget.tabBar().hide()
         self.account_button.setMenu(QMenu(self.account_button))
         self.setWindowTitle('Blink Server Tools')
@@ -629,7 +635,7 @@ class ServerToolsWindow(base_class, ui_class):
         self.spinner_label.show()
         self.spinner_movie.start()
         self.progress_bar.setValue(0)
-        #self.progress_bar.show()
+        # self.progress_bar.show()
 
     def _SH_WebViewLoadFinished(self, load_ok):
         self.spinner_movie.stop()

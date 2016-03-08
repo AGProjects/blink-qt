@@ -1,6 +1,4 @@
 
-__all__ = ['PresenceManager', 'PendingWatcherDialog']
-
 import base64
 import hashlib
 import re
@@ -36,6 +34,9 @@ from blink.resources import IconManager, Resources
 from blink.util import run_in_gui_thread
 
 
+__all__ = ['PresenceManager', 'PendingWatcherDialog']
+
+
 epoch = datetime.fromtimestamp(0, tzutc())
 
 
@@ -50,7 +51,7 @@ class BlinkPresenceState(object):
         state = blink_settings.presence.current_state.state
         note = blink_settings.presence.current_state.note
 
-        state = 'offline' if state=='Invisible' else state.lower()
+        state = 'offline' if state == 'Invisible' else state.lower()
 
         if self.account is BonjourAccount():
             return BonjourPresenceState(state, note)
@@ -182,10 +183,10 @@ class PresencePublicationHandler(object):
                     account.presence_state = BlinkPresenceState(account).online_state
         else:
             account = notification.sender
-            if set(['xcap.enabled', 'xcap.xcap_root']).intersection(notification.data.modified):
+            if {'xcap.enabled', 'xcap.xcap_root'}.intersection(notification.data.modified):
                 account.xcap.icon = None
                 account.save()
-            elif set(['presence.enabled', 'display_name', 'xcap.icon']).intersection(notification.data.modified) and account.presence.enabled:
+            elif {'presence.enabled', 'display_name', 'xcap.icon'}.intersection(notification.data.modified) and account.presence.enabled:
                 account.presence_state = BlinkPresenceState(account).online_state
 
     def _NH_SIPAccountWillActivate(self, notification):
@@ -219,11 +220,11 @@ class PresencePublicationHandler(object):
         blink_settings.presence.current_state = new_state
         if new_state.note:
             try:
-                next(state for state in blink_settings.presence.state_history if state==new_state)
+                next(state for state in blink_settings.presence.state_history if state == new_state)
             except StopIteration:
                 blink_settings.presence.state_history = [new_state] + blink_settings.presence.state_history
             else:
-                blink_settings.presence.state_history = [new_state] + [state for state in blink_settings.presence.state_history if state!=new_state]
+                blink_settings.presence.state_history = [new_state] + [state for state in blink_settings.presence.state_history if state != new_state]
         blink_settings.save()
 
     def _NH_SIPAccountDidDiscoverXCAPSupport(self, notification):
@@ -334,11 +335,11 @@ class PresenceSubscriptionHandler(object):
         def service_sort_key(service):
             timestamp = service.timestamp.value if service.timestamp else epoch
             if service.status.extended is not None:
-                return (100, timestamp)
+                return 100, timestamp
             elif service.status.basic == 'open':
-                return (10, timestamp)
+                return 10, timestamp
             else:
-                return (0, timestamp)
+                return 0, timestamp
 
         current_pidf_map = {}
         contact_pidf_map = {}
@@ -365,7 +366,7 @@ class PresenceSubscriptionHandler(object):
                 if service.status.extended:
                     state = unicode(service.status.extended)
                 else:
-                    state = 'available' if service.status.basic=='open' else 'offline'
+                    state = 'available' if service.status.basic == 'open' else 'offline'
                 note = unicode(next(iter(service.notes))) if service.notes else None
                 icon_url = unicode(service.icon) if service.icon else None
 
@@ -406,7 +407,7 @@ class PresenceSubscriptionHandler(object):
             self._winfo_map.pop(old_id, None)
             self._process_presence_data()
             return
-        if set(['enabled', 'presence.enabled']).intersection(notification.data.modified):
+        if {'enabled', 'presence.enabled'}.intersection(notification.data.modified):
             if not account.enabled or not account.presence.enabled:
                 self._pidf_map.pop(account.id, None)
                 self._winfo_map.pop(account.id, None)

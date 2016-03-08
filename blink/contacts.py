@@ -1,6 +1,4 @@
 
-__all__ = ['Group', 'Contact', 'BonjourNeighbour', 'GoogleContact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'GoogleContactsDialog', 'URIUtils']
-
 import cPickle as pickle
 import os
 import re
@@ -54,6 +52,10 @@ from blink.google.gdata.contacts.client import ContactsClient
 from blink.google.gdata.contacts.data import ContactsFeed
 from blink.google.gdata.contacts.service import ContactsQuery
 from blink.google.gdata.gauth import ClientLoginToken
+
+
+__all__ = ['Group', 'Contact', 'BonjourNeighbour', 'GoogleContact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView',
+           'ContactEditorDialog', 'GoogleContactsDialog', 'URIUtils']
 
 
 class VirtualGroupManager(object):
@@ -170,14 +172,19 @@ class VirtualGroup(SettingsState):
 class AllContactsList(object):
     def __init__(self):
         self.manager = addressbook.AddressbookManager()
+
     def __iter__(self):
         return iter(self.manager.get_contacts())
+
     def __getitem__(self, id):
         return self.manager.get_contact(id)
+
     def __contains__(self, id):
         return self.manager.has_contact(id)
+
     def __len__(self):
         return len(self.manager.get_contacts())
+
     __hash__ = None
 
 
@@ -271,26 +278,36 @@ class BonjourNeighbourURI(object):
 class BonjourNeighbourURIList(object):
     def __init__(self, uris):
         self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
+
     def __getitem__(self, id):
         return self._uri_map[id]
+
     def __contains__(self, id):
         return id in self._uri_map
+
     def __iter__(self):
         return iter(self._uri_map.values())
+
     def __len__(self):
         return len(self._uri_map)
+
     __hash__ = None
+
     def get(self, key, default=None):
         return self._uri_map.get(key, default)
+
     def add(self, uri):
         self._uri_map[uri.id] = uri
+
     def pop(self, id, *args):
         return self._uri_map.pop(id, *args)
+
     def remove(self, uri):
         self._uri_map.pop(uri.id, None)
+
     @property
     def default(self):
-        return sorted(self, key=lambda item: 0 if item.uri.transport=='tls' else 1 if item.uri.transport=='tcp' else 2)[0] if self._uri_map else None
+        return sorted(self, key=lambda item: 0 if item.uri.transport == 'tls' else 1 if item.uri.transport == 'tcp' else 2)[0] if self._uri_map else None
 
 
 class BonjourPresence(object):
@@ -314,19 +331,27 @@ class BonjourNeighbour(object):
 class BonjourNeighboursList(object):
     def __init__(self):
         self._contact_map = {}
+
     def __getitem__(self, id):
         return self._contact_map[id]
+
     def __contains__(self, id):
         return id in self._contact_map
+
     def __iter__(self):
         return iter(self._contact_map.values())
+
     def __len__(self):
         return len(self._contact_map)
+
     __hash__ = None
+
     def add(self, contact):
         self._contact_map[contact.id] = contact
+
     def pop(self, id, *args):
         return self._contact_map.pop(id, *args)
+
     def remove(self, contact):
         return self._contact_map.pop(contact.id, None)
 
@@ -439,11 +464,11 @@ class GoogleContactURI(object):
 
     @classmethod
     def from_number(cls, number):
-        return cls(re.sub('[\s()-]', '', number.text), cls._get_label(number), number.primary=='true')
+        return cls(re.sub('[\s()-]', '', number.text), cls._get_label(number), number.primary == 'true')
 
     @classmethod
     def from_email(cls, email):
-        return cls(re.sub('^sips?:', '', email.address), cls._get_label(email), False) # for now do not let email addresses become default URIs -Dan
+        return cls(re.sub('^sips?:', '', email.address), cls._get_label(email), False)  # for now do not let email addresses become default URIs -Dan
 
     @staticmethod
     def _get_label(entry):
@@ -456,23 +481,33 @@ class GoogleContactURI(object):
 class GoogleContactURIList(object):
     def __init__(self, uris):
         self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
+
     def __getitem__(self, id):
         return self._uri_map[id]
+
     def __contains__(self, id):
         return id in self._uri_map
+
     def __iter__(self):
         return iter(self._uri_map.values())
+
     def __len__(self):
         return len(self._uri_map)
+
     __hash__ = None
+
     def get(self, key, default=None):
         return self._uri_map.get(key, default)
+
     def add(self, uri):
         self._uri_map[uri.id] = uri
+
     def pop(self, id, *args):
         return self._uri_map.pop(id, *args)
+
     def remove(self, uri):
         self._uri_map.pop(uri.id, None)
+
     @property
     def default(self):
         try:
@@ -500,27 +535,35 @@ class GoogleContact(object):
         self.preferred_media = PreferredMedia('audio')
 
     def __reduce__(self):
-        return (self.__class__, (self.id, self.name, self.company, self.icon, self.uris))
+        return self.__class__, (self.id, self.name, self.company, self.icon, self.uris)
 
 
 class GoogleContactsList(object):
     def __init__(self):
         self._contact_map = {}
         self.timestamp = None
+
     def __getitem__(self, id):
         return self._contact_map[id]
+
     def __contains__(self, id):
         return id in self._contact_map
+
     def __iter__(self):
         return iter(self._contact_map.values())
+
     def __len__(self):
         return len(self._contact_map)
+
     __hash__ = None
+
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self._contact_map # accessing this will fail if the pickle was created by an older version of the code, thus invalidating the unpickling
+        self._contact_map  # accessing this will fail if the pickle was created by an older version of the code, thus invalidating the unpickling
+
     def add(self, contact):
         self._contact_map[contact.id] = contact
+
     def pop(self, id, *args):
         return self._contact_map.pop(id, *args)
 
@@ -654,7 +697,7 @@ class GoogleContactsManager(object):
         self.client.auth_token = ClientLoginToken(settings.google_contacts.authorization_token)
 
         try:
-            group_id = next(entry.id.text for entry in self.client.get_groups().entry if entry.title.text=='System Group: My Contacts')
+            group_id = next(entry.id.text for entry in self.client.get_groups().entry if entry.title.text == 'System Group: My Contacts')
             if self.need_sync:
                 query = ContactsQuery(feed=self.client.get_feed_uri(kind='contacts'), group=group_id, params={})
                 feed = self.client.get_feed(query.ToUri(), desired_class=ContactsFeed)
@@ -838,23 +881,33 @@ class DummyContactURI(object):
 class DummyContactURIList(object):
     def __init__(self, uris):
         self._uri_map = OrderedDict((uri.id, uri) for uri in uris)
+
     def __getitem__(self, id):
         return self._uri_map[id]
+
     def __contains__(self, id):
         return id in self._uri_map
+
     def __iter__(self):
         return iter(self._uri_map.values())
+
     def __len__(self):
         return len(self._uri_map)
+
     __hash__ = None
+
     def get(self, key, default=None):
         return self._uri_map.get(key, default)
+
     def add(self, uri):
         self._uri_map[uri.id] = uri
+
     def pop(self, id, *args):
         return self._uri_map.pop(id, *args)
+
     def remove(self, uri):
         self._uri_map.pop(uri.id, None)
+
     @property
     def default(self):
         try:
@@ -877,7 +930,7 @@ class DummyContact(object):
         self.preferred_media = PreferredMedia('audio')
 
     def __reduce__(self):
-        return (self.__class__, (self.name, self.uris))
+        return self.__class__, (self.name, self.uris)
 
 
 class Group(object):
@@ -903,7 +956,7 @@ class Group(object):
         return "%s(%r)" % (self.__class__.__name__, self.settings)
 
     def __getstate__(self):
-        return (self.settings.id, dict(widget=Null, saved_state=self.saved_state, reference_group=self.reference_group))
+        return self.settings.id, dict(widget=Null, saved_state=self.saved_state, reference_group=self.reference_group)
 
     def __setstate__(self, state):
         group_id, state = state
@@ -990,14 +1043,17 @@ class ContactIconDescriptor(object):
     def __init__(self, filename):
         self.filename = filename
         self.icon = None
-    def __get__(self, obj, objtype):
+
+    def __get__(self, instance, owner):
         if self.icon is None:
             self.icon = QIcon(self.filename)
             self.icon.filename = self.filename
         return self.icon
-    def __set__(self, obj, value):
+
+    def __set__(self, instance, value):
         raise AttributeError("attribute cannot be set")
-    def __delete__(self, obj):
+
+    def __delete__(self, instance):
         raise AttributeError("attribute cannot be deleted")
 
 
@@ -1046,7 +1102,7 @@ class Contact(object):
         return '%s(%r, %r)' % (self.__class__.__name__, self.settings, self.group)
 
     def __getstate__(self):
-        return (self.settings.id, dict(group=self.group))
+        return self.settings.id, dict(group=self.group)
 
     def __setstate__(self, state):
         contact_id, state = state
@@ -1058,7 +1114,7 @@ class Contact(object):
             group = BonjourNeighboursGroup()
         else:
             group = None
-        self.settings = group.contacts[contact_id] # problem if group is None -Dan
+        self.settings = group.contacts[contact_id]  # problem if group is None -Dan
         self.__dict__.update(state)
 
     def __unicode__(self):
@@ -1172,7 +1228,7 @@ class Contact(object):
         handler(notification)
 
     def _NH_AddressbookContactDidChange(self, notification):
-        if set(['icon', 'alternate_icon']).intersection(notification.data.modified):
+        if {'icon', 'alternate_icon'}.intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDidChange', sender=self)
@@ -1206,7 +1262,7 @@ class ContactDetail(object):
         return '%s(%r)' % (self.__class__.__name__, self.settings)
 
     def __getstate__(self):
-        return (self.settings.id, {})
+        return self.settings.id, {}
 
     def __setstate__(self, state):
         contact_id, state = state
@@ -1218,7 +1274,7 @@ class ContactDetail(object):
             group = BonjourNeighboursGroup()
         else:
             group = None
-        self.settings = group.contacts[contact_id] # problem if group is None -Dan
+        self.settings = group.contacts[contact_id]  # problem if group is None -Dan
         self.__dict__.update(state)
 
     def __unicode__(self):
@@ -1368,7 +1424,7 @@ class ContactURI(object):
         else:
             uri_id = None
             state_dict = dict(uri=self.uri)
-        return (self.contact.id, uri_id, state_dict)
+        return self.contact.id, uri_id, state_dict
 
     def __setstate__(self, state):
         contact_id, uri_id, state = state
@@ -1380,7 +1436,7 @@ class ContactURI(object):
             group = BonjourNeighboursGroup()
         else:
             group = None
-        self.contact = group.contacts[contact_id] # problem if group is None -Dan
+        self.contact = group.contacts[contact_id]  # problem if group is None -Dan
         if uri_id is not None:
             self.uri = self.contact.uris[uri_id]
         self.__dict__.update(state)
@@ -1413,6 +1469,7 @@ class GoogleAuthorizationData(object):
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('google_contacts_dialog.ui'))
+
 
 class GoogleContactsDialog(base_class, ui_class):
     __metaclass__ = QSingleton
@@ -1556,6 +1613,7 @@ del ui_class, base_class
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact.ui'))
 
+
 class ContactWidget(base_class, ui_class):
     def __init__(self, parent=None):
         super(ContactWidget, self).__init__(parent)
@@ -1588,6 +1646,7 @@ del ui_class, base_class
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact_group.ui'))
+
 
 class GroupWidget(base_class, ui_class):
     def __init__(self, parent=None):
@@ -1624,7 +1683,7 @@ class GroupWidget(base_class, ui_class):
             return
         self.__dict__['selected'] = value
         self.name_label.setStyleSheet("color: #ffffff; font-weight: bold;" if value else "color: #000000;")
-        #self.name_label.setForegroundRole(QPalette.BrightText if value else QPalette.WindowText)
+        # self.name_label.setForegroundRole(QPalette.BrightText if value else QPalette.WindowText)
         self.update()
 
     selected = property(_get_selected, _set_selected)
@@ -1646,7 +1705,7 @@ class GroupWidget(base_class, ui_class):
         self._start_editing()
 
     def _start_editing(self):
-        #self.name_editor.setText(self.name_label.text())
+        # self.name_editor.setText(self.name_label.text())
         self.name_editor.selectAll()
         self.name_view.setCurrentWidget(self.editor_widget)
         self.name_editor.setFocus()
@@ -1726,7 +1785,7 @@ class GroupWidget(base_class, ui_class):
 
     def event(self, event):
         if type(event) is QKeyEvent and self.editing:
-            return True # do not propagate keyboard events while editing
+            return True  # do not propagate keyboard events while editing
         elif type(event) is QMouseEvent and event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
             self._start_editing()
         return super(GroupWidget, self).event(event)
@@ -1776,7 +1835,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         item = index.data(Qt.UserRole)
         if isinstance(item, Group):
             item.widget = GroupWidget(parent)
-            item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item)) # the partial still creates a memory cycle -Dan
+            item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))  # the partial still creates a memory cycle -Dan
             return item.widget
         else:
             return None
@@ -1784,7 +1843,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
     def editorEvent(self, event, model, option, index):
         arrow_rect = QRect(0, 0, 14, option.rect.height())
         arrow_rect.moveTopRight(option.rect.topRight())
-        if event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier and arrow_rect.contains(event.pos()):
+        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and arrow_rect.contains(event.pos()):
             model.contact_list.detail_model.contact = index.data(Qt.UserRole).settings
             detail_view = model.contact_list.detail_view
             detail_view.animation.setDirection(QPropertyAnimation.Forward)
@@ -1841,8 +1900,8 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
             gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
             contrast_color = QBrush(gradient)
         else:
-            #foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-            #background_color = option.palette.color(QPalette.Window)
+            # foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            # background_color = option.palette.color(QPalette.Window)
             foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
             background_color = widget.palette().color(widget.backgroundRole())
             contrast_color = self.calc_light_color(background_color)
@@ -1909,7 +1968,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
     def editorEvent(self, event, model, option, index):
         arrow_rect = QRect(0, 0, 14, option.rect.height())
         arrow_rect.moveTopRight(option.rect.topRight())
-        if index.row()==0 and event.type()==QEvent.MouseButtonRelease and event.button()==Qt.LeftButton and event.modifiers()==Qt.NoModifier and arrow_rect.contains(event.pos()):
+        if index.row() == 0 and event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and arrow_rect.contains(event.pos()):
             detail_view = self.parent()
             detail_view.animation.setDirection(QPropertyAnimation.Backward)
             detail_view.animation.start()
@@ -2068,6 +2127,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
 class Operation(object):
     __params__ = ()
     __priority__ = None
+
     def __init__(self, **params):
         for name, value in params.iteritems():
             setattr(self, name, value)
@@ -2075,13 +2135,16 @@ class Operation(object):
             raise ValueError("missing operation parameter: '%s'" % param)
         self.timestamp = datetime.utcnow()
 
+
 class AddContactOperation(Operation):
     __params__ = ('contact', 'group_ids', 'icon', 'alternate_icon')
     __priority__ = 0
 
+
 class AddGroupOperation(Operation):
     __params__ = ('group',)
     __priority__ = 1
+
 
 class AddGroupMemberOperation(Operation):
     __params__ = ('group_id', 'contact_id')
@@ -2319,21 +2382,21 @@ class ContactModel(QAbstractListModel):
             drop_group = next(group for group in groups if group not in moved_groups)
             drop_position = self.contact_list.AboveItem
         elif group is groups[-1] and group in moved_groups:
-            drop_group = (group for group in reversed(groups) if group not in moved_groups).next()
+            drop_group = next(group for group in reversed(groups) if group not in moved_groups)
             drop_position = self.contact_list.BelowItem
         elif group in moved_groups:
             position = groups.index(group)
             if drop_indicator is self.contact_list.AboveItem:
-                drop_group = (group for group in reversed(groups[:position]) if group not in moved_groups).next()
+                drop_group = next(group for group in reversed(groups[:position]) if group not in moved_groups)
                 drop_position = self.contact_list.BelowItem
             else:
-                drop_group = (group for group in groups[position:] if group not in moved_groups).next()
+                drop_group = next(group for group in groups[position:] if group not in moved_groups)
                 drop_position = self.contact_list.AboveItem
         else:
             drop_group = group
             drop_position = drop_indicator
         items = self._pop_items(selected_indexes)
-        groups = self.items[GroupList] # get group list again as it changed
+        groups = self.items[GroupList]  # get group list again as it changed
         if drop_position is self.contact_list.AboveItem:
             position = self.items.index(drop_group)
         else:
@@ -2538,8 +2601,8 @@ class ContactModel(QAbstractListModel):
         if contact.presence.policy == 'default':
             contact.presence.policy = 'allow' if contact.presence.subscribe else 'block'
             contact.save()
-        elif contact.presence.subscribe != (True if contact.presence.policy=='allow' else False):
-            contact.presence.subscribe = True if contact.presence.policy=='allow' else False
+        elif contact.presence.subscribe != (True if contact.presence.policy == 'allow' else False):
+            contact.presence.subscribe = True if contact.presence.policy == 'allow' else False
             contact.save()
 
     @staticmethod
@@ -2792,7 +2855,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         if isinstance(item, Group) or not item.group.virtual:
             return False
         search_tokens = self.filterRegExp().pattern().lower().split()
-        searched_item = u' '.join([item.name] + [uri.uri for uri in item.uris]).lower() # should we only search in the username part of the uris? -Dan
+        searched_item = u' '.join([item.name] + [uri.uri for uri in item.uris]).lower()  # should we only search in the username part of the uris? -Dan
         return all(token in searched_item for token in search_tokens)
 
     def lessThan(self, left_index, right_index):
@@ -3163,13 +3226,13 @@ class ContactListView(QListView):
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Enter, Qt.Key_Return):
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
                 session_manager = SessionManager()
                 session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
         elif event.key() == Qt.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
                 self.detail_model.contact = item.settings
                 self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
@@ -3290,7 +3353,7 @@ class ContactListView(QListView):
 
     def _AH_AddGroup(self):
         group = Group(addressbook.Group())
-        group.settings.save = Null # disable saving until the user provides the name
+        group.settings.save = Null  # disable saving until the user provides the name
         model = self.model()
         selection_model = self.selectionModel()
         model.addGroup(group)
@@ -3306,7 +3369,7 @@ class ContactListView(QListView):
                 groups.add(item)
             elif isinstance(item, Contact) and not item.group.virtual:
                 groups.add(item.group)
-        preferred_group = groups.pop() if len(groups)==1 else None
+        preferred_group = groups.pop() if len(groups) == 1 else None
         main_window = QApplication.instance().main_window
         main_window.contact_editor_dialog.open_for_add(main_window.search_box.text(), preferred_group)
 
@@ -3624,7 +3687,7 @@ class ContactSearchListView(QListView):
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Enter, Qt.Key_Return):
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
                 session_manager = SessionManager()
                 session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
@@ -3632,7 +3695,7 @@ class ContactSearchListView(QListView):
             QApplication.instance().main_window.search_box.clear()
         elif event.key() == Qt.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes)==1 else None
+            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
                 self.detail_model.contact = item.settings
                 self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
@@ -4278,7 +4341,7 @@ class ContactURIDelegate(QItemDelegate):
             # draw elided text using a fading gradient
             color_group = QPalette.Disabled if not option.state & QStyle.State_Enabled else QPalette.Normal if option.state & QStyle.State_Active else QPalette.Inactive
             text_margin = option.widget.style().pixelMetric(QStyle.PM_FocusFrameHMargin, None, option.widget) + 1
-            text_rect = rect.adjusted(text_margin, 0, -text_margin, 0) # remove width padding
+            text_rect = rect.adjusted(text_margin, 0, -text_margin, 0)  # remove width padding
             width = text_rect.width()
             fade_start = 1 - 50.0/width if width > 50 else 0.0
             gradient = QLinearGradient(0, 0, width, 0)
@@ -4358,7 +4421,7 @@ class ContactURIModel(QAbstractTableModel):
         elif column == ContactURIModel.DefaultColumn:
             if value:
                 for position, item in enumerate(self.items):
-                    item.default = position==row
+                    item.default = position == row
             else:
                 self.items[row].default = False
         else:
@@ -4404,7 +4467,7 @@ class ContactURIModel(QAbstractTableModel):
             default_item = None
         else:
             if default_item not in added_items:
-                default_item = None # only care for the default URI if it was a newly added one, else use the one from the contact
+                default_item = None  # only care for the default URI if it was a newly added one, else use the one from the contact
         items = [ContactURIItem(uri.id, uri.uri, uri.type, default=default_item is None and uri is contact.uris.default) for uri in contact.uris]
         items.extend(added_items)
         items.append(ContactURIItem(None, None, self.default_uri_type, False, ghost=True))
@@ -4476,6 +4539,7 @@ class ContactURITableView(QTableView):
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
+
 
 class ContactEditorDialog(base_class, ui_class):
     implements(IObserver)
@@ -4659,13 +4723,13 @@ class URIUtils(object):
                         uri_str = uri_str.partition(':')[2]
                     contact_user = uri_str.partition('@')[0]
                     if cls.is_number(contact_user):
-                        contact_user = cls.trim_number(contact_user) # these could be expensive, maybe cache -Dan
+                        contact_user = cls.trim_number(contact_user)  # these could be expensive, maybe cache -Dan
                         if contact_user.endswith(number):
                             ratio = len(number) * 100 / len(contact_user)
                             if ratio >= 50:
                                 heappush(matched_numbers, (100-ratio, next(counter), contact, contact_uri))
             if matched_numbers:
-                return matched_numbers[0][2:] # ratio, index, contact, uri
+                return matched_numbers[0][2:]  # ratio, index, contact, uri
 
         display_name = display_name or "%s@%s" % (uri.user, uri.host)
         contact = Contact(DummyContact(display_name, [DummyContactURI(str(uri).partition(':')[2], default=True)]), None)

@@ -1,6 +1,4 @@
 
-__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin']
-
 from PyQt4.QtCore import Qt
 from PyQt4.QtGui  import QColor
 from application.python import limit
@@ -8,8 +6,11 @@ from application.python.decorator import decorator, preserve_signature
 from math import fmod, isnan
 
 
+__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin']
+
+
 class HCYColor(object):
-    """Hue/chroma/luma colorspace"""
+    """Hue/chroma/luma color space"""
 
     luma_r = 0.2126
     luma_g = 0.7152
@@ -202,8 +203,10 @@ class ColorUtils(object):
 def color_key(instance, color):
     return color.rgba()
 
+
 def color_ratio_key(instance, color, ratio):
     return color.rgba() << 32 | int(ratio*512)
+
 
 def background_color_key(instance, background, color):
     return background.rgba() << 32 | color.rgba()
@@ -276,7 +279,7 @@ class ColorHelperMixin(object):
             shadow_color = ColorUtils.mix(Qt.black, color, color.alphaF())
         else:
             shadow_color = ColorScheme.shade(ColorUtils.mix(Qt.black, color, color.alphaF()), ColorScheme.ShadowShade, self._contrast)
-        shadow_color.setAlpha(color.alpha()) # make sure shadow color has the same alpha channel as the input
+        shadow_color.setAlpha(color.alpha())  # make sure shadow color has the same alpha channel as the input
         return shadow_color
 
     @cache_result(color_ratio_key)

@@ -1,8 +1,6 @@
 
 """Provide access to Blink's resources"""
 
-__all__ = ['ApplicationData', 'Resources', 'IconManager']
-
 import __main__
 import imghdr
 import os
@@ -21,10 +19,14 @@ from sipsimple.configuration.datatypes import Path
 from blink.util import run_in_gui_thread
 
 
+__all__ = ['ApplicationData', 'Resources', 'IconManager']
+
+
 class DirectoryContextManager(unicode):
     def __enter__(self):
         self.directory = os.getcwdu()
         os.chdir(self)
+
     def __exit__(self, type, value, traceback):
         os.chdir(self.directory)
 

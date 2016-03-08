@@ -83,7 +83,7 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
     sounds = SoundSettings
     tls = TLSSettingsExtension
 
-    user_agent = Setting(type=str, default='Blink %s (%s)' % (__version__, platform.system() if sys.platform!='darwin' else 'MacOSX Qt'))
+    user_agent = Setting(type=str, default='Blink %s (%s)' % (__version__, platform.system() if sys.platform != 'darwin' else 'MacOSX Qt'))
 
 
 class SessionInfoSettings(SettingsGroup):

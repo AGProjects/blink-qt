@@ -1,9 +1,10 @@
 
-__all__ = ['CallFunctionEvent']
-
 from PyQt4.QtCore import QEvent
 
 from application.python.descriptor import classproperty
+
+
+__all__ = ['CallFunctionEvent']
 
 
 class EventMeta(type(QEvent)):
@@ -34,5 +35,4 @@ class CallFunctionEvent(EventBase):
         self.function = function
         self.args = args
         self.kw = kw
-
 

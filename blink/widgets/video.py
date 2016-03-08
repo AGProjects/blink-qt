@@ -1,10 +1,6 @@
 
 from __future__ import division
 
-
-__all__ = ['VideoSurface']
-
-
 from PyQt4.QtCore import Qt, QMetaObject, QPoint, QRect, QTimer, pyqtSignal
 from PyQt4.QtGui  import QColor, QCursor, QIcon, QImage, QPainter, QPixmap, QTransform, QWidget
 
@@ -16,7 +12,11 @@ from sipsimple.core import FrameBufferVideoRenderer
 from blink.resources import Resources
 
 
-class Container(object): pass
+__all__ = ['VideoSurface']
+
+
+class Container(object):
+    pass
 
 
 class InteractionState(object):
@@ -41,7 +41,7 @@ class VideoSurface(QWidget):
     class BottomLeftCorner:  __metaclass__ = MarkerType
     class BottomRightCorner: __metaclass__ = MarkerType
 
-    adjusted = pyqtSignal(QRect, QRect) # the widget was adjusted by the user (if interactive)
+    adjusted = pyqtSignal(QRect, QRect)  # the widget was adjusted by the user (if interactive)
 
     interactive = False  # if the widget can be interacted with (moved, resized)
     mirror = False       # mirror the image horizontally
@@ -197,13 +197,13 @@ class VideoSurface(QWidget):
                 delta_x = -(self.width_for_height(geometry.height() - delta_y) - geometry.width())
                 geometry.setTopLeft(geometry.topLeft() + QPoint(delta_x, delta_y))
             elif self._interaction.resize_corner is self.TopRightCorner:
-                delta_x =  (self.width_for_height(geometry.height() - delta_y) - geometry.width())
+                delta_x = +(self.width_for_height(geometry.height() - delta_y) - geometry.width())
                 geometry.setTopRight(geometry.topRight() + QPoint(delta_x, delta_y))
             elif self._interaction.resize_corner is self.BottomLeftCorner:
                 delta_x = -(self.width_for_height(geometry.height() + delta_y) - geometry.width())
                 geometry.setBottomLeft(geometry.bottomLeft() + QPoint(delta_x, delta_y))
             else:
-                delta_x =  (self.width_for_height(geometry.height() + delta_y) - geometry.width())
+                delta_x = +(self.width_for_height(geometry.height() + delta_y) - geometry.width())
                 geometry.setBottomRight(geometry.bottomRight() + QPoint(delta_x, delta_y))
 
             if self.minimumHeight() <= geometry.height() <= self.maximumHeight() and (self.parent() is None or self.parent().rect().contains(geometry)):
@@ -223,5 +223,4 @@ class VideoSurface(QWidget):
     def closeEvent(self, event):
         super(VideoSurface, self).closeEvent(event)
         self.stop()
-
 

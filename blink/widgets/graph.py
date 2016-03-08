@@ -1,6 +1,4 @@
 
-__all__ = ['Graph', 'GraphWidget', 'HeightScaler', 'LogarithmicScaler', 'MaxScaler', 'SoftScaler']
-
 from PyQt4.QtCore import Qt, QLine, QPointF, QMetaObject, pyqtSignal
 from PyQt4.QtGui  import QColor, QLinearGradient, QPainterPath, QPen, QPolygonF, QStyle, QStyleOption, QStylePainter, QWidget
 
@@ -12,6 +10,9 @@ from math import ceil, log10, modf
 
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import QtDynamicProperty
+
+
+__all__ = ['Graph', 'GraphWidget', 'HeightScaler', 'LogarithmicScaler', 'MaxScaler', 'SoftScaler']
 
 
 class HeightScaler(object):
@@ -140,7 +141,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
         option = QStyleOption()
         option.initFrom(self)
 
-        contents_rect = self.style().subElementRect(QStyle.SE_FrameContents, option, self) or self.contentsRect() # the SE_FrameContents rect is Null unless the stylesheet defines decorations
+        contents_rect = self.style().subElementRect(QStyle.SE_FrameContents, option, self) or self.contentsRect()  # the SE_FrameContents rect is Null unless the stylesheet defines decorations
 
         if self.graphStyle == self.BarStyle:
             graph_width = self.__dict__['graph_width'] = int(ceil(float(contents_rect.width()) / self.horizontalPixelsPerUnit))
@@ -196,18 +197,18 @@ class GraphWidget(QWidget, ColorHelperMixin):
                     cx_offset = self.horizontalPixelsPerUnit / 3.0
                     smoothness = self.smoothFactor
 
-                    last_values = deque(3*[dataset.next() * height_scaling], maxlen=3) # last 3 values: 0 last, 1 previous, 2 previous previous
+                    last_values = deque(3*[next(dataset) * height_scaling], maxlen=3)  # last 3 values: 0 last, 1 previous, 2 previous previous
 
                     envelope = QPainterPath()
                     envelope.moveTo(0, last_values[0])
                     for x, y in enumerate(dataset, 1):
-                        x = x * self.horizontalPixelsPerUnit
-                        y = y * height_scaling * (1 - smoothness) + last_values[0] * smoothness
+                        x *= self.horizontalPixelsPerUnit
+                        y *= height_scaling * (1 - smoothness) + last_values[0] * smoothness
                         last_values.appendleft(y)
                         c1x = x - cx_offset * 2
                         c2x = x - cx_offset
-                        c1y = limit((1 + smoothness) * last_values[1] - smoothness * last_values[2], min_value, max_value) # same gradient as previous previous value to previous value
-                        c2y = limit((1 - smoothness) * last_values[0] + smoothness * last_values[1], min_value, max_value) # same gradient as previous value to last value
+                        c1y = limit((1 + smoothness) * last_values[1] - smoothness * last_values[2], min_value, max_value)  # same gradient as previous previous value to previous value
+                        c2y = limit((1 - smoothness) * last_values[0] + smoothness * last_values[1], min_value, max_value)  # same gradient as previous value to last value
                         envelope.cubicTo(c1x, c1y, c2x, c2y, x, y)
                 else:
                     envelope = QPainterPath()
@@ -236,7 +237,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
 
         painter.restore()
 
-        # queue the 'updated' signal to be emited after returning to the main loop
+        # queue the 'updated' signal to be emitted after returning to the main loop
         QMetaObject.invokeMethod(self, 'updated', Qt.QueuedConnection)
 
     def add_graph(self, graph):
@@ -253,5 +254,4 @@ class GraphWidget(QWidget, ColorHelperMixin):
     def clear(self):
         self.graphs = []
         self.update()
-
 

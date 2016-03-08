@@ -1,7 +1,4 @@
 
-__all__ = ['VNCClient', 'RFBSettings', 'ServerDefault', 'TrueColor', 'HighColor', 'LowColor']
-
-
 from PyQt4.QtCore import QObject, QSize, QSocketNotifier, QThread, pyqtSignal
 from PyQt4.QtGui  import QApplication
 
@@ -10,7 +7,10 @@ from application.python import Null
 from application.python.descriptor import WriteOnceAttribute
 
 from blink.event import EventBase
-from blink.screensharing._rfb  import RFBClient, RFBClientError
+from blink.screensharing._rfb import RFBClient, RFBClientError
+
+
+__all__ = ['VNCClient', 'RFBSettings', 'ServerDefault', 'TrueColor', 'HighColor', 'LowColor']
 
 
 class RFBSettings(object):
@@ -101,6 +101,7 @@ class VNCClient(QObject):
 
     def _get_settings(self):
         return self.__dict__['settings']
+
     def _set_settings(self, settings):
         old_settings = self.__dict__.get('settings', None)
         if settings == old_settings:
@@ -108,6 +109,7 @@ class VNCClient(QObject):
         self.__dict__['settings'] = settings
         if self.thread.isRunning():
             QApplication.postEvent(self, RFBConfigureClientEvent())
+
     settings = property(_get_settings, _set_settings)
     del _get_settings, _set_settings
 

@@ -1,6 +1,4 @@
 
-__all__ = ['FileTransferWindow']
-
 import os
 
 from PyQt4 import uic
@@ -18,7 +16,11 @@ from blink.sessions import FileTransferDelegate, FileTransferModel
 from blink.widgets.util import ContextMenuActions
 
 
+__all__ = ['FileTransferWindow']
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_window.ui'))
+
 
 class FileTransferWindow(base_class, ui_class):
     implements(IObserver)
@@ -63,7 +65,7 @@ class FileTransferWindow(base_class, ui_class):
     def update_status(self):
         total = len(self.model.items)
         active = len([item for item in self.model.items if not item.ended])
-        text = u'%d %s' % (total, 'transfer' if total==1 else 'transfers')
+        text = u'%d %s' % (total, 'transfer' if total == 1 else 'transfers')
         if active > 0:
             text += u' (%d active)' % active
         self.status_label.setText(text)

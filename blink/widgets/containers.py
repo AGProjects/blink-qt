@@ -1,10 +1,11 @@
 
-__all__ = ['SlidingStackedWidget']
-
 from PyQt4.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, QPoint, pyqtSignal
 from PyQt4.QtGui  import QStackedWidget
 
 from blink.widgets.util import QtDynamicProperty
+
+
+__all__ = ['SlidingStackedWidget']
 
 
 class SlidingStackedWidget(QStackedWidget):
@@ -65,9 +66,9 @@ class SlidingStackedWidget(QStackedWidget):
         next_widget.setGeometry(0, 0, width, height)
 
         if direction in (self.TopToBottom, self.BottomToTop):
-            offset = QPoint(0, height if direction==self.TopToBottom else -height)
+            offset = QPoint(0, height if direction == self.TopToBottom else -height)
         elif direction in (self.LeftToRight, self.RightToLeft):
-            offset = QPoint(width if direction==self.LeftToRight else -width, 0)
+            offset = QPoint(width if direction == self.LeftToRight else -width, 0)
 
         # re-position the next widget outside of the display area
         prev_widget_position = prev_widget.pos()
@@ -100,8 +101,8 @@ class SlidingStackedWidget(QStackedWidget):
         prev_widget = prev_widget_animation.targetObject()
         next_widget = next_widget_animation.targetObject()
         self.setCurrentWidget(next_widget)
-        prev_widget.hide() # this may have been done already by QStackedWidget when changing the current widget above -Dan
-        prev_widget.move(prev_widget_animation.startValue()) # move the outshifted widget back to its original position
+        prev_widget.hide()  # this may have been done already by QStackedWidget when changing the current widget above -Dan
+        prev_widget.move(prev_widget_animation.startValue())  # move the out-shifted widget back to its original position
         self._animation_group.clear()
         self._active = False
         self.animationFinished.emit()

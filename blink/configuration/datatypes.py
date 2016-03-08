@@ -176,7 +176,7 @@ class IconDescriptor(object):
 
     def __eq__(self, other):
         if isinstance(other, IconDescriptor):
-            return self.url==other.url and self.etag==other.etag
+            return self.url == other.url and self.etag == other.etag
         return NotImplemented
 
     def __ne__(self, other):
@@ -208,7 +208,7 @@ class PresenceState(object):
 
     def __eq__(self, other):
         if isinstance(other, PresenceState):
-            return self.state==other.state and self.note==other.note
+            return self.state == other.state and self.note == other.note
         return NotImplemented
 
     def __ne__(self, other):

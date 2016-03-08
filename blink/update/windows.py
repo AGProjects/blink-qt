@@ -19,14 +19,13 @@ def library_locations(name):
     for path in additional_paths:
         yield os.path.join(path, library_name)
 
+
 def load_library(name):
     for library in library_locations(name):
         try:
             return CDLL(library)
         except OSError:
             pass
-        else:
-            break
     else:
         raise RuntimeError('cannot find %s on this system' % name)
 

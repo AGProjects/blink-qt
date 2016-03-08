@@ -1,6 +1,4 @@
 
-__all__ = ['LogManager']
-
 import os
 import sys
 
@@ -19,6 +17,9 @@ from zope.interface import implements
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.resources import ApplicationData
+
+
+__all__ = ['LogManager']
 
 
 class NotificationQueue(object):
@@ -161,10 +162,10 @@ class LogManager(object):
             direction = "RECEIVED"
         else:
             direction = "SENDING"
-        buf = ["%s: Packet %d, +%s" % (direction, self._siptrace_packet_count, (notification.datetime - self._siptrace_start_time))]
-        buf.append("%(source_ip)s:%(source_port)d -(SIP over %(transport)s)-> %(destination_ip)s:%(destination_port)d" % notification.data.__dict__)
-        buf.append(notification.data.data)
-        buf.append('--')
+        buf = ["%s: Packet %d, +%s" % (direction, self._siptrace_packet_count, (notification.datetime - self._siptrace_start_time)),
+               "%(source_ip)s:%(source_port)d -(SIP over %(transport)s)-> %(destination_ip)s:%(destination_port)d" % notification.data.__dict__,
+               notification.data.data,
+               '--']
         message = '\n'.join(buf)
         try:
             self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
@@ -235,5 +236,4 @@ class LogManager(object):
             self.msrptrace_file.flush()
         except Exception:
             pass
-
 

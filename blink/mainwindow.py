@@ -1,6 +1,4 @@
 
-__all__ = ['MainWindow']
-
 import hashlib
 import os
 
@@ -36,7 +34,11 @@ from blink.util import run_in_gui_thread
 from blink.widgets.buttons import AccountState, SwitchViewButton
 
 
+__all__ = ['MainWindow']
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
+
 
 class MainWindow(base_class, ui_class):
     implements(IObserver)
@@ -140,7 +142,7 @@ class MainWindow(base_class, ui_class):
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
         self.video_call_button.clicked.connect(self._SH_VideoCallButtonClicked)
         self.chat_session_button.clicked.connect(self._SH_ChatSessionButtonClicked)
-        self.back_to_contacts_button.clicked.connect(self.search_box.clear) # this can be set in designer -Dan
+        self.back_to_contacts_button.clicked.connect(self.search_box.clear)  # this can be set in designer -Dan
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
 
@@ -385,7 +387,7 @@ class MainWindow(base_class, ui_class):
         session_manager = SessionManager()
         if session_manager.last_dialed_uri is not None:
             contact, contact_uri = URIUtils.find_contact(session_manager.last_dialed_uri)
-            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')]) # TODO: remember used media types and redial with them. -Saul
+            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')])  # TODO: remember used media types and redial with them. -Saul
 
     def _AH_SIPServerSettings(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
@@ -451,7 +453,7 @@ class MainWindow(base_class, ui_class):
         except KeyError:
             account = None
         contact, contact_uri = URIUtils.find_contact(action.entry.uri)
-        session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account) # TODO: memorize media type and use it? -Saul (not sure about history in/out -Dan)
+        session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account)  # TODO: memorize media type and use it? -Saul (not sure about history in/out -Dan)
 
     def _AH_SystemTrayShowWindow(self, checked):
         self.show()
@@ -585,7 +587,7 @@ class MainWindow(base_class, ui_class):
     def _SH_ContactListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
         selected_items = self.contact_list.selectionModel().selectedIndexes()
-        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
+        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
 
     def _SH_ContactModelAddedItems(self, items):
         if not self.search_box.text():
@@ -597,7 +599,7 @@ class MainWindow(base_class, ui_class):
         if not self.search_box.text():
             return
         if any(type(item) is Contact for item in items) and self.contact_search_model.rowCount() == 0:
-            self.search_box.clear() # check this. it is no longer be the correct behaviour as now contacts can be deleted from remote -Dan
+            self.search_box.clear()  # check this. it is no longer be the correct behaviour as now contacts can be deleted from remote -Dan
         else:
             active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
             self.search_view.setCurrentWidget(active_widget)
@@ -663,7 +665,7 @@ class MainWindow(base_class, ui_class):
         else:
             self.contacts_view.setCurrentWidget(self.contact_list_panel)
             selected_items = self.contact_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)==1 and type(selected_items[0].data(Qt.UserRole)) is Contact)
+            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and type(selected_items[0].data(Qt.UserRole)) is Contact)
         self.search_list.detail_model.contact = None
         self.search_list.detail_view.hide()
 
@@ -698,7 +700,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AudioSessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
-        self.active_sessions_label.setText(u'There is 1 active call' if len(active_sessions)==1 else u'There are %d active calls' % len(active_sessions))
+        self.active_sessions_label.setText(u'There is 1 active call' if len(active_sessions) == 1 else u'There are %d active calls' % len(active_sessions))
         self.active_sessions_label.setVisible(any(active_sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
@@ -803,16 +805,16 @@ class MainWindow(base_class, ui_class):
                 self.silent_action.setChecked(settings.audio.silent)
                 self.silent_button.setChecked(settings.audio.silent)
             if 'audio.output_device' in notification.data.modified:
-                action = (action for action in self.output_devices_group.actions() if action.data() == settings.audio.output_device).next()
+                action = next(action for action in self.output_devices_group.actions() if action.data() == settings.audio.output_device)
                 action.setChecked(True)
             if 'audio.input_device' in notification.data.modified:
-                action = (action for action in self.input_devices_group.actions() if action.data() == settings.audio.input_device).next()
+                action = next(action for action in self.input_devices_group.actions() if action.data() == settings.audio.input_device)
                 action.setChecked(True)
             if 'audio.alert_device' in notification.data.modified:
-                action = (action for action in self.alert_devices_group.actions() if action.data() == settings.audio.alert_device).next()
+                action = next(action for action in self.alert_devices_group.actions() if action.data() == settings.audio.alert_device)
                 action.setChecked(True)
             if 'video.device' in notification.data.modified:
-                action = (action for action in self.video_devices_group.actions() if action.data() == settings.video.device).next()
+                action = next(action for action in self.video_devices_group.actions() if action.data() == settings.video.device)
                 action.setChecked(True)
             if 'answering_machine.enabled' in notification.data.modified:
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)
@@ -841,12 +843,12 @@ class MainWindow(base_class, ui_class):
             account_manager = AccountManager()
             account = notification.sender
             if 'enabled' in notification.data.modified:
-                action = (action for action in self.accounts_menu.actions() if action.data() is account).next()
+                action = next(action for action in self.accounts_menu.actions() if action.data() is account)
                 action.setChecked(account.enabled)
             if 'display_name' in notification.data.modified and account is account_manager.default_account:
                 self.display_name.setText(account.display_name or u'')
-            if set(['enabled', 'message_summary.enabled', 'message_summary.voicemail_uri']).intersection(notification.data.modified):
-                action = (action for action in self.voicemail_menu.actions() if action.data() is account).next()
+            if {'enabled', 'message_summary.enabled', 'message_summary.voicemail_uri'}.intersection(notification.data.modified):
+                action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
                 action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
                 action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
 
@@ -868,9 +870,9 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account
-        action = (action for action in self.accounts_menu.actions() if action.data() is account).next()
+        action = next(action for action in self.accounts_menu.actions() if action.data() is account)
         self.accounts_menu.removeAction(action)
-        action = (action for action in self.voicemail_menu.actions() if action.data() is account).next()
+        action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
         self.voicemail_menu.removeAction(action)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
@@ -878,12 +880,12 @@ class MainWindow(base_class, ui_class):
             self.enable_call_buttons(False)
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(len(selected_items)==1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
+            self.enable_call_buttons(len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
 
     def _NH_SIPAccountGotMessageSummary(self, notification):
         account = notification.sender
         summary = notification.data.message_summary
-        action = (action for action in self.voicemail_menu.actions() if action.data() is account).next()
+        action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
         action.setEnabled(account.voicemail_uri is not None)
         if summary.messages_waiting:
             try:
@@ -917,5 +919,4 @@ class MainWindow(base_class, ui_class):
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
 
 del ui_class, base_class
-
 

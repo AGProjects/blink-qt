@@ -1,6 +1,4 @@
 
-__all__ = ['RFBClient', 'RFBClientError']
-
 from sip import voidptr
 from PyQt4.QtCore import QThread
 from PyQt4.QtGui  import QImage
@@ -10,6 +8,9 @@ from application.notification import NotificationCenter, NotificationData
 from libc.stdint cimport uint8_t, uint16_t, uint32_t
 from libc.stdlib cimport calloc, malloc, free
 from libc.string cimport memcpy, strlen
+
+
+__all__ = ['RFBClient', 'RFBClientError']
 
 
 # external declarations
