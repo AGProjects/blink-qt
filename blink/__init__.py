@@ -1,7 +1,4 @@
 
-__version__ = '1.4.2'
-__date__    = 'December 4th 2015'
-
 import os
 import sys
 import sip
@@ -33,6 +30,8 @@ from sipsimple.payloads import XMLDocument
 from sipsimple.storage import FileStorage
 from sipsimple.threading import run_in_twisted_thread
 from sipsimple.threading.green import run_in_green_thread
+
+from blink.__info__ import __project__, __summary__, __webpage__, __version__, __date__, __author__, __email__, __license__, __copyright__
 
 try:
     from blink import branding
