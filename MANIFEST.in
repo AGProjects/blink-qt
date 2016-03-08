@@ -1,4 +1,6 @@
 include LICENSE
+include INSTALL
+include README
 include MANIFEST.in
 
 include build_inplace
@@ -8,6 +10,5 @@ include run
 recursive-include blink *.pyx
 recursive-exclude blink *.c
 
-graft doc
 graft resources
 prune resources/icons/work
