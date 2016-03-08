@@ -295,7 +295,9 @@ class ContactIcon(object):
                 data = base64.decodestring(pres_content.data.value)
             except Exception:
                 return None
-        return cls(data, IconDescriptor(url, descriptor_etag or etag))
+            return cls(data, IconDescriptor(url, descriptor_etag or etag))
+        else:
+            return None
 
 
 class PresenceSubscriptionHandler(object):
