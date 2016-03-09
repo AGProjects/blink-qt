@@ -202,8 +202,8 @@ class GraphWidget(QWidget, ColorHelperMixin):
                     envelope = QPainterPath()
                     envelope.moveTo(0, last_values[0])
                     for x, y in enumerate(dataset, 1):
-                        x *= self.horizontalPixelsPerUnit
-                        y *= height_scaling * (1 - smoothness) + last_values[0] * smoothness
+                        x = x * self.horizontalPixelsPerUnit
+                        y = y * height_scaling * (1 - smoothness) + last_values[0] * smoothness
                         last_values.appendleft(y)
                         c1x = x - cx_offset * 2
                         c2x = x - cx_offset
