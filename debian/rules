@@ -9,4 +9,7 @@ override_dh_clean:
 	dh_clean
 	rm -rf build dist MANIFEST
 
-.PHONY: override_dh_clean
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
+.PHONY: override_dh_clean override_dh_strip
