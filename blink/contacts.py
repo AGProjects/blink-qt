@@ -165,7 +165,7 @@ class VirtualGroup(SettingsState):
         try:
             configuration.save()
         except Exception, e:
-            log.err()
+            log.exception()
             notification_center.post_notification('CFGManagerSaveFailed', sender=configuration, data=NotificationData(object=self, operation='save', modified=modified_data, exception=e))
 
 
