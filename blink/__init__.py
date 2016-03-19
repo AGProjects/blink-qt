@@ -274,7 +274,7 @@ class Blink(QApplication):
         try:
             event.function(*event.args, **event.kw)
         except:
-            log.error('Exception occured while calling function %s in the GUI thread' % event.function.__name__)
+            log.error('Exception occurred while calling function %s in the GUI thread' % event.function.__name__)
             log.err()
 
     def handle_notification(self, notification):
