@@ -129,10 +129,8 @@ install the client side VNC libraries.
 
 * Install dependencies: pacman -S mingw-w64-i686-pkgconf patch
 * Get the package code: darcs get http://devel.ag-projects.com/repositories/windows/mingw-w64-libvncclient
-* Enter the directory and build the package: cd mingw-w64-libvncclient && makepkg-mingw -L --nocheck
-* In case the above command fails with an error regarding a non-existent icon file,
-  just run "makepkg-mingw -L --nocheck" again
-* Install the package: pacman -U mingw-w64-i686-libvncclient*any.pkg.tar.xz
+* Enter the directory and build+instal the package: cd mingw-w64-libvncclient && makepkg-mingw -cifL --nocheck --nosign
+* In case the above command fails with an error run it again
 
 
 Step 2. Build and run Blink
