@@ -1256,7 +1256,7 @@ class SMPVerificationHandler(object):
             self.chat_stream.encryption.smp_abort()
             return
         audio_stream = self.audio_stream
-        if audio_stream.encryption.active and audio_stream.encryption.type == 'ZRTP':
+        if audio_stream.encryption.active and audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.sas is not None:
             self.chat_stream.encryption.smp_answer(audio_stream.encryption.zrtp.sas)
             if self.blink_session.info.streams.chat.smp_status not in (SMPVerification.Succeeded, SMPVerification.Failed):
                 self.blink_session.info.streams.chat.smp_status = SMPVerification.InProgress
