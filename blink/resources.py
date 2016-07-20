@@ -50,7 +50,7 @@ class ApplicationData(object):
 
     @classmethod
     def get(cls, resource):
-        return os.path.join(cls.directory, resource or u'')
+        return os.path.join(cls.directory, os.path.normpath(resource or u''))
 
 
 class Resources(object):
@@ -81,7 +81,7 @@ class Resources(object):
 
     @classmethod
     def get(cls, resource):
-        return os.path.join(cls.directory, resource or u'')
+        return os.path.join(cls.directory, os.path.normpath(resource or u''))
 
 
 class IconManager(object):
