@@ -1,5 +1,6 @@
 
 import cPickle as pickle
+import locale
 import os
 import re
 import socket
@@ -1080,22 +1081,22 @@ class Contact(object):
 
     def __gt__(self, other):
         if isinstance(other, Contact):
-            return self.name > other.name
+            return locale.strcoll(self.name, other.name) > 0
         return NotImplemented
 
     def __ge__(self, other):
         if isinstance(other, Contact):
-            return self.name >= other.name
+            return locale.strcoll(self.name, other.name) >= 0
         return NotImplemented
 
     def __lt__(self, other):
         if isinstance(other, Contact):
-            return self.name < other.name
+            return locale.strcoll(self.name, other.name) < 0
         return NotImplemented
 
     def __le__(self, other):
         if isinstance(other, Contact):
-            return self.name <= other.name
+            return locale.strcoll(self.name, other.name) <= 0
         return NotImplemented
 
     def __repr__(self):
@@ -2678,13 +2679,13 @@ class ContactModel(QAbstractListModel):
         position = self.items.index(contact)
         prev_item = self.items[position-1] if position>0 else None
         next_item = self.items[position+1] if position+1<len(self.items) else None
-        prev_ok = prev_item is None or isinstance(prev_item, Group) or prev_item.name <= contact.name
-        next_ok = next_item is None or isinstance(next_item, Group) or next_item.name >= contact.name
+        prev_ok = prev_item is None or isinstance(prev_item, Group) or prev_item <= contact
+        next_ok = next_item is None or isinstance(next_item, Group) or next_item >= contact
         if prev_ok and next_ok:
             return None
         for position in xrange(self.items.index(contact.group)+1, len(self.items)):
             item = self.items[position]
-            if isinstance(item, Group) or item.name > contact.name:
+            if isinstance(item, Group) or item > contact:
                 break
         else:
             position = len(self.items)
@@ -2693,7 +2694,7 @@ class ContactModel(QAbstractListModel):
     def _find_contact_insertion_point(self, contact):
         for position in xrange(self.items.index(contact.group)+1, len(self.items)):
             item = self.items[position]
-            if isinstance(item, Group) or item.name > contact.name:
+            if isinstance(item, Group) or item > contact:
                 break
         else:
             position = len(self.items)
