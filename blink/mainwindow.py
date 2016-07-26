@@ -6,8 +6,8 @@ from functools import partial
 
 from PyQt4 import uic
 from PyQt4.QtCore import Qt, QSettings, QUrl
-from PyQt4.QtGui  import QAction, QActionGroup, QDesktopServices, QMenu, QShortcut
-from PyQt4.QtGui  import QApplication, QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2, QSystemTrayIcon
+from PyQt4.QtGui import QAction, QActionGroup, QDesktopServices, QMenu, QShortcut
+from PyQt4.QtGui import QApplication, QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2, QSystemTrayIcon
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -21,12 +21,12 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, GoogleContactsDialog, URIUtils
+from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
-from blink.configuration.datatypes import IconDescriptor, FileURL, InvalidToken, PresenceState
+from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
 from blink.resources import ApplicationData, IconManager, Resources
@@ -128,7 +128,6 @@ class MainWindow(base_class, ui_class):
         self.about_panel = AboutPanel(self)
         self.conference_dialog = ConferenceDialog(self)
         self.contact_editor_dialog = ContactEditorDialog(self)
-        self.google_contacts_dialog = GoogleContactsDialog(self)
         self.filetransfer_window = FileTransferWindow()
         self.preferences_window = PreferencesWindow(self.account_model, None)
         self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
@@ -245,7 +244,6 @@ class MainWindow(base_class, ui_class):
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
         self.contact_editor_dialog.close()
-        self.google_contacts_dialog.close()
         self.server_tools_window.close()
         for dialog in self.pending_watcher_dialogs[:]:
             dialog.close()
@@ -376,12 +374,8 @@ class MainWindow(base_class, ui_class):
 
     def _AH_GoogleContactsActionTriggered(self):
         settings = SIPSimpleSettings()
-        if settings.google_contacts.authorization_token is not None:
-            settings.google_contacts.authorization_token = None
-            settings.save()
-            self.google_contacts_dialog.hide()
-        else:
-            self.google_contacts_dialog.open()
+        settings.google_contacts.enabled = not settings.google_contacts.enabled
+        settings.save()
 
     def _AH_RedialActionTriggered(self):
         session_manager = SessionManager()
@@ -751,10 +745,10 @@ class MainWindow(base_class, ui_class):
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
-        if settings.google_contacts.authorization_token is None:
-            self.google_contacts_action.setText(u'Enable &Google Contacts...')
-        else:
+        if settings.google_contacts.enabled:
             self.google_contacts_action.setText(u'Disable &Google Contacts')
+        else:
+            self.google_contacts_action.setText(u'Enable &Google Contacts...')
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
         if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
@@ -822,14 +816,11 @@ class MainWindow(base_class, ui_class):
                 self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
             if 'sounds.play_message_alerts' in notification.data.modified:
                 self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
-            if 'google_contacts.authorization_token' in notification.data.modified:
-                authorization_token = notification.sender.google_contacts.authorization_token
-                if authorization_token is None:
-                    self.google_contacts_action.setText(u'Enable &Google Contacts...')
-                else:
+            if 'google_contacts.enabled' in notification.data.modified:
+                if notification.sender.google_contacts.enabled:
                     self.google_contacts_action.setText(u'Disable &Google Contacts')
-                if authorization_token is InvalidToken:
-                    self.google_contacts_dialog.open_for_incorrect_password()
+                else:
+                    self.google_contacts_action.setText(u'Enable &Google Contacts...')
         elif notification.sender is blink_settings:
             if 'presence.current_state' in notification.data.modified:
                 state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)

@@ -11,7 +11,7 @@ from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger
 from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, LogsSettings, RTPSettings, TLSSettings
 
 from blink import __version__
-from blink.configuration.datatypes import ApplicationDataPath, AuthorizationToken, GraphTimeScale, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
+from blink.configuration.datatypes import ApplicationDataPath, GraphTimeScale, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
 from blink.resources import Resources
 
 
@@ -40,7 +40,7 @@ class ChatSettingsExtension(ChatSettings):
 
 
 class GoogleContactsSettings(SettingsGroup):
-    authorization_token = Setting(type=AuthorizationToken, default=None, nillable=True)
+    enabled = Setting(type=bool, default=False)
     username = Setting(type=unicode, default=None, nillable=True)
 
 

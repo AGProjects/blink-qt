@@ -7,27 +7,32 @@ import socket
 import sys
 
 from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QPointF, QPropertyAnimation, QRectF, QRect, QSize, pyqtSignal
-from PyQt4.QtGui  import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
-from PyQt4.QtGui  import QAction, QMenu, QKeyEvent, QMouseEvent, QSortFilterProxyModel, QItemDelegate, QStyledItemDelegate
-from PyQt4.QtGui  import QApplication, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QRadioButton, QTableView, QWidget
+from PyQt4.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, pyqtSignal
+from PyQt4.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl
+from PyQt4.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
+from PyQt4.QtGui import QAction, QMenu, QKeyEvent, QMouseEvent, QSortFilterProxyModel, QItemDelegate, QStyledItemDelegate
+from PyQt4.QtGui import QApplication, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QRadioButton, QTableView, QWidget
+from PyQt4.QtWebKit import QWebView
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python.descriptor import WriteOnceAttribute
+from application.python.threadpool import ThreadPool, run_in_threadpool
 from application.python.types import MarkerType, Singleton
 from application.python import Null
-from application.system import unlink
+from application.system import makedirs, unlink
 from collections import OrderedDict, deque
 from datetime import datetime
-from eventlib import coros, proc
-from eventlib.green import httplib, urllib2
 from functools import partial
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from heapq import heappush
+from httplib2 import Http, HttpLib2Error
 from itertools import count
+from oauth2client.client import OAuth2WebServerFlow, AccessTokenRefreshError
+from oauth2client.file import Storage
 from operator import attrgetter
-from twisted.internet import reactor
-from twisted.internet.error import ConnectionLost
+from threading import Event
 from zope.interface import implements
 
 from sipsimple import addressbook
@@ -36,27 +41,18 @@ from sipsimple.account.bonjour import BonjourServiceDescription
 from sipsimple.configuration import ConfigurationManager, DefaultValue, Setting, SettingsState, SettingsObjectMeta, ObjectNotFoundError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import BaseSIPURI, SIPURI
-from sipsimple.threading import run_in_thread, run_in_twisted_thread
-from sipsimple.threading.green import Command, call_in_green_thread, run_in_green_thread
+from sipsimple.threading import run_in_thread
 
-from blink.configuration.datatypes import AuthorizationToken, InvalidToken, IconDescriptor, FileURL
+from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
-from blink.util import QSingleton, run_in_gui_thread
+from blink.util import call_in_gui_thread, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
-from blink.widgets.labels import Status
 from blink.widgets.util import ContextMenuActions
 
-from blink.google.gdata.client import CaptchaChallenge, RequestError, Unauthorized
-from blink.google.gdata.contacts.client import ContactsClient
-from blink.google.gdata.contacts.data import ContactsFeed
-from blink.google.gdata.contacts.service import ContactsQuery
-from blink.google.gdata.gauth import ClientLoginToken
 
-
-__all__ = ['Group', 'Contact', 'BonjourNeighbour', 'GoogleContact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView',
-           'ContactEditorDialog', 'GoogleContactsDialog', 'URIUtils']
+__all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'URIUtils']
 
 
 class VirtualGroupManager(object):
@@ -205,9 +201,7 @@ class AllContactsGroup(VirtualGroup):
 
     def __establish__(self):
         notification_center = NotificationCenter()
-        notification_center.post_notification('VirtualGroupWasActivated', sender=self)
-        for contact in self.contacts:
-            notification_center.post_notification('VirtualGroupDidAddContact', sender=self, data=NotificationData(contact=contact))
+        notification_center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=list(self.contacts)))
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -427,7 +421,7 @@ class BonjourNeighboursGroup(VirtualGroup):
         handler(notification)
 
     def _NH_SIPAccountWillActivate(self, notification):
-        notification.center.post_notification('VirtualGroupWasActivated', sender=self)
+        notification.center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=[]))
 
     def _NH_SIPAccountDidDeactivate(self, notification):
         notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
@@ -446,10 +440,98 @@ class GoogleContactID(unicode):
     pass
 
 
+class GoogleContactIconData(bytes):
+    def __new__(cls, data, url):
+        instance = super(GoogleContactIconData, cls).__new__(cls, data)
+        instance.url = url
+        return instance
+
+
+class GoogleContactIconMetadata(object):
+    def __init__(self, metadata):
+        metadata = metadata or {'source': {'id': None, 'type': None}}
+        self.__dict__.update({name: GoogleContactIconMetadata(value) if isinstance(value, dict) else value for name, value in metadata.iteritems()})
+
+    def __getattr__(self, name):  # stop PyCharm from complaining about undefined attributes
+        raise AttributeError(name)
+
+
 class GoogleContactIcon(object):
-    def __init__(self, data, etag):
+    def __init__(self, url, metadata, data=None):
+        self.url = url
+        self.metadata = GoogleContactIconMetadata(metadata)
         self.data = data
-        self.etag = etag
+
+    @property
+    def url(self):
+        return self.__dict__['url']
+
+    @url.setter
+    def url(self, value):
+        old_value = self.__dict__.get('url')
+        new_value = self.__dict__['url'] = value
+        if old_value != new_value is None:
+            self.data = None
+
+    @property
+    def data(self):
+        return self.__dict__['data']
+
+    @data.setter
+    def data(self, value):
+        if not isinstance(value, (GoogleContactIconData, type(None))):
+            raise TypeError("data must be an instance of GoogleContactIconData or None")
+        self.__dict__['data'] = value
+
+    @property
+    def alternate_url(self):
+        if self.metadata.source.type == 'CONTACT':
+            return 'https://www.google.com/m8/feeds/photos/media/default/' + self.metadata.source.id
+        else:
+            return None
+
+    @property
+    def needs_update(self):
+        return self.url is not None and (self.data is None or self.data.url != self.url)
+
+
+class GoogleContactIconRetriever(object):
+    threadpool = ThreadPool(name='google-icons', min_threads=1, max_threads=10)
+    threadpool.start()
+
+    def __init__(self, contact, credentials):
+        self.contact = contact
+        self.credentials = credentials
+        self._event = Event()
+
+    def wait(self):
+        return self._event.wait()
+
+    @run_in_threadpool(threadpool)
+    def run(self):
+        icon = self.contact.icon
+        http = self.credentials.authorize(Http(timeout=5))
+        try:
+            response, content = http.request(icon.url+'?size=96')
+        except (HttpLib2Error, socket.error) as e:
+            log.warning(u"could not retrieve icon for {}: {!s}".format(self.contact.name, e))
+        else:
+            if response['status'] == '200' and response['content-type'].startswith('image/'):
+                icon.data = GoogleContactIconData(content, icon.url)
+            elif response['status'] == '403' and icon.alternate_url:  # private photo. use old GData protocol if alternate_url is available
+                try:
+                    response, content = http.request(icon.alternate_url, headers={'GData-Version': '3.0'})
+                except (HttpLib2Error, socket.error) as e:
+                    log.warning(u"could not retrieve icon for {}: {!s}".format(self.contact.name, e))
+                else:
+                    if response['status'] == '200' and response['content-type'].startswith('image/'):
+                        icon.data = GoogleContactIconData(content, icon.url)
+                    else:
+                        log.error(u"could not retrieve icon for {} (status={}, content type={})".format(self.contact.name, response['status'], response['content-type']))
+            else:
+                log.error(u"could not retrieve icon for {} (status={}, content type={})".format(self.contact.name, response['status'], response['content-type']))
+        finally:
+            self._event.set()
 
 
 class GoogleContactURI(object):
@@ -465,18 +547,15 @@ class GoogleContactURI(object):
 
     @classmethod
     def from_number(cls, number):
-        return cls(re.sub('[\s()-]', '', number.text), cls._get_label(number), number.primary == 'true')
+        return cls(number.get('canonicalForm') or number['value'], number.get('formattedType', 'Other'), number['metadata'].get('primary', False))
 
     @classmethod
-    def from_email(cls, email):
-        return cls(re.sub('^sips?:', '', email.address), cls._get_label(email), False)  # for now do not let email addresses become default URIs -Dan
+    def from_im(cls, address):
+        return cls(re.sub('^sips?:', '', address['username']), address.get('formattedType', 'Other'), False)  # for now do not let IM addresses become default URIs -Dan
 
-    @staticmethod
-    def _get_label(entry):
-        if entry.label:
-            return entry.label.strip()
-        else:
-            return entry.rel.rpartition('#')[2].replace('_', ' ').strip().title()
+    @classmethod
+    def from_email(cls, address):
+        return cls(re.sub('^sips?:', '', address['value']), address.get('formattedType', 'Other'), False)  # for now do not let email addresses become default URIs -Dan
 
 
 class GoogleContactURIList(object):
@@ -511,10 +590,7 @@ class GoogleContactURIList(object):
 
     @property
     def default(self):
-        try:
-            return next(uri for uri in self if uri.default)
-        except StopIteration:
-            return None
+        return next((uri for uri in self if uri.default), None)
 
 
 class GooglePresence(object):
@@ -526,23 +602,62 @@ class GooglePresence(object):
 class GoogleContact(object):
     id = WriteOnceAttribute()
 
-    def __init__(self, id, name, company, icon, uris):
+    def __init__(self, id, name, organization, uris, icon=None, etag=None):
         self.id = GoogleContactID(id)
         self.name = name
-        self.company = company
-        self.icon = icon
+        self.organization = organization
         self.uris = GoogleContactURIList(uris)
+        self.icon = icon
+        self.etag = etag
         self.presence = GooglePresence()
         self.preferred_media = PreferredMedia('audio')
 
     def __reduce__(self):
-        return self.__class__, (self.id, self.name, self.company, self.icon, self.uris)
+        return self.__class__, (self.id, self.name, self.organization, self.uris, self.icon, self.etag)
+
+    def __repr__(self):
+        return "<GoogleContact: id={0.id!r}, name={0.name!r}, organization={0.organization!r}, uris={0.uris!r}, icon={0.icon!r}, etag={0.etag!r}>".format(self)
+
+    def update(self, contact_data):
+        assert self.id == contact_data['resourceName']
+
+        etag = contact_data['etag']
+        name = next((entry['displayName'] for entry in contact_data.get('names', Null)), None)
+        organization = next((entry.get('name') for entry in contact_data.get('organizations', Null)), None)
+        icon_url, icon_metadata = next(((entry['url'], entry['metadata']) for entry in contact_data.get('photos', Null)), (None, None))
+
+        uris = [GoogleContactURI.from_number(number) for number in contact_data.get('phoneNumbers', Null)]
+        uris.extend(GoogleContactURI.from_im(address) for address in contact_data.get('imClients', Null))
+        uris.extend(GoogleContactURI.from_email(address) for address in contact_data.get('emailAddresses', Null))
+
+        self.name = name
+        self.organization = organization
+        self.uris = GoogleContactURIList(uris)
+        self.icon.url = icon_url
+        self.icon.metadata = GoogleContactIconMetadata(icon_metadata)
+        self.etag = etag
+
+    @classmethod
+    def from_google_data(cls, contact_data):
+        contact_id = contact_data['resourceName']
+        etag = contact_data['etag']
+
+        name = next((entry['displayName'] for entry in contact_data.get('names', Null)), None)
+        organization = next((entry.get('name') for entry in contact_data.get('organizations', Null)), None)
+        icon_url, icon_metadata = next(((entry['url'], entry['metadata']) for entry in contact_data.get('photos', Null)), (None, None))
+
+        uris = [GoogleContactURI.from_number(number) for number in contact_data.get('phoneNumbers', Null)]
+        uris.extend(GoogleContactURI.from_im(address) for address in contact_data.get('imClients', Null))
+        uris.extend(GoogleContactURI.from_email(address) for address in contact_data.get('emailAddresses', Null))
+
+        icon = GoogleContactIcon(icon_url, icon_metadata)
+
+        return cls(contact_id, name, organization, uris, icon, etag)
 
 
 class GoogleContactsList(object):
     def __init__(self):
         self._contact_map = {}
-        self.timestamp = None
 
     def __getitem__(self, id):
         return self._contact_map[id]
@@ -558,9 +673,9 @@ class GoogleContactsList(object):
 
     __hash__ = None
 
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._contact_map  # accessing this will fail if the pickle was created by an older version of the code, thus invalidating the unpickling
+    @property
+    def ids(self):
+        return set(self._contact_map)
 
     def add(self, contact):
         self._contact_map[contact.id] = contact
@@ -569,264 +684,309 @@ class GoogleContactsList(object):
         return self._contact_map.pop(id, *args)
 
 
+class GoogleAuthorizationView(QWebView):
+    finished = pyqtSignal()
+    accepted = pyqtSignal(unicode, unicode)  # accepted.emit(code, email)
+    rejected = pyqtSignal()
+
+    success_token = 'Success code='
+    failure_token = 'Denied error=access_denied'
+
+    def __init__(self, parent=None):
+        super(GoogleAuthorizationView, self).__init__(parent)
+        self.email = None
+        self.setWindowTitle('Blink Google Authorization')
+        self.setWindowIconText('Blink Google Authorization')
+        self.setWindowIcon(QIcon(Resources.get('icons/blink48.png')))
+        self.selectionChanged.connect(self._SH_SelectionChanged)
+        self.titleChanged.connect(self._SH_TitleChanged)
+        self.resize(500, 630)
+
+    @run_in_gui_thread
+    def open(self, url):
+        self.load(QUrl.fromEncoded(url))
+        self.show()
+
+    def closeEvent(self, event):
+        super(GoogleAuthorizationView, self).closeEvent(event)
+        self.finished.emit()
+        self.rejected.emit()
+
+    def _SH_SelectionChanged(self):
+        self.email = self.page().mainFrame().findFirstElement('input#Email').evaluateJavaScript('this.value') or self.email  # the input changes to None during submit
+
+    def _SH_TitleChanged(self, title):
+        self.setWindowTitle(title)
+        if title == self.failure_token:
+            self.hide()
+            self.finished.emit()
+            self.rejected.emit()
+        elif title.startswith(self.success_token):
+            code = title[len(self.success_token):]
+            self.hide()
+            self.finished.emit()
+            self.accepted.emit(code, self.email)
+
+
+class GoogleAuthorizationStorage(Storage):
+    def __init__(self, filename):
+        self._directory = os.path.dirname(filename)
+        super(GoogleAuthorizationStorage, self).__init__(filename)
+
+    def put(self, credentials):
+        makedirs(self._directory)
+        super(GoogleAuthorizationStorage, self).put(credentials)
+
+
+class GoogleAuthorization(object):
+    client_id = '28246556873-20215d5a5ttd0l3sa7cchsm7hklh2d3c.apps.googleusercontent.com'
+    client_secret = '3L8FDV5LELGmMIwr3NhfaZsq'
+    redirect_uri = 'urn:ietf:wg:oauth:2.0:oob:auto'
+    scope = 'https://www.googleapis.com/auth/contacts.readonly profile'
+
+    def __init__(self):
+        settings = SIPSimpleSettings()
+        self.storage = GoogleAuthorizationStorage(ApplicationData.get('google/credentials'))
+        self.flow = OAuth2WebServerFlow(client_id=self.client_id, client_secret=self.client_secret, scope=self.scope, redirect_uri=self.redirect_uri, login_hint=settings.google_contacts.username, user_agent=settings.user_agent)
+        self.view = GoogleAuthorizationView()
+        self.view.accepted.connect(self._SH_AuthorizationAccepted)
+        self.view.rejected.connect(self._SH_AuthorizationRejected)
+
+    @property
+    def credentials(self):
+        return self.storage.get()
+
+    @property
+    def email(self):
+        return self.flow.login_hint
+
+    @email.setter
+    def email(self, email):
+        self.flow.login_hint = email
+
+    @run_in_thread('network-io')
+    def request_credentials(self):
+        credentials = self.storage.get()
+        if credentials is None or credentials.invalid:
+            self.view.open(self.flow.step1_get_authorize_url())
+        else:
+            notification_center = NotificationCenter()
+            notification_center.post_notification('GoogleAuthorizationWasAccepted', sender=self, data=NotificationData(credentials=credentials, email=self.email))
+
+    @run_in_thread('network-io')
+    def _SH_AuthorizationAccepted(self, code, email):
+        self.email = email
+        credentials = self.flow.step2_exchange(code)
+        self.storage.put(credentials)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('GoogleAuthorizationWasAccepted', sender=self, data=NotificationData(credentials=credentials, email=email))
+
+    @run_in_thread('network-io')
+    def _SH_AuthorizationRejected(self):
+        notification_center = NotificationCenter()
+        notification_center.post_notification('GoogleAuthorizationWasRejected', sender=self)
+
+
 class GoogleContactsManager(object):
     __metaclass__ = Singleton
     implements(IObserver)
 
-    contacts = WriteOnceAttribute()
-
     def __init__(self):
-        self.client = ContactsClient()
-        self.command_proc = None
-        self.command_channel = coros.queue()
-        self.last_fetch_time = datetime.fromtimestamp(0)
-        self.not_executed_fetch = None
+        self.contacts = GoogleContactsList()
+        self.running = False
         self.active = False
-        self.state = 'stopped'
-        self.timer = None
-        self.need_sync = True
-        try:
-            self.contacts = pickle.load(open(ApplicationData.get('google_contacts')))
-        except Exception:
-            self.contacts = GoogleContactsList()
+        self.auth = None
+        self._service = None
+        self._sync_timer = None
+        self._sync_token = None
         self._initialize()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='SIPApplicationWillEnd')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings())
 
-    def _get_state(self):
-        return self.__dict__['state']
+    @property
+    def active(self):
+        return self.__dict__['active']
 
-    def _set_state(self, value):
-        old_value = self.__dict__.get('state', Null)
-        self.__dict__['state'] = value
-        if old_value != value and old_value is not Null:
+    @active.setter
+    def active(self, value):
+        old_value = self.__dict__.get('active', False)
+        new_value = self.__dict__['active'] = value
+        if old_value != new_value:
             notification_center = NotificationCenter()
-            notification_center.post_notification('GoogleContactsManagerDidChangeState', sender=self, data=NotificationData(prev_state=old_value, state=value))
+            if new_value:
+                notification_center.post_notification('GoogleContactsManagerDidActivate', sender=self)
+            else:
+                notification_center.post_notification('GoogleContactsManagerDidDeactivate', sender=self)
 
-    state = property(_get_state, _set_state)
-    del _get_state, _set_state
-
-    @run_in_green_thread
-    def _initialize(self):
-        self.command_proc = proc.spawn(self._run)
-
-    def _run(self):
-        while True:
-            command = self.command_channel.wait()
-            try:
-                handler = getattr(self, '_CH_%s' % command.name)
-                handler(command)
-            except:
-                self.command_proc = None
-                raise
-
-    def start(self):
-        """
-        Starts the Google contacts manager. This method needs to be called in
-        a green thread.
-        """
-        command = Command('start')
-        self.command_channel.send(command)
-        command.wait()
-
-    def stop(self):
-        """
-        Stops the Google contacts manager. This method blocks until all the
-        operations are stopped and needs to be called in a green thread.
-        """
-        command = Command('stop')
-        self.command_channel.send(command)
-        command.wait()
-
-    # Command handlers
-    #
-
-    def _CH_start(self, command):
-        if self.state != 'stopped':
-            command.signal()
-            return
-        self.state = 'initializing'
-        settings = SIPSimpleSettings()
+    @run_in_gui_thread
+    def _initialize(self):  # object is instantiated from a non-UI thread, while these need to be created in the UI thread
+        self.auth = GoogleAuthorization()
+        self._sync_timer = QTimer()
+        self._sync_timer.setInterval(60 * 1000)  # a minute (in milliseconds)
+        self._sync_timer.setSingleShot(True)
+        self._sync_timer.timeout.connect(self.sync_contacts)
+        try:
+            self.contacts, self._sync_token = pickle.load(open(ApplicationData.get('google/contacts')))
+        except Exception:
+            pass
         notification_center = NotificationCenter()
-        notification_center.post_notification('GoogleContactsManagerWillStart', sender=self)
-        notification_center.add_observer(self, sender=settings, name='CFGSettingsObjectDidChange')
-        if settings.google_contacts.authorization_token is not None:
-            self.active = True
-            notification_center.post_notification('GoogleContactsManagerDidActivate', sender=self)
-            for contact in self.contacts:
-                notification_center.post_notification('GoogleContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
-            self.command_channel.send(Command('initialize'))
-        notification_center.post_notification('GoogleContactsManagerDidStart', sender=self)
-        command.signal()
+        notification_center.add_observer(self, sender=self.auth)
 
-    def _CH_stop(self, command):
-        if self.state == 'stopped':
-            command.signal()
+    @run_in_gui_thread
+    def _start(self):
+        if not self.running:
+            self.running = True
+            self.auth.request_credentials()
+
+    @run_in_gui_thread
+    def _stop(self):
+        if self.running:
+            self.running = False
+            self.auth.view.hide()
+            self._sync_timer.stop()
+            self._terminate()
+
+    @run_in_thread('network-io')
+    def _terminate(self):
+        self.active = False
+
+    @run_in_thread('network-io', scheduled=True)
+    def sync_contacts(self):
+        if not self.active:
             return
-        notification_center = NotificationCenter()
-        notification_center.post_notification('GoogleContactsManagerWillEnd', sender=self)
-        notification_center.remove_observer(self, sender=SIPSimpleSettings(), name='CFGSettingsObjectDidChange')
-        if self.active:
-            self.active = False
-            notification_center.post_notification('GoogleContactsManagerDidDeactivate', sender=self)
-        if self.timer is not None and self.timer.active():
-            self.timer.cancel()
-        self.timer = None
-        self.client = None
-        self.state = 'stopped'
-        self._save_contacts()
-        notification_center.post_notification('GoogleContactsManagerDidEnd', sender=self)
-        command.signal()
 
-    def _CH_initialize(self, command):
-        self.state = 'initializing'
-        if self.timer is not None and self.timer.active():
-            self.timer.cancel()
-        self.timer = None
-        self.state = 'fetching'
-        self.command_channel.send(Command('fetch'))
+        # A person's available attributes:
+        #
+        # person.addresses, person.age_range, person.biographies, person.birthdays, person.bragging_rights, person.cover_photos, person.email_addresses,
+        # person.events, person.genders, person.im_clients, person.interests, person.locales, person.memberships, person.metadata, person.names, person.nicknames,
+        # person.occupations, person.organizations, person.phone_numbers, person.photos, person.relations, person.relationship_interests, person.relationship_statuses,
+        # person.residences, person.skills, person.taglines, person.urls
 
-    def _CH_fetch(self, command):
-        if self.state not in ('insync', 'fetching'):
-            self.not_executed_fetch = command
-            return
-        self.not_executed_fetch = None
-        self.state = 'fetching'
-        if self.timer is not None and self.timer.active():
-            self.timer.cancel()
-        self.timer = None
-
-        settings = SIPSimpleSettings()
-        self.client.auth_token = ClientLoginToken(settings.google_contacts.authorization_token)
+        # request_mask = "person.addresses,person.email_addresses,person.im_clients,person.metadata,person.names,person.organizations,person.phone_numbers,person.photos,person.urls"
+        request_mask = "person.email_addresses,person.im_clients,person.metadata,person.names,person.organizations,person.phone_numbers,person.photos,person.urls"
 
         try:
-            group_id = next(entry.id.text for entry in self.client.get_groups().entry if entry.title.text == 'System Group: My Contacts')
-            if self.need_sync:
-                query = ContactsQuery(feed=self.client.get_feed_uri(kind='contacts'), group=group_id, params={})
-                feed = self.client.get_feed(query.ToUri(), desired_class=ContactsFeed)
-                all_contact_ids = set()
-                while feed:
-                    all_contact_ids.update(entry.id.text for entry in feed.entry)
-                    feed = self.client.get_next(feed) if feed.find_next_link() is not None else None
-                deleted_contacts = [contact for contact in self.contacts if contact.id not in all_contact_ids]
-                self.need_sync = False
-            else:
-                deleted_contacts = []
-            query = ContactsQuery(feed=self.client.get_feed_uri(kind='contacts'), group=group_id, params={'showdeleted': 'true'})
-            if self.contacts.timestamp is not None:
-                query.updated_min = self.contacts.timestamp
-            feed = self.client.get_feed(query.ToUri(), desired_class=ContactsFeed)
-            update_timestamp = feed.updated.text if feed else None
-
-            added_contacts = []
-            updated_contacts = []
-
-            while feed:
-                deleted_contacts.extend(self.contacts[entry.id.text] for entry in feed.entry if entry.deleted and entry.id.text in self.contacts)
-                for entry in (entry for entry in feed.entry if not entry.deleted):
-                    name = entry.title.text
-                    try:
-                        company = entry.organization.name.text
-                    except AttributeError:
-                        company = None
-                    uris = [GoogleContactURI.from_number(number) for number in entry.phone_number]
-                    uris.extend(GoogleContactURI.from_email(email) for email in entry.email)
-                    icon_url, icon_etag = entry.get_entry_photo_data()
-                    try:
-                        contact = self.contacts[entry.id.text]
-                    except KeyError:
-                        if icon_url:
-                            try:
-                                icon_data = self.client.Get(icon_url).read()
-                            except Exception:
-                                icon_data = icon_etag = None
-                        else:
-                            icon_data = icon_etag = None
-                        icon = GoogleContactIcon(icon_data, icon_etag)
-                        contact = GoogleContact(entry.id.text, name, company, icon, uris)
-                        added_contacts.append(contact)
-                    else:
-                        contact.name = name
-                        contact.company = company
-                        contact.uris = GoogleContactURIList(uris)
-                        if icon_url and contact.icon.etag != icon_etag != None:
-                            try:
-                                contact.icon.data = self.client.Get(icon_url).read()
-                            except Exception:
-                                contact.icon.data = None
-                                contact.icon.etag = None
-                            else:
-                                contact.icon.etag = icon_etag
-                        updated_contacts.append(contact)
-                feed = self.client.get_next(feed) if feed.find_next_link() is not None else None
-        except Unauthorized:
-            settings.google_contacts.authorization_token = InvalidToken
-            settings.save()
-        except (ConnectionLost, RequestError, httplib.HTTPException, socket.error):
-            self.timer = self._schedule_command(60, Command('fetch', command.event))
+            connections, sync_token = self._get_connections(sync_token=self._sync_token, request_mask=request_mask)
+        except AccessTokenRefreshError:
+            self.auth.request_credentials()
+            return
+        except HttpError as e:
+            if e.resp.status == 400 and self._sync_token is not None:  # one reason why we get 400 is that the sync token is expired
+                self._sync_token = None
+                self.sync_contacts()
+                return
+            log.warning(u"Could not fetch Google contacts: {!s}".format(e))
+        except socket.error as e:
+            log.warning(u"Could not fetch Google contacts: {!s}".format(e))
         else:
+            added_contacts = []
+            modified_contacts = []
+            deleted_contact_ids = self.contacts.ids - {contact['resourceName'] for contact in connections} if self._sync_token is None else set()
+
+            for contact_data in connections:
+                contact_id = contact_data['resourceName']
+                if contact_data['metadata'].get('deleted') is True:
+                    if contact_id in self.contacts:
+                        deleted_contact_ids.add(contact_id)
+                    continue
+                try:
+                    contact = self.contacts[contact_id]
+                except KeyError:
+                    contact = GoogleContact.from_google_data(contact_data)
+                    if contact.uris:
+                        added_contacts.append(contact)
+                else:
+                    if contact.etag != contact_data['etag']:
+                        contact.update(contact_data)
+                        if contact.uris:
+                            modified_contacts.append(contact)
+                        else:
+                            deleted_contact_ids.add(contact.id)
+
             notification_center = NotificationCenter()
-            for contact in deleted_contacts:
-                self.contacts.pop(contact.id, None)
+            for contact_id in deleted_contact_ids:
+                contact = self.contacts.pop(contact_id)
                 notification_center.post_notification('GoogleContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
             for contact in added_contacts:
                 self.contacts.add(contact)
                 notification_center.post_notification('GoogleContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
-            for contact in updated_contacts:
+            for contact in modified_contacts:
                 notification_center.post_notification('GoogleContactsManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
-            if update_timestamp is not None:
-                self.contacts.timestamp = update_timestamp
-            if added_contacts or updated_contacts or deleted_contacts:
-                self._save_contacts()
-            self.last_fetch_time = datetime.utcnow()
-            self.state = 'insync'
-            self.timer = self._schedule_command(60, Command('fetch'))
-            command.signal()
 
-    # Notification handlers
-    #
+            icon_retrievers = [GoogleContactIconRetriever(contact, self.auth.credentials) for contact in self.contacts if contact.icon.needs_update]
+            for retriever in icon_retrievers:
+                retriever.run()
+            for retriever in icon_retrievers:
+                retriever.wait()
+                notification_center.post_notification('GoogleContactsManagerDidUpdateContact', sender=self, data=NotificationData(contact=retriever.contact))
 
-    @run_in_twisted_thread
+            GoogleContactIconRetriever.threadpool.compact()
+
+            self._sync_token = sync_token
+
+            if added_contacts or modified_contacts or deleted_contact_ids or icon_retrievers:
+                filename = ApplicationData.get('google/contacts')
+                tempname = '{}.{}'.format(filename, os.getpid())
+                try:
+                    makedirs(os.path.dirname(filename))
+                    with open(tempname, 'wb') as f:
+                        pickle.dump((self.contacts, self._sync_token), f)
+                    if sys.platform == 'win32':
+                        unlink(filename)
+                    os.rename(tempname, filename)
+                except Exception, e:
+                    log.error("could not save google contacts: %s" % e)
+
+        call_in_gui_thread(self._sync_timer.start)
+
+    def _get_connections(self, sync_token=None, request_mask=None):
+        connections = []
+        sync_tokens = []
+        request = self._service.people().connections().list(resourceName='people/me', syncToken=sync_token, requestMask_includeField=request_mask, pageSize=500)
+        while request is not None:
+            response = request.execute()
+            connections.extend(response.get('connections', []))
+            sync_tokens.append(response['nextSyncToken'])
+            request = self._service.people().connections().list_next(request, response)
+        sync_tokens.append(sync_token)  # in case we got no new sync token in the responses, use the previous one
+        return connections, sync_tokens[0]
+
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _NH_GoogleAuthorizationWasAccepted(self, notification):
+        settings = SIPSimpleSettings()
+        settings.google_contacts.username = notification.data.email
+        settings.save()
+        self._service = build('people', 'v1', credentials=notification.data.credentials, http=Http(timeout=10))
+        self.active = True
+        self.sync_contacts()  # sync_contacts is always scheduled in order to not queue posting notifications until after sync_contacts finishes, when called from a notification handler
+
+    def _NH_GoogleAuthorizationWasRejected(self, notification):
+        self._service = None
+        self.active = False
+        self.running = False
+        settings = SIPSimpleSettings()
+        settings.google_contacts.enabled = False
+        settings.save()
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        settings = SIPSimpleSettings()
+        if settings.google_contacts.enabled:
+            self._start()
+
+    def _NH_SIPApplicationWillEnd(self, notification):
+        self._stop()
+
     def _NH_CFGSettingsObjectDidChange(self, notification):
-        if 'google_contacts.authorization_token' in notification.data.modified:
-            if self.timer is not None and self.timer.active():
-                self.timer.cancel()
-            self.timer = None
-            authorization_token = notification.sender.google_contacts.authorization_token
-            if authorization_token is not None:
-                if not self.active:
-                    self.active = True
-                    notification.center.post_notification('GoogleContactsManagerDidActivate', sender=self)
-                    for contact in self.contacts:
-                        notification.center.post_notification('GoogleContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
-                self.need_sync = True
-                self.command_channel.send(Command('initialize'))
+        if 'google_contacts.enabled' in notification.data.modified:
+            if notification.sender.google_contacts.enabled:
+                self._start()
             else:
-                if self.active:
-                    self.active = False
-                    for contact in self.contacts:
-                        notification.center.post_notification('GoogleContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
-                    notification.center.post_notification('GoogleContactsManagerDidDeactivate', sender=self)
-
-    def _save_contacts(self):
-        contacts_filename = ApplicationData.get('google_contacts')
-        contacts_tempname = contacts_filename + '.tmp'
-        try:
-            file = open(contacts_tempname, 'wb')
-            pickle.dump(self.contacts, file)
-            file.close()
-            if sys.platform == 'win32':
-                unlink(contacts_filename)
-            os.rename(contacts_tempname, contacts_filename)
-        except Exception, e:
-            log.error("could not save google contacts: %s" % e)
-
-    def _schedule_command(self, timeout, command):
-        timer = reactor.callLater(timeout, self.command_channel.send, command)
-        timer.command = command
-        return timer
+                self._stop()
 
 
 class GoogleContactsGroup(VirtualGroup):
@@ -840,19 +1000,14 @@ class GoogleContactsGroup(VirtualGroup):
     def __init__(self):
         self.__manager__ = GoogleContactsManager()
         notification_center = NotificationCenter()
-        notification_center.add_observer(self, name='SIPApplicationWillEnd')
         notification_center.add_observer(self, sender=self.__manager__)
-        call_in_green_thread(self.__manager__.start)
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_SIPApplicationWillEnd(self, notification):
-        call_in_green_thread(self.__manager__.stop)
-
     def _NH_GoogleContactsManagerDidActivate(self, notification):
-        notification.center.post_notification('VirtualGroupWasActivated', sender=self)
+        notification.center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=list(self.contacts)))
 
     def _NH_GoogleContactsManagerDidDeactivate(self, notification):
         notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
@@ -1143,7 +1298,7 @@ class Contact(object):
         if self.type == 'bonjour':
             return '%s (%s)' % (self.settings.name, self.settings.hostname)
         elif self.type == 'google':
-            return self.settings.name or self.settings.company or u''
+            return self.settings.name or self.settings.organization or u''
         else:
             return self.settings.name
 
@@ -1303,7 +1458,7 @@ class ContactDetail(object):
         if self.type == 'bonjour':
             return '%s (%s)' % (self.settings.name, self.settings.hostname)
         elif self.type == 'google':
-            return self.settings.name or self.settings.company
+            return self.settings.name or self.settings.organization or u''
         else:
             return self.settings.name
 
@@ -1454,162 +1609,6 @@ class ContactURI(object):
         modified_default = notification.data.modified.get('uris.default', Null)
         if self.uri.id in modified_uris.modified or self.uri in (modified_default.old, modified_default.new) and self.uri not in modified_uris.removed:
             notification.center.post_notification('BlinkContactURIDidChange', sender=self)
-
-
-class CaptchaRequired:    __metaclass__ = MarkerType
-class AuthorizationError: __metaclass__ = MarkerType
-class ConnectionError:    __metaclass__ = MarkerType
-class AuthorizationOk:    __metaclass__ = MarkerType
-
-
-class GoogleAuthorizationData(object):
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-    def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, ', '.join('%s=%r' % (name, value) for name, value in self.__dict__.iteritems()))
-
-
-ui_class, base_class = uic.loadUiType(Resources.get('google_contacts_dialog.ui'))
-
-
-class GoogleContactsDialog(base_class, ui_class):
-    __metaclass__ = QSingleton
-
-    def __init__(self, parent=None):
-        super(GoogleContactsDialog, self).__init__(parent)
-        with Resources.directory:
-            self.setupUi(self)
-
-        self.authorize_button.clicked.connect(self._SH_AuthorizeButtonClicked)
-        self.captcha_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
-        self.username_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
-        self.password_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
-        self.rejected.connect(self._SH_DialogRejected)
-
-        self.captcha_editor.regexp = re.compile('^.+$')
-        self.username_editor.regexp = re.compile('^.+$')
-        self.password_editor.regexp = re.compile('^.+$')
-
-        self.captcha_token = None
-
-    def show_captcha(self, image_data):
-        pixmap = QPixmap()
-        if pixmap.loadFromData(image_data):
-            pixmap = pixmap.scaled(200, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.captcha_label.setVisible(True)
-        self.captcha_editor.setVisible(True)
-        self.captcha_image_label.setVisible(True)
-        self.captcha_image_label.setPixmap(pixmap)
-        self.captcha_editor.setText(u'')
-        self.captcha_editor.setFocus()
-
-    def hide_captcha(self):
-        self.captcha_label.setVisible(False)
-        self.captcha_editor.setVisible(False)
-        self.captcha_image_label.setVisible(False)
-
-    def open(self):
-        settings = SIPSimpleSettings()
-        username = settings.google_contacts.username or u''
-        self.username_editor.setEnabled(True)
-        self.username_editor.setText(username)
-        self.password_editor.setText(u'')
-        self.hide_captcha()
-        if username:
-            self.password_editor.setFocus()
-        else:
-            self.username_editor.setFocus()
-        self.show()
-
-    def open_for_incorrect_password(self):
-        red = '#cc0000'
-        settings = SIPSimpleSettings()
-        self.username_editor.setEnabled(False)
-        self.username_editor.setText(settings.google_contacts.username)
-        self.status_label.value = Status('Error authenticating with Google. Please enter your password:', color=red)
-        self.hide_captcha()
-        self.password_editor.setFocus()
-        self.show()
-
-    @run_in_green_thread
-    def _authorize_google_account(self):
-        captcha_response = self.captcha_editor.text() if self.captcha_token else None
-        username = self.username_editor.text()
-        password = self.password_editor.text()
-        client = ContactsClient()
-        try:
-            client.client_login(email=username, password=password, source=QApplication.applicationName(), captcha_token=self.captcha_token, captcha_response=captcha_response)
-        except CaptchaChallenge, e:
-            try:
-                captcha_data = urllib2.urlopen(e.captcha_url).read()
-            except (urllib2.HTTPError, urllib2.URLError):
-                self.captcha_token = None
-                self._process_authorization_reply(ConnectionError)
-            else:
-                self.captcha_token = e.captcha_token
-                self._process_authorization_reply(CaptchaRequired, data=GoogleAuthorizationData(captcha_image=captcha_data))
-        except RequestError:
-            self.captcha_token = None
-            self._process_authorization_reply(AuthorizationError)
-        except Exception:
-            self.captcha_token = None
-            self._process_authorization_reply(ConnectionError)
-        else:
-            self.captcha_token = None
-            settings = SIPSimpleSettings()
-            settings.google_contacts.authorization_token = AuthorizationToken(client.auth_token.token_string)
-            settings.google_contacts.username = username
-            settings.save()
-            self._process_authorization_reply(AuthorizationOk)
-
-    @run_in_gui_thread
-    def _process_authorization_reply(self, reply, data=GoogleAuthorizationData()):
-        red = '#cc0000'
-        self.setEnabled(True)
-        if reply is CaptchaRequired:
-            self.username_editor.setEnabled(False)
-            self.show_captcha(data.captcha_image)
-            self.status_label.value = Status('Answer captcha to confirm authentication', color=red)
-        elif reply is AuthorizationError:
-            self.username_editor.setEnabled(True)
-            self.hide_captcha()
-            self.status_label.value = Status('Error authenticating with Google', color=red)
-            self.password_editor.setFocus()
-        elif reply is ConnectionError:
-            self.username_editor.setEnabled(True)
-            self.hide_captcha()
-            self.status_label.value = Status('Error connecting with Google', color=red)
-            self.password_editor.setFocus()
-        elif reply is AuthorizationOk:
-            self.accept()
-        else:
-            raise ValueError("Unknown reply: %r" % reply)
-
-    def _SH_AuthorizeButtonClicked(self):
-        self.status_label.value = Status('Contacting Google server...')
-        self.setEnabled(False)
-        self._authorize_google_account()
-
-    @run_in_twisted_thread
-    def _SH_DialogRejected(self):
-        settings = SIPSimpleSettings()
-        settings.google_contacts.authorization_token = None
-        settings.save()
-        self.captcha_token = None
-
-    def _SH_ValidityStatusChanged(self):
-        red = '#cc0000'
-        if not self.username_editor.text_valid:
-            self.status_label.value = Status('Please specify your Google account username', color=red)
-        elif not self.password_editor.text_valid:
-            self.status_label.value = Status('Please specify your Google account password', color=red)
-        elif self.captcha_editor.isVisible() and not self.captcha_editor.text_valid:
-            self.status_label.value = Status('Please insert the text in the image below', color=red)
-        else:
-            self.status_label.value = None
-        self.authorize_button.setEnabled(self.username_editor.text_valid and self.password_editor.text_valid and (True if not self.captcha_editor.isVisible() else self.captcha_editor.text_valid))
-
-del ui_class, base_class
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('contact.ui'))
@@ -2534,7 +2533,10 @@ class ContactModel(QAbstractListModel):
             self.addContact(Contact(contact, group))
 
     def _NH_VirtualGroupWasActivated(self, notification):
-        self.addGroup(Group(notification.sender))
+        group = Group(notification.sender)
+        self.addGroup(group)
+        for contact in notification.data.contacts:
+            self.addContact(Contact(contact, group))
 
     def _NH_VirtualGroupWasDeactivated(self, notification):
         group = self.items[GroupElement, notification.sender]

@@ -1,9 +1,6 @@
 
 """Definitions for datatypes used in configuration extensions."""
 
-__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'AuthorizationToken', 'InvalidToken',
-           'IconDescriptor', 'PresenceState', 'PresenceStateList', 'GraphTimeScale']
-
 import os
 import re
 
@@ -14,6 +11,9 @@ from application.python.types import MarkerType
 from sipsimple.configuration.datatypes import Hostname, List
 
 from blink.resources import ApplicationData
+
+
+__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'IconDescriptor', 'PresenceState', 'PresenceStateList', 'GraphTimeScale']
 
 
 class ApplicationDataPath(unicode):
@@ -61,6 +61,7 @@ class SoundFile(object):
 
 
 class DefaultPath: __metaclass__ = MarkerType
+
 
 class CustomSoundFile(object): # check if this data type is still needed -Dan
     def __init__(self, path=DefaultPath, volume=100):
@@ -111,29 +112,6 @@ class HTTPURL(unicode):
         if url.port is not None and not (0 < url.port < 65536):
             raise ValueError("illegal port value: %d" % url.port)
         return value
-
-
-class AuthorizationTokenMeta(type):
-    def __init__(cls, name, bases, dic):
-        super(AuthorizationTokenMeta, cls).__init__(name, bases, dic)
-        cls._instances = {}
-    def __call__(cls, *args):
-        if len(args) > 1:
-            raise TypeError('%s() takes at most 1 argument (%d given)' % (cls.__name__, len(args)))
-        key = args[0] if args else ''
-        if key not in cls._instances:
-            cls._instances[key] = super(AuthorizationTokenMeta, cls).__call__(*args)
-        return cls._instances[key]
-
-class AuthorizationToken(str):
-    __metaclass__ = AuthorizationTokenMeta
-    def __repr__(self):
-        if self is InvalidToken:
-            return 'InvalidToken'
-        else:
-            return '%s(%s)' % (self.__class__.__name__, str.__repr__(self))
-
-InvalidToken = AuthorizationToken() # a valid token is never empty
 
 
 class FileURL(unicode):

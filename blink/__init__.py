@@ -41,7 +41,6 @@ except ImportError:
 from blink.chatwindow import ChatWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.addressbook import ContactExtension, GroupExtension
-from blink.configuration.datatypes import InvalidToken
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.logging import LogManager
 from blink.mainwindow import MainWindow
@@ -293,8 +292,6 @@ class Blink(QApplication):
         accounts = AccountManager().get_accounts()
         if not accounts or (self.first_run and accounts == [BonjourAccount()]):
             self.main_window.preferences_window.show_create_account_dialog()
-        if settings.google_contacts.authorization_token is InvalidToken:
-            self.main_window.google_contacts_dialog.open_for_incorrect_password()
         self.update_manager.initialize()
 
     def _NH_SIPApplicationWillEnd(self, notification):

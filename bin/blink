@@ -3,6 +3,9 @@
 import os
 import sys
 
+from application import log
+log.level.current = log.level.WARNING
+
 frozen = hasattr(sys, 'frozen')
 
 # We need to mangle Python's import path in case blink is run directly from
