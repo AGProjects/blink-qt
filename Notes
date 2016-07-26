@@ -35,11 +35,6 @@ Code refactoring
 
 + do not kill greenlets but interrupt commands instead (sipsimple)
 - refactor how models/dialogs/windows are created and where are they kept
-- GoogleContactManager.enable_captcha should be decorated to run in the gui thread
-- GoogleContactManager._set_captcha_image should be decorated to run in the gui thread
-- _authorize_google_account from google dialog needs refactoring
-- saving settings should be probably done in an auxiliary thread not the green thread
-- rename main_window.google_contacts_dialog to something else
 
 Issues
 ------
