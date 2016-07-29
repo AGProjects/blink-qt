@@ -174,13 +174,13 @@ class PresencePublicationHandler(object):
         if notification.sender is BlinkSettings():
             account_manager = AccountManager()
             if 'presence.offline_note' in notification.data.modified:
-                for account in (account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered):
+                for account in (account for account in account_manager.get_accounts() if account.enabled and account.xcap_available):
                     state = BlinkPresenceState(account).offline_state
                     account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
             if 'presence.icon' in notification.data.modified:
                 icon_data = IconManager().get_image('avatar')
                 icon = Icon(icon_data, 'image/png') if icon_data is not None else None
-                for account in (account for account in account_manager.get_accounts() if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered):
+                for account in (account for account in account_manager.get_accounts() if account.enabled and account.xcap_available):
                     account.xcap_manager.set_status_icon(icon)
             if 'presence.current_state' in notification.data.modified:
                 for account in (account for account in account_manager.get_accounts() if account.enabled and account.presence.enabled):
@@ -192,7 +192,7 @@ class PresencePublicationHandler(object):
                 account.save()
             elif {'presence.enabled', 'display_name', 'xcap.icon'}.intersection(notification.data.modified) and account.presence.enabled:
                 account.presence_state = BlinkPresenceState(account).online_state
-                if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered:
+                if account.enabled and account.xcap_available:
                     state = BlinkPresenceState(account).offline_state
                     account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
 
