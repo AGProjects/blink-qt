@@ -78,6 +78,8 @@ class BlinkPresenceState(object):
             service.contact = str(self.account.uri)
             service.timestamp = timestamp
             service.capabilities = caps.ServiceCapabilities()
+            service.display_name = self.account.display_name or None
+            service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon is not None else None
             doc.add(service)
         else:
             settings = SIPSimpleSettings()
