@@ -139,6 +139,8 @@ class BlinkPresenceState(object):
         service.contact = str(self.account.uri)
         service.timestamp = timestamp
         service.capabilities = caps.ServiceCapabilities()
+        service.display_name = self.account.display_name or None
+        service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon is not None else None
         service.notes.add(blink_settings.presence.offline_note)
         doc.add(service)
 
@@ -190,6 +192,9 @@ class PresencePublicationHandler(object):
                 account.save()
             elif {'presence.enabled', 'display_name', 'xcap.icon'}.intersection(notification.data.modified) and account.presence.enabled:
                 account.presence_state = BlinkPresenceState(account).online_state
+                if hasattr(account, 'xcap') and account.enabled and account.xcap.enabled and account.xcap.discovered:
+                    state = BlinkPresenceState(account).offline_state
+                    account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
 
     def _NH_SIPAccountWillActivate(self, notification):
         account = notification.sender
