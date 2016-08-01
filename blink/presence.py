@@ -117,10 +117,10 @@ class BlinkPresenceState(object):
 
     @property
     def offline_state(self):
-        blink_settings = BlinkSettings()
-
-        if self.account is BonjourAccount() or not blink_settings.presence.offline_note:
+        if self.account is BonjourAccount():
             return None
+
+        blink_settings = BlinkSettings()
 
         account_id = hashlib.md5(self.account.id).hexdigest()
         timestamp = ISOTimestamp.now()
@@ -141,7 +141,8 @@ class BlinkPresenceState(object):
         service.capabilities = caps.ServiceCapabilities()
         service.display_name = self.account.display_name or None
         service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon is not None else None
-        service.notes.add(blink_settings.presence.offline_note)
+        if blink_settings.presence.offline_note:
+            service.notes.add(blink_settings.presence.offline_note)
         doc.add(service)
 
         return doc
@@ -149,6 +150,9 @@ class BlinkPresenceState(object):
 
 class PresencePublicationHandler(object):
     implements(IObserver)
+
+    def __init__(self):
+        self._should_set_offline_status = set()
 
     def start(self):
         notification_center = NotificationCenter()
@@ -192,9 +196,11 @@ class PresencePublicationHandler(object):
                 account.save()
             elif {'presence.enabled', 'display_name', 'xcap.icon'}.intersection(notification.data.modified) and account.presence.enabled:
                 account.presence_state = BlinkPresenceState(account).online_state
-                if account.enabled and account.xcap_available:
+                if account.enabled and account.xcap_available and (set(notification.data.modified) != {'xcap.icon'} or account.id in self._should_set_offline_status):
                     state = BlinkPresenceState(account).offline_state
                     account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
+                if account.id in self._should_set_offline_status:  # do not use set.discard() here to avoid race conditions. it should only be removed if present.
+                    self._should_set_offline_status.remove(account.id)
 
     def _NH_SIPAccountWillActivate(self, notification):
         account = notification.sender
@@ -259,6 +265,13 @@ class PresencePublicationHandler(object):
         blink_settings.presence.offline_note = offline_note
         blink_settings.save()
 
+        try:
+            offline_icon = next(service.icon for service in offline_status.pidf.services)
+        except (AttributeError, StopIteration):
+            offline_icon_hash = None
+        else:
+            offline_icon_hash = str(offline_icon).partition('#blink-icon')[2] or None
+
         if status_icon:
             icon_hash = hashlib.sha1(status_icon.data).hexdigest()
             icon_desc = IconDescriptor(status_icon.url, icon_hash)
@@ -266,7 +279,14 @@ class PresencePublicationHandler(object):
                 icon = icon_manager.store_data('avatar', status_icon.data)
                 blink_settings.presence.icon = IconDescriptor(FileURL(icon.filename), icon_hash) if icon is not None else None
                 blink_settings.save()
+            elif account.xcap.icon != icon_desc and icon_hash != offline_icon_hash:
+                self._should_set_offline_status.add(account.id)
         else:
+            if blink_settings.presence.icon is None is not account.xcap.icon:
+                self._should_set_offline_status.add(account.id)
+            elif blink_settings.presence.icon is account.xcap.icon is offline_status is None and account.xcap_manager.pidf_manipulation.supported:
+                state = BlinkPresenceState(account).offline_state
+                account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
             icon_desc = None
             icon_manager.remove('avatar')
             blink_settings.presence.icon = None
