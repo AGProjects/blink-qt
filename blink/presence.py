@@ -242,11 +242,9 @@ class PresencePublicationHandler(object):
 
     def _NH_SIPAccountDidDiscoverXCAPSupport(self, notification):
         account = notification.sender
-        with account.xcap_manager.transaction():
-            state = BlinkPresenceState(account).offline_state
-            icon_data = IconManager().get_image('avatar')
-            account.xcap_manager.set_offline_status(OfflineStatus(state) if state is not None else None)
-            account.xcap_manager.set_status_icon(Icon(icon_data, 'image/png') if icon_data is not None else None)
+        icon_data = IconManager().get_image('avatar')
+        if icon_data is not None:
+            account.xcap_manager.set_status_icon(Icon(icon_data, 'image/png'))
 
     @run_in_gui_thread
     def _NH_XCAPManagerDidReloadData(self, notification):
