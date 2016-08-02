@@ -878,7 +878,7 @@ class GoogleContactsManager(object):
                 self.sync_contacts()
                 return
             log.warning(u"Could not fetch Google contacts: {!s}".format(e))
-        except socket.error as e:
+        except (HttpLib2Error, socket.error) as e:
             log.warning(u"Could not fetch Google contacts: {!s}".format(e))
         else:
             added_contacts = []
