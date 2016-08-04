@@ -2817,9 +2817,11 @@ class ContactModel(QAbstractListModel):
             elif item.group.settings is all_contacts_group:
                 removed_items.append(item.settings)
                 group_ids = [contact.group.settings.id for contact in self.iter_contacts() if contact.settings is item.settings and not contact.group.virtual]
-                icon = icon_manager.get_image(item.settings.id)
-                alternate_icon = icon_manager.get_image(item.settings.id + '_alt')
-                undo_operations.append(AddContactOperation(contact=RecallState(item.settings), group_ids=group_ids, icon=icon, alternate_icon=alternate_icon))
+                icon = icon_manager.get(item.settings.id)
+                icon_data = icon and icon.content
+                alternate_icon = icon_manager.get(item.settings.id + '_alt')
+                alternate_icon_data = alternate_icon and alternate_icon.content
+                undo_operations.append(AddContactOperation(contact=RecallState(item.settings), group_ids=group_ids, icon=icon_data, alternate_icon=alternate_icon_data))
             elif item.group.settings not in removed_items:
                 item.group.settings.contacts.remove(item.settings)
                 removed_members.append(item.group.settings)

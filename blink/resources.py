@@ -7,13 +7,12 @@ import os
 import platform
 import sys
 
-from PyQt4.QtCore import Qt, QBuffer, QThread
-from PyQt4.QtGui  import QApplication, QIcon, QPixmap
+from PyQt4.QtCore import Qt, QBuffer
+from PyQt4.QtGui  import QIcon, QPixmap
 
 from application.python.descriptor import classproperty
 from application.python.types import Singleton
 from application.system import makedirs, unlink
-from threading import Event
 
 from sipsimple.configuration.datatypes import Path
 from blink.util import run_in_gui_thread
@@ -92,6 +91,7 @@ class IconManager(object):
     def __init__(self):
         self.iconmap = {}
 
+    @run_in_gui_thread(wait=True)
     def get(self, id):
         try:
             return self.iconmap[id]
@@ -107,31 +107,12 @@ class IconManager(object):
                 icon = QIcon(pixmap)
                 icon.filename = filename
                 icon.content = data
+                icon.content_type = 'image/png'
             else:
                 icon = None
             return self.iconmap.setdefault(id, icon)
 
-    def get_image(self, id):
-        application = QApplication.instance()
-        if QThread.currentThread() is application.thread():
-            icon = self.get(id)
-        else:
-            @run_in_gui_thread
-            def get_icon(id, event):
-                try:
-                    event.icon = self.get(id)
-                except:
-                    event.icon = None
-                finally:
-                    event.set()
-            event = Event()
-            get_icon(id, event)
-            event.wait()
-            icon = event.icon
-        if icon is None:
-            return None
-        return icon.content
-
+    @run_in_gui_thread(wait=True)
     def store_data(self, id, data):
         directory = ApplicationData.get('images')
         filename = os.path.join(directory, id + '.png')
@@ -150,12 +131,14 @@ class IconManager(object):
             icon = QIcon(pixmap)
             icon.filename = filename
             icon.content = data
+            icon.content_type = 'image/png'
         else:
             unlink(filename)
             icon = None
         self.iconmap[id] = icon
         return icon
 
+    @run_in_gui_thread(wait=True)
     def store_file(self, id, file):
         directory = ApplicationData.get('images')
         filename = os.path.join(directory, id + '.png')
@@ -174,12 +157,14 @@ class IconManager(object):
             icon = QIcon(pixmap)
             icon.filename = filename
             icon.content = data
+            icon.content_type = 'image/png'
         else:
             unlink(filename)
             icon = None
         self.iconmap[id] = icon
         return icon
 
+    @run_in_gui_thread(wait=True)
     def remove(self, id):
         self.iconmap.pop(id, None)
         unlink(ApplicationData.get(os.path.join('images', id + '.png')))
