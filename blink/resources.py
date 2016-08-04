@@ -93,6 +93,7 @@ class IconManager(object):
 
     @run_in_gui_thread(wait=True)
     def get(self, id):
+        id = id.replace('/', '_')
         try:
             return self.iconmap[id]
         except KeyError:
@@ -114,6 +115,7 @@ class IconManager(object):
 
     @run_in_gui_thread(wait=True)
     def store_data(self, id, data):
+        id = id.replace('/', '_')
         directory = ApplicationData.get('images')
         filename = os.path.join(directory, id + '.png')
         makedirs(directory)
@@ -140,6 +142,7 @@ class IconManager(object):
 
     @run_in_gui_thread(wait=True)
     def store_file(self, id, file):
+        id = id.replace('/', '_')
         directory = ApplicationData.get('images')
         filename = os.path.join(directory, id + '.png')
         if filename == os.path.normpath(file):
@@ -166,6 +169,7 @@ class IconManager(object):
 
     @run_in_gui_thread(wait=True)
     def remove(self, id):
+        id = id.replace('/', '_')
         self.iconmap.pop(id, None)
         unlink(ApplicationData.get(os.path.join('images', id + '.png')))
 

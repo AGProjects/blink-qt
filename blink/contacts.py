@@ -440,13 +440,6 @@ class GoogleContactID(unicode):
     pass
 
 
-class GoogleContactIconData(bytes):
-    def __new__(cls, data, url):
-        instance = super(GoogleContactIconData, cls).__new__(cls, data)
-        instance.url = url
-        return instance
-
-
 class GoogleContactIconMetadata(object):
     def __init__(self, metadata):
         metadata = metadata or {'source': {'id': None, 'type': None}}
@@ -457,31 +450,10 @@ class GoogleContactIconMetadata(object):
 
 
 class GoogleContactIcon(object):
-    def __init__(self, url, metadata, data=None):
+    def __init__(self, url, metadata):
         self.url = url
         self.metadata = GoogleContactIconMetadata(metadata)
-        self.data = data
-
-    @property
-    def url(self):
-        return self.__dict__['url']
-
-    @url.setter
-    def url(self, value):
-        old_value = self.__dict__.get('url')
-        new_value = self.__dict__['url'] = value
-        if old_value != new_value is None:
-            self.data = None
-
-    @property
-    def data(self):
-        return self.__dict__['data']
-
-    @data.setter
-    def data(self, value):
-        if not isinstance(value, (GoogleContactIconData, type(None))):
-            raise TypeError("data must be an instance of GoogleContactIconData or None")
-        self.__dict__['data'] = value
+        self.downloaded_url = None
 
     @property
     def alternate_url(self):
@@ -492,7 +464,7 @@ class GoogleContactIcon(object):
 
     @property
     def needs_update(self):
-        return self.url is not None and (self.data is None or self.data.url != self.url)
+        return self.url != self.downloaded_url
 
 
 class GoogleContactIconRetriever(object):
@@ -512,12 +484,25 @@ class GoogleContactIconRetriever(object):
         icon = self.contact.icon
         http = self.credentials.authorize(Http(timeout=5))
         try:
-            response, content = http.request(icon.url+'?size=96')
+            if icon.url is not None:
+                response, content = http.request(icon.url+'?size={}'.format(IconManager.max_size))
+            else:
+                response = content = None
         except (HttpLib2Error, socket.error) as e:
             log.warning(u"could not retrieve icon for {}: {!s}".format(self.contact.name, e))
         else:
-            if response['status'] == '200' and response['content-type'].startswith('image/'):
-                icon.data = GoogleContactIconData(content, icon.url)
+            if response is None:
+                icon_manager = IconManager()
+                icon_manager.store_data(self.contact.id, None)
+                icon.downloaded_url = None
+            elif response['status'] == '200' and response['content-type'].startswith('image/'):
+                icon_manager = IconManager()
+                try:
+                    icon_manager.store_data(self.contact.id, content)
+                except Exception as e:
+                    log.error(u"could not store icon for {}: {!s}".format(self.contact.name, e))
+                else:
+                    icon.downloaded_url = icon.url
             elif response['status'] == '403' and icon.alternate_url:  # private photo. use old GData protocol if alternate_url is available
                 try:
                     response, content = http.request(icon.alternate_url, headers={'GData-Version': '3.0'})
@@ -525,7 +510,13 @@ class GoogleContactIconRetriever(object):
                     log.warning(u"could not retrieve icon for {}: {!s}".format(self.contact.name, e))
                 else:
                     if response['status'] == '200' and response['content-type'].startswith('image/'):
-                        icon.data = GoogleContactIconData(content, icon.url)
+                        icon_manager = IconManager()
+                        try:
+                            icon_manager.store_data(self.contact.id, content)
+                        except Exception as e:
+                            log.error(u"could not store icon for {}: {!s}".format(self.contact.name, e))
+                        else:
+                            icon.downloaded_url = icon.url
                     else:
                         log.error(u"could not retrieve icon for {} (status={}, content type={})".format(self.contact.name, response['status'], response['content-type']))
             else:
@@ -1348,12 +1339,8 @@ class Contact(object):
                 icon_manager = IconManager()
                 icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
             elif self.type == 'google':
-                pixmap = QPixmap()
-                if pixmap.loadFromData(self.settings.icon.data):
-                    icon = QIcon(pixmap)
-                    icon.filename = None  # TODO: cache icons to disk -Saul
-                else:
-                    icon = self.default_user_icon
+                icon_manager = IconManager()
+                icon = icon_manager.get(self.settings.id) or self.default_user_icon
             else:
                 icon = self.default_user_icon
             return self.__dict__.setdefault('icon', icon)
@@ -1508,11 +1495,8 @@ class ContactDetail(object):
                 icon_manager = IconManager()
                 icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
             elif self.type == 'google':
-                pixmap = QPixmap()
-                if pixmap.loadFromData(self.settings.icon.data):
-                    icon = QIcon(pixmap)
-                else:
-                    icon = self.default_user_icon
+                icon_manager = IconManager()
+                icon = icon_manager.get(self.settings.id) or self.default_user_icon
             else:
                 icon = self.default_user_icon
             return self.__dict__.setdefault('icon', icon)
@@ -2553,6 +2537,9 @@ class ContactModel(QAbstractListModel):
             icon_manager = IconManager()
             icon_manager.remove(contact.settings.id)
             icon_manager.remove(contact.settings.id + '_alt')
+        elif notification.sender is GoogleContactsGroup():
+            icon_manager = IconManager()
+            icon_manager.remove(contact.settings.id)
 
     def _NH_BlinkContactDidChange(self, notification):
         contact = notification.sender
