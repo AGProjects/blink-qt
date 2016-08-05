@@ -855,7 +855,6 @@ class GoogleContactsManager(object):
         # person.occupations, person.organizations, person.phone_numbers, person.photos, person.relations, person.relationship_interests, person.relationship_statuses,
         # person.residences, person.skills, person.taglines, person.urls
 
-        # request_mask = "person.addresses,person.email_addresses,person.im_clients,person.metadata,person.names,person.organizations,person.phone_numbers,person.photos,person.urls"
         request_mask = "person.email_addresses,person.im_clients,person.metadata,person.names,person.organizations,person.phone_numbers,person.photos,person.urls"
 
         try:
