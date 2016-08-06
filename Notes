@@ -9,7 +9,6 @@ ZRTP
 Video fixes
 -----------
 
-- global screenshots/download directory (for all sections)
 - consider if we should always show the mute/hold/close buttons (even in
   attached mode)?
 - run the preview at the normal framerate before we connect (while big)?
