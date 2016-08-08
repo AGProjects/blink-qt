@@ -1079,6 +1079,11 @@ class DummyContact(object):
         return self.__class__, (self.name, self.uris)
 
 
+class RelocationInfo(object):
+    def __init__(self, successor):
+        self.successor = successor
+
+
 class Group(object):
     implements(IObserver)
 
@@ -1094,7 +1099,7 @@ class Group(object):
         self.settings = group
         self.widget = Null
         self.saved_state = None
-        self.reference_group = None
+        self.relocation_info = None
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=group)
 
@@ -1102,7 +1107,7 @@ class Group(object):
         return "%s(%r)" % (self.__class__.__name__, self.settings)
 
     def __getstate__(self):
-        return self.settings.id, dict(widget=Null, saved_state=self.saved_state, reference_group=self.reference_group)
+        return self.settings.id, dict(widget=Null, saved_state=self.saved_state, relocation_info=self.relocation_info)
 
     def __setstate__(self, state):
         group_id, state = state
@@ -2394,7 +2399,7 @@ class ContactModel(QAbstractListModel):
                 self.contact_list.setRowHidden(position+index, item.group.collapsed)
         bonjour_group = self.bonjour_group
         if bonjour_group in moved_groups:
-            bonjour_group.reference_group = None
+            bonjour_group.relocation_info = None
         self._update_group_positions()
         return True
 
@@ -2557,11 +2562,11 @@ class ContactModel(QAbstractListModel):
             groups = self.items[GroupList]
             bonjour_group = self.bonjour_group
             try:
-                bonjour_group.reference_group = groups[groups.index(bonjour_group)+1]
+                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group)+1])
             except IndexError:
-                bonjour_group.reference_group = None
+                bonjour_group.relocation_info = RelocationInfo(successor=None)
             if bonjour_group is not groups[0]:
-                self.moveGroup(bonjour_group, groups[0])
+                self.moveGroup(bonjour_group, successor=groups[0])
             bonjour_group.expand()
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
@@ -2571,17 +2576,17 @@ class ContactModel(QAbstractListModel):
             groups = self.items[GroupList]
             bonjour_group = self.bonjour_group
             try:
-                bonjour_group.reference_group = groups[groups.index(bonjour_group)+1]
+                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group)+1])
             except IndexError:
-                bonjour_group.reference_group = None
+                bonjour_group.relocation_info = RelocationInfo(successor=None)
             if bonjour_group is not groups[0]:
-                self.moveGroup(bonjour_group, groups[0])
+                self.moveGroup(bonjour_group, successor=groups[0])
             bonjour_group.expand()
         elif old_account is BonjourAccount() and old_account.enabled:
             bonjour_group = self.bonjour_group
-            if bonjour_group.reference_group is not None:
-                self.moveGroup(bonjour_group, bonjour_group.reference_group)
-                bonjour_group.reference_group = None
+            if bonjour_group.relocation_info is not None:
+                self.moveGroup(bonjour_group, successor=bonjour_group.relocation_info.successor)
+                bonjour_group.relocation_info = None
             bonjour_group.reset_state()
 
     def _NH_AddressbookContactDidChange(self, notification):
@@ -2690,9 +2695,11 @@ class ContactModel(QAbstractListModel):
 
     def _find_group_insertion_point(self, group):
         for item in self.items[GroupList]:
-            if item.settings.position >= group.settings.position:
+            if item.relocation_info is None and item.settings.position >= group.settings.position:
                 position = self.items.index(item)
                 break
+            elif item.relocation_info is not None and item.settings.position == group.settings.position - 1:
+                item.relocation_info.successor = group
         else:
             position = len(self.items)
         return position
@@ -2744,9 +2751,12 @@ class ContactModel(QAbstractListModel):
             return
         groups = self.items[GroupList]
         bonjour_group = self.bonjour_group
-        if bonjour_group is groups[0] and bonjour_group.reference_group is not None:
+        if bonjour_group is groups[0] and bonjour_group.relocation_info is not None:
             groups.pop(0)
-            groups.insert(groups.index(bonjour_group.reference_group), bonjour_group)
+            if bonjour_group.relocation_info.successor is not None:
+                groups.insert(groups.index(bonjour_group.relocation_info.successor), bonjour_group)
+            else:
+                groups.append(bonjour_group)
         for position, group in enumerate(groups):
             group.settings.position = position
             group.settings.save()
@@ -2778,12 +2788,12 @@ class ContactModel(QAbstractListModel):
         self.itemsRemoved.emit(items)
         self._update_group_positions()
 
-    def moveGroup(self, group, reference):
+    def moveGroup(self, group, successor):
         groups = self.items[GroupList]
-        if group not in groups or groups.index(group)+1 == (groups.index(reference) if reference in groups else len(groups)):
+        if group not in groups or groups.index(group)+1 == (groups.index(successor) if successor in groups else len(groups)):
             return
         items = self._pop_group(group)
-        position = self.items.index(reference) if reference in groups else len(self.items)
+        position = self.items.index(successor) if successor in groups else len(self.items)
         self.beginInsertRows(QModelIndex(), position, position+len(items)-1)
         self.items[position:position] = items
         self.endInsertRows()
