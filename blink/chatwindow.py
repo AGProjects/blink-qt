@@ -1792,6 +1792,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 else:
                     self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
                     self.audio_connection_label.setToolTip(u'ICE is disabled')
+            elif audio_info.ice_status is None:
+                self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
+                self.audio_connection_label.setToolTip(u'ICE is unavailable')
             else:
                 self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
                 self.audio_connection_label.setToolTip(u'Negotiating ICE')
@@ -1823,6 +1826,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 else:
                     self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
                     self.video_connection_label.setToolTip(u'ICE is disabled')
+            elif video_info.ice_status is None:
+                self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
+                self.video_connection_label.setToolTip(u'ICE is unavailable')
             else:
                 self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
                 self.video_connection_label.setToolTip(u'Negotiating ICE')
