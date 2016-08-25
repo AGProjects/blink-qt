@@ -15,6 +15,8 @@ from PyQt4.QtWebKit import QWebView
 import cjson
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
+from application.system import makedirs
+from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
@@ -24,7 +26,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 from sipsimple.util import user_info
 
-from blink.resources import Resources
+from blink.resources import ApplicationData, Resources
 from blink.widgets.labels import Status
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
@@ -421,14 +423,14 @@ class AddAccountDialog(base_class, ui_class):
             response_data = cjson.decode(response.read().replace(r'\/', '/'))
             response_data = defaultdict(lambda: None, response_data)
             if response_data['success']:
-                from blink import Blink
                 try:
-                    certificate_path = None
                     passport = response_data['passport']
                     if passport is not None:
-                        certificate_path = Blink().save_certificates(response_data['sip_address'], passport['crt'], passport['key'], passport['ca'])
+                        certificate_path = self._save_certificates(response_data['sip_address'], passport['crt'], passport['key'], passport['ca'])
+                    else:
+                        certificate_path = None
                 except (GNUTLSError, IOError, OSError):
-                    pass
+                    certificate_path = None
                 account_manager = AccountManager()
                 try:
                     account = Account(response_data['sip_address'])
@@ -456,6 +458,37 @@ class AddAccountDialog(base_class, ui_class):
             call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Failed to contact server: %s' % e.reason, color=red))
         finally:
             call_in_gui_thread(self.setEnabled, True)
+
+    @staticmethod
+    def _save_certificates(sip_address, crt, key, ca):
+        crt = crt.strip() + os.linesep
+        key = key.strip() + os.linesep
+        ca = ca.strip() + os.linesep
+        X509Certificate(crt)
+        X509PrivateKey(key)
+        X509Certificate(ca)
+        makedirs(ApplicationData.get('tls'))
+        certificate_path = ApplicationData.get(os.path.join('tls', sip_address+'.crt'))
+        certificate_file = open(certificate_path, 'w')
+        os.chmod(certificate_path, 0600)
+        certificate_file.write(crt+key)
+        certificate_file.close()
+        ca_path = ApplicationData.get(os.path.join('tls', 'ca.crt'))
+        try:
+            existing_cas = open(ca_path).read().strip() + os.linesep
+        except:
+            certificate_file = open(ca_path, 'w')
+            certificate_file.write(ca)
+            certificate_file.close()
+        else:
+            if ca not in existing_cas:
+                certificate_file = open(ca_path, 'w')
+                certificate_file.write(existing_cas+ca)
+                certificate_file.close()
+        settings = SIPSimpleSettings()
+        settings.tls.ca_list = ca_path
+        settings.save()
+        return certificate_path
 
     @run_in_gui_thread
     def handle_notification(self, notification):

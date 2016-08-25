@@ -2,7 +2,6 @@
 import os
 import sys
 import sip
-import cjson
 
 sip.setapi('QString',  2)
 sip.setapi('QVariant', 2)
@@ -15,11 +14,8 @@ QApplication.setAttribute(Qt.AA_X11InitThreads, True)
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
-from application.system import host, makedirs, unlink
-from collections import defaultdict
+from application.system import host, makedirs
 from eventlib import api
-from gnutls.crypto import X509Certificate, X509PrivateKey
-from gnutls.errors import GNUTLSError
 from zope.interface import implements
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
@@ -176,82 +172,6 @@ class Blink(QApplication):
         self.main_window.close()
         super(Blink, self).quit()
 
-    def fetch_account(self):
-        filename = os.path.expanduser('~/.blink_account')
-        if not os.path.exists(filename):
-            return
-        try:
-            data = open(filename).read()
-            data = cjson.decode(data.replace(r'\/', '/'))
-        except (OSError, IOError), e:
-            print "Failed to read json data from ~/.blink_account: %s" % e
-            return
-        except cjson.DecodeError, e:
-            print "Failed to decode json data from ~/.blink_account: %s" % e
-            return
-        finally:
-            unlink(filename)
-        data = defaultdict(lambda: None, data)
-        account_id = data['sip_address']
-        if account_id is None:
-            return
-        account_manager = AccountManager()
-        try:
-            account = account_manager.get_account(account_id)
-        except KeyError:
-            account = Account(account_id)
-            account.display_name = data['display_name'] or None
-            default_account = account
-        else:
-            default_account = account_manager.default_account
-        account.auth.username = data['auth_username']
-        account.auth.password = data['password'] or ''
-        account.sip.outbound_proxy = data['outbound_proxy']
-        account.xcap.xcap_root = data['xcap_root']
-        account.nat_traversal.msrp_relay = data['msrp_relay']
-        account.server.conference_server = data['conference_server']
-        account.server.settings_url = data['settings_url']
-        if data['passport'] is not None:
-            try:
-                passport = data['passport']
-                certificate_path = self.save_certificates(account_id, passport['crt'], passport['key'], passport['ca'])
-                account.tls.certificate = certificate_path
-            except (GNUTLSError, IOError, OSError):
-                pass
-        account.enabled = True
-        account.save()
-        account_manager.default_account = default_account
-
-    def save_certificates(self, sip_address, crt, key, ca):
-        crt = crt.strip() + os.linesep
-        key = key.strip() + os.linesep
-        ca = ca.strip() + os.linesep
-        X509Certificate(crt)
-        X509PrivateKey(key)
-        X509Certificate(ca)
-        makedirs(ApplicationData.get('tls'))
-        certificate_path = ApplicationData.get(os.path.join('tls', sip_address+'.crt'))
-        file = open(certificate_path, 'w')
-        os.chmod(certificate_path, 0600)
-        file.write(crt+key)
-        file.close()
-        ca_path = ApplicationData.get(os.path.join('tls', 'ca.crt'))
-        try:
-            existing_cas = open(ca_path).read().strip() + os.linesep
-        except:
-            file = open(ca_path, 'w')
-            file.write(ca)
-            file.close()
-        else:
-            if ca not in existing_cas:
-                file = open(ca_path, 'w')
-                file.write(existing_cas+ca)
-                file.close()
-        settings = SIPSimpleSettings()
-        settings.tls.ca_list = ca_path
-        settings.save()
-        return certificate_path
-
     def eventFilter(self, watched, event):
         if watched in (self.main_window, self.chat_window):
             if event.type() == QEvent.Show:
@@ -286,9 +206,7 @@ class Blink(QApplication):
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):
         self.ip_address_monitor.start()
-        self.fetch_account()
         self.main_window.show()
-        settings = SIPSimpleSettings()
         accounts = AccountManager().get_accounts()
         if not accounts or (self.first_run and accounts == [BonjourAccount()]):
             self.main_window.preferences_window.show_create_account_dialog()
