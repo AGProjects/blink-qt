@@ -93,7 +93,7 @@
      </property>
     </widget>
    </item>
-   <item row="4" column="1" colspan="3">
+   <item row="4" column="1" colspan="2">
     <widget class="QComboBox" name="preferred_media">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
@@ -123,7 +123,7 @@
      </item>
     </widget>
    </item>
-   <item row="3" column="1" colspan="3">
+   <item row="3" column="1" colspan="2">
     <widget class="QCheckBox" name="presence">
      <property name="text">
       <string>Exchange Availability Information</string>
@@ -133,8 +133,8 @@
      </property>
     </widget>
    </item>
-   <item row="6" column="0" colspan="4">
-    <spacer name="section_spacer">
+   <item row="5" column="0" colspan="3">
+    <spacer name="grid_spacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
      </property>
@@ -149,7 +149,7 @@
      </property>
     </spacer>
    </item>
-   <item row="2" column="1" colspan="3">
+   <item row="2" column="1" colspan="2">
     <widget class="ContactURITableView" name="addresses_table">
      <property name="palette">
       <palette>
@@ -215,20 +215,7 @@
      </property>
     </widget>
    </item>
-   <item row="7" column="0" colspan="4">
-    <spacer name="grid_spacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>412</width>
-       <height>20</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item row="8" column="0" colspan="4">
+   <item row="6" column="0" colspan="3">
     <layout class="QHBoxLayout" name="button_box_layout">
      <property name="spacing">
       <number>6</number>
