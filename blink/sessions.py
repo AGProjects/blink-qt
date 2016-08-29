@@ -15,10 +15,11 @@ from enum import Enum
 from itertools import chain
 from operator import attrgetter
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QByteArray, QEasingCurve, QEvent, QMimeData, QModelIndex, QObject, QPointF, QProcess, QPropertyAnimation, QRect, QRectF, QSize, QTimer, QUrl, pyqtSignal
-from PyQt4.QtGui  import QBrush, QColor, QDialog, QDrag, QIcon, QLabel, QLinearGradient, QListView, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QShortcut
-from PyQt4.QtGui  import QApplication, QDesktopServices, QStyle, QStyledItemDelegate, QStyleOption
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QAbstractListModel, QEasingCurve, QModelIndex, QObject, QProcess, QPropertyAnimation, pyqtSignal
+from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl
+from PyQt5.QtGui import QBrush, QColor, QDesktopServices, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QListView, QMenu, QShortcut, QStyle, QStyledItemDelegate, QStyleOption
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -2642,13 +2643,6 @@ class AudioSessionModel(QAbstractListModel):
                     session.widget.mute_button.show()
 
 
-# workaround class because passing context to the QShortcut constructor segfaults (fixed upstreams on 09-Apr-2013) -Dan
-class QShortcut(QShortcut):
-    def __init__(self, key, parent, member=None, ambiguousMember=None, context=Qt.WindowShortcut):
-        super(QShortcut, self).__init__(key, parent, member, ambiguousMember)
-        self.setContext(context)
-
-
 class AudioSessionListView(QListView):
     implements(IObserver)
 
@@ -2798,12 +2792,13 @@ class AudioSessionListView(QListView):
         super(AudioSessionListView, self).dragMoveEvent(event)
 
         model = self.model()
+        mime_data = event.mimeData()
 
         for session in model.sessions:
             session.widget.drop_indicator = False
 
         for mime_type in model.accepted_mime_types:
-            if event.provides(mime_type):
+            if mime_data.hasFormat(mime_type):
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
                 session = index.data(Qt.UserRole)
@@ -3254,7 +3249,7 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         session.widget.setFixedSize(option.rect.size())
 
         painter.save()
-        painter.drawPixmap(option.rect, QPixmap.grabWidget(session.widget))
+        painter.drawPixmap(option.rect, session.widget.grab())
         if option.state & QStyle.State_MouseOver:
             self.drawSessionIndicators(session, option, painter, session.widget)
         if 0 and (option.state & QStyle.State_MouseOver):
@@ -3579,9 +3574,12 @@ class ChatSessionListView(QListView):
 
     def dragMoveEvent(self, event):
         super(ChatSessionListView, self).dragMoveEvent(event)
+
         model = self.model()
+        mime_data = event.mimeData()
+
         for mime_type in model.accepted_mime_types:
-            if event.provides(mime_type):
+            if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
@@ -4480,7 +4478,7 @@ class FileTransferDelegate(QStyledItemDelegate):
             item.widget.state_indicator.show_cancel_button = False
 
         item.widget.setFixedSize(option.rect.size())
-        painter.drawPixmap(option.rect, QPixmap.grabWidget(item.widget))
+        painter.drawPixmap(option.rect, item.widget.grab())
 
     def sizeHint(self, option, index):
         return index.data(Qt.SizeHintRole)
@@ -4726,7 +4724,7 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         participant.widget.setFixedSize(option.rect.size())
 
         painter.save()
-        painter.drawPixmap(option.rect, QPixmap.grabWidget(participant.widget))
+        painter.drawPixmap(option.rect, participant.widget.grab())
         if (option.state & QStyle.State_MouseOver) and participant.widget.isEnabled():
             self.drawRemoveIndicator(participant, option, painter, participant.widget)
         if 0 and (option.state & QStyle.State_MouseOver):
@@ -4999,9 +4997,12 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
 
     def dragMoveEvent(self, event):
         super(ConferenceParticipantListView, self).dragMoveEvent(event)
+
         model = self.model()
+        mime_data = event.mimeData()
+
         for mime_type in model.accepted_mime_types:
-            if event.provides(mime_type):
+            if mime_data.hasFormat(mime_type):
                 handler = getattr(self, '_DH_%s' % mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', ''))
                 handler(event)
                 self.viewport().update()

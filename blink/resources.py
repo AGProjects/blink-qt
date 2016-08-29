@@ -7,8 +7,8 @@ import os
 import platform
 import sys
 
-from PyQt4.QtCore import Qt, QBuffer
-from PyQt4.QtGui  import QIcon, QPixmap
+from PyQt5.QtCore import Qt, QBuffer
+from PyQt5.QtGui import QIcon, QPixmap
 
 from application.python.descriptor import classproperty
 from application.python.types import Singleton

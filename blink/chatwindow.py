@@ -5,11 +5,13 @@ import locale
 import os
 import re
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
-from PyQt4.QtGui import QApplication, QDesktopServices, QAction, QImageReader, QKeyEvent, QLabel, QListView, QMenu, QTextCursor, QTextDocument, QTextEdit, QToolButton
-from PyQt4.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QStyle, QStyleOption, QStylePainter, QTextCharFormat
-from PyQt4.QtWebKit import QWebPage, QWebSettings, QWebView
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtWebKit import QWebSettings
+from PyQt5.QtWebKitWidgets import QWebPage, QWebView
+from PyQt5.QtWidgets import QApplication, QAction, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
 
 from abc import ABCMeta, abstractmethod
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy
@@ -1311,7 +1313,7 @@ class VideoWidget(VideoSurface, ui_class):
             start_geometry = start_rect.translated(self.mapToGlobal(QPoint(0, 0)))
             final_geometry = final_rect.translated(screen_area.topRight() - final_rect.topRight() + QPoint(-10, 10))
 
-            pixmap = QPixmap.grabWidget(self)
+            pixmap = self.grab()
             self.no_flicker_widget.resize(pixmap.size())
             self.no_flicker_widget.setPixmap(pixmap)
             self.no_flicker_widget.setGeometry(self.rect().translated(self.mapToGlobal(QPoint(0, 0))))
@@ -1374,7 +1376,7 @@ class VideoWidget(VideoSurface, ui_class):
 
     def _SH_DetachAnimationFinished(self):
         if self.detach_animation.direction() == QPropertyAnimation.Backward:
-            pixmap = QPixmap.grabWidget(self)
+            pixmap = self.grab()
             self.no_flicker_widget.resize(pixmap.size())
             self.no_flicker_widget.setPixmap(pixmap)
             self.no_flicker_widget.setGeometry(self.geometry())

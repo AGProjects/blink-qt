@@ -1,7 +1,7 @@
 
-from PyQt4.QtCore import Qt, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, pyqtSignature
-from PyQt4.QtGui  import QAction, QBrush, QColor, QCommonStyle, QLinearGradient, QIcon, QMenu, QPainter, QPainterPath, QPalette, QPen, QPixmap
-from PyQt4.QtGui  import QPolygonF, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
+from PyQt5.QtCore import Qt, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor, QLinearGradient, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt5.QtWidgets import QAction, QCommonStyle, QMenu, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
 
 from blink.resources import Resources
 from blink.widgets.color import ColorScheme, ColorUtils, ColorHelperMixin
@@ -379,7 +379,6 @@ class StateButtonStyle(QCommonStyle, ColorHelperMixin):
     _pixel_metrics = {QStyle.PM_MenuButtonIndicator: 11, QStyle.PM_DefaultFrameWidth: 3, QStyle.PM_ButtonMargin: 1, QStyle.PM_ButtonShiftHorizontal: 0, QStyle.PM_ButtonShiftVertical: 0,
                       QStyle.PM_ButtonIconSize: 32}
 
-    @pyqtSignature("polish(QWidget*)")
     def polish(self, widget):
         widget.setAttribute(Qt.WA_Hover)
         super(StateButtonStyle, self).polish(widget)

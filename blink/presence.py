@@ -5,8 +5,8 @@ import re
 import socket
 import uuid
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QTimer
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QTimer
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null, limit
@@ -24,7 +24,7 @@ from sipsimple.account.bonjour import BonjourPresenceState
 from sipsimple.account.xcap import Icon, OfflineStatus
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.payloads import caps, pidf, prescontent, rpid
-from sipsimple.payloads import cipid; cipid # needs to be imported to register its namespace and extensions
+from sipsimple.payloads import cipid
 from sipsimple.threading.green import run_in_green_thread
 from sipsimple.util import ISOTimestamp
 
@@ -32,6 +32,8 @@ from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.resources import IconManager, Resources
 from blink.util import run_in_gui_thread
+
+del cipid  # this only needs to be imported to register its namespace and extensions
 
 
 __all__ = ['PresenceManager', 'PendingWatcherDialog']

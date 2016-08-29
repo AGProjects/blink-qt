@@ -2,9 +2,10 @@
 import os
 import urlparse
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QEvent, QRegExp
-from PyQt4.QtGui  import QActionGroup, QButtonGroup, QFileDialog, QFont, QListView, QListWidgetItem, QMessageBox, QRegExpValidator, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate, QValidator
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QEvent, QRegExp
+from PyQt5.QtGui import QFont, QRegExpValidator, QValidator
+from PyQt5.QtWidgets import QActionGroup, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -1285,7 +1286,7 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         account = self.selected_account
         directory = os.path.dirname(account.tls.certificate.normalized) if account.tls.certificate else Path('~').normalized
-        cert_path = QFileDialog.getOpenFileName(self, u'Select Certificate File', directory, u"TLS certificates (*.crt *.pem)") or None
+        cert_path = QFileDialog.getOpenFileName(self, u'Select Certificate File', directory, u"TLS certificates (*.crt *.pem)")[0] or None
         if cert_path is not None:
             cert_path = os.path.normpath(cert_path)
             if cert_path != account.tls.certificate:
@@ -1643,7 +1644,7 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         settings = SIPSimpleSettings()
         directory = os.path.dirname(settings.tls.ca_list.normalized) if settings.tls.ca_list else Path('~').normalized
-        ca_path = QFileDialog.getOpenFileName(self, u'Select Certificate Authority File', directory, u"TLS certificates (*.crt *.pem)") or None
+        ca_path = QFileDialog.getOpenFileName(self, u'Select Certificate Authority File', directory, u"TLS certificates (*.crt *.pem)")[0] or None
         if ca_path is not None:
             ca_path = os.path.normpath(ca_path)
             if ca_path != settings.tls.ca_list:

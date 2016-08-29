@@ -1,6 +1,6 @@
 
-from PyQt4.QtCore import QObject, QThread, QTimer
-from PyQt4.QtGui import QApplication
+from PyQt5.QtCore import QObject, QThread, QTimer
+from PyQt5.QtWidgets import QApplication
 from application.python.decorator import decorator, preserve_signature
 from application.python.descriptor import classproperty
 from application.python.types import Singleton

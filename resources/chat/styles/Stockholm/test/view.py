@@ -1,8 +1,9 @@
 #!/usr/bin/python
 
-from PyQt4.QtCore import QUrl
-from PyQt4.QtGui import QApplication
-from PyQt4.QtWebKit import QWebView, QWebSettings
+from PyQt5.QtCore import QUrl
+from PyQt5.QtWebKit import QWebSettings
+from PyQt5.QtWebKitWidgets import QWebView
+from PyQt5.QtWidgets import QApplication
 
 app = QApplication([])
 view = QWebView()

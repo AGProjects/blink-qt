@@ -1,5 +1,5 @@
 
-from PyQt4.QtCore import QEvent
+from PyQt5.QtCore import QEvent
 
 from application.python.descriptor import classproperty
 

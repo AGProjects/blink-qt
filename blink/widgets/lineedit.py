@@ -1,8 +1,9 @@
 
 import re
 
-from PyQt4.QtCore import Qt, QEvent, pyqtSignal
-from PyQt4.QtGui import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QPainter, QPalette, QPixmap, QSpacerItem, QSizePolicy, QStyle, QWidget, QStyleOptionFrameV2
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal
+from PyQt5.QtGui import QPainter, QPalette, QPixmap
+from PyQt5.QtWidgets import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
 
 from blink.resources import Resources
 from blink.widgets.util import QtDynamicProperty
@@ -15,7 +16,7 @@ class SideWidget(QWidget):
     sizeHintChanged = pyqtSignal()
 
     def __init__(self, parent=None):
-        QWidget.__init__(self, parent)
+        super(SideWidget, self).__init__(parent)
 
     def event(self, event):
         if event.type() == QEvent.LayoutRequest:
@@ -28,7 +29,7 @@ class LineEdit(QLineEdit):
     widgetSpacing = QtDynamicProperty('widgetSpacing', int)
 
     def __init__(self, parent=None, contents=u""):
-        QLineEdit.__init__(self, contents, parent)
+        super(LineEdit, self).__init__(contents, parent)
         box_direction = QBoxLayout.RightToLeft if self.isRightToLeft() else QBoxLayout.LeftToRight
         self.inactiveText = u""
         self.left_widget = SideWidget(self)
@@ -60,7 +61,7 @@ class LineEdit(QLineEdit):
         self._update_side_widget_locations()
 
     def _update_side_widget_locations(self):
-        option = QStyleOptionFrameV2()
+        option = QStyleOptionFrame()
         self.initStyleOption(option)
         spacing = self.right_layout.spacing()
         text_rect = self.style().subElementRect(QStyle.SE_LineEditContents, option, self)
@@ -100,7 +101,7 @@ class LineEdit(QLineEdit):
     def paintEvent(self, event):
         QLineEdit.paintEvent(self, event)
         if not self.hasFocus() and not self.text() and self.inactiveText:
-            options = QStyleOptionFrameV2()
+            options = QStyleOptionFrame()
             self.initStyleOption(options)
             text_rect = self.style().subElementRect(QStyle.SE_LineEditContents, options, self)
             text_rect.adjust(self.left_margin+2, 0, -self.right_margin, 0)
@@ -139,7 +140,7 @@ class ValidatingLineEdit(LineEdit):
         self.invalid_entry_label.setObjectName('invalid_entry_label')
         self.invalid_entry_label.hide()
         self.addTailWidget(self.invalid_entry_label)
-        option = QStyleOptionFrameV2()
+        option = QStyleOptionFrame()
         self.initStyleOption(option)
         frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
         self.setMinimumHeight(self.invalid_entry_label.minimumHeight() + 2 + 2*frame_width)
@@ -187,7 +188,7 @@ class ValidatingLineEdit(LineEdit):
 
 class SearchIcon(QWidget):
     def __init__(self, parent=None, size=16):
-        QWidget.__init__(self, parent)
+        super(SearchIcon, self).__init__(parent)
         self.setFocusPolicy(Qt.NoFocus)
         self.setVisible(True)
         self.setMinimumSize(size+2, size+2)
@@ -207,7 +208,7 @@ class SearchIcon(QWidget):
 
 class ClearButton(QAbstractButton):
     def __init__(self, parent=None, size=16):
-        QAbstractButton.__init__(self, parent)
+        super(ClearButton, self).__init__(parent)
         self.setCursor(Qt.ArrowCursor)
         self.setFocusPolicy(Qt.NoFocus)
         self.setToolTip(u"Clear")
@@ -260,12 +261,12 @@ class ClearButton(QAbstractButton):
 
 class SearchBox(LineEdit):
     def __init__(self, parent=None):
-        LineEdit.__init__(self, parent=parent)
+        super(SearchBox, self).__init__(parent=parent)
         self.search_icon = SearchIcon(self)
         self.clear_button = ClearButton(self)
         self.addHeadWidget(self.search_icon)
         self.addTailWidget(self.clear_button)
-        option = QStyleOptionFrameV2()
+        option = QStyleOptionFrame()
         self.initStyleOption(option)
         frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
         widgets_height = max(self.search_icon.minimumHeight(), self.clear_button.minimumHeight())
@@ -289,10 +290,10 @@ class LocationBar(LineEdit):
     locationCleared = pyqtSignal()
 
     def __init__(self, parent=None):
-        LineEdit.__init__(self, parent=parent)
+        super(LocationBar, self).__init__(parent=parent)
         self.clear_button = ClearButton(self)
         self.addTailWidget(self.clear_button)
-        option = QStyleOptionFrameV2()
+        option = QStyleOptionFrame()
         self.initStyleOption(option)
         frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
         widgets_height = self.clear_button.minimumHeight()

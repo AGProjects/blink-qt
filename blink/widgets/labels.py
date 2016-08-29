@@ -2,8 +2,9 @@
 import os
 from datetime import timedelta
 
-from PyQt4.QtCore import Qt, QEvent
-from PyQt4.QtGui import QAction, QBrush, QColor, QFileDialog, QFontMetrics, QIcon, QLabel, QLinearGradient, QMenu, QPainter, QPalette, QPen
+from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtGui import QBrush, QColor, QFontMetrics, QIcon, QLinearGradient, QPainter, QPalette, QPen
+from PyQt5.QtWidgets import QAction, QFileDialog, QLabel, QMenu
 
 from application.python.types import MarkerType
 
@@ -106,7 +107,7 @@ class IconSelector(QLabel):
         super(IconSelector, self).mouseReleaseEvent(event)
 
     def _SH_ChangeIconActionTriggered(self):
-        filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")
+        filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
         if filename:
             self.filename = filename
 

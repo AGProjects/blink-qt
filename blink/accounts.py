@@ -1,21 +1,22 @@
 
+import cjson
 import os
 import re
 import sys
 import urllib
 import urllib2
-from collections import defaultdict
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QModelIndex, QUrl
-from PyQt4.QtGui import QAction, QButtonGroup, QComboBox, QIcon, QMenu, QMovie, QSortFilterProxyModel
-from PyQt4.QtNetwork import QNetworkAccessManager
-from PyQt4.QtWebKit import QWebView
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel, QUrl, QUrlQuery
+from PyQt5.QtGui import QIcon, QMovie
+from PyQt5.QtNetwork import QNetworkAccessManager
+from PyQt5.QtWebKitWidgets import QWebView
+from PyQt5.QtWidgets import QAction, QButtonGroup, QComboBox, QMenu
 
-import cjson
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
 from application.system import makedirs
+from collections import defaultdict
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implements
@@ -609,7 +610,7 @@ class ServerToolsWebView(QWebView):
             self.last_error = None
 
     def _SH_URLChanged(self, url):
-        query_items = dict(url.queryItems())
+        query_items = dict(QUrlQuery(url).queryItems())
         self.tab = query_items.get('tab') or self.tab
         self.task = query_items.get('task') or self.task
 
@@ -618,8 +619,10 @@ class ServerToolsWebView(QWebView):
         self.task = task
         self.account = account
         url = QUrl(account.server.settings_url)
+        url_query = QUrlQuery()
         for name, value in self.query_items:
-            url.addQueryItem(name, value)
+            url_query.addQueryItem(name, value)
+        url.setQuery(url_query)
         self.load(url)
 
 

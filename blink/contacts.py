@@ -6,13 +6,13 @@ import re
 import socket
 import sys
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, pyqtSignal
-from PyQt4.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl
-from PyQt4.QtGui import QBrush, QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QStyle
-from PyQt4.QtGui import QAction, QMenu, QKeyEvent, QMouseEvent, QSortFilterProxyModel, QItemDelegate, QStyledItemDelegate
-from PyQt4.QtGui import QApplication, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QRadioButton, QTableView, QWidget
-from PyQt4.QtWebKit import QWebView
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
+from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt5.QtWebKitWidgets import QWebView
+from PyQt5.QtWidgets import QAction, QApplication, QItemDelegate, QStyledItemDelegate, QStyle
+from PyQt5.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QRadioButton, QTableView, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -3325,8 +3325,10 @@ class ContactListView(QListView):
             event.setDropAction(Qt.MoveAction)
 
         model = self.model()
+        mime_data = event.mimeData()
+
         for mime_type in model.accepted_mime_types:
-            if event.provides(mime_type):
+            if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
@@ -3444,11 +3446,9 @@ class ContactListView(QListView):
 
     def _AH_SendFiles(self):
         session_manager = SessionManager()
-        files = QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')
-        if files:
-            contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-            for filename in files:
-                session_manager.send_file(contact, contact.uri, filename)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        for filename in QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')[0]:
+            session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -3746,8 +3746,10 @@ class ContactSearchListView(QListView):
     def dragMoveEvent(self, event):
         super(ContactSearchListView, self).dragMoveEvent(event)
 
+        mime_data = event.mimeData()
+
         for mime_type in self.model().accepted_mime_types:
-            if event.provides(mime_type):
+            if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
@@ -3834,11 +3836,9 @@ class ContactSearchListView(QListView):
 
     def _AH_SendFiles(self):
         session_manager = SessionManager()
-        files = QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')
-        if files:
-            contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-            for filename in files:
-                session_manager.send_file(contact, contact.uri, filename)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        for filename in QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')[0]:
+            session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -4061,9 +4061,12 @@ class ContactDetailView(QListView):
 
     def dragMoveEvent(self, event):
         super(ContactDetailView, self).dragMoveEvent(event)
+
         model = self.model()
+        mime_data = event.mimeData()
+
         for mime_type in model.accepted_mime_types:
-            if event.provides(mime_type):
+            if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
@@ -4135,17 +4138,15 @@ class ContactDetailView(QListView):
 
     def _AH_SendFiles(self):
         session_manager = SessionManager()
-        files = QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')
-        if files:
-            contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-            selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
-            if isinstance(item, ContactURI):
-                selected_uri = item.uri
-            else:
-                selected_uri = contact.uri
-            for filename in files:
-                session_manager.send_file(contact, selected_uri, filename)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = contact.uri
+        for filename in QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')[0]:
+            session_manager.send_file(contact, selected_uri, filename)
 
     def _AH_RequestScreen(self):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -4445,7 +4446,7 @@ class ContactURIModel(QAbstractTableModel):
         for row in range(len(items)):
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
-        self.table_view.horizontalHeader().setResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
 
     def init_with_contact(self, contact):
         items = [ContactURIItem(uri.id, uri.uri, uri.type, default=uri is contact.uris.default) for uri in contact.uris]
@@ -4458,7 +4459,7 @@ class ContactURIModel(QAbstractTableModel):
         for row in range(len(items)):
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
-        self.table_view.horizontalHeader().setResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
 
     def update_from_contact(self, contact):
         added_items = [item for item in self.items if item.id is None and not item.ghost]
@@ -4480,7 +4481,7 @@ class ContactURIModel(QAbstractTableModel):
         for row in range(len(items)):
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
-        self.table_view.horizontalHeader().setResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
 
     def reset(self):
         self.beginResetModel()
@@ -4510,7 +4511,7 @@ class ContactURITableView(QTableView):
         self.setItemDelegate(ContactURIDelegate(self))
         self.context_menu = QMenu(self)
         self.context_menu.addAction(QAction("Delete", self, triggered=self._AH_DeleteSelection))
-        self.horizontalHeader().setResizeMode(self.horizontalHeader().ResizeToContents)
+        self.horizontalHeader().setSectionResizeMode(self.horizontalHeader().ResizeToContents)
 
     def selectionChanged(self, selected, deselected):
         super(ContactURITableView, self).selectionChanged(selected, deselected)

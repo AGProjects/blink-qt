@@ -4,9 +4,10 @@ from __future__ import division
 import os
 import platform
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QTimer, QUrl
-from PyQt4.QtGui  import QApplication, QDesktopServices, QFrame, QIcon, QImage, QMenu, QPainter, QStyle, QStyleOption, QStylePainter, QTransform, QWidget, qRgb
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QTimer, QUrl
+from PyQt5.QtGui import QDesktopServices, QIcon, QImage, QPainter, QTransform, qRgb
+from PyQt5.QtWidgets import QApplication, QFrame, QMenu, QStyle, QStyleOption, QStylePainter, QWidget
 
 from application.system import makedirs
 from collections import defaultdict
@@ -510,7 +511,7 @@ class ScreensharingToolbox(base_class, ui_class):
 
     def paintEvent(self, event):  # make the widget style aware
         option = QStyleOption()
-        option.init(self)
+        option.initFrom(self)
         painter = QStylePainter(self)
         painter.drawPrimitive(QStyle.PE_Widget, option)
 

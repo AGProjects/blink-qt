@@ -1,7 +1,7 @@
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, pyqtSignal
-from PyQt4.QtGui  import QStyle, QStyleOption, QStylePainter
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtWidgets import QStyle, QStyleOption, QStylePainter
 
 from blink.resources import Resources
 

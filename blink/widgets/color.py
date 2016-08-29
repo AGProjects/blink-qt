@@ -1,6 +1,7 @@
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui  import QColor
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
+
 from application.python import limit
 from application.python.decorator import decorator, preserve_signature
 from math import fmod, isnan

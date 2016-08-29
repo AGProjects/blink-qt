@@ -4,10 +4,10 @@ import os
 
 from functools import partial
 
-from PyQt4 import uic
-from PyQt4.QtCore import Qt, QSettings, QUrl
-from PyQt4.QtGui import QAction, QActionGroup, QDesktopServices, QMenu, QShortcut
-from PyQt4.QtGui import QApplication, QFileDialog, QIcon, QStyle, QStyleOptionComboBox, QStyleOptionFrameV2, QSystemTrayIcon
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QSettings, QUrl
+from PyQt5.QtGui import QDesktopServices, QIcon
+from PyQt5.QtWidgets import QAction, QActionGroup, QApplication, QFileDialog, QMenu, QShortcut, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -227,7 +227,7 @@ class MainWindow(base_class, ui_class):
 
         # adjust search box height depending on theme as the value set in designer isn't suited for all themes
         search_box = self.search_box
-        option = QStyleOptionFrameV2()
+        option = QStyleOptionFrame()
         search_box.initStyleOption(option)
         frame_width = search_box.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, search_box)
         if frame_width < 4:
@@ -476,7 +476,7 @@ class MainWindow(base_class, ui_class):
         blink_settings.save()
 
     def _SH_AccountStateClicked(self, checked):
-        filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")
+        filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
         if filename:
             self.last_icon_directory = os.path.dirname(filename)
             filename = filename if os.path.realpath(filename) != os.path.realpath(self.default_icon_path) else None
@@ -845,19 +845,19 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
-        action = QAction(account.id if account is not BonjourAccount() else u'Bonjour', None)
+
+        action = self.accounts_menu.addAction(account.id if account is not BonjourAccount() else u'Bonjour')
         action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
         action.setCheckable(True)
         action.setChecked(account.enabled)
         action.setData(account)
         action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
-        self.accounts_menu.addAction(action)
-        action = QAction(self.mwi_icons[0], account.id, None)
+
+        action = self.voicemail_menu.addAction(self.mwi_icons[0], account.id)
         action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
         action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
         action.setData(account)
         action.triggered.connect(partial(self._AH_VoicemailActionTriggered, action))
-        self.voicemail_menu.addAction(action)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account

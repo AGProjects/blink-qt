@@ -1,6 +1,4 @@
 
-from PyQt4.QtCore import QPyNullVariant
-
 
 __all__ = ['QtDynamicProperty', 'ContextMenuActions']
 
@@ -13,10 +11,7 @@ class QtDynamicProperty(object):
     def __get__(self, instance, owner):
         if instance is None:
             return self
-        value = instance.property(self.name)
-        if isinstance(value, QPyNullVariant):
-            value = self.type()
-        return value
+        return instance.property(self.name)
 
     def __set__(self, obj, value):
         if value is not None and not isinstance(value, self.type):

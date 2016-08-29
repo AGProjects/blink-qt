@@ -1,5 +1,5 @@
 
-from PyQt4 import uic
+from PyQt5 import uic
 
 from blink import __date__, __version__
 from blink.resources import Resources

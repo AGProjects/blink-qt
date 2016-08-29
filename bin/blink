@@ -4,6 +4,13 @@ import os
 import sys
 
 from application import log
+
+
+def except_hook(exception_type, exception_value, traceback):
+    sys.__excepthook__(exception_type, exception_value, traceback)
+
+sys.excepthook = except_hook  # pyqt5 (>=5.5) will abort if an exception happens in python code when called from Qt, unless we define this
+
 log.level.current = log.level.WARNING
 
 frozen = hasattr(sys, 'frozen')

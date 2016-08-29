@@ -1,6 +1,6 @@
 
-from PyQt4.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, QPoint, pyqtSignal
-from PyQt4.QtGui  import QStackedWidget
+from PyQt5.QtCore import QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, QPoint, pyqtSignal
+from PyQt5.QtWidgets import QStackedWidget
 
 from blink.widgets.util import QtDynamicProperty
 

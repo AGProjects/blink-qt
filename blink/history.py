@@ -3,7 +3,7 @@ import bisect
 import cPickle as pickle
 import re
 
-from PyQt4.QtGui import QIcon
+from PyQt5.QtGui import QIcon
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null

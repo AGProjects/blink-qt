@@ -1,15 +1,9 @@
 
 import os
 import sys
-import sip
 
-sip.setapi('QString',  2)
-sip.setapi('QVariant', 2)
-
-from PyQt4.QtCore import Qt, QEvent
-from PyQt4.QtGui  import QApplication, QMessageBox
-
-QApplication.setAttribute(Qt.AA_X11InitThreads, True)
+from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData

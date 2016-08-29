@@ -1,6 +1,7 @@
 
-from PyQt4.QtCore import Qt, QLine, QPointF, QMetaObject, pyqtSignal
-from PyQt4.QtGui  import QColor, QLinearGradient, QPainterPath, QPen, QPolygonF, QStyle, QStyleOption, QStylePainter, QWidget
+from PyQt5.QtCore import Qt, QLineF, QPointF, QMetaObject, pyqtSignal
+from PyQt5.QtGui import QColor, QLinearGradient, QPainterPath, QPen, QPolygonF
+from PyQt5.QtWidgets import QStyle, QStyleOption, QStylePainter, QWidget
 
 from abc import ABCMeta, abstractmethod
 from application.python import limit
@@ -185,7 +186,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
                 brush_color = self.color_with_alpha(graph.color, self.fillTransparency)
             dataset = islice(reversed(graph.data), graph_width)
             if self.graphStyle == self.BarStyle:
-                lines = [QLine(x*self.horizontalPixelsPerUnit, 0, x*self.horizontalPixelsPerUnit, y*height_scaling) for x, y in enumerate(dataset)]
+                lines = [QLineF(x*self.horizontalPixelsPerUnit, 0, x*self.horizontalPixelsPerUnit, y*height_scaling) for x, y in enumerate(dataset)]
                 painter.setPen(QPen(pen_color, self.lineThickness))
                 painter.drawLines(lines)
             else:
