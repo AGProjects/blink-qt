@@ -701,10 +701,9 @@ class AccountState(StateButton):
                 state = getattr(self, state_name)
             except AttributeError:
                 continue
-            action = QAction(QIcon(state.icon), note, menu)
+            action = menu.addAction(QIcon(state.icon), note)
             action.state = state
             action.note = note
-            menu.addAction(action)
 
     history = property(_get_history, _set_history)
     del _get_history, _set_history

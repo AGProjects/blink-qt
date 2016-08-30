@@ -709,9 +709,8 @@ class ServerToolsWindow(base_class, ui_class):
         menu.clear()
         for row in xrange(self.model.rowCount()):
             account_info = self.model.data(self.model.index(row, 0), Qt.UserRole)
-            action = QAction(account_info.name, self)
+            action = menu.addAction(account_info.name)
             action.setData(account_info.account)
-            menu.addAction(action)
 
     def open_settings_page(self, account):
         view = self.tab_widget.currentWidget()

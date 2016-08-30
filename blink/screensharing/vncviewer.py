@@ -550,7 +550,6 @@ class ScreensharingWindow(base_class, ui_class):
         self.fullscreen_action.triggered.connect(self._SH_FullscreenActionTriggered)
         self.minimize_action.triggered.connect(self._SH_MinimizeActionTriggered)
         self.close_action.triggered.connect(self._SH_CloseActionTriggered)
-        self.screenshots_folder_action.triggered.connect(self._SH_ScreenshotsFolderActionTriggered)
         self.screenshot_button.customContextMenuRequested.connect(self._SH_ScreenshotButtonContextMenuRequested)
         self.color_depth_button.currentIndexChanged[int].connect(self._SH_ColorDepthButtonCurrentIndexChanged)
         self.fullscreen_toolbox.color_depth_button.currentIndexChanged[int].connect(self._SH_ColorDepthButtonCurrentIndexChanged)
@@ -594,7 +593,7 @@ class ScreensharingWindow(base_class, ui_class):
         self.color_depth_button.addItem('LowColor (8 bits)', LowColor)
 
         self.screenshot_button_menu = QMenu(self)
-        self.screenshots_folder_action = self.screenshot_button_menu.addAction('Open screenshots folder')
+        self.screenshot_button_menu.addAction('Open screenshots folder', self._SH_ScreenshotsFolderActionTriggered)
 
     def closeEvent(self, event):
         super(ScreensharingWindow, self).closeEvent(event)
@@ -656,7 +655,7 @@ class ScreensharingWindow(base_class, ui_class):
         else:
             self.screenshot_button_menu.exec_(self.screenshot_button.mapToGlobal(pos))
 
-    def _SH_ScreenshotsFolderActionTriggered(self, pos):
+    def _SH_ScreenshotsFolderActionTriggered(self):
         settings = BlinkSettings()
         QDesktopServices.openUrl(QUrl.fromLocalFile(settings.screenshots_directory.normalized))
 

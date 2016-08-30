@@ -97,8 +97,8 @@ class MainWindow(base_class, ui_class):
             self.system_tray_icon = QSystemTrayIcon(QIcon(Resources.get('icons/blink.png')), self)
             self.system_tray_icon.activated.connect(self._SH_SystemTrayIconActivated)
             menu = QMenu(self)
-            menu.addAction(QAction("Show", self, triggered=self._AH_SystemTrayShowWindow))
-            menu.addAction(QAction(QIcon(Resources.get('icons/application-exit.png')), "Quit", self, triggered=self._AH_QuitActionTriggered))
+            menu.addAction("Show", self._AH_SystemTrayShowWindow)
+            menu.addAction(QIcon(Resources.get('icons/application-exit.png')), "Quit", self._AH_QuitActionTriggered)
             self.system_tray_icon.setContextMenu(menu)
             self.system_tray_icon.show()
         else:
@@ -220,10 +220,8 @@ class MainWindow(base_class, ui_class):
         self.alert_devices_group = QActionGroup(self)
         self.video_devices_group = QActionGroup(self)
 
-        self.request_screen_action = QAction('Request screen', self, triggered=self._AH_RequestScreenActionTriggered)
-        self.share_my_screen_action = QAction('Share my screen', self, triggered=self._AH_ShareMyScreenActionTriggered)
-        self.screen_sharing_button.addAction(self.request_screen_action)
-        self.screen_sharing_button.addAction(self.share_my_screen_action)
+        self.screen_sharing_button.addAction(QAction('Request screen', self.screen_sharing_button, triggered=self._AH_RequestScreenActionTriggered))
+        self.screen_sharing_button.addAction(QAction('Share my screen', self.screen_sharing_button, triggered=self._AH_ShareMyScreenActionTriggered))
 
         # adjust search box height depending on theme as the value set in designer isn't suited for all themes
         search_box = self.search_box
@@ -449,12 +447,12 @@ class MainWindow(base_class, ui_class):
         contact, contact_uri = URIUtils.find_contact(action.entry.uri)
         session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account)  # TODO: memorize media type and use it? -Saul (not sure about history in/out -Dan)
 
-    def _AH_SystemTrayShowWindow(self, checked):
+    def _AH_SystemTrayShowWindow(self):
         self.show()
         self.raise_()
         self.activateWindow()
 
-    def _AH_QuitActionTriggered(self, checked):
+    def _AH_QuitActionTriggered(self):
         if self.system_tray_icon is not None:
             self.system_tray_icon.hide()
         QApplication.instance().quit()

@@ -4510,7 +4510,7 @@ class ContactURITableView(QTableView):
         super(ContactURITableView, self).__init__(parent)
         self.setItemDelegate(ContactURIDelegate(self))
         self.context_menu = QMenu(self)
-        self.context_menu.addAction(QAction("Delete", self, triggered=self._AH_DeleteSelection))
+        self.context_menu.addAction("Delete", self._AH_DeleteSelection)
         self.horizontalHeader().setSectionResizeMode(self.horizontalHeader().ResizeToContents)
 
     def selectionChanged(self, selected, deselected):

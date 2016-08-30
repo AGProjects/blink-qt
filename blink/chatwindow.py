@@ -903,7 +903,6 @@ class VideoWidget(VideoSurface, ui_class):
         self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
         self.hold_button.clicked.connect(self._SH_HoldButtonClicked)
         self.close_button.clicked.connect(self._SH_CloseButtonClicked)
-        self.screenshots_folder_action.triggered.connect(self._SH_ScreenshotsFolderActionTriggered)
         self.screenshot_button.customContextMenuRequested.connect(self._SH_ScreenshotButtonContextMenuRequested)
         self.camera_preview.adjusted.connect(self._SH_CameraPreviewAdjusted)
         self.detach_animation.finished.connect(self._SH_DetachAnimationFinished)
@@ -999,7 +998,7 @@ class VideoWidget(VideoSurface, ui_class):
         self.close_button.setIcon(close_icon)
 
         self.screenshot_button_menu = QMenu(self)
-        self.screenshots_folder_action = self.screenshot_button_menu.addAction('Open screenshots folder')
+        self.screenshot_button_menu.addAction('Open screenshots folder', self._SH_ScreenshotsFolderActionTriggered)
 
     @property
     def interactive(self):
@@ -1370,7 +1369,7 @@ class VideoWidget(VideoSurface, ui_class):
         if not self.isFullScreen():
             self.screenshot_button_menu.exec_(self.screenshot_button.mapToGlobal(pos))
 
-    def _SH_ScreenshotsFolderActionTriggered(self, pos):
+    def _SH_ScreenshotsFolderActionTriggered(self):
         settings = BlinkSettings()
         QDesktopServices.openUrl(QUrl.fromLocalFile(settings.screenshots_directory.normalized))
 
