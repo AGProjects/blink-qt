@@ -122,7 +122,6 @@ class SingleSegment(SegmentType):
                      
                      QToolButton:pressed {
                          background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-                         border-style: inset;
                      }
                   """
 
@@ -140,7 +139,6 @@ class LeftSegment(SegmentType):
                      
                      QToolButton:pressed {
                          background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-                         border-style: inset;
                      }
                   """
 
@@ -157,7 +155,6 @@ class MiddleSegment(SegmentType):
                      
                      QToolButton:pressed {
                          background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-                         border-style: inset;
                      }
                   """
 
@@ -176,7 +173,6 @@ class RightSegment(SegmentType):
                      
                      QToolButton:pressed {
                          background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-                         border-style: inset;
                      }
                   """
 
