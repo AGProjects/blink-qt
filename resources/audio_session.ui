@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>296</width>
-    <height>62</height>
+    <width>304</width>
+    <height>66</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -452,6 +452,9 @@ QToolButton#mute_button:pressed {
          <property name="checkable">
           <bool>true</bool>
          </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
         </widget>
        </item>
        <item>
@@ -498,6 +501,9 @@ QToolButton:pressed {
           </size>
          </property>
          <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="autoRaise">
           <bool>true</bool>
          </property>
         </widget>
@@ -548,6 +554,9 @@ QToolButton:pressed {
          <property name="checkable">
           <bool>true</bool>
          </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
         </widget>
        </item>
        <item>
@@ -593,6 +602,9 @@ QToolButton:pressed {
            <width>16</width>
            <height>16</height>
           </size>
+         </property>
+         <property name="autoRaise">
+          <bool>true</bool>
          </property>
         </widget>
        </item>
