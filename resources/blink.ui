@@ -1008,8 +1008,8 @@ padding: 2px;</string>
             </property>
             <property name="icon">
              <iconset>
-              <normaloff>icons/mic-on.png</normaloff>
-              <normalon>icons/mic-off.png</normalon>icons/mic-on.png</iconset>
+              <normaloff>icons/mic-on.svg</normaloff>
+              <normalon>icons/mic-off.svg</normalon>icons/mic-on.svg</iconset>
             </property>
             <property name="checkable">
              <bool>true</bool>
