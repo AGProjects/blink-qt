@@ -119,51 +119,6 @@
        <property name="verticalSpacing">
         <number>0</number>
        </property>
-       <item row="0" column="0" rowspan="2">
-        <widget class="AccountState" name="account_state">
-         <property name="icon">
-          <iconset>
-           <normaloff>icons/avatar.jpg</normaloff>icons/avatar.jpg</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>32</width>
-           <height>32</height>
-          </size>
-         </property>
-         <property name="popupMode">
-          <enum>QToolButton::MenuButtonPopup</enum>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="1">
-        <widget class="LineEdit" name="display_name">
-         <property name="maximumSize">
-          <size>
-           <width>16777215</width>
-           <height>18</height>
-          </size>
-         </property>
-         <property name="toolTip">
-          <string>Click to change your display name</string>
-         </property>
-         <property name="styleSheet">
-          <string>QLineEdit {
-	background-color: transparent;
-}
-</string>
-         </property>
-         <property name="frame">
-          <bool>false</bool>
-         </property>
-         <property name="inactiveText" stdset="0">
-          <string>Type your name here</string>
-         </property>
-         <property name="widgetSpacing" stdset="0">
-          <number>0</number>
-         </property>
-        </widget>
-       </item>
        <item row="1" column="1">
         <widget class="LineEdit" name="activity_note">
          <property name="maximumSize">
@@ -304,6 +259,51 @@
          </property>
          <property name="widgetSpacing" stdset="0">
           <number>0</number>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="LineEdit" name="display_name">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>18</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Click to change your display name</string>
+         </property>
+         <property name="styleSheet">
+          <string>QLineEdit {
+	background-color: transparent;
+}
+</string>
+         </property>
+         <property name="frame">
+          <bool>false</bool>
+         </property>
+         <property name="inactiveText" stdset="0">
+          <string>Type your name here</string>
+         </property>
+         <property name="widgetSpacing" stdset="0">
+          <number>0</number>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0" rowspan="2">
+        <widget class="AccountState" name="account_state">
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/avatar.jpg</normaloff>icons/avatar.jpg</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>32</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::MenuButtonPopup</enum>
          </property>
         </widget>
        </item>
