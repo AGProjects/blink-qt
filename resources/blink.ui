@@ -51,12 +51,6 @@
     </property>
     <item>
      <widget class="AccountSelector" name="identity">
-      <property name="maximumSize">
-       <size>
-        <width>16777215</width>
-        <height>21</height>
-       </size>
-      </property>
       <property name="font">
        <font>
         <pointsize>9</pointsize>
@@ -76,6 +70,9 @@
         <width>14</width>
         <height>14</height>
        </size>
+      </property>
+      <property name="frame">
+       <bool>false</bool>
       </property>
      </widget>
     </item>
@@ -679,6 +676,9 @@ padding: 2px;</string>
               <height>18</height>
              </size>
             </property>
+            <property name="autoRaise">
+             <bool>true</bool>
+            </property>
            </widget>
           </item>
           <item>
@@ -726,6 +726,9 @@ padding: 2px;</string>
                 <height>16</height>
                </size>
               </property>
+              <property name="autoRaise">
+               <bool>true</bool>
+              </property>
              </widget>
             </item>
             <item>
@@ -755,6 +758,9 @@ padding: 2px;</string>
                 <height>16</height>
                </size>
               </property>
+              <property name="autoRaise">
+               <bool>true</bool>
+              </property>
              </widget>
             </item>
             <item>
@@ -783,6 +789,9 @@ padding: 2px;</string>
                 <width>16</width>
                 <height>16</height>
                </size>
+              </property>
+              <property name="autoRaise">
+               <bool>true</bool>
               </property>
              </widget>
             </item>
@@ -815,6 +824,9 @@ padding: 2px;</string>
               </property>
               <property name="popupMode">
                <enum>QToolButton::InstantPopup</enum>
+              </property>
+              <property name="autoRaise">
+               <bool>true</bool>
               </property>
              </widget>
             </item>
@@ -865,6 +877,9 @@ padding: 2px;</string>
              </size>
             </property>
             <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="autoRaise">
              <bool>true</bool>
             </property>
            </widget>
@@ -1012,6 +1027,9 @@ padding: 2px;</string>
               <normalon>icons/mic-off.svg</normalon>icons/mic-on.svg</iconset>
             </property>
             <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="autoRaise">
              <bool>true</bool>
             </property>
            </widget>
