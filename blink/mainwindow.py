@@ -263,72 +263,100 @@ class MainWindow(base_class, ui_class):
     def load_audio_devices(self):
         settings = SIPSimpleSettings()
 
-        action = QAction(u'System default', self.output_devices_group)
+        action_map = {}
+
+        action = action_map[u'system_default'] = self.output_device_menu.addAction(u'System default')
         action.setData(u'system_default')
-        self.output_device_menu.addAction(action)
+        action.setCheckable(True)
+        self.output_devices_group.addAction(action)
+
         self.output_device_menu.addSeparator()
-        for device in SIPApplication.engine.output_devices:
-            action = QAction(device, self.output_devices_group)
-            action.setData(device)
-            self.output_device_menu.addAction(action)
-        action = QAction(u'None', self.output_devices_group)
-        action.setData(None)
-        self.output_device_menu.addAction(action)
-        for action in self.output_devices_group.actions():
-            action.setCheckable(True)
-            if settings.audio.output_device == action.data():
-                action.setChecked(True)
 
-        action = QAction(u'System default', self.input_devices_group)
+        for device in SIPApplication.engine.output_devices:
+            action = action_map[device] = self.output_device_menu.addAction(device)
+            action.setData(device)
+            action.setCheckable(True)
+            self.output_devices_group.addAction(action)
+
+        action = action_map[None] = self.output_device_menu.addAction(u'None')
+        action.setData(None)
+        action.setCheckable(True)
+        self.output_devices_group.addAction(action)
+
+        active_action = action_map.get(settings.audio.output_device, Null)
+        active_action.setChecked(True)
+
+        action_map = {}
+
+        action = action_map[u'system_default'] = self.input_device_menu.addAction(u'System default')
         action.setData(u'system_default')
-        self.input_device_menu.addAction(action)
+        action.setCheckable(True)
+        self.input_devices_group.addAction(action)
+
         self.input_device_menu.addSeparator()
-        for device in SIPApplication.engine.input_devices:
-            action = QAction(device, self.input_devices_group)
-            action.setData(device)
-            self.input_device_menu.addAction(action)
-        action = QAction(u'None', self.input_devices_group)
-        action.setData(None)
-        self.input_device_menu.addAction(action)
-        for action in self.input_devices_group.actions():
-            action.setCheckable(True)
-            if settings.audio.input_device == action.data():
-                action.setChecked(True)
 
-        action = QAction(u'System default', self.alert_devices_group)
-        action.setData(u'system_default')
-        self.alert_device_menu.addAction(action)
-        self.alert_device_menu.addSeparator()
-        for device in SIPApplication.engine.output_devices:
-            action = QAction(device, self.alert_devices_group)
+        for device in SIPApplication.engine.input_devices:
+            action = action_map[device] = self.input_device_menu.addAction(device)
             action.setData(device)
-            self.alert_device_menu.addAction(action)
-        action = QAction(u'None', self.alert_devices_group)
-        action.setData(None)
-        self.alert_device_menu.addAction(action)
-        for action in self.alert_devices_group.actions():
             action.setCheckable(True)
-            if settings.audio.alert_device == action.data():
-                action.setChecked(True)
+            self.input_devices_group.addAction(action)
+
+        action = action_map[None] = self.input_device_menu.addAction(u'None')
+        action.setData(None)
+        action.setCheckable(True)
+        self.input_devices_group.addAction(action)
+
+        active_action = action_map.get(settings.audio.input_device, Null)
+        active_action.setChecked(True)
+
+        action_map = {}
+
+        action = action_map[u'system_default'] = self.alert_device_menu.addAction(u'System default')
+        action.setData(u'system_default')
+        action.setCheckable(True)
+        self.alert_devices_group.addAction(action)
+
+        self.alert_device_menu.addSeparator()
+
+        for device in SIPApplication.engine.output_devices:
+            action = action_map[device] = self.alert_device_menu.addAction(device)
+            action.setData(device)
+            action.setCheckable(True)
+            self.alert_devices_group.addAction(action)
+
+        action = action_map[None] = self.alert_device_menu.addAction(u'None')
+        action.setData(None)
+        action.setCheckable(True)
+        self.alert_devices_group.addAction(action)
+
+        active_action = action_map.get(settings.audio.alert_device, Null)
+        active_action.setChecked(True)
 
     def load_video_devices(self):
         settings = SIPSimpleSettings()
 
-        action = QAction(u'System default', self.video_devices_group)
+        action_map = {}
+
+        action = action_map[u'system_default'] = self.video_camera_menu.addAction(u'System default')
         action.setData(u'system_default')
-        self.video_camera_menu.addAction(action)
+        action.setCheckable(True)
+        self.video_devices_group.addAction(action)
+
         self.video_camera_menu.addSeparator()
+
         for device in SIPApplication.engine.video_devices:
-            action = QAction(device, self.video_devices_group)
+            action = action_map[device] = self.video_camera_menu.addAction(device)
             action.setData(device)
-            self.video_camera_menu.addAction(action)
-        action = QAction(u'None', self.video_devices_group)
-        action.setData(None)
-        self.video_camera_menu.addAction(action)
-        for action in self.video_devices_group.actions():
             action.setCheckable(True)
-            if settings.video.device == action.data():
-                action.setChecked(True)
+            self.video_devices_group.addAction(action)
+
+        action = action_map[None] = self.video_camera_menu.addAction(u'None')
+        action.setData(None)
+        action.setCheckable(True)
+        self.video_devices_group.addAction(action)
+
+        active_action = action_map.get(settings.video.device, Null)
+        active_action.setChecked(True)
 
     def _AH_AccountActionTriggered(self, action, enabled):
         account = action.data()
@@ -764,19 +792,11 @@ class MainWindow(base_class, ui_class):
         self.account_state.setState(state, blink_settings.presence.current_state.note)
 
     def _NH_AudioDevicesDidChange(self, notification):
-        for action in self.output_device_menu.actions():
-            self.output_devices_group.removeAction(action)
-            self.output_device_menu.removeAction(action)
-        for action in self.input_device_menu.actions():
-            self.input_devices_group.removeAction(action)
-            self.input_device_menu.removeAction(action)
-        for action in self.alert_device_menu.actions():
-            self.alert_devices_group.removeAction(action)
-            self.alert_device_menu.removeAction(action)
+        self.output_device_menu.clear()  # because actions are owned by the menu and only referenced by their corresponding action groups,
+        self.input_device_menu.clear()   # clearing the menus will result in the actions automatically disappearing from the corresponding
+        self.alert_device_menu.clear()   # action groups as well
         if self.session_model.active_sessions:
-            old_devices = set(notification.data.old_devices)
-            new_devices = set(notification.data.new_devices)
-            added_devices = new_devices - old_devices
+            added_devices = set(notification.data.new_devices).difference(notification.data.old_devices)
             if added_devices:
                 new_device = added_devices.pop()
                 settings = SIPSimpleSettings()
