@@ -358,8 +358,8 @@ class MainWindow(base_class, ui_class):
         active_action = action_map.get(settings.video.device, Null)
         active_action.setChecked(True)
 
-    def _AH_AccountActionTriggered(self, action, enabled):
-        account = action.data()
+    def _AH_AccountActionTriggered(self, enabled):
+        account = self.sender().data()
         account.enabled = enabled
         account.save()
 
@@ -448,8 +448,8 @@ class MainWindow(base_class, ui_class):
         makedirs(directory)
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
-    def _AH_VoicemailActionTriggered(self, action, checked):
-        account = action.data()
+    def _AH_VoicemailActionTriggered(self, checked):
+        account = self.sender().data()
         contact, contact_uri = URIUtils.find_contact(account.voicemail_uri, display_name='Voicemail')
         session_manager = SessionManager()
         session_manager.create_session(contact, contact_uri, [StreamDescription('audio')], account=account)
@@ -880,13 +880,13 @@ class MainWindow(base_class, ui_class):
         action.setCheckable(True)
         action.setChecked(account.enabled)
         action.setData(account)
-        action.triggered.connect(partial(self._AH_AccountActionTriggered, action))
+        action.triggered.connect(self._AH_AccountActionTriggered)
 
         action = self.voicemail_menu.addAction(self.mwi_icons[0], account.id)
         action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
         action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
         action.setData(account)
-        action.triggered.connect(partial(self._AH_VoicemailActionTriggered, action))
+        action.triggered.connect(self._AH_VoicemailActionTriggered)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account
