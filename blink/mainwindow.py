@@ -786,6 +786,7 @@ class MainWindow(base_class, ui_class):
         self.load_video_devices()
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='AudioDevicesDidChange')
+        notification.center.add_observer(self, name='VideoDevicesDidChange')
         blink_settings = BlinkSettings()
         self.account_state.history = [(item.state, item.note) for item in blink_settings.presence.state_history]
         state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
@@ -804,6 +805,16 @@ class MainWindow(base_class, ui_class):
                 settings.audio.output_device = new_device
                 settings.save()
         self.load_audio_devices()
+
+    def _NH_VideoDevicesDidChange(self, notification):
+        self.video_camera_menu.clear()  # actions will be removed automatically from the action group because they are owned by the menu and only referenced in the action group
+        if self.session_model.active_sessions:
+            added_devices = set(notification.data.new_devices).difference(notification.data.old_devices)
+            if added_devices:
+                settings = SIPSimpleSettings()
+                settings.video.device = added_devices.pop()
+                settings.save()
+        self.load_video_devices()
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
