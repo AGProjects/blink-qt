@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyMo
 from PyQt5.QtGui import QIcon, QMovie
 from PyQt5.QtNetwork import QNetworkAccessManager
 from PyQt5.QtWebKitWidgets import QWebView
-from PyQt5.QtWidgets import QAction, QButtonGroup, QComboBox, QMenu
+from PyQt5.QtWidgets import QButtonGroup, QComboBox, QMenu
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
