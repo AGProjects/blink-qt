@@ -341,7 +341,8 @@ class ChatWebPage(QWebPage):
         super(ChatWebPage, self).__init__(parent)
         self.setLinkDelegationPolicy(QWebPage.DelegateAllLinks)
         self.linkClicked.connect(QDesktopServices.openUrl)
-        disable_actions = {QWebPage.OpenLink, QWebPage.OpenLinkInNewWindow, QWebPage.DownloadLinkToDisk, QWebPage.OpenImageInNewWindow, QWebPage.DownloadImageToDisk,
+        disable_actions = {QWebPage.OpenLink, QWebPage.OpenLinkInNewWindow, QWebPage.OpenLinkInThisWindow, QWebPage.DownloadLinkToDisk,
+                           QWebPage.OpenImageInNewWindow, QWebPage.DownloadImageToDisk, QWebPage.DownloadMediaToDisk,
                            QWebPage.Back, QWebPage.Forward, QWebPage.Stop, QWebPage.Reload}
         for action in (self.action(action) for action in disable_actions):
             action.setVisible(False)
