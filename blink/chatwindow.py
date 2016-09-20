@@ -355,11 +355,6 @@ class ChatWebPage(QWebPage):
             return False
         return super(ChatWebPage, self).acceptNavigationRequest(frame, request, navigation_type)
 
-    def triggerAction(self, action, checked=False):
-        if action == QWebPage.OpenLink:
-            return
-        super(ChatWebPage, self).triggerAction(action, checked)
-
     def _SH_LinkClicked(self, url):
         QDesktopServices.openUrl(url)
 
