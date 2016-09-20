@@ -646,6 +646,7 @@ class ServerToolsWindow(base_class, ui_class):
         self.account_button.setMenu(QMenu(self.account_button))
         self.setWindowTitle('Blink Server Tools')
         self.setWindowIconText('Server Tools')
+        self.setWindowIcon(QIcon(Resources.get('icons/blink48.png')))
         self.model = model
         self.tab_widget.addTab(ServerToolsWebView(self), '')
         font = self.account_label.font()
