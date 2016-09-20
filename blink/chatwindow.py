@@ -346,7 +346,7 @@ class ChatWebPage(QWebPage):
         for action in (self.action(action) for action in disable_actions):
             action.setVisible(False)
 
-    def acceptNavigationRequest(self, frame, request, navigation_type):
+    def acceptNavigationRequest(self, frame, request, navigation_type):  # not sure if needed since we already disabled the corresponding actions. (can they be triggered otherwise?)
         if navigation_type in (QWebPage.NavigationTypeBackOrForward, QWebPage.NavigationTypeReload):
             return False
         return super(ChatWebPage, self).acceptNavigationRequest(frame, request, navigation_type)
