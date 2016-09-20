@@ -340,7 +340,7 @@ class ChatWebPage(QWebPage):
     def __init__(self, parent=None):
         super(ChatWebPage, self).__init__(parent)
         self.setLinkDelegationPolicy(QWebPage.DelegateAllLinks)
-        self.linkClicked.connect(self._SH_LinkClicked)
+        self.linkClicked.connect(QDesktopServices.openUrl)
         # self.downloadRequested.connect(self._SH_DownloadRequested)
         # self.setForwardUnsupportedContent(True)
         # self.unsupportedContent.connect(self._SH_UnsupportedContent)
@@ -354,9 +354,6 @@ class ChatWebPage(QWebPage):
         if navigation_type in (QWebPage.NavigationTypeBackOrForward, QWebPage.NavigationTypeReload):
             return False
         return super(ChatWebPage, self).acceptNavigationRequest(frame, request, navigation_type)
-
-    def _SH_LinkClicked(self, url):
-        QDesktopServices.openUrl(url)
 
     # def _SH_DownloadRequested(self, request):
     #    print "-- download requested", request.url().toString()
