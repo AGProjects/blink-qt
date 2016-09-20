@@ -341,10 +341,6 @@ class ChatWebPage(QWebPage):
         super(ChatWebPage, self).__init__(parent)
         self.setLinkDelegationPolicy(QWebPage.DelegateAllLinks)
         self.linkClicked.connect(QDesktopServices.openUrl)
-        # self.downloadRequested.connect(self._SH_DownloadRequested)
-        # self.setForwardUnsupportedContent(True)
-        # self.unsupportedContent.connect(self._SH_UnsupportedContent)
-        # allowed_actions = {QWebPage.InspectElement, QWebPage.CopyLinkToClipboard, QWebPage.CopyImageToClipboard, QWebPage.CopyImageUrlToClipboard}
         disable_actions = {QWebPage.OpenLink, QWebPage.OpenLinkInNewWindow, QWebPage.DownloadLinkToDisk, QWebPage.OpenImageInNewWindow, QWebPage.DownloadImageToDisk,
                            QWebPage.Back, QWebPage.Forward, QWebPage.Stop, QWebPage.Reload}
         for action in (self.action(action) for action in disable_actions):
@@ -354,12 +350,6 @@ class ChatWebPage(QWebPage):
         if navigation_type in (QWebPage.NavigationTypeBackOrForward, QWebPage.NavigationTypeReload):
             return False
         return super(ChatWebPage, self).acceptNavigationRequest(frame, request, navigation_type)
-
-    # def _SH_DownloadRequested(self, request):
-    #    print "-- download requested", request.url().toString()
-
-    # def _SH_UnsupportedContent(self, reply):
-    #    print "-- unsupported", reply.url().toString()
 
 
 class ChatWebView(QWebView):
