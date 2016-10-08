@@ -2493,6 +2493,7 @@ class ContactModel(QAbstractListModel):
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.state = 'started'
+        self._update_group_positions()
 
     def _NH_SIPApplicationWillEnd(self, notification):
         self.state = 'stopping'
@@ -2694,6 +2695,8 @@ class ContactModel(QAbstractListModel):
         return position
 
     def _find_group_insertion_point(self, group):
+        if group.settings.position is None:
+            return 0  # insert new groups at the top
         for item in self.items[GroupList]:
             if item.relocation_info is None and item.settings.position >= group.settings.position:
                 position = self.items.index(item)
