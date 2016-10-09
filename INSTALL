@@ -1,16 +1,5 @@
-
-Blink Qt Installation on Debian and Ubuntu Linux
-------------------------------------------------
-
-Copyright (c) 2010-2015 AG Projects
-http://ag-projects.com
-
-Home page: http://icanblink.com
-
-This document describes the installation procedure on Debian and Ubuntu
-operating systems from the official public repository maintained by AG
-Projects.
-
+Debian / Ubuntu or other Linux systems
+======================================
 
 Configure Repository
 --------------------
@@ -54,12 +43,12 @@ http://download.ag-projects.com/Blink/Linux/
 Install the runtime dependencies:
 
  * python (2.7)
- * python-application (>= 1.2.5)
+ * python-application (>= 2.0.0)
  * python-cjson
- * python-eventlet-0.8 (>= 0.8.11.4)
- * python-qt4 (>= 4.7)
- * python-twisted-core (>= 8.1.0)
- * python-sipsimple (>= 0.18.1)
+ * python-eventlib
+ * python-qt5 (>= 5.0)
+ * python-twisted-core
+ * python-sipsimple (>= 3.0.0)
  * python-zope.interface
 
 After installing the above dependencies, install Blink system wide using:
@@ -73,10 +62,9 @@ Creating Debian Packages
 
 Install the building dependencies:
 
- * cdbs (>= 0.4.47)
  * debhelper (>= 7)
  * python-all (>= 2.7, not 3)
- * python-qt4 (>=4.7)
+ * python-qt5 (>= 5.0)
  * python-support
  * build-essential
  * python-all-dev
@@ -96,25 +84,13 @@ debuild
 The .deb and related files are built in the upper directory.
 
 
-Blink Qt Installation on Microsoft Windows
-------------------------------------------
-
-Copyright (c) 2010-2014 AG Projects
-http://ag-projects.com
-
-Home page: http://icanblink.com
-
-This document describes the installation procedure on Microsoft Windows
-systems. Windows XP and higher are supported.
-
-This document assumes the SIP SIMPLE Client SDK has already been
-installed alongside with all its dependencies.
-
+Installation on Microsoft Windows
+=================================
 
 Step 1. Install dependencies
 ----------------------------
 
-* Install PyQt4: pacman -S mingw-w64-i686-python2-pyqt4
+* Install PyQt4: pacman -S mingw-w64-i686-python2-pyqt5
 
 NOTE: at the time of this writing binary packages weren't available due to some work
 in progress, they can alternatively be built manually.
@@ -127,7 +103,7 @@ The MSYS2 project does not provide a package for libvncclient, and since our
 needs are pretty specific, we provide the source to build a package which just
 install the client side VNC libraries.
 
-* Install dependencies: pacman -S mingw-w64-i686-pkgconf patch
+* Install dependencies: patch
 * Get the package code: darcs get http://devel.ag-projects.com/repositories/windows/mingw-w64-libvncclient
 * Enter the directory and build+instal the package: cd mingw-w64-libvncclient && makepkg-mingw -cifL --nocheck --nosign
 * In case the above command fails with an error run it again
