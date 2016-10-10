@@ -309,11 +309,17 @@ class VNCViewer(QWidget):
             x = event.x()
             y = event.y()
         button_mask = self.button_mask_map[event.buttons()]
-        if event.type() == QEvent.Wheel:
-            if event.delta() > 0:
-                wheel_button_mask = self.button_mask_map.vnc.WheelUp if event.orientation() == Qt.Vertical else self.button_mask_map.vnc.WheelLeft
-            else:
-                wheel_button_mask = self.button_mask_map.vnc.WheelDown if event.orientation() == Qt.Vertical else self.button_mask_map.vnc.WheelRight
+        if event.type() == QEvent.Wheel and event.angleDelta():
+            wheel_delta = event.angleDelta()
+            wheel_button_mask = 0
+            if wheel_delta.y() > 0:
+                wheel_button_mask |= self.button_mask_map.vnc.WheelUp
+            elif wheel_delta.y() < 0:
+                wheel_button_mask |= self.button_mask_map.vnc.WheelDown
+            if wheel_delta.x() > 0:
+                wheel_button_mask |= self.button_mask_map.vnc.WheelLeft
+            elif wheel_delta.x() < 0:
+                wheel_button_mask |= self.button_mask_map.vnc.WheelRight
             self.client.mouse_event(x, y, button_mask | wheel_button_mask)
         self.client.mouse_event(x, y, button_mask)
 

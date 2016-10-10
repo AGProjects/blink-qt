@@ -1955,10 +1955,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         elif watched in (self.latency_graph, self.packet_loss_graph, self.traffic_graph):
             if event_type == QEvent.Wheel and event.modifiers() == Qt.ControlModifier:
                 settings = BlinkSettings()
-                if event.delta() > 0 and settings.chat_window.session_info.graph_time_scale > GraphTimeScale.min_value:
+                wheel_delta = event.angleDelta().y()
+                if wheel_delta > 0 and settings.chat_window.session_info.graph_time_scale > GraphTimeScale.min_value:
                     settings.chat_window.session_info.graph_time_scale -= 1
                     settings.save()
-                elif event.delta() < 0 and settings.chat_window.session_info.graph_time_scale < GraphTimeScale.max_value:
+                elif wheel_delta < 0 and settings.chat_window.session_info.graph_time_scale < GraphTimeScale.max_value:
                     settings.chat_window.session_info.graph_time_scale += 1
                     settings.save()
         elif watched in (self.audio_encryption_label, self.video_encryption_label):
