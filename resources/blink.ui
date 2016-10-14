@@ -939,7 +939,7 @@ padding: 2px;</string>
            <number>3</number>
           </property>
           <item>
-           <widget class="QPushButton" name="hangup_all_button">
+           <widget class="QToolButton" name="hangup_all_button">
             <property name="minimumSize">
              <size>
               <width>85</width>
@@ -957,6 +957,9 @@ padding: 2px;</string>
             </property>
             <property name="text">
              <string>Hangup all</string>
+            </property>
+            <property name="autoRaise">
+             <bool>true</bool>
             </property>
            </widget>
           </item>
@@ -988,6 +991,9 @@ padding: 2px;</string>
             </property>
             <property name="toolButtonStyle">
              <enum>Qt::ToolButtonTextOnly</enum>
+            </property>
+            <property name="autoRaise">
+             <bool>true</bool>
             </property>
            </widget>
           </item>
