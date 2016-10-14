@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>850</width>
-    <height>600</height>
+    <width>890</width>
+    <height>630</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>850</width>
-    <height>600</height>
+    <width>890</width>
+    <height>630</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -25,7 +25,16 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="window_layout">
-    <property name="margin">
+    <property name="leftMargin">
+     <number>3</number>
+    </property>
+    <property name="topMargin">
+     <number>3</number>
+    </property>
+    <property name="rightMargin">
+     <number>3</number>
+    </property>
+    <property name="bottomMargin">
      <number>3</number>
     </property>
     <item row="0" column="0">
@@ -69,7 +78,16 @@
            <property name="spacing">
             <number>0</number>
            </property>
-           <property name="margin">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
             <number>0</number>
            </property>
            <item>
@@ -140,15 +158,27 @@
         <item row="0" column="1">
          <widget class="QTabWidget" name="account_tab_widget">
           <property name="currentIndex">
-           <number>1</number>
+           <number>2</number>
           </property>
           <widget class="QWidget" name="account_information_tab">
            <attribute name="title">
             <string>Account Information</string>
            </attribute>
            <layout class="QGridLayout" name="account_information_tab_layout">
-            <property name="margin">
+            <property name="leftMargin">
              <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
             </property>
             <item row="3" column="0">
              <widget class="QLabel" name="password_label">
@@ -159,49 +189,6 @@
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
               </property>
              </widget>
-            </item>
-            <item row="3" column="1">
-             <widget class="QLineEdit" name="password_editor">
-              <property name="echoMode">
-               <enum>QLineEdit::Password</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="4" column="0" colspan="2">
-             <spacer name="account_information_spacer_2">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeType">
-               <enum>QSizePolicy::Fixed</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>25</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="0" column="0" colspan="2">
-             <widget class="QCheckBox" name="account_enabled_button">
-              <property name="text">
-               <string>Use account</string>
-              </property>
-             </widget>
-            </item>
-            <item row="6" column="0" colspan="2">
-             <spacer name="account_information_spacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
-              </property>
-             </spacer>
             </item>
             <item row="2" column="1">
              <widget class="QLineEdit" name="display_name_editor"/>
@@ -229,7 +216,7 @@
               </property>
              </widget>
             </item>
-            <item row="7" column="0" colspan="2">
+            <item row="6" column="0" colspan="2">
              <widget class="QLabel" name="account_registration_label">
               <property name="layoutDirection">
                <enum>Qt::LeftToRight</enum>
@@ -242,6 +229,33 @@
               </property>
              </widget>
             </item>
+            <item row="3" column="1">
+             <widget class="QLineEdit" name="password_editor">
+              <property name="echoMode">
+               <enum>QLineEdit::Password</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0" colspan="2">
+             <widget class="QCheckBox" name="account_enabled_button">
+              <property name="text">
+               <string>Use account</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="0" colspan="2">
+             <spacer name="account_information_spacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
            </layout>
           </widget>
           <widget class="QWidget" name="media_tab">
@@ -249,13 +263,34 @@
             <string>Media</string>
            </attribute>
            <layout class="QGridLayout" name="media_tab_layout">
-            <property name="margin">
+            <property name="leftMargin">
              <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
             </property>
             <item row="5" column="0" colspan="2">
              <widget class="QWidget" name="rtp_options_widget" native="true">
               <layout class="QGridLayout" name="rtp_options_widget_layout">
-               <property name="margin">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
                 <number>0</number>
                </property>
                <item row="2" column="1" colspan="2">
@@ -466,7 +501,16 @@
             <item row="3" column="0" colspan="2">
              <widget class="QWidget" name="reset_buttons_widget" native="true">
               <layout class="QHBoxLayout" name="reset_buttons_widget_layout">
-               <property name="margin">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
                 <number>0</number>
                </property>
                <item>
@@ -567,8 +611,20 @@
             <string>Server Settings</string>
            </attribute>
            <layout class="QGridLayout" name="server_settings_tab_layout">
-            <property name="margin">
+            <property name="leftMargin">
              <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
             </property>
             <item row="0" column="0" colspan="6">
              <widget class="QLabel" name="sip_proxy_label">
@@ -682,22 +738,6 @@
              <widget class="QLineEdit" name="auth_username_editor"/>
             </item>
             <item row="5" column="0" colspan="6">
-             <spacer name="server_settings_spacer_2">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeType">
-               <enum>QSizePolicy::Fixed</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>25</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="6" column="0" colspan="6">
              <widget class="QLabel" name="msrp_label">
               <property name="font">
                <font>
@@ -705,26 +745,29 @@
                 <bold>true</bold>
                </font>
               </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
               <property name="text">
                <string>MSRP Relay</string>
               </property>
              </widget>
             </item>
-            <item row="7" column="0" colspan="6">
+            <item row="6" column="0" colspan="6">
              <widget class="Line" name="line_4">
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
              </widget>
             </item>
-            <item row="8" column="1" colspan="5">
+            <item row="7" column="1" colspan="5">
              <widget class="QCheckBox" name="always_use_my_msrp_relay_button">
               <property name="text">
                <string>Always use my relay for outgoing sessions</string>
               </property>
              </widget>
             </item>
-            <item row="9" column="0">
+            <item row="8" column="0">
              <widget class="QLabel" name="msrp_relay_label">
               <property name="text">
                <string>MSRP Relay:</string>
@@ -734,7 +777,7 @@
               </property>
              </widget>
             </item>
-            <item row="9" column="1">
+            <item row="8" column="1">
              <widget class="LineEdit" name="msrp_relay_host_editor">
               <property name="inactiveText" stdset="0">
                <string>Relay address taken from DNS</string>
@@ -744,7 +787,7 @@
               </property>
              </widget>
             </item>
-            <item row="9" column="2">
+            <item row="8" column="2">
              <widget class="QLabel" name="msrp_relay_port_label">
               <property name="text">
                <string>Port:</string>
@@ -754,7 +797,7 @@
               </property>
              </widget>
             </item>
-            <item row="9" column="3">
+            <item row="8" column="3">
              <widget class="QSpinBox" name="msrp_relay_port">
               <property name="specialValueText">
                <string>2855</string>
@@ -770,7 +813,7 @@
               </property>
              </widget>
             </item>
-            <item row="9" column="4">
+            <item row="8" column="4">
              <widget class="QLabel" name="msrp_relay_transport_label">
               <property name="text">
                <string>Transport:</string>
@@ -780,7 +823,7 @@
               </property>
              </widget>
             </item>
-            <item row="9" column="5">
+            <item row="8" column="5">
              <widget class="QComboBox" name="msrp_relay_transport_button">
               <item>
                <property name="text">
@@ -794,23 +837,7 @@
               </item>
              </widget>
             </item>
-            <item row="10" column="0" colspan="6">
-             <spacer name="server_settings_spacer_3">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeType">
-               <enum>QSizePolicy::Fixed</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>25</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="11" column="0" colspan="6">
+            <item row="9" column="0" colspan="6">
              <widget class="QLabel" name="voicemail_label">
               <property name="font">
                <font>
@@ -818,19 +845,22 @@
                 <bold>true</bold>
                </font>
               </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
               <property name="text">
                <string>Extra Server Settings</string>
               </property>
              </widget>
             </item>
-            <item row="12" column="0" colspan="6">
+            <item row="10" column="0" colspan="6">
              <widget class="Line" name="line_5">
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
              </widget>
             </item>
-            <item row="13" column="0">
+            <item row="11" column="0">
              <widget class="QLabel" name="voicemail_uri_label">
               <property name="text">
                <string>Voicemail URI:</string>
@@ -840,7 +870,7 @@
               </property>
              </widget>
             </item>
-            <item row="13" column="1" colspan="5">
+            <item row="11" column="1" colspan="5">
              <widget class="LineEdit" name="voicemail_uri_editor">
               <property name="inactiveText" stdset="0">
                <string>Discovered by subscribing to myself</string>
@@ -850,7 +880,7 @@
               </property>
              </widget>
             </item>
-            <item row="14" column="0">
+            <item row="12" column="0">
              <widget class="QLabel" name="xcap_root_label">
               <property name="text">
                <string>XCAP Root URL:</string>
@@ -860,7 +890,7 @@
               </property>
              </widget>
             </item>
-            <item row="14" column="1" colspan="5">
+            <item row="12" column="1" colspan="5">
              <widget class="LineEdit" name="xcap_root_editor">
               <property name="inactiveText" stdset="0">
                <string>Taken from the DNS TXT record for xcap.domain</string>
@@ -870,7 +900,10 @@
               </property>
              </widget>
             </item>
-            <item row="15" column="0">
+            <item row="13" column="1" colspan="5">
+             <widget class="QLineEdit" name="server_tools_url_editor"/>
+            </item>
+            <item row="13" column="0">
              <widget class="QLabel" name="server_tools_url_label">
               <property name="text">
                <string>Server Tools URL:</string>
@@ -880,10 +913,7 @@
               </property>
              </widget>
             </item>
-            <item row="15" column="1" colspan="5">
-             <widget class="QLineEdit" name="server_tools_url_editor"/>
-            </item>
-            <item row="17" column="0" colspan="6">
+            <item row="15" column="0" colspan="6">
              <spacer name="server_settings_spacer">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -896,7 +926,7 @@
               </property>
              </spacer>
             </item>
-            <item row="16" column="0">
+            <item row="14" column="0">
              <widget class="QLabel" name="conference_server_label">
               <property name="text">
                <string>Conference Server:</string>
@@ -906,7 +936,7 @@
               </property>
              </widget>
             </item>
-            <item row="16" column="1" colspan="5">
+            <item row="14" column="1" colspan="5">
              <widget class="LineEdit" name="conference_server_editor">
               <property name="widgetSpacing" stdset="0">
                <number>0</number>
@@ -923,8 +953,20 @@
             <string>Network</string>
            </attribute>
            <layout class="QGridLayout" name="network_tab_layout">
-            <property name="margin">
+            <property name="leftMargin">
              <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
             </property>
             <item row="2" column="1" colspan="2">
              <widget class="QCheckBox" name="use_ice_button">
@@ -1022,8 +1064,20 @@
             <string>Advanced</string>
            </attribute>
            <layout class="QGridLayout" name="advanced_tab_layout">
-            <property name="margin">
+            <property name="leftMargin">
              <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
             </property>
             <item row="7" column="0" colspan="3">
              <spacer name="account_tls_settings_spacer">
@@ -1045,6 +1099,9 @@
                 <weight>75</weight>
                 <bold>true</bold>
                </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">m</string>
               </property>
               <property name="text">
                <string>TLS Settings</string>
@@ -1098,8 +1155,20 @@
             <item row="0" column="0" colspan="3">
              <widget class="QWidget" name="sip_settings_widget" native="true">
               <layout class="QGridLayout" name="sip_settings_widget_layout">
-               <property name="margin">
+               <property name="leftMargin">
                 <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <property name="spacing">
+                <number>5</number>
                </property>
                <item row="0" column="0" colspan="6">
                 <widget class="QLabel" name="sip_settings_label">
@@ -1297,8 +1366,20 @@
             <item row="1" column="0" colspan="3">
              <widget class="QWidget" name="pstn_widget" native="true">
               <layout class="QGridLayout" name="pstn_widget_layout">
-               <property name="margin">
+               <property name="leftMargin">
                 <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <property name="spacing">
+                <number>5</number>
                </property>
                <item row="0" column="0" colspan="5">
                 <widget class="QLabel" name="pstn_label">
@@ -1312,22 +1393,6 @@
                   <string>Dialing landline and mobile numbers</string>
                  </property>
                 </widget>
-               </item>
-               <item row="4" column="0" colspan="5">
-                <spacer name="pstn_spacer">
-                 <property name="orientation">
-                  <enum>Qt::Vertical</enum>
-                 </property>
-                 <property name="sizeType">
-                  <enum>QSizePolicy::Fixed</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>20</width>
-                   <height>25</height>
-                  </size>
-                 </property>
-                </spacer>
                </item>
                <item row="1" column="0" colspan="5">
                 <widget class="Line" name="line_10">
@@ -1408,17 +1473,11 @@
                </item>
                <item row="2" column="2" rowspan="2">
                 <widget class="QLabel" name="pstn_example_original_label">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
                  <property name="text">
                   <string>+442079460000</string>
                  </property>
-                 <property name="alignment">
-                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 <property name="indent">
+                  <number>25</number>
                  </property>
                 </widget>
                </item>
@@ -1460,6 +1519,22 @@
                  </property>
                 </widget>
                </item>
+               <item row="4" column="0" colspan="5">
+                <spacer name="pstn_spacer">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Fixed</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>25</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
               </layout>
              </widget>
             </item>
@@ -1471,7 +1546,16 @@
       </widget>
       <widget class="QWidget" name="audio_page">
        <layout class="QGridLayout" name="audio_layout">
-        <property name="margin">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
          <number>0</number>
         </property>
         <item row="0" column="0">
@@ -1944,7 +2028,16 @@
       </widget>
       <widget class="QWidget" name="video_page">
        <layout class="QGridLayout" name="video_layout" columnstretch="1,0">
-        <property name="margin">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
          <number>0</number>
         </property>
         <item row="0" column="1">
@@ -2238,7 +2331,16 @@
       </widget>
       <widget class="QWidget" name="chat_page">
        <layout class="QGridLayout" name="chat_layout" rowstretch="1,0" rowminimumheight="0,150">
-        <property name="margin">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
          <number>0</number>
         </property>
         <item row="0" column="0" colspan="2">
@@ -2322,8 +2424,8 @@
             </widget>
            </item>
            <item row="0" column="0" colspan="8">
-            <widget class="ChatWebView" name="style_view" native="true">
-             <property name="url" stdset="0">
+            <widget class="ChatWebView" name="style_view">
+             <property name="url">
               <url>
                <string>about:blank</string>
               </url>
@@ -2460,7 +2562,16 @@
       </widget>
       <widget class="QWidget" name="screen_sharing_page">
        <layout class="QVBoxLayout" name="screen_sharing_layout">
-        <property name="margin">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
          <number>0</number>
         </property>
         <item>
@@ -2510,7 +2621,16 @@
       </widget>
       <widget class="QWidget" name="logging_page">
        <layout class="QVBoxLayout" name="logging_layout">
-        <property name="margin">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
          <number>0</number>
         </property>
         <item>
@@ -2663,13 +2783,31 @@
       </widget>
       <widget class="QWidget" name="advanced_page">
        <layout class="QVBoxLayout" name="advanced_layout">
-        <property name="margin">
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
          <number>0</number>
         </property>
         <item>
          <widget class="QGroupBox" name="advanced_group_box">
           <layout class="QGridLayout" name="advanced_group_box_layout">
-           <property name="margin">
+           <property name="leftMargin">
+            <number>10</number>
+           </property>
+           <property name="topMargin">
+            <number>10</number>
+           </property>
+           <property name="rightMargin">
+            <number>10</number>
+           </property>
+           <property name="bottomMargin">
             <number>10</number>
            </property>
            <item row="9" column="6">
@@ -2693,28 +2831,6 @@
              </property>
              <property name="alignment">
               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="5" rowspan="2">
-            <widget class="QLabel" name="port_note_label">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="text">
-              <string>Note: set SIP ports to 0 for automatic allocation</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-             </property>
-             <property name="wordWrap">
-              <bool>true</bool>
-             </property>
-             <property name="margin">
-              <number>5</number>
              </property>
             </widget>
            </item>
@@ -3060,6 +3176,25 @@
              </property>
             </widget>
            </item>
+           <item row="2" column="5">
+            <widget class="QLabel" name="port_note_label">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string>Set SIP ports to 0 for automatic allocation</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+             </property>
+             <property name="indent">
+              <number>5</number>
+             </property>
+            </widget>
+           </item>
           </layout>
          </widget>
         </item>
@@ -3198,17 +3333,17 @@
   <customwidget>
    <class>QWebView</class>
    <extends>QWidget</extends>
-   <header>QtWebKit/QWebView</header>
-  </customwidget>
-  <customwidget>
-   <class>ChatWebView</class>
-   <extends>QWebView</extends>
-   <header>blink.chatwindow</header>
+   <header>QtWebKitWidgets/QWebView</header>
   </customwidget>
   <customwidget>
    <class>LineEdit</class>
    <extends>QLineEdit</extends>
    <header>blink.widgets.lineedit</header>
+  </customwidget>
+  <customwidget>
+   <class>ChatWebView</class>
+   <extends>QWebView</extends>
+   <header>blink.chatwindow</header>
   </customwidget>
   <customwidget>
    <class>SIPPortEditor</class>
