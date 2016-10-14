@@ -664,7 +664,7 @@ padding: 2px;</string>
              <string>Add a new contact</string>
             </property>
             <property name="text">
-             <string>+</string>
+             <string/>
             </property>
             <property name="icon">
              <iconset>
@@ -863,7 +863,7 @@ padding: 2px;</string>
              <string>Disable ringtones (silent mode)</string>
             </property>
             <property name="text">
-             <string>M</string>
+             <string/>
             </property>
             <property name="icon">
              <iconset>
