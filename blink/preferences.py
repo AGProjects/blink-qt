@@ -190,7 +190,6 @@ class PreferencesWindow(base_class, ui_class):
             self.setupUi()
 
         self.setWindowTitle('Blink Preferences')
-        self.setWindowIconText('Blink Preferences')
 
         self.account_list.setModel(account_model)
         self.delete_account_button.setEnabled(False)

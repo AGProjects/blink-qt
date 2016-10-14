@@ -5192,11 +5192,9 @@ class IncomingRequest(QObject):
 
         if proposal:
             self.dialog.setWindowTitle(u'Incoming Session Update')
-            self.dialog.setWindowIconText(u'Incoming Session Update')
             self.dialog.busy_button.hide()
         else:
             self.dialog.setWindowTitle(u'Incoming Session Request')
-            self.dialog.setWindowIconText(u'Incoming Session Request')
         address = u'%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)

@@ -70,7 +70,6 @@ class MainWindow(base_class, ui_class):
             self.setupUi()
 
         self.setWindowTitle('Blink')
-        self.setWindowIconText('Blink')
 
         geometry = QSettings().value("main_window/geometry")
         if geometry:
