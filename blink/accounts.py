@@ -15,7 +15,7 @@ from PyQt5.QtWebKitWidgets import QWebView, QWebPage
 from PyQt5.QtWidgets import QApplication, QButtonGroup, QComboBox, QMenu
 
 from application.notification import IObserver, NotificationCenter
-from application.python import Null
+from application.python import Null, limit
 from application.system import makedirs
 from collections import defaultdict
 from gnutls.crypto import X509Certificate, X509PrivateKey
@@ -248,9 +248,10 @@ class AddAccountDialog(base_class, ui_class):
         self.button_group.setObjectName("button_group")
         self.button_group.addButton(self.add_account_button, self.panel_view.indexOf(self.add_account_panel))
         self.button_group.addButton(self.create_account_button, self.panel_view.indexOf(self.create_account_panel))
+        default_font_size = self.info_label.fontInfo().pointSizeF()
+        title_font_size = limit(default_font_size + 3, max=14)
         font = self.title_label.font()
-        font.setPointSizeF(self.info_label.fontInfo().pointSizeF() + 3)
-        font.setFamily("Sans Serif")
+        font.setPointSizeF(title_font_size)
         self.title_label.setFont(font)
         font_metrics = self.create_status_label.fontMetrics()
         self.create_status_label.setMinimumHeight(font_metrics.height() + 2*(font_metrics.height() + font_metrics.leading()))   # reserve space for 3 lines

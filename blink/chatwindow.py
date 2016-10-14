@@ -1401,7 +1401,6 @@ class NoSessionsLabel(QLabel):
         super(NoSessionsLabel, self).__init__(chat_window.session_panel)
         self.chat_window = chat_window
         font = self.font()
-        font.setFamily("Sans Serif")
         font.setPointSize(20)
         self.setFont(font)
         self.setAlignment(Qt.AlignCenter)

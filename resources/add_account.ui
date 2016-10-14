@@ -60,7 +60,16 @@
       <property name="spacing">
        <number>0</number>
       </property>
-      <property name="margin">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
        <number>0</number>
       </property>
       <item>
@@ -102,7 +111,6 @@
           <widget class="QLabel" name="title_label">
            <property name="font">
             <font>
-             <family>Sans Serif</family>
              <pointsize>12</pointsize>
              <weight>75</weight>
              <bold>true</bold>
@@ -183,7 +191,7 @@
          <item row="4" column="1">
           <widget class="QRadioButton" name="add_account_button">
            <property name="text">
-            <string>Add an existing SIP account</string>
+            <string>Add an e&amp;xisting SIP account</string>
            </property>
            <property name="checked">
             <bool>true</bool>
@@ -193,7 +201,7 @@
          <item row="5" column="1">
           <widget class="QRadioButton" name="create_account_button">
            <property name="text">
-            <string>Create a free SIP account</string>
+            <string>Crea&amp;te a free SIP account</string>
            </property>
           </widget>
          </item>
@@ -204,7 +212,16 @@
            </property>
            <widget class="QWidget" name="add_account_panel">
             <layout class="QGridLayout" name="add_panel_layout">
-             <property name="margin">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
               <number>0</number>
              </property>
              <item row="0" column="0">
@@ -312,7 +329,16 @@
            </widget>
            <widget class="QWidget" name="create_account_panel">
             <layout class="QGridLayout" name="create_panel_layout">
-             <property name="margin">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
               <number>0</number>
              </property>
              <item row="0" column="0">
