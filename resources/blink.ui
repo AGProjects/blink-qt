@@ -291,7 +291,7 @@
         <widget class="AccountState" name="account_state">
          <property name="icon">
           <iconset>
-           <normaloff>icons/avatar.jpg</normaloff>icons/avatar.jpg</iconset>
+           <normaloff>icons/default-avatar.png</normaloff>icons/default-avatar.png</iconset>
          </property>
          <property name="iconSize">
           <size>
