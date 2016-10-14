@@ -2520,7 +2520,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.otr_widget.peer_fingerprint = stream_info.otr_peer_fingerprint
                 self.otr_widget.my_fingerprint = stream_info.otr_key_fingerprint
                 self.otr_widget.smp_status = stream_info.smp_status
-                self.otr_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 300))
+                self.otr_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 320))
                 self.otr_widget.verification_stack.setCurrentWidget(self.otr_widget.smp_panel)
                 self.otr_widget.show()
                 self.otr_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
@@ -2538,7 +2538,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.zrtp_widget.peer_verified = stream_info.zrtp_verified
                 self.zrtp_widget.sas = stream_info.zrtp_sas
                 self.zrtp_widget.stream_type = encryption_label.stream_type
-                self.zrtp_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 300))
+                self.zrtp_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 320))
                 self.zrtp_widget.show()
                 self.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
 

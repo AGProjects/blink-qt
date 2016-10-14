@@ -1651,7 +1651,7 @@ class AudioSessionWidget(base_class, ui_class):
         session = self.session
         stream_info = session.blink_session.info.streams.audio
         if session.audio_stream is not None and not session.audio_stream._done and stream_info.encryption == 'ZRTP':
-            rect = QRect(0, 0, 230, 300)
+            rect = QRect(0, 0, 230, 320)
             rect.moveTopRight(self.srtp_label.mapToGlobal(self.srtp_label.rect().bottomRight()))
             rect.translate(0, 3)
             screen_area = QApplication.desktop().screenGeometry(self.srtp_label)
