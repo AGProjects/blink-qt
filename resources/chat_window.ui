@@ -1540,7 +1540,7 @@ QToolButton:pressed {
 </string>
                        </property>
                        <property name="text">
-                        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Traffic: &lt;span style=&quot; color:#d70000;&quot;&gt;↓&lt;/span&gt; 0kbps &lt;span style=&quot; color:#0064d7;&quot;&gt;↑&lt;/span&gt; 0kbps&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Traffic: &lt;span style=&quot;font-family: sans-serif; color:#d70000;&quot;&gt;↓&lt;/span&gt; 0kbps &lt;span style=&quot;font-family: sans-serif; color:#0064d7;&quot;&gt;↑&lt;/span&gt; 0kbps&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                        </property>
                        <property name="indent">
                         <number>5</number>

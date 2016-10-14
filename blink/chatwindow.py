@@ -2350,7 +2350,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value*8, bits_per_second=True)
             outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value*8, bits_per_second=True)
-        self.traffic_label.setText(u"""<p>Traffic: <span style="color: #d70000;">\u2193</span> %s <span style="color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
+        self.traffic_label.setText(u"""<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">\u2193</span> %s <span style="font-family: sans-serif; color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
 
     def _SH_MuteButtonClicked(self, checked):
         settings = SIPSimpleSettings()
