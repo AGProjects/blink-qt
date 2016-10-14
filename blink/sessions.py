@@ -5098,16 +5098,18 @@ ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
 class IncomingDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingDialog, self).__init__(parent)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
+        default_font_size = self.uri_label.fontInfo().pointSizeF()
+        name_font_size = limit(default_font_size + 3, max=14)
+        note_font_size = limit(default_font_size - 1, max=9)
         font = self.username_label.font()
-        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() + 3)
-        font.setFamily("Sans Serif")
+        font.setPointSizeF(name_font_size)
         self.username_label.setFont(font)
         font = self.note_label.font()
-        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
+        font.setPointSizeF(note_font_size)
         self.note_label.setFont(font)
         self.reject_mode = 'ignore'
         self.slot = None
@@ -5150,7 +5152,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
             self.chat_stream.active = True
             self.screensharing_stream.active = True
             self.video_stream.active = True
-            self.note_label.setText(u'To refuse a stream click its icon')
+            self.note_label.setText(u'To refuse a media type click its icon')
         else:
             self.audio_stream.active = False
             self.chat_stream.active = False
@@ -5198,8 +5200,7 @@ class IncomingRequest(QObject):
         address = u'%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
-        if contact.pixmap:
-            self.dialog.user_icon.setPixmap(contact.pixmap)
+        self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
         self.dialog.audio_stream.setVisible(self.audio_stream is not None)
         self.dialog.video_stream.setVisible(self.video_stream is not None)
         self.dialog.chat_stream.setVisible(self.chat_stream is not None)
@@ -5210,7 +5211,6 @@ class IncomingRequest(QObject):
             else:
                 self.dialog.screensharing_label.setText(u'is asking to share your screen')
                 # self.dialog.screensharing_stream.accepted = bool(proposal)
-        self.dialog.audio_device_label.setText(u'Selected audio device is: %s' % SIPApplication.voice_audio_bridge.mixer.real_output_device)
 
         self.dialog.finished.connect(self._SH_DialogFinished)
 
@@ -5288,20 +5288,19 @@ class IncomingRequest(QObject):
 
 ui_class, base_class = uic.loadUiType(Resources.get('incoming_filetransfer_dialog.ui'))
 
+
 class IncomingFileTransferDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingFileTransferDialog, self).__init__(parent)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
+        default_font_size = self.uri_label.fontInfo().pointSizeF()
+        name_font_size = limit(default_font_size + 3, max=14)
         font = self.username_label.font()
-        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() + 3)
-        font.setFamily("Sans Serif")
+        font.setPointSizeF(name_font_size)
         self.username_label.setFont(font)
-        font = self.file_label.font()
-        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
-        self.file_label.setFont(font)
         self.slot = None
         self.reject_mode = 'ignore'
         self.reject_button.released.connect(self._set_reject_mode)
@@ -5332,13 +5331,9 @@ class IncomingFileTransferRequest(QObject):
         self.session = session
         self.stream = stream
 
-        self.dialog.setWindowTitle(u'Incoming File Transfer')
-        self.dialog.setWindowIconText(u'Incoming File Transfer')
-
         self.dialog.uri_label.setText(contact_uri.uri)
         self.dialog.username_label.setText(contact.name)
-        if contact.pixmap:
-            self.dialog.user_icon.setPixmap(contact.pixmap)
+        self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
         filename = os.path.basename(self.stream.file_selector.name)
         size = self.stream.file_selector.size
         if size:
@@ -5380,17 +5375,15 @@ ui_class, base_class = uic.loadUiType(Resources.get('incoming_calltransfer_dialo
 class IncomingCallTransferDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingCallTransferDialog, self).__init__(parent)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
+        default_font_size = self.uri_label.fontInfo().pointSizeF()
+        name_font_size = limit(default_font_size + 3, max=14)
         font = self.username_label.font()
-        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() + 3)
-        font.setFamily("Sans Serif")
+        font.setPointSizeF(name_font_size)
         self.username_label.setFont(font)
-        font = self.transfer_label.font()
-        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() - 1)
-        self.transfer_label.setFont(font)
         self.slot = None
         self.reject_mode = 'reject'
 
@@ -5409,21 +5402,17 @@ class IncomingCallTransferRequest(QObject):
     priority = 0
     stream_types = {'audio'}
 
-    def __init__(self, dialog, contact, contact_uri, session):
+    def __init__(self, dialog, contact, contact_uri, blink_session):
         super(IncomingCallTransferRequest, self).__init__()
         self.dialog = dialog
         self.contact = contact
         self.contact_uri = contact_uri
-        self.session = session
-
-        self.dialog.setWindowTitle(u'Incoming Call Transfer')
-        self.dialog.setWindowIconText(u'Incoming Call Transfer')
+        self.session = blink_session.sip_session
 
         self.dialog.uri_label.setText(contact_uri.uri)
         self.dialog.username_label.setText(contact.name)
-        if contact.pixmap:
-            self.dialog.user_icon.setPixmap(contact.pixmap)
-        self.dialog.transfer_label.setText(u'would like to transfer you to {.uri}'.format(contact_uri))
+        self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
+        self.dialog.transfer_label.setText(u'transfer requested by {}'.format(blink_session.contact.name or blink_session.contact_uri.uri))
 
         self.dialog.finished.connect(self._SH_DialogFinished)
 
@@ -5903,11 +5892,10 @@ class SessionManager(object):
     def _NH_BlinkSessionTransferNewIncoming(self, notification):
         from blink.contacts import URIUtils
 
-        session = notification.sender.sip_session
         contact, contact_uri = URIUtils.find_contact(notification.data.transfer_destination)
 
         dialog = IncomingCallTransferDialog()  # Build the dialog without a parent in order to be displayed on the current workspace on Linux.
-        incoming_request = IncomingCallTransferRequest(dialog, contact, contact_uri, session)
+        incoming_request = IncomingCallTransferRequest(dialog, contact, contact_uri, notification.sender)
         incoming_request.finished.connect(self._SH_IncomingRequestFinished)
         incoming_request.accepted.connect(self._SH_IncomingCallTransferRequestAccepted)
         incoming_request.rejected.connect(self._SH_IncomingCallTransferRequestRejected)

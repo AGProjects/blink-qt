@@ -511,13 +511,19 @@ class PresenceManager(object):
 
 ui_class, base_class = uic.loadUiType(Resources.get('pending_watcher.ui'))
 
+
 class PendingWatcherDialog(base_class, ui_class):
     def __init__(self, account, uri, display_name, parent=None):
         super(PendingWatcherDialog, self).__init__(parent)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
+        default_font_size = self.uri_label.fontInfo().pointSizeF()
+        name_font_size = limit(default_font_size + 3, max=14)
+        font = self.name_label.font()
+        font.setPointSizeF(name_font_size)
+        self.name_label.setFont(font)
         addressbook_manager = addressbook.AddressbookManager()
         try:
             self.contact = next(contact for contact in addressbook_manager.get_contacts() if uri in (addr.uri for addr in contact.uris))
@@ -528,14 +534,10 @@ class PendingWatcherDialog(base_class, ui_class):
             icon_manager = IconManager()
             icon = icon_manager.get(self.contact.id)
             if icon is not None:
-                self.user_icon.setPixmap(icon.pixmap(32))
-        self.account_label.setText(u'For account %s' % account.id)
+                self.user_icon.setPixmap(icon.pixmap(48))
+        self.description_label.setText(u'Wants to subscribe to your availability information at {}'.format(account.id))
         self.name_label.setText(display_name or uri)
         self.uri_label.setText(uri)
-        font = self.name_label.font()
-        font.setPointSizeF(self.uri_label.fontInfo().pointSizeF() + 3)
-        font.setFamily("Sans Serif")
-        self.name_label.setFont(font)
         self.accept_button.released.connect(self._accept_watcher)
         self.block_button.released.connect(self._block_watcher)
         self.position = None
@@ -564,35 +566,6 @@ class PendingWatcherDialog(base_class, ui_class):
         policy.name = self.name_label.text()
         policy.presence.policy = 'block'
         policy.save()
-
-    def show(self, position=1):
-        from blink import Blink
-        blink = Blink()
-        screen_geometry = blink.desktop().screenGeometry(self)
-        available_geometry = blink.desktop().availableGeometry(self)
-        main_window_geometry = blink.main_window.geometry()
-        main_window_framegeometry = blink.main_window.frameGeometry()
-
-        horizontal_decorations = main_window_framegeometry.width() - main_window_geometry.width()
-        vertical_decorations = main_window_framegeometry.height() - main_window_geometry.height()
-        width = limit(self.sizeHint().width(), min=self.minimumSize().width(), max=min(self.maximumSize().width(), available_geometry.width()-horizontal_decorations))
-        height = limit(self.sizeHint().height(), min=self.minimumSize().height(), max=min(self.maximumSize().height(), available_geometry.height()-vertical_decorations))
-        total_width = width + horizontal_decorations
-        total_height = height + vertical_decorations
-        x = limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width)
-        if position is None:
-            y = -1
-        elif position % 2 == 0:
-            y = screen_geometry.center().y() + (position-1)*total_height/2
-        else:
-            y = screen_geometry.center().y() - position*total_height/2
-        if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
-            self.setGeometry(x, y, width, height)
-        else:
-            self.resize(width, height)
-
-        self.position = position
-        super(PendingWatcherDialog, self).show()
 
 del ui_class, base_class
 
