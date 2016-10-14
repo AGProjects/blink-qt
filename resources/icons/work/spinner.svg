@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="32"
+   height="32"
+   viewBox="0 0 32 32"
+   id="svg4146"
+   version="1.1"
+   inkscape:version="0.91 r13725"
+   sodipodi:docname="spinner.svg">
+  <defs
+     id="defs4148">
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient5620">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop5622" />
+      <stop
+         id="stop5624"
+         offset="0.85714287"
+         style="stop-color:#000000;stop-opacity:1" />
+      <stop
+         style="stop-color:#000000;stop-opacity:0"
+         offset="0.85714287"
+         id="stop5626" />
+      <stop
+         style="stop-color:#000000;stop-opacity:0;"
+         offset="1"
+         id="stop5628" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient4255">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop4257" />
+      <stop
+         style="stop-color:#000000;stop-opacity:0;"
+         offset="1"
+         id="stop4259" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4255"
+       id="linearGradient4261"
+       x1="16"
+       y1="2"
+       x2="16"
+       y2="30"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient5620"
+       id="linearGradient5226"
+       x1="16"
+       y1="30"
+       x2="16"
+       y2="16"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient5620"
+       id="linearGradient5234"
+       gradientUnits="userSpaceOnUse"
+       x1="16"
+       y1="30"
+       x2="16"
+       y2="16"
+       gradientTransform="translate(0,-32)" />
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="29.1875"
+     inkscape:cx="16"
+     inkscape:cy="16"
+     inkscape:document-units="px"
+     inkscape:current-layer="g5954"
+     showgrid="true"
+     units="px"
+     inkscape:window-width="1850"
+     inkscape:window-height="1168"
+     inkscape:window-x="2"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     showguides="true"
+     inkscape:guide-bbox="true">
+    <inkscape:grid
+       type="xygrid"
+       id="grid4694"
+       spacingx="0.5"
+       spacingy="0.5"
+       empspacing="10" />
+  </sodipodi:namedview>
+  <metadata
+     id="metadata4151">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:groupmode="layer"
+     id="layer1"
+     inkscape:label="Spinner"
+     style="display:none;opacity:1">
+    <circle
+       style="opacity:0.2;fill:none;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-dashoffset:3.55200005;stroke-opacity:1"
+       id="circle4147"
+       cx="16"
+       cy="16"
+       r="12.5" />
+    <path
+       style="color:#000000;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:medium;line-height:normal;font-family:sans-serif;text-indent:0;text-align:start;text-decoration:none;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;block-progression:tb;writing-mode:lr-tb;baseline-shift:baseline;text-anchor:start;white-space:normal;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:0.6;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:3;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-dashoffset:3.55200005;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate"
+       d="M 16,2 C 8.2857805,2 2,8.2857805 2,16 l 3,0 C 5,9.9071008 9.9071008,5 16,5 22.092899,5 27,9.9071008 27,16 l 3,0 C 30,8.2857805 23.71422,2 16,2 Z"
+       id="circle6611"
+       inkscape:connector-curvature="0">
+      <animateTransform
+         attributeName="transform"
+         type="rotate"
+         from="0 16 16"
+         to="360 16 16"
+         repeatCount="indefinite"
+         dur="0.8s" />
+    </path>
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="g4236"
+     inkscape:label="Spinner 180"
+     style="display:none;opacity:1">
+    <path
+       d="M 28.5,16 A 12.5,12.5 0 0 1 22.25,26.825318 12.5,12.5 0 0 1 9.7499997,26.825317 12.5,12.5 0 0 1 3.5,15.999999"
+       sodipodi:open="true"
+       sodipodi:end="3.1415927"
+       sodipodi:start="0"
+       sodipodi:ry="12.5"
+       sodipodi:rx="12.5"
+       sodipodi:cy="16"
+       sodipodi:cx="16"
+       sodipodi:type="arc"
+       style="opacity:0.6;fill:none;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-dashoffset:3.55200005;stroke-opacity:1"
+       id="circle4238">
+      <animateTransform
+         attributeName="transform"
+         type="rotate"
+         from="0 16 16"
+         to="360 16 16"
+         repeatCount="indefinite"
+         dur="0.8s" />
+    </path>
+  </g>
+  <g
+     style="display:none;opacity:1"
+     inkscape:label="Spinner 270"
+     id="g4221"
+     inkscape:groupmode="layer">
+    <path
+       id="circle4223"
+       style="opacity:0.6;fill:none;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:3;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-dashoffset:3.55200005;stroke-opacity:1"
+       sodipodi:type="arc"
+       sodipodi:cx="15.999502"
+       sodipodi:cy="16.000498"
+       sodipodi:rx="12.500498"
+       sodipodi:ry="12.500498"
+       sodipodi:start="0"
+       sodipodi:end="4.712389"
+       sodipodi:open="true"
+       d="M 28.5,16.000498 A 12.500498,12.500498 0 0 1 20.783236,27.549452 12.500498,12.500498 0 0 1 7.1603153,24.839685 12.500498,12.500498 0 0 1 4.4505482,11.216764 12.500498,12.500498 0 0 1 15.999502,3.5">
+      <animateTransform
+         attributeName="transform"
+         type="rotate"
+         from="0 16 16"
+         to="360 16 16"
+         repeatCount="indefinite"
+         dur="0.8s" />
+    </path>
+  </g>
+  <g
+     style="display:none;opacity:1"
+     inkscape:label="Spinner gradient"
+     id="g4240"
+     inkscape:groupmode="layer">
+    <circle
+       r="12.5"
+       cy="16"
+       cx="16"
+       id="circle4242"
+       style="opacity:0.6;fill:none;fill-opacity:1;fill-rule:nonzero;stroke:url(#linearGradient4261);stroke-width:3;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-dashoffset:3.55200005;stroke-opacity:1">
+      <animateTransform
+         attributeName="transform"
+         type="rotate"
+         from="0 16 16"
+         to="360 16 16"
+         repeatCount="indefinite"
+         dur="0.8s" />
+    </circle>
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="g5954"
+     inkscape:label="Spinner dual color"
+     style="display:inline;opacity:1">
+    <animateTransform
+       attributeName="transform"
+       type="rotate"
+       from="0 16 16"
+       to="360 16 16"
+       repeatCount="indefinite"
+       dur="0.8s" />
+    <circle
+       r="12.5"
+       cy="16"
+       cx="16"
+       id="circle4307"
+       style="opacity:0.6;fill:none;fill-opacity:1;fill-rule:nonzero;stroke:url(#linearGradient5226);stroke-width:3;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-dashoffset:3.55200005;stroke-opacity:1" />
+    <circle
+       r="12.5"
+       cy="-16"
+       cx="16"
+       style="opacity:0.3;fill:none;fill-opacity:1;fill-rule:nonzero;stroke:url(#linearGradient5234);stroke-width:3;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-dashoffset:3.55200005;stroke-opacity:1"
+       id="circle4305"
+       transform="scale(1,-1)" />
+  </g>
+</svg>

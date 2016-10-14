@@ -8,10 +8,11 @@ import urllib2
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel, QUrl, QUrlQuery
-from PyQt5.QtGui import QIcon, QMovie
+from PyQt5.QtGui import QIcon
 from PyQt5.QtNetwork import QNetworkAccessManager
-from PyQt5.QtWebKitWidgets import QWebView
-from PyQt5.QtWidgets import QButtonGroup, QComboBox, QMenu
+from PyQt5.QtWebKit import QWebSettings
+from PyQt5.QtWebKitWidgets import QWebView, QWebPage
+from PyQt5.QtWidgets import QApplication, QButtonGroup, QComboBox, QMenu
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
@@ -27,7 +28,10 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 from sipsimple.util import user_info
 
-from blink.resources import ApplicationData, Resources
+from blink.configuration.settings import BlinkSettings
+from blink.contacts import URIUtils
+from blink.resources import ApplicationData, IconManager, Resources
+from blink.sessions import SessionManager, StreamDescription
 from blink.widgets.labels import Status
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
@@ -522,6 +526,29 @@ del ui_class, base_class
 # Account server tools
 #
 
+class WebPage(QWebPage):
+    def __init__(self, parent=None):
+        super(WebPage, self).__init__(parent)
+        disable_actions = {QWebPage.OpenLink, QWebPage.OpenLinkInNewWindow, QWebPage.OpenLinkInThisWindow, QWebPage.OpenFrameInNewWindow, QWebPage.DownloadLinkToDisk,
+                           QWebPage.OpenImageInNewWindow, QWebPage.DownloadImageToDisk, QWebPage.DownloadMediaToDisk}
+        for action in (self.action(action) for action in disable_actions):
+            action.setVisible(False)
+
+    def createWindow(self, type):
+        return self
+
+    def acceptNavigationRequest(self, frame, request, navigation_type):
+        if navigation_type == QWebPage.NavigationTypeLinkClicked and self.linkDelegationPolicy() == QWebPage.DontDelegateLinks and request.url().scheme() in ('sip', 'sips'):
+            blink = QApplication.instance()
+            contact, contact_uri = URIUtils.find_contact(request.url().toString())
+            session_manager = SessionManager()
+            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')])
+            blink.main_window.raise_()
+            blink.main_window.activateWindow()
+            return False
+        return super(WebPage, self).acceptNavigationRequest(frame, request, navigation_type)
+
+
 class ServerToolsAccountModel(QSortFilterProxyModel):
     def __init__(self, model, parent=None):
         super(ServerToolsAccountModel, self).__init__(parent)
@@ -540,6 +567,7 @@ class ServerToolsWebView(QWebView):
 
     def __init__(self, parent=None):
         super(ServerToolsWebView, self).__init__(parent)
+        self.setPage(WebPage(self))
         self.access_manager = Null
         self.authenticated = False
         self.account = None
@@ -548,7 +576,10 @@ class ServerToolsWebView(QWebView):
         self.task = None
         self.last_error = None
         self.realm = None
+        self.homepage = None
         self.urlChanged.connect(self._SH_URLChanged)
+        self.settings().setAttribute(QWebSettings.JavascriptEnabled, True)
+        self.settings().setAttribute(QWebSettings.JavascriptCanOpenWindows, True)
 
     @property
     def query_items(self):
@@ -614,7 +645,7 @@ class ServerToolsWebView(QWebView):
         self.tab = query_items.get('tab') or self.tab
         self.task = query_items.get('task') or self.task
 
-    def load_account_page(self, account, tab=None, task=None):
+    def load_account_page(self, account, tab=None, task=None, reset_history=False, set_home=False):
         self.tab = tab
         self.task = task
         self.account = account
@@ -623,7 +654,16 @@ class ServerToolsWebView(QWebView):
         for name, value in self.query_items:
             url_query.addQueryItem(name, value)
         url.setQuery(url_query)
-        self.load(url)
+        if set_home:
+            self.homepage = url
+        if reset_history:
+            self.history().clear()
+            self.page().mainFrame().evaluateJavaScript('window.location.replace("{}");'.format(url.toString()))  # this will replace the current url in the history
+        else:
+            self.load(url)
+
+    def load_homepage(self):
+        self.load(self.homepage or self.history().itemAt(0).url())
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('server_tools.ui'))
@@ -632,56 +672,69 @@ ui_class, base_class = uic.loadUiType(Resources.get('server_tools.ui'))
 class ServerToolsWindow(base_class, ui_class):
     __metaclass__ = QSingleton
 
+    implements(IObserver)
+
     def __init__(self, model, parent=None):
         super(ServerToolsWindow, self).__init__(parent)
         with Resources.directory:
-            self.setupUi(self)
-        self.spinner_movie = QMovie(Resources.get('icons/servertools-spinner.mng'))
-        self.spinner_label.setMovie(self.spinner_movie)
-        self.spinner_label.hide()
-        self.progress_bar.hide()
-        while self.tab_widget.count():
-            self.tab_widget.removeTab(0)  # remove the tab(s) added in designer
-        self.tab_widget.tabBar().hide()
-        self.account_button.setMenu(QMenu(self.account_button))
+            self.setupUi()
         self.setWindowTitle('Blink Server Tools')
         self.setWindowIconText('Server Tools')
         self.setWindowIcon(QIcon(Resources.get('icons/blink48.png')))
         self.model = model
-        self.tab_widget.addTab(ServerToolsWebView(self), '')
-        font = self.account_label.font()
-        font.setPointSizeF(self.account_label.fontInfo().pointSizeF() + 2)
-        font.setFamily("Sans Serif")
-        self.account_label.setFont(font)
         self.model.rowsInserted.connect(self._SH_ModelChanged)
         self.model.rowsRemoved.connect(self._SH_ModelChanged)
         self.account_button.menu().triggered.connect(self._SH_AccountButtonMenuTriggered)
-        web_view = self.tab_widget.currentWidget()
-        web_view.loadStarted.connect(self._SH_WebViewLoadStarted)
-        web_view.loadFinished.connect(self._SH_WebViewLoadFinished)
-        web_view.loadProgress.connect(self._SH_WebViewLoadProgress)
+        self.back_button.clicked.connect(self._SH_BackButtonClicked)
+        self.back_button.triggered.connect(self._SH_NavigationButtonTriggered)
+        self.forward_button.clicked.connect(self._SH_ForwardButtonClicked)
+        self.forward_button.triggered.connect(self._SH_NavigationButtonTriggered)
+        self.home_button.clicked.connect(self._SH_HomeButtonClicked)
+        self.web_view.loadStarted.connect(self._SH_WebViewLoadStarted)
+        self.web_view.loadFinished.connect(self._SH_WebViewLoadFinished)
+        self.web_view.titleChanged.connect(self._SH_WebViewTitleChanged)
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+
+    def setupUi(self):
+        super(ServerToolsWindow, self).setupUi(self)
+        self.account_button.default_avatar = QIcon(Resources.get('icons/default-avatar.png'))
+        self.account_button.setIcon(IconManager().get('avatar') or self.account_button.default_avatar)
+        self.account_button.setMenu(QMenu(self.account_button))
+        self.back_button.setMenu(QMenu(self.back_button))
+        self.back_button.setEnabled(False)
+        self.forward_button.setMenu(QMenu(self.forward_button))
+        self.forward_button.setEnabled(False)
 
     def _SH_AccountButtonMenuTriggered(self, action):
-        view = self.tab_widget.currentWidget()
         account = action.data()
-        self.account_label.setText(account.id)
-        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
-        view.load_account_page(account, tab=view.tab, task=view.task)
+        account_changed = account is not self.web_view.account
+        if account_changed:
+            self.back_button.setEnabled(False)
+            self.forward_button.setEnabled(False)
+        self.account_button.setText(account.id)
+        self.web_view.load_account_page(account, tab=self.web_view.tab, task=self.web_view.task, reset_history=account_changed, set_home=account_changed)
+
+    def _SH_BackButtonClicked(self):
+        self.web_view.history().back()
+
+    def _SH_ForwardButtonClicked(self):
+        self.web_view.history().forward()
+
+    def _SH_NavigationButtonTriggered(self, action):
+        self.web_view.history().goToItem(action.history_item)
+
+    def _SH_HomeButtonClicked(self):
+        self.web_view.load_homepage()
 
     def _SH_WebViewLoadStarted(self):
-        self.spinner_label.show()
-        self.spinner_movie.start()
-        self.progress_bar.setValue(0)
-        # self.progress_bar.show()
+        self.spinner.show()
 
     def _SH_WebViewLoadFinished(self, load_ok):
-        self.spinner_movie.stop()
-        self.spinner_label.hide()
-        self.progress_bar.hide()
+        self.spinner.hide()
         if not load_ok:
-            web_view = self.tab_widget.currentWidget()
             icon_path = Resources.get('icons/invalid.png')
-            error_message = web_view.last_error or 'Unknown error'
+            error_message = self.web_view.last_error or 'Unknown error'
             html = """
             <html>
              <head>
@@ -696,14 +749,13 @@ class ServerToolsWindow(base_class, ui_class):
              </body>
             </html>
             """ % (icon_path, error_message)
-            web_view.loadStarted.disconnect(self._SH_WebViewLoadStarted)
-            web_view.loadFinished.disconnect(self._SH_WebViewLoadFinished)
-            web_view.setHtml(html)
-            web_view.loadStarted.connect(self._SH_WebViewLoadStarted)
-            web_view.loadFinished.connect(self._SH_WebViewLoadFinished)
+            self.web_view.blockSignals(True)
+            self.web_view.setHtml(html)
+            self.web_view.blockSignals(False)
+        self._update_navigation_buttons()
 
-    def _SH_WebViewLoadProgress(self, percent):
-        self.progress_bar.setValue(percent)
+    def _SH_WebViewTitleChanged(self, title):
+        self.window().setWindowTitle(u'Blink Server Tools: {}'.format(title))
 
     def _SH_ModelChanged(self, parent_index, start, end):
         menu = self.account_button.menu()
@@ -714,35 +766,67 @@ class ServerToolsWindow(base_class, ui_class):
             action.setData(account_info.account)
 
     def open_settings_page(self, account):
-        view = self.tab_widget.currentWidget()
-        account = account or view.account
+        account = account or self.web_view.account
         if account is None or account.server.settings_url is None:
             account = self.account_button.menu().actions()[0].data()
-        self.account_label.setText(account.id)
-        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
-        view.load_account_page(account, tab='settings')
+        account_changed = account is not self.web_view.account
+        if account_changed:
+            self.back_button.setEnabled(False)
+            self.forward_button.setEnabled(False)
+        self.account_button.setText(account.id)
+        self.web_view.load_account_page(account, tab='settings', reset_history=account_changed, set_home=True)
         self.show()
 
     def open_search_for_people_page(self, account):
-        view = self.tab_widget.currentWidget()
-        account = account or view.account
+        account = account or self.web_view.account
         if account is None or account.server.settings_url is None:
             account = self.account_button.menu().actions()[0].data()
-        self.account_label.setText(account.id)
-        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
-        view.load_account_page(account, tab='contacts', task='directory')
+        account_changed = account is not self.web_view.account
+        if account_changed:
+            self.back_button.setEnabled(False)
+            self.forward_button.setEnabled(False)
+        self.account_button.setText(account.id)
+        self.web_view.load_account_page(account, tab='contacts', task='directory', reset_history=account_changed, set_home=True)
         self.show()
 
     def open_history_page(self, account):
-        view = self.tab_widget.currentWidget()
-        account = account or view.account
+        account = account or self.web_view.account
         if account is None or account.server.settings_url is None:
             account = self.account_button.menu().actions()[0].data()
-        self.account_label.setText(account.id)
-        self.tab_widget.setTabText(self.tab_widget.currentIndex(), account.id)
-        view.load_account_page(account, tab='calls')
+        account_changed = account is not self.web_view.account
+        if account_changed:
+            self.back_button.setEnabled(False)
+            self.forward_button.setEnabled(False)
+        self.account_button.setText(account.id)
+        self.web_view.load_account_page(account, tab='calls', reset_history=account_changed, set_home=True)
         self.show()
 
+    def _update_navigation_buttons(self):
+        history = self.web_view.history()
+        self.back_button.setEnabled(history.canGoBack())
+        self.forward_button.setEnabled(history.canGoForward())
+        back_menu = self.back_button.menu()
+        back_menu.clear()
+        for item in reversed(history.backItems(7)):
+            action = back_menu.addAction(item.title())
+            action.history_item = item
+        forward_menu = self.forward_button.menu()
+        forward_menu.clear()
+        for item in history.forwardItems(7):
+            action = forward_menu.addAction(item.title())
+            action.history_item = item
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        notification.center.add_observer(self, name='CFGSettingsObjectDidChange', sender=BlinkSettings())
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if 'presence.icon' in notification.data.modified:
+            self.account_button.setIcon(IconManager().get('avatar') or self.account_button.default_avatar)
+
+
 del ui_class, base_class
-
-
