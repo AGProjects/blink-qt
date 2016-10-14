@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>ContactEditor</class>
- <widget class="QDialog" name="ContactEditor">
+ <class>contact_editor</class>
+ <widget class="QDialog" name="contact_editor">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -302,7 +302,7 @@
   <connection>
    <sender>accept_button</sender>
    <signal>clicked()</signal>
-   <receiver>ContactEditor</receiver>
+   <receiver>contact_editor</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -318,7 +318,7 @@
   <connection>
    <sender>reject_button</sender>
    <signal>clicked()</signal>
-   <receiver>ContactEditor</receiver>
+   <receiver>contact_editor</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">
