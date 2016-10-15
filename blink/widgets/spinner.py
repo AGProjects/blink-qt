@@ -48,7 +48,11 @@ class Spinner(QSvgWidget):
     def _update_viewbox(self, size):
         if self._original_viewbox.isEmpty() or size.isEmpty():
             return
-        viewbox = self._original_viewbox.adjusted(self.icon_crop, self.icon_crop, -self.icon_crop, -self.icon_crop)
+        if self.icon_crop >= 0:
+            adjustment = self.icon_crop
+        else:
+            adjustment = self._original_viewbox.width() * self.icon_crop / (self._original_viewbox.width() + 2*self.icon_crop)  # (w - w * w/(w+2b))/2 = wb/(w+2b)
+        viewbox = self._original_viewbox.adjusted(adjustment, adjustment, -adjustment, -adjustment)
         width = size.width()
         height = size.height()
         if height >= width:
