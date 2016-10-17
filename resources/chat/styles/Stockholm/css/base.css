@@ -176,7 +176,7 @@ body
 {
 	visibility: hidden;
 	font-weight: bold;
-	//position: absolute;
+	/*position: absolute;*/
 	margin-top: 0px;
 	padding-left: 4px;
 	padding-top: 0px;
@@ -191,7 +191,7 @@ body
 .message:not(.focus) .x-message.ltr .x-time,
 .message .x-message.ltr:not(.focus) .x-time
 {
-	//right: 1px;
+	/*right: 1px;*/
 	padding-right: 5px;
 	float: right;
 	margin-right: -8px;
@@ -201,7 +201,7 @@ body
 .message.focus .x-message.ltr .x-time,
 .message .x-message.focus.ltr .x-time
 {
-	//right: 1px;
+	/*right: 1px;*/
 	padding-right: 9px;
 	float: right;
 	margin-right: -8px;
@@ -210,11 +210,11 @@ body
 
 .message .x-message.rtl .x-time
 {
-	//left: 2px;
+	/*left: 2px;*/
 	padding-left: 4px;
 	padding-right: 4px;
 	float: left;
-	//margin-right: -8px;
+	/*margin-right: -8px;*/
 	margin-left: -4px;
 }
 
