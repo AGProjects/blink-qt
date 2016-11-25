@@ -2556,7 +2556,12 @@ class HtmlProcessor(object):
                                   (?:\?(?:[\w/%!$@#*&='~:;,.+-]*(?:\([\w/%!$@#*&='~:;,.+-]*\))?)*)?  # [ ? query]
                                 )
                                 """, re.I|re.U|re.X),
-                    re.compile(r"(?P<body>ftps?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?(?:/(?:[\w/%!?$@*&='~:,.+-]*(?:\([\w/%!?$@*&='~:,.+-]*\))?)*(?:;type=[aid])?)?)", re.I|re.U),
+                    re.compile(r"""
+                                (?P<body>
+                                  ftps?://(?:[^:@/]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?                  # scheme :// [ user [ : password ] @ ] host [ : port ]
+                                  (?:/(?:[\w/%!?$@*&='~:,.+-]*(?:\([\w/%!?$@*&='~:,.+-]*\))?)*(?:;type=[aid])?)?  # [ / path [ ;type=a/i/d ] ]
+                                )
+                                """, re.I|re.U|re.X),
                     re.compile(r'mailto:(?P<body>[\w.-]+@(?P<host>[a-z0-9.-]+))', re.I|re.U)]
 
     @classmethod
