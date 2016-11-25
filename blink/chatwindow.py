@@ -2569,7 +2569,7 @@ class HtmlProcessor(object):
         if isinstance(content, basestring):
             doc = html.fromstring(content)
             autolink(doc, link_regexes=cls._autolink_re)
-            return html.tostring(doc, encoding='unicode') # add method='xml' to get <br/> xhtml style tags and doctype=doc.getroottree().docinfo.doctype for prepending the DOCTYPE line
+            return html.tostring(doc, encoding='unicode')  # add method='xml' to get <br/> xhtml style tags and doctype=doc.getroottree().docinfo.doctype for prepending the DOCTYPE line
         else:
             autolink(content, link_regexes=cls._autolink_re)
             return content
