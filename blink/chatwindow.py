@@ -2549,8 +2549,7 @@ del ui_class, base_class
 #
 
 class HtmlProcessor(object):
-    _autolink_re = [  # re.compile(r"(?P<body>https?://(?:[^:@]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?(?:/[\w/%!$@#*&='~():;,.+-]*(?:\?[\w%!$@*&='~():;,.+-]*)?)?)", re.I|re.U),
-                    re.compile(r"""
+    _autolink_re = [re.compile(r"""
                                 (?P<body>
                                   https?://(?:[^:@/]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?    # scheme :// [ user [ : password ] @ ] host [ : port ]
                                   (?:/(?:[\w/%!$@#*&='~:;,.+-]*(?:\([\w/%!$@#*&='~:;,.+-]*\))?)*)?   # [ / path]
