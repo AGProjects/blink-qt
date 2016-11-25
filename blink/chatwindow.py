@@ -2555,14 +2555,14 @@ class HtmlProcessor(object):
                                   (?:/(?:[\w/%!$@#*&='~:;,.+-]*(?:\([\w/%!$@#*&='~:;,.+-]*\))?)*)?   # [ / path]
                                   (?:\?(?:[\w/%!$@#*&='~:;,.+-]*(?:\([\w/%!$@#*&='~:;,.+-]*\))?)*)?  # [ ? query]
                                 )
-                                """, re.I|re.U|re.X),
+                                """, re.IGNORECASE | re.UNICODE | re.VERBOSE),
                     re.compile(r"""
                                 (?P<body>
                                   ftps?://(?:[^:@/]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?                  # scheme :// [ user [ : password ] @ ] host [ : port ]
                                   (?:/(?:[\w/%!?$@*&='~:,.+-]*(?:\([\w/%!?$@*&='~:,.+-]*\))?)*(?:;type=[aid])?)?  # [ / path [ ;type=a/i/d ] ]
                                 )
-                                """, re.I|re.U|re.X),
-                    re.compile(r'mailto:(?P<body>[\w.-]+@(?P<host>[a-z0-9.-]+))', re.I|re.U)]
+                                """, re.IGNORECASE | re.UNICODE | re.VERBOSE),
+                    re.compile(r'mailto:(?P<body>[\w.-]+@(?P<host>[a-z0-9.-]+))', re.IGNORECASE | re.UNICODE)]
 
     @classmethod
     def autolink(cls, content):
