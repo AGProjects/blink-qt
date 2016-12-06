@@ -321,7 +321,7 @@ class ChatSender(object):
     def __init__(self, name, uri, iconpath):
         self.name = name
         self.uri = uri
-        self.iconpath = iconpath
+        self.iconpath = QUrl.fromLocalFile(iconpath).toString()
 
     def __eq__(self, other):
         if not isinstance(other, ChatSender):
