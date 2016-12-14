@@ -3,15 +3,12 @@
 import os
 import sys
 
-from application import log
-
 
 def except_hook(exception_type, exception_value, traceback):
     sys.__excepthook__(exception_type, exception_value, traceback)
 
 sys.excepthook = except_hook  # pyqt5 (>=5.5) will abort if an exception happens in python code when called from Qt, unless we define this
 
-log.level.current = log.level.WARNING
 
 frozen = hasattr(sys, 'frozen')
 
@@ -33,7 +30,35 @@ if os.path.basename(script_dir) == 'bin' and os.path.exists(os.path.join(parent_
 
 if frozen:
     from StringIO import StringIO
-    sys.stdout = sys.stderr = StringIO()
+
+    class FakeStdout(object):
+        def __init__(self):
+            self._io = StringIO()
+            self._file = None
+
+        @property
+        def file(self):
+            return self._file
+
+        @file.setter
+        def file(self, f):
+            f.write(self._io.getvalue())
+            self._io.close()
+            self._file = f
+
+        def __getattr__(self, name):
+            if self._file is not None:
+                return getattr(self._file, name)
+            else:
+                return getattr(self._io, name)
+
+    sys.stdout = sys.stderr = FakeStdout()
+
+
+# Import log last so the created StreamHandler instances have references
+# to the replaced sys.std{out,err}
+from application import log
+log.level.current = log.level.WARNING
 
 
 if __name__ == '__main__':
