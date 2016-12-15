@@ -48,7 +48,7 @@ if hasattr(sys, 'frozen'):
     makedirs(ApplicationData.get('logs'))
     sys.stdout.file = open(ApplicationData.get('logs/output.log'), 'a', 0)
     import httplib2
-    httplib2.CA_CERTS = Resources.get('tls/cacerts.txt')
+    httplib2.CA_CERTS = os.environ['SSL_CERT_FILE'] = Resources.get('tls/cacerts.pem')
 
 
 class IPAddressMonitor(object):
