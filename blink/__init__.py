@@ -47,6 +47,8 @@ __all__ = ['Blink']
 if hasattr(sys, 'frozen'):
     makedirs(ApplicationData.get('logs'))
     sys.stdout.file = open(ApplicationData.get('logs/output.log'), 'a', 0)
+    import httplib2
+    httplib2.CA_CERTS = Resources.get('tls/cacerts.txt')
 
 
 class IPAddressMonitor(object):
