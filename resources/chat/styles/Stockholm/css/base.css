@@ -48,7 +48,7 @@ body
 	opacity: .7;
 }
 
-.x-container:not(.mention).hide-icons
+.x-container:not(.mention).hide-icons,
 .x-container:not(.mention).hide-icons .x-message
 {
 	margin-right: 0px !important;
