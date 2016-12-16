@@ -31,9 +31,9 @@ if os.path.basename(script_dir) == 'bin' and os.path.exists(os.path.join(parent_
 if frozen:
     from StringIO import StringIO
 
-    class FakeStdout(object):
+    class DivertedStdout(object):
         def __init__(self):
-            self._io = StringIO()
+            self._output = StringIO()
             self._file = None
 
         @property
@@ -41,18 +41,20 @@ if frozen:
             return self._file
 
         @file.setter
-        def file(self, f):
-            f.write(self._io.getvalue())
-            self._io.close()
-            self._file = f
+        def file(self, path):
+            if self._file is not None:
+                raise RuntimeError("output file was already set to: {0._file!r}".format(self))
+            f = open(path, 'a', 0)
+            # noinspection PyUnresolvedReferences
+            f.write(self._output.getvalue())
+            self._output.close()
+            self._output = f
+            self._file = path
 
         def __getattr__(self, name):
-            if self._file is not None:
-                return getattr(self._file, name)
-            else:
-                return getattr(self._io, name)
+            return getattr(self._output, name)
 
-    sys.stdout = sys.stderr = FakeStdout()
+    sys.stdout = sys.stderr = DivertedStdout()
 
 
 # Import log last so the created StreamHandler instances have references
