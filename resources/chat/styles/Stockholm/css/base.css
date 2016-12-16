@@ -186,7 +186,6 @@ body
 	-webkit-box-shadow: 0px 1px 4px rgba(0, 0, 0, .5);
 	background-color: rgba(255, 255, 255, .8);
 	color: rgba(16, 16, 16, .8);
-	font-weight: bold;
 }
 
 .message:not(.focus) .x-message.ltr .x-time,
