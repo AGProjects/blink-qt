@@ -376,7 +376,7 @@ a
 
 		/* dark border: top, left, right */
 		-webkit-gradient(linear, left top, right top,   from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 48%, 1))) left top no-repeat,
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 73%, 1))) left 2px no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 73%, 1))) left 2px no-repeat,  /* needs to be shifted down 2 px else it messes the corner */
 		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 48%, 1)), color-stop(.3, hsla(0, 0%, 48%, 1)), to(hsla(0, 0%, 58%, 1))) right bottom no-repeat,
 
 		/* light border: top, bottom, left, right */
@@ -400,7 +400,7 @@ a
 
 		/* dark border: top, left, right */
 		-webkit-gradient(linear, left top, right top,   from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 48%, 1))) left top no-repeat,
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 73%, 1))) left 2px no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 73%, 1))) left 2px no-repeat,  /* needs to be shifted down 2 px else it messes the corner */
 		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 48%, 1)), color-stop(.3, hsla(0, 0%, 48%, 1)), to(hsla(0, 0%, 58%, 1))) right bottom no-repeat,
 
 		/* light border: top, bottom, left, right */
