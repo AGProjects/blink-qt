@@ -200,6 +200,7 @@ class MainWindow(base_class, ui_class):
         self.sip_server_settings_action.triggered.connect(self._AH_SIPServerSettings)
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
+        self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
 
         # Window menu actions
         self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
@@ -774,7 +775,6 @@ class MainWindow(base_class, ui_class):
             self.google_contacts_action.setText(u'Disable &Google Contacts')
         else:
             self.google_contacts_action.setText(u'Enable &Google Contacts...')
-        self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
         if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
