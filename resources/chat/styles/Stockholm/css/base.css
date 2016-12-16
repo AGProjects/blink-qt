@@ -374,22 +374,19 @@ a
 		/* top left corner */
 		-webkit-gradient(linear, left top, right top, from(hsla(0, 0%, 63%, 1)), to(hsla(0, 0%, 63%, 1))) left top no-repeat,
 
-		/* dark border: top, left, right */
+		/* dark border: top, bottom, left, right */
 		-webkit-gradient(linear, left top, right top,   from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 48%, 1))) left top no-repeat,
+		-webkit-gradient(linear, left top, right top,   from(hsla(0, 0%, 73%, .2)), to(hsla(0, 0%, 73%, .2))) left bottom no-repeat,
 		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 58%, 1)), to(hsla(0, 0%, 73%, 1))) left 2px no-repeat,  /* needs to be shifted down 2 px else it messes the corner */
 		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 48%, 1)), color-stop(.3, hsla(0, 0%, 48%, 1)), to(hsla(0, 0%, 58%, 1))) right bottom no-repeat,
 
 		/* light border: top, bottom, left, right */
 		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) left top no-repeat,
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .7)), to(hsla(0, 0%, 100%, .7))) left bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) left bottom no-repeat,
 		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) left top no-repeat,
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) right top no-repeat  !important;
 
-		/* body gradient x2 */
-		-webkit-gradient(linear, left top, right top,   from(hsla(0, 0%, 0%, .1)), color-stop(.15, hsla(0, 0%, 100%, 0)), color-stop(.85, hsla(0, 0%, 100%, 0)), to(hsla(0, 0%, 0%, .1))),
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 0%, .1)), color-stop(.17, hsla(0, 0%, 100%, 0)), color-stop(.52, hsla(0, 0%, 100%, 0)), to(hsla(0, 0%, 0%, .1))) !important;
-
-	-webkit-background-size: 2px 2px, 100% 1px, 1px 100%, 1px 100%, 100% 2px, 100% 1px, 2px 100%, 2px 100%, 100% 100%, 100% 100% !important;
+	-webkit-background-size: 2px 2px, 100% 1px, 100% 1px, 1px 100%, 1px 100%, 100% 2px, 100% 1px, 2px 100%, 2px 100% !important;
 }
 
 .x-container.mention .x-iconoverlay
