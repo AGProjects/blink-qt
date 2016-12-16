@@ -401,10 +401,10 @@ a
 		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 48%, 1)), color-stop(.3, hsla(0, 0%, 48%, 1)), to(hsla(0, 0%, 58%, 1))) right bottom no-repeat,
 
 		/* light border: top, bottom, left, right */
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) left top no-repeat,
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .7)), to(hsla(0, 0%, 100%, .7))) left bottom no-repeat,
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) left top no-repeat,
-		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 100%, .8)), to(hsla(0, 0%, 100%, .8))) right top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 90%, .5)), to(hsla(0, 0%, 90%, .5))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 90%, .5)), to(hsla(0, 0%, 90%, .5))) left bottom no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 90%, .5)), to(hsla(0, 0%, 90%, .5))) left top no-repeat,
+		-webkit-gradient(linear, left top, left bottom, from(hsla(0, 0%, 90%, .5)), to(hsla(0, 0%, 90%, .5))) right top no-repeat,
 
 		/* body gradient x2 */
 		-webkit-gradient(linear, left top, right top,   from(hsla(0, 0%, 0%, .1)), color-stop(.15, hsla(0, 0%, 100%, 0)), color-stop(.85, hsla(0, 0%, 100%, 0)), to(hsla(0, 0%, 0%, .1))),
