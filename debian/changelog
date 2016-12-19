@@ -3,7 +3,7 @@ blink (3.0.0) unstable; urgency=medium
   * Switched to Qt5
   * Skip creation of dbgsym packages
   * Updated building instructions for MinGW
-  * ixed race condition in accessing the ZRTP SAS for SMP verification
+  * Fixed race condition in accessing the ZRTP SAS for SMP verification
   * Fixed unicode sorting for contact names
   * Publish icon and display name in offline state
   * Include display name and icon in the offline status document as well
@@ -12,11 +12,11 @@ blink (3.0.0) unstable; urgency=medium
   * Store Google contact icons in the IconManager
   * Fixed showing ICE status when not available
   * Improved some icons
-  * Fixed regular expression for autolinking http URLs
+  * Fixed regular expression for auto-linking http URLs
   * Fix diverting std{out,err} when running frozen
-  * Use bundled cacerts when running frozen
+  * Use bundled CA certs when running frozen
   * Improved chat themes
-  * Avoid random crahses on exit caused by out of order object deallocation
+  * Avoid random crashes on exit caused by out of order object deletion
 
  -- Saul Ibarra <saul@ag-projects.com>  Fri, 16 Dec 2016 16:31:34 +0100
 
