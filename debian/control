@@ -25,7 +25,7 @@ Depends: ${python:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python-twisted-core,
          python-zope.interface,
          x11vnc
-Description: A state of the art, easy to use SIP client
+Description: Easy to use SIP client
  Blink is a fully featured SIP client written in Python and built on top of
  SIP SIMPLE client SDK. Blink provides real time applications based on SIP
  and related protocols for Audio, Video, Instant Messaging, File Transfers,
