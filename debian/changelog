@@ -1,3 +1,15 @@
+blink (3.0.1) unstable; urgency=medium
+
+  * Depend on python-sipsimple 3.1.0
+  * Updated debian standards version
+  * Updated debian compatibility level
+  * Updated debian package description
+  * Updated debian copyright file
+  * Removed deprecated debian blink.menu entry
+  * Fixed typos in changelog
+
+ -- Dan Pascu <dan@ag-projects.com>  Mon, 19 Dec 2016 12:42:46 +0200
+
 blink (3.0.0) unstable; urgency=medium
 
   * Switched to Qt5
