@@ -21,7 +21,7 @@ Depends: ${python:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python-pyqt5,
          python-pyqt5.qtsvg,
          python-pyqt5.qtwebkit,
-         python-sipsimple (>= 3.0.0),
+         python-sipsimple (>= 3.1.0),
          python-twisted-core,
          python-zope.interface,
          x11vnc
