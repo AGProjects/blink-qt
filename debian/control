@@ -3,7 +3,7 @@ Section: python
 Priority: optional
 Maintainer: Dan Pascu <dan@ag-projects.com>
 Uploaders: Adrian Georgescu <ag@ag-projects.com>
-Build-Depends: debhelper (>= 7.3.5), dh-python, python-all-dev (>= 2.7), python-all-dbg (>= 2.7), cython-dbg (>= 0.19), libvncserver-dev
+Build-Depends: debhelper (>= 9), dh-python, python-all-dev (>= 2.7), python-all-dbg (>= 2.7), cython-dbg (>= 0.19), libvncserver-dev
 Standards-Version: 3.9.8
 Homepage: http://icanblink.com
 
