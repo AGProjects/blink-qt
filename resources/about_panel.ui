@@ -45,7 +45,7 @@
    <item>
     <widget class="QLabel" name="description">
      <property name="text">
-      <string>A state of the art, easy to use SIP client</string>
+      <string>Fully featured, easy to use SIP client</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>

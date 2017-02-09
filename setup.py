@@ -26,7 +26,7 @@ def list_resources(source_directory, destination_directory):
 
 
 package_info = PackageInfo(os.path.join('blink', '__info__.py'))
-package_info.__description__ = "A state of the art, easy to use SIP client"
+package_info.__description__ = "Fully featured, easy to use SIP client with a Qt based UI"
 
 
 setup(

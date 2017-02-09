@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Blink
 GenericName=SIP client
-Comment=A state of the art, easy to use SIP client
+Comment=Fully featured, easy to use SIP client with a Qt based UI
 X-GNOME-FullName=Blink SIP client
 Type=Application
 Exec=blink
