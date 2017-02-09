@@ -1,3 +1,16 @@
+blink (3.0.2) unstable; urgency=medium
+
+  * Fixed people API breakage on Google's side
+  * Removed obsolete pycompat/pyversions files
+  * Updated debhelper version dependency
+  * Use the backward compatible way for no automatic dbgsym packages
+  * Removed unnecessary .PHONY targets
+  * Updated software description
+  * Updated copyright years
+  * Updated man page
+
+ -- Dan Pascu <dan@ag-projects.com>  Thu, 09 Feb 2017 16:32:38 +0200
+
 blink (3.0.1) unstable; urgency=medium
 
   * Depend on python-sipsimple 3.1.0
