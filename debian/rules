@@ -2,6 +2,8 @@
 
 #export DH_VERBOSE=1
 
+export DEB_BUILD_OPTIONS=noautodbgsym
+
 %:
 	dh $@ --with python2
 
@@ -9,7 +11,4 @@ override_dh_clean:
 	dh_clean
 	rm -rf build dist MANIFEST
 
-override_dh_strip:
-	dh_strip --no-automatic-dbgsym
-
-.PHONY: override_dh_clean override_dh_strip
+.PHONY: override_dh_clean
