@@ -933,12 +933,12 @@ class GoogleContactsManager(object):
     def _get_connections(self, sync_token=None, request_mask=None):
         connections = []
         sync_tokens = []
-        request = self._service.people().me().connections().list(syncToken=sync_token, requestMask_includeField=request_mask, pageSize=500)
+        request = self._service.people().connections().list(resourceName='people/me', syncToken=sync_token, requestMask_includeField=request_mask, pageSize=500)
         while request is not None:
             response = request.execute()
             connections.extend(response.get('connections', []))
             sync_tokens.append(response['nextSyncToken'])
-            request = self._service.people().me().connections().list_next(request, response)
+            request = self._service.people().connections().list_next(request, response)
         sync_tokens.append(sync_token)  # in case we got no new sync token in the responses, use the previous one
         return connections, sync_tokens[0]
 
