@@ -1,3 +1,10 @@
+blink (3.0.3) unstable; urgency=medium
+
+  * Fixed another People API breakage by Google (they restored old behaviour)
+  * Added minimum version dependency for python-googleapi
+
+ -- Dan Pascu <dan@ag-projects.com>  Tue, 28 Feb 2017 12:19:11 +0200
+
 blink (3.0.2) unstable; urgency=medium
 
   * Fixed people API breakage on Google's side
