@@ -1,3 +1,18 @@
++ use an svg for the default avatar
+
++ When we accept a watcher and add it as a contact, it has no display name.
+  We can take it from offline/online presence info instead
++ When a contact is removed and it had "Exchange presence info" enabled, we
+  should remove its uris from the allowed contact list and add them to the
+  blocked contact list (actually check if this is what we want)
++ When "Exchange availability information" is disabled, we still get
+  presence updates until blink is restarted
++ If a uri was blocked then later added to a contact, it will still retain
+  an addressbook policy with policy=blocked, even if "Exchange availability
+  information" is enabled. Despite this, the accounts seem to exchange
+  presence info without problems.
++ Add the ability to merge contacts
+
 ZRTP
 ----
 
@@ -108,6 +123,94 @@ fullscreen: +12-15%
 
 - exceptions:
 
+Unhandled Error
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/threading.py", line 754, in run
+    self.__target(*self.__args, **self.__kwargs)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/application.py", line 141, in _run_reactor
+    reactor.run(installSignalHandlers=False)
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 1199, in run
+    self.mainLoop()
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 1208, in mainLoop
+    self.runUntilCurrent()
+--- <exception caught here> ---
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 828, in runUntilCurrent
+    call.func(*call.args, **call.kw)
+  File "/usr/lib/python2.7/dist-packages/eventlib/api.py", line 241, in _spawn
+    g.switch()
+  File "/usr/lib/python2.7/dist-packages/eventlib/api.py", line 237, in _spawn_startup
+    return cb(*args, **kw)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 380, in add_participant
+    referral_handler.start()
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 181, in start
+    if not self.session.remote_focus:
+exceptions.AttributeError: 'ReferralHandler' object has no attribute 'session'
+Traceback (most recent call last):
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 5015, in dropEvent
+    if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 4840, in handleDroppedData
+    return handler(mime_data, action, index)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 4850, in _DH_ApplicationXBlinkContactList
+    self.session.server_conference.add_participant(contact, contact.uri)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 1410, in add_participant
+    if contact_uri.uri in self.participants:
+AttributeError: 'NoneType' object has no attribute 'uri'
+
+Unhandled Error
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/threading.py", line 754, in run
+    self.__target(*self.__args, **self.__kwargs)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/application.py", line 141, in _run_reactor
+    reactor.run(installSignalHandlers=False)
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 1199, in run
+    self.mainLoop()
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 1208, in mainLoop
+    self.runUntilCurrent()
+--- <exception caught here> ---
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 828, in runUntilCurrent
+    call.func(*call.args, **call.kw)
+  File "/usr/lib/python2.7/dist-packages/eventlib/api.py", line 241, in _spawn
+    g.switch()
+  File "/usr/lib/python2.7/dist-packages/eventlib/api.py", line 237, in _spawn_startup
+    return cb(*args, **kw)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 380, in add_participant
+    referral_handler.start()
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 181, in start
+    if not self.session.remote_focus:
+exceptions.AttributeError: 'ReferralHandler' object has no attribute 'session'
+
+Unhandled Error
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/threading.py", line 754, in run
+    self.__target(*self.__args, **self.__kwargs)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/application.py", line 141, in _run_reactor
+    reactor.run(installSignalHandlers=False)
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 1199, in run
+    self.mainLoop()
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 1208, in mainLoop
+    self.runUntilCurrent()
+--- <exception caught here> ---
+  File "/usr/lib/python2.7/dist-packages/twisted/internet/base.py", line 828, in runUntilCurrent
+    call.func(*call.args, **call.kw)
+  File "/usr/lib/python2.7/dist-packages/eventlib/api.py", line 241, in _spawn
+    g.switch()
+  File "/usr/lib/python2.7/dist-packages/eventlib/api.py", line 237, in _spawn_startup
+    return cb(*args, **kw)
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 380, in add_participant
+    referral_handler.start()
+  File "/home/dan/work/voip/python-sipsimple/sipsimple/session.py", line 181, in start
+    if not self.session.remote_focus:
+exceptions.AttributeError: 'ReferralHandler' object has no attribute 'session'
+Traceback (most recent call last):
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 5015, in dropEvent
+    if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 4840, in handleDroppedData
+    return handler(mime_data, action, index)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 4850, in _DH_ApplicationXBlinkContactList
+    self.session.server_conference.add_participant(contact, contact.uri)
+  File "/home/dan/work/voip/blink-qt/blink/sessions.py", line 1410, in add_participant
+    if contact_uri.uri in self.participants:
+AttributeError: 'NoneType' object has no attribute 'uri'
 error: Exception occured while calling function handle_notification in the GUI thread
 Traceback (most recent call last):
   File "/home/dan/work/voip/blink-qt/blink/__init__.py", line 278, in _EH_CallFunctionEvent
