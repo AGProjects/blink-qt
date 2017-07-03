@@ -503,7 +503,7 @@ class GoogleContactIconRetriever(object):
                     log.error(u"could not store icon for {}: {!s}".format(self.contact.name, e))
                 else:
                     icon.downloaded_url = icon.url
-            elif response['status'] == '403' and icon.alternate_url:  # private photo. use old GData protocol if alternate_url is available
+            elif response['status'] in ('403', '404') and icon.alternate_url:  # private or unavailable photo. use old GData protocol if alternate_url is available.
                 try:
                     response, content = http.request(icon.alternate_url, headers={'GData-Version': '3.0'})
                 except (HttpLib2Error, socket.error) as e:
