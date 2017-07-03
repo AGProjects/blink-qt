@@ -481,6 +481,7 @@ class GoogleContactIconRetriever(object):
 
     @run_in_threadpool(threadpool)
     def run(self):
+        owner = self.contact.name or self.contact.organization or self.contact.id
         icon = self.contact.icon
         http = self.credentials.authorize(Http(timeout=5))
         try:
@@ -489,7 +490,7 @@ class GoogleContactIconRetriever(object):
             else:
                 response = content = None
         except (HttpLib2Error, socket.error) as e:
-            log.warning(u"could not retrieve icon for {}: {!s}".format(self.contact.name, e))
+            log.warning(u'could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
         else:
             if response is None:
                 icon_manager = IconManager()
@@ -500,27 +501,27 @@ class GoogleContactIconRetriever(object):
                 try:
                     icon_manager.store_data(self.contact.id, content)
                 except Exception as e:
-                    log.error(u"could not store icon for {}: {!s}".format(self.contact.name, e))
+                    log.error(u'could not store icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                 else:
                     icon.downloaded_url = icon.url
             elif response['status'] in ('403', '404') and icon.alternate_url:  # private or unavailable photo. use old GData protocol if alternate_url is available.
                 try:
                     response, content = http.request(icon.alternate_url, headers={'GData-Version': '3.0'})
                 except (HttpLib2Error, socket.error) as e:
-                    log.warning(u"could not retrieve icon for {}: {!s}".format(self.contact.name, e))
+                    log.warning(u'could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                 else:
                     if response['status'] == '200' and response['content-type'].startswith('image/'):
                         icon_manager = IconManager()
                         try:
                             icon_manager.store_data(self.contact.id, content)
                         except Exception as e:
-                            log.error(u"could not store icon for {}: {!s}".format(self.contact.name, e))
+                            log.error(u'could not store icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                         else:
                             icon.downloaded_url = icon.url
                     else:
-                        log.error(u"could not retrieve icon for {} (status={}, content type={})".format(self.contact.name, response['status'], response['content-type']))
+                        log.error(u'could not retrieve icon for {} (status={}, content-type={!r})'.format(owner, response['status'], response['content-type']))
             else:
-                log.error(u"could not retrieve icon for {} (status={}, content type={})".format(self.contact.name, response['status'], response['content-type']))
+                log.error(u'could not retrieve icon for {} (status={}, content-type={!r})'.format(owner, response['status'], response['content-type']))
         finally:
             self._event.set()
 
