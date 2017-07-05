@@ -850,15 +850,14 @@ class GoogleContactsManager(object):
 
         # A person's available attributes:
         #
-        # person.addresses, person.age_range, person.biographies, person.birthdays, person.bragging_rights, person.cover_photos, person.email_addresses,
-        # person.events, person.genders, person.im_clients, person.interests, person.locales, person.memberships, person.metadata, person.names, person.nicknames,
-        # person.occupations, person.organizations, person.phone_numbers, person.photos, person.relations, person.relationship_interests, person.relationship_statuses,
-        # person.residences, person.skills, person.taglines, person.urls
+        # addresses, age_range, biographies, birthdays, bragging_rights, cover_photos, email_addresses, events, genders,
+        # im_clients, interests, locales, memberships, metadata, names, nicknames, occupations, organizations, phone_numbers,
+        # photos, relations, relationship_interests, relationship_statuses, residences, skills, taglines, urls
 
-        request_mask = "person.email_addresses,person.im_clients,person.metadata,person.names,person.organizations,person.phone_numbers,person.photos,person.urls"
+        person_fields = 'email_addresses,im_clients,metadata,names,organizations,phone_numbers,photos,urls'
 
         try:
-            connections, sync_token = self._get_connections(sync_token=self._sync_token, request_mask=request_mask)
+            connections, sync_token = self._get_connections(person_fields, sync_token=self._sync_token)
         except AccessTokenRefreshError:
             self.auth.request_credentials()
             return
@@ -931,17 +930,15 @@ class GoogleContactsManager(object):
 
         call_in_gui_thread(self._sync_timer.start)
 
-    def _get_connections(self, sync_token=None, request_mask=None):
+    def _get_connections(self, person_fields, sync_token=None):
         connections = []
-        sync_tokens = []
-        request = self._service.people().connections().list(resourceName='people/me', syncToken=sync_token, requestMask_includeField=request_mask, pageSize=500)
+        request = self._service.people().connections().list(resourceName='people/me', personFields=person_fields, syncToken=sync_token, requestSyncToken=True, pageSize=2000)
         while request is not None:
             response = request.execute()
             connections.extend(response.get('connections', []))
-            sync_tokens.append(response['nextSyncToken'])
+            sync_token = response.get('nextSyncToken', sync_token)
             request = self._service.people().connections().list_next(request, response)
-        sync_tokens.append(sync_token)  # in case we got no new sync token in the responses, use the previous one
-        return connections, sync_tokens[0]
+        return connections, sync_token
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
