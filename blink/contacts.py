@@ -867,9 +867,9 @@ class GoogleContactsManager(object):
                 self._sync_token = None
                 self.sync_contacts()
                 return
-            log.warning(u"Could not fetch Google contacts: {!s}".format(e))
+            log.warning(u'Could not fetch Google contacts: {!s}'.format(e))
         except (HttpLib2Error, socket.error) as e:
-            log.warning(u"Could not fetch Google contacts: {!s}".format(e))
+            log.warning(u'Could not fetch Google contacts: {!s}'.format(e))
         else:
             added_contacts = []
             modified_contacts = []
@@ -927,7 +927,7 @@ class GoogleContactsManager(object):
                         unlink(filename)
                     os.rename(tempname, filename)
                 except Exception, e:
-                    log.error("could not save google contacts: %s" % e)
+                    log.error('could not save google contacts: %s' % e)
 
         call_in_gui_thread(self._sync_timer.start)
 
