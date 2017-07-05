@@ -161,7 +161,7 @@ class VirtualGroup(SettingsState):
 
         try:
             configuration.save()
-        except Exception, e:
+        except Exception as e:
             log.exception()
             notification_center.post_notification('CFGManagerSaveFailed', sender=configuration, data=NotificationData(object=self, operation='save', modified=modified_data, exception=e))
 
@@ -926,7 +926,7 @@ class GoogleContactsManager(object):
                     if sys.platform == 'win32':
                         unlink(filename)
                     os.rename(tempname, filename)
-                except Exception, e:
+                except Exception as e:
                     log.error('could not save google contacts: %s' % e)
 
         call_in_gui_thread(self._sync_timer.start)
