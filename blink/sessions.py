@@ -2285,7 +2285,12 @@ class AudioSessionModel(QAbstractListModel):
         if role == Qt.UserRole:
             return item
         elif role == Qt.DisplayRole:
-            return unicode(item)
+            props=[]
+            for prop in (item.name, item.status, item.type, item.codec_info, item.duration):
+                if (prop is not None and len(unicode(prop))>0):
+                    props.append(unicode(prop))
+            if (len(props)>=1):
+                return ", ".join(props)
         return None
 
     def supportedDropActions(self):
