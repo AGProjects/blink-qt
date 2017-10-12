@@ -2167,7 +2167,7 @@ class AudioSessionItem(object):
         self.widget.hangup_button.setEnabled(False)
 
     def _NH_BlinkSessionDidEnd(self, notification):
-        if not self.__deleted__: # may have been removed by BlinkSessionDidRemoveStream less than 5 seconds before the session ended.
+        if not self.__deleted__:  # may have been removed by BlinkSessionDidRemoveStream less than 5 seconds before the session ended.
             if notification.data.error:
                 self.status = Status(notification.data.reason, color='#900000')
             else:
