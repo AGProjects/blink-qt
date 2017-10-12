@@ -1862,6 +1862,14 @@ class AudioSessionItem(object):
         notification_center.add_observer(self, sender=self.blink_session)
         notification_center.add_observer(self, name='MediaStreamWillEnd')
 
+    def __unicode__(self):
+        if self.status is not None:
+            return u'{0.type} call with {0.name} ({0.status})'.format(self)
+        elif self.codec_info:
+            return u'{0.type} call with {0.name} using {0.codec_info} ({0.duration!s})'.format(self)
+        else:
+            return u'{0.type} call with {0.name}'.format(self)
+
     @property
     def audio_stream(self):
         return self.blink_session.streams.get('audio')
