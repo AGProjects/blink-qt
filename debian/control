@@ -11,7 +11,7 @@ Package: blink
 Architecture: any
 Depends: ${python:Depends}, ${shlibs:Depends}, ${misc:Depends},
          libavahi-compat-libdnssd1,
-         python-application (>= 2.0.0),
+         python-application (>= 2.5.0),
          python-cjson,
          python-enum34,
          python-eventlib,
