@@ -1,3 +1,19 @@
+blink (3.1.0) unstable; urgency=medium
+
+  * Updated software license to GPL-3+ without restrictions
+  * Extended the cases for which we fetch the alternate icon
+  * Fixed displaying the owner of a failed icon retrieval
+  * Use newer syntax when catching exceptions
+  * Fixed Google contacts for another API breakage on Google's side
+  * Fixed google contacts file cache being unavailable with newer ouath2client
+  * Added unicode representation for AudioSessionItem to improve accessibility
+  * Depend on python-application 2.5.0
+  * Build the dbgsym package
+  * Updated debian copyright
+  * Updated copyright years
+
+ -- Dan Pascu <dan@ag-projects.com>  Sat, 06 Oct 2018 12:57:59 +0300
+
 blink (3.0.3) unstable; urgency=medium
 
   * Fixed another People API breakage by Google (they restored old behaviour)
