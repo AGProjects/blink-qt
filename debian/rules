@@ -2,8 +2,6 @@
 
 #export DH_VERBOSE=1
 
-export DEB_BUILD_OPTIONS=noautodbgsym
-
 %:
 	dh $@ --with python2
 
