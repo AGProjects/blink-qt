@@ -948,7 +948,7 @@ class GoogleContactsManager(object):
         settings = SIPSimpleSettings()
         settings.google_contacts.username = notification.data.email
         settings.save()
-        self._service = build('people', 'v1', credentials=notification.data.credentials, http=Http(timeout=10))
+        self._service = build('people', 'v1', credentials=notification.data.credentials, http=Http(timeout=10), cache_discovery=False)  # todo: what's the best fix for cache?
         self.active = True
         self.sync_contacts()  # sync_contacts is always scheduled in order to not queue posting notifications until after sync_contacts finishes, when called from a notification handler
 
