@@ -254,7 +254,7 @@ class MainWindow(base_class, ui_class):
     def set_user_icon(self, icon):
         self.account_state.setIcon(icon or self.default_icon)
 
-    def enable_call_buttons(self, enabled):
+    def enable_call_buttons(self, enabled):  # todo: review this
         self.audio_call_button.setEnabled(enabled)
         self.video_call_button.setEnabled(enabled)
         self.chat_session_button.setEnabled(enabled)
