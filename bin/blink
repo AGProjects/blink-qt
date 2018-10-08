@@ -7,6 +7,7 @@ import sys
 def except_hook(exception_type, exception_value, traceback):
     sys.__excepthook__(exception_type, exception_value, traceback)
 
+
 sys.excepthook = except_hook  # pyqt5 (>=5.5) will abort if an exception happens in python code when called from Qt, unless we define this
 
 
@@ -26,7 +27,6 @@ if os.path.basename(script_dir) == 'bin' and os.path.exists(os.path.join(parent_
     except ValueError:
         position = 0
     sys.path.insert(position, parent_dir)
-
 
 if frozen:
     from StringIO import StringIO
@@ -68,4 +68,3 @@ if __name__ == '__main__':
     blink = Blink()
     blink.run()
     os._exit(0)
-
