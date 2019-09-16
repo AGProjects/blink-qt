@@ -12,14 +12,11 @@ include debian/blink.desktop
 include debian/blink.docs
 include debian/blink.install
 include debian/blink.manpages
-include debian/blink.menu
 include debian/blink.xpm
 include debian/changelog
 include debian/compat
 include debian/control
 include debian/copyright
-include debian/pycompat
-include debian/pyversions
 include debian/rules
 include debian/source/format
 
