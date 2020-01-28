@@ -230,7 +230,7 @@ class LogManager(object):
             return
         if notification.data.level < self.msrp_level:
             return
-        message = '%s%s' % (notification.data.level.prefix, notification.data.message)
+        message = '%s %s' % (notification.data.level, notification.data.message)
         try:
             self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
             self.msrptrace_file.flush()
