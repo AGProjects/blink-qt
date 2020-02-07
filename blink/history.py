@@ -149,7 +149,7 @@ class HistoryEntry(object):
 
     @property
     def text(self):
-        result = unicode(self.name or self.uri)
+        result = unicode(self.name) + ' ' + '(' + unicode(self.uri) + ')'
         if self.call_time:
             call_time = self.call_time.astimezone(tzlocal())
             call_date = call_time.date()
