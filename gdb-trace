@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if [ $# = 0 ]; then
-   blink_pid=$(ps x | grep -E '\./blink|bin/blink' | grep -v grep | head -1 | awk '{print $1}')
+   blink_pid=$(ps h -o pid -C blink | head -1)
 else
    blink_pid=$1
 fi
