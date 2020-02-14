@@ -1,3 +1,24 @@
+blink (3.2.1) unstable; urgency=medium
+
+  * Updated windows installation instructions
+  * Removed no longer used files from manifest
+  * Fixed MSRP library logging
+  * Preserve quoted arguments with build_inplace
+  * Cleanup after build_inplace
+  * Removed commented out variable in debian rules
+  * Explicitly use python2 in shebang lines
+  * Preserve quoted command line arguments when passing them along
+  * Made the gdb-trace script be more precise in finding the blink process
+  * Mark illegal requests in MSRP logs
+  * Updated copyright years
+  * Split debian build dependencies one per line
+  * Increased debian compatibility level to 11
+  * Increased debian standards version to 4.5.0
+  * Use pybuild as the debian build system
+  * Updated minimum versions for dependencies
+
+ -- Dan Pascu <dan@ag-projects.com>  Fri, 14 Feb 2020 13:09:05 +0200
+
 blink (3.2.0) unstable; urgency=medium
 
   * Updated TLS certificates
