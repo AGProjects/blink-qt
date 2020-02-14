@@ -43,12 +43,12 @@ http://download.ag-projects.com/Blink/Linux/
 Install the runtime dependencies:
 
  * python (2.7)
- * python-application (>= 2.0.0)
+ * python-application (>= 2.8.0)
  * python-cjson
  * python-eventlib
  * python-qt5 (>= 5.0)
  * python-twisted-core
- * python-sipsimple (>= 3.0.0)
+ * python-sipsimple (>= 3.5.0)
  * python-zope.interface
  * google-api-python-client
 
