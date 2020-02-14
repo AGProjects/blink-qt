@@ -218,8 +218,9 @@ class LogManager(object):
         local_address = '%s:%d' % (notification.data.local_address.host, notification.data.local_address.port)
         remote_address = '%s:%d' % (notification.data.remote_address.host, notification.data.remote_address.port)
         message = '%s %s %s\n' % (local_address, arrow, remote_address) + notification.data.data
+        prefix = '[Illegal request!] ' if notification.data.illegal else ''
         try:
-            self.msrptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
+            self.msrptrace_file.write('%s [%s %d]: %s%s\n' % (notification.datetime, self.name, self.pid, prefix, message))
             self.msrptrace_file.flush()
         except Exception:
             pass
