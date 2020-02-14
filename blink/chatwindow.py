@@ -815,6 +815,21 @@ class ChatWidget(base_class, ui_class):
 
     def _SH_ChatInputTextEntered(self, text):
         self.composing_timer.stop()
+        doc = QTextDocument()
+        doc.setHtml(text)
+        plain_text = doc.toPlainText()
+        if plain_text == '/otr+':
+            try:
+                self.session.chat_stream.encryption.start()
+            except AttributeError:
+                pass
+            return
+        elif plain_text == '/otr-':
+            try:
+                self.session.chat_stream.encryption.stop()
+            except AttributeError:
+                pass
+            return
         try:
             self.send_message(text, content_type='text/html')
         except Exception, e:
