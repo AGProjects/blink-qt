@@ -9,7 +9,7 @@ Build-Depends: debhelper (>= 11),
                python-all-dbg (>= 2.7),
                cython-dbg (>= 0.19),
                libvncserver-dev
-Standards-Version: 3.9.8
+Standards-Version: 4.5.0
 Homepage: http://icanblink.com
 
 Package: blink
