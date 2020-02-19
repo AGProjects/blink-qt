@@ -27,4 +27,6 @@
   url when the icon is deleted
 - save state timestamp so we don't overwrite the state when we start a new
   instance of blink and it publishes its old state on startup
+- when accepting a new contact from a presence request it adds the URI but
+  it is not set as type SIP (it has no type selected)
 
