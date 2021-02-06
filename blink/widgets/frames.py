@@ -11,8 +11,8 @@ __all__ = ['BackgroundFrame']
 
 
 class BackgroundFrame(QFrame):
-    backgroundColor = QtDynamicProperty('backgroundColor', unicode)
-    backgroundImage = QtDynamicProperty('backgroundImage', unicode)
+    backgroundColor = QtDynamicProperty('backgroundColor', str)
+    backgroundImage = QtDynamicProperty('backgroundImage', str)
     imageGeometry   = QtDynamicProperty('imageGeometry', QRect)
 
     def __init__(self, parent=None):

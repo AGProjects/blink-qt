@@ -21,9 +21,9 @@ from blink.util import run_in_gui_thread
 __all__ = ['ApplicationData', 'Resources', 'IconManager']
 
 
-class DirectoryContextManager(unicode):
+class DirectoryContextManager(str):
     def __enter__(self):
-        self.directory = os.getcwdu()
+        self.directory = os.getcwd()
         os.chdir(self)
 
     def __exit__(self, type, value, traceback):
@@ -40,11 +40,11 @@ class ApplicationData(object):
         if cls._cached_directory is None:
             if platform.system() == 'Darwin':
                 from Foundation import NSApplicationSupportDirectory, NSSearchPathForDirectoriesInDomains, NSUserDomainMask
-                cls._cached_directory = os.path.join(NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, True)[0], u'Blink')
+                cls._cached_directory = os.path.join(NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, True)[0], 'Blink')
             elif platform.system() == 'Windows':
-                cls._cached_directory = os.path.join(os.environ['APPDATA'].decode(sys.getfilesystemencoding()), u'Blink')
+                cls._cached_directory = os.path.join(os.environ['APPDATA'].decode(sys.getfilesystemencoding()), 'Blink')
             else:
-                cls._cached_directory = Path(u'~/.blink').normalized
+                cls._cached_directory = Path('~/.blink').normalized
         return DirectoryContextManager(cls._cached_directory)
 
     @classmethod
@@ -83,9 +83,7 @@ class Resources(object):
         return os.path.join(cls.directory, os.path.normpath(resource))
 
 
-class IconManager(object):
-    __metaclass__ = Singleton
-
+class IconManager(object, metaclass=Singleton):
     max_size = 256
 
     def __init__(self):

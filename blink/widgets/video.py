@@ -1,5 +1,5 @@
 
-from __future__ import division
+
 
 from PyQt5.QtCore import Qt, QMetaObject, QPoint, QRect, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QCursor, QIcon, QImage, QPainter, QPixmap, QTransform
@@ -37,10 +37,10 @@ class InteractionState(object):
 
 
 class VideoSurface(QWidget):
-    class TopLeftCorner:     __metaclass__ = MarkerType
-    class TopRightCorner:    __metaclass__ = MarkerType
-    class BottomLeftCorner:  __metaclass__ = MarkerType
-    class BottomRightCorner: __metaclass__ = MarkerType
+    class TopLeftCorner(metaclass=MarkerType):     pass
+    class TopRightCorner(metaclass=MarkerType):    pass
+    class BottomLeftCorner(metaclass=MarkerType):  pass
+    class BottomRightCorner(metaclass=MarkerType): pass
 
     adjusted = pyqtSignal(QRect, QRect)  # the widget was adjusted by the user (if interactive)
 

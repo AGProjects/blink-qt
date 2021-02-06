@@ -13,8 +13,8 @@ SharedSetting.set_namespace('ag-projects:blink')
 
 
 class PresenceSettingsExtension(PresenceSettings):
-    state = RuntimeSetting(type=unicode, nillable=True, default=None)
-    note = RuntimeSetting(type=unicode, nillable=True, default=None)
+    state = RuntimeSetting(type=str, nillable=True, default=None)
+    note = RuntimeSetting(type=str, nillable=True, default=None)
 
 
 class ContactExtension(ContactExtension):

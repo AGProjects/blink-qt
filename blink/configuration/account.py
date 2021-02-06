@@ -34,8 +34,8 @@ class PresenceSettingsExtension(PresenceSettings):
 
 
 class PSTNSettings(SettingsGroup):
-    idd_prefix = Setting(type=unicode, default=None, nillable=True)
-    prefix = Setting(type=unicode, default=None, nillable=True)
+    idd_prefix = Setting(type=str, default=None, nillable=True)
+    prefix = Setting(type=str, default=None, nillable=True)
 
 
 class RTPSettingsExtension(RTPSettings):
@@ -71,7 +71,7 @@ class XCAPSettingsExtension(XCAPSettings):
 
 
 class AccountExtension(SettingsObjectExtension):
-    display_name = Setting(type=unicode, default=user_info.fullname, nillable=True)
+    display_name = Setting(type=str, default=user_info.fullname, nillable=True)
     message_summary = MessageSummarySettingsExtension
     msrp = MSRPSettingsExtension
     pstn = PSTNSettings

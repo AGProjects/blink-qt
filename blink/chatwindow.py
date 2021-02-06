@@ -1,5 +1,5 @@
 
-from __future__ import division
+
 
 import locale
 import os
@@ -116,7 +116,7 @@ class OrderedSet(MutableSet):
     def __init__(self, iterable=None):
         self.__hardroot = Link()  # sentinel node for doubly linked list
         self.__root = root = proxy(self.__hardroot)
-        root.prev = root.next = root
+        root.prev = root.__next__ = root
         self.__map = {}
         if iterable is not None:
             self |= iterable
@@ -129,10 +129,10 @@ class OrderedSet(MutableSet):
 
     def __iter__(self):
         root = self.__root
-        curr = root.next
+        curr = root.__next__
         while curr is not root:
             yield curr.key
-            curr = curr.next
+            curr = curr.__next__
 
     def __reversed__(self):
         root = self.__root
@@ -157,13 +157,13 @@ class OrderedSet(MutableSet):
         if key in self.__map:
             link = self.__map.pop(key)
             link_prev = link.prev
-            link_next = link.next
+            link_next = link.__next__
             link_prev.next = link_next
             link_next.prev = link_prev
 
     def clear(self):
         root = self.__root
-        root.prev = root.next = root
+        root.prev = root.__next__ = root
         self.__map.clear()
 
 
@@ -188,7 +188,7 @@ class ChatContentBooleanOption(object):
         raise AttributeError('attribute cannot be deleted')
 
 
-class AnyValue: __metaclass__ = MarkerType
+class AnyValue(metaclass=MarkerType): pass
 
 
 class ChatContentStringAttribute(object):
@@ -219,9 +219,7 @@ class ChatContentStringAttribute(object):
         raise AttributeError('attribute cannot be deleted')
 
 
-class ChatContent(object):
-    __metaclass__ = ABCMeta
-
+class ChatContent(object, metaclass=ABCMeta):
     __cssclasses__ = ()
 
     continuation_interval = timedelta(0, 5*60)  # 5 minutes
@@ -371,7 +369,7 @@ class ChatWebView(QWebView):
             menu.exec_(event.globalPos())
 
     def createWindow(self, window_type):
-        print "create window of type", window_type
+        print("create window of type", window_type)
         return None
 
     def dragEnterEvent(self, event):
@@ -409,20 +407,18 @@ class ChatInputLock(base_class, ui_class):
         painter.drawPrimitive(QStyle.PE_Widget, option)
 
 
-class LockType(object):
-    __metaclass__ = MarkerType
-
+class LockType(object, metaclass=MarkerType):
     note_text = None
     button_text = None
 
 
 class EncryptionLock(LockType):
-    note_text = u'Encryption has been terminated by the other party'
-    button_text = u'Confirm'
+    note_text = 'Encryption has been terminated by the other party'
+    button_text = 'Confirm'
 
 
 class ChatTextInput(QTextEdit):
-    textEntered = pyqtSignal(unicode)
+    textEntered = pyqtSignal(str)
     lockEngaged = pyqtSignal(object)
     lockReleased = pyqtSignal(object)
 
@@ -710,8 +706,8 @@ class ChatWidget(base_class, ui_class):
 
     def _print_scrollbar_position(self):
         frame = self.chat_view.page().mainFrame()
-        print "%d out of %d, %d+%d=%d (%d)" % (frame.scrollBarValue(Qt.Vertical), frame.scrollBarMaximum(Qt.Vertical), frame.scrollBarValue(Qt.Vertical), self.chat_view.size().height(),
-                                               frame.scrollBarValue(Qt.Vertical)+self.chat_view.size().height(), frame.contentsSize().height())
+        print("%d out of %d, %d+%d=%d (%d)" % (frame.scrollBarValue(Qt.Vertical), frame.scrollBarMaximum(Qt.Vertical), frame.scrollBarValue(Qt.Vertical), self.chat_view.size().height(),
+                                               frame.scrollBarValue(Qt.Vertical)+self.chat_view.size().height(), frame.contentsSize().height()))
 
     def dragEnterEvent(self, event):
         mime_data = event.mimeData()
@@ -742,7 +738,7 @@ class ChatWidget(base_class, ui_class):
         else:
             mime_types = set(mime_data.formats())
             if mime_types.issuperset({'text/html', 'text/_moz_htmlcontext'}):
-                text = unicode(mime_data.data('text/html'), encoding='utf16')
+                text = str(mime_data.data('text/html'), encoding='utf16')
             else:
                 text = mime_data.html() or mime_data.text()
             self._DH_Text(text)
@@ -758,10 +754,10 @@ class ChatWidget(base_class, ui_class):
         for image in image_descriptors:
             try:
                 self.send_message(image.thumbnail.data, content_type=image.thumbnail.type)
-            except Exception, e:
+            except Exception as e:
                 self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), e)))  # decide what type to use here. -Dan
             else:
-                content = u'''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image.thumbnail.data.encode('base64').rstrip())
+                content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image.thumbnail.data.encode('base64').rstrip())
                 sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
                 self.add_message(ChatMessage(content, sender, 'outgoing'))
 
@@ -773,17 +769,17 @@ class ChatWidget(base_class, ui_class):
         if match is not None:
             try:
                 self.send_message(match.group('data').decode('base64'), content_type=match.group('type'))
-            except Exception, e:
+            except Exception as e:
                 self.add_message(ChatStatus('Error sending image: %s' % e))  # decide what type to use here. -Dan
             else:
                 account = self.session.blink_session.account
-                content = u'''<img src="{}" class="scaled-to-fit" />'''.format(text)
+                content = '''<img src="{}" class="scaled-to-fit" />'''.format(text)
                 sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
                 self.add_message(ChatMessage(content, sender, 'outgoing'))
         else:
             user_text = self.chat_input.toHtml()
             self.chat_input.setHtml(text)
-            self.chat_input.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, text=u'\r'))
+            self.chat_input.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, text='\r'))
             self.chat_input.setHtml(user_text)
 
     def _SH_ChatViewSizeChanged(self):
@@ -832,7 +828,7 @@ class ChatWidget(base_class, ui_class):
             return
         try:
             self.send_message(text, content_type='text/html')
-        except Exception, e:
+        except Exception as e:
             self.add_message(ChatStatus('Error sending message: %s' % e))  # decide what type to use here. -Dan
         else:
             account = self.session.blink_session.account
@@ -1004,7 +1000,7 @@ class VideoWidget(VideoSurface, ui_class):
 
     @property
     def tool_buttons(self):
-        return tuple(attr for attr in vars(self).itervalues() if isinstance(attr, VideoToolButton))
+        return tuple(attr for attr in vars(self).values() if isinstance(attr, VideoToolButton))
 
     @property
     def active_tool_buttons(self):
@@ -1508,7 +1504,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
     def _SH_SplitterMoved(self, pos, index):
-        print "-- splitter:", pos, index, self.splitter.sizes()
+        print("-- splitter:", pos, index, self.splitter.sizes())
 
     def setupUi(self):
         super(ChatWindow, self).setupUi(self)
@@ -1769,38 +1765,38 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if 'session' in elements:
             self.account_value_label.setText(blink_session.account.id)
-            self.remote_agent_value_label.setText(session_info.remote_user_agent or u'N/A')
+            self.remote_agent_value_label.setText(session_info.remote_user_agent or 'N/A')
 
         if 'media' in elements:
             self.audio_value_label.setText(audio_info.codec or 'N/A')
             if audio_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (audio_info.local_rtp_candidate, audio_info.remote_rtp_candidate)}:
                     self.audio_connection_label.setPixmap(self.pixmaps.relay_connection)
-                    self.audio_connection_label.setToolTip(u'Using relay')
+                    self.audio_connection_label.setToolTip('Using relay')
                 else:
                     self.audio_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.audio_connection_label.setToolTip(u'Peer to peer')
+                    self.audio_connection_label.setToolTip('Peer to peer')
             elif audio_info.ice_status == 'failed':
                 self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.audio_connection_label.setToolTip(u"Couldn't negotiate ICE")
+                self.audio_connection_label.setToolTip("Couldn't negotiate ICE")
             elif audio_info.ice_status == 'disabled':
                 if blink_session.contact.type == 'bonjour':
                     self.audio_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.audio_connection_label.setToolTip(u'Peer to peer')
+                    self.audio_connection_label.setToolTip('Peer to peer')
                 else:
                     self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                    self.audio_connection_label.setToolTip(u'ICE is disabled')
+                    self.audio_connection_label.setToolTip('ICE is disabled')
             elif audio_info.ice_status is None:
                 self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.audio_connection_label.setToolTip(u'ICE is unavailable')
+                self.audio_connection_label.setToolTip('ICE is unavailable')
             else:
                 self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.audio_connection_label.setToolTip(u'Negotiating ICE')
+                self.audio_connection_label.setToolTip('Negotiating ICE')
 
             if audio_info.encryption is not None:
-                self.audio_encryption_label.setToolTip(u'Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
+                self.audio_encryption_label.setToolTip('Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
             else:
-                self.audio_encryption_label.setToolTip(u'Media is not encrypted')
+                self.audio_encryption_label.setToolTip('Media is not encrypted')
             self._update_rtp_encryption_icon(self.audio_encryption_label)
 
             self.audio_connection_label.setVisible(audio_info.remote_address is not None)
@@ -1810,31 +1806,31 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if video_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (video_info.local_rtp_candidate, video_info.remote_rtp_candidate)}:
                     self.video_connection_label.setPixmap(self.pixmaps.relay_connection)
-                    self.video_connection_label.setToolTip(u'Using relay')
+                    self.video_connection_label.setToolTip('Using relay')
                 else:
                     self.video_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.video_connection_label.setToolTip(u'Peer to peer')
+                    self.video_connection_label.setToolTip('Peer to peer')
             elif video_info.ice_status == 'failed':
                 self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.video_connection_label.setToolTip(u"Couldn't negotiate ICE")
+                self.video_connection_label.setToolTip("Couldn't negotiate ICE")
             elif video_info.ice_status == 'disabled':
                 if blink_session.contact.type == 'bonjour':
                     self.video_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.video_connection_label.setToolTip(u'Peer to peer')
+                    self.video_connection_label.setToolTip('Peer to peer')
                 else:
                     self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                    self.video_connection_label.setToolTip(u'ICE is disabled')
+                    self.video_connection_label.setToolTip('ICE is disabled')
             elif video_info.ice_status is None:
                 self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.video_connection_label.setToolTip(u'ICE is unavailable')
+                self.video_connection_label.setToolTip('ICE is unavailable')
             else:
                 self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.video_connection_label.setToolTip(u'Negotiating ICE')
+                self.video_connection_label.setToolTip('Negotiating ICE')
 
             if video_info.encryption is not None:
-                self.video_encryption_label.setToolTip(u'Media is encrypted using %s (%s)' % (video_info.encryption, video_info.encryption_cipher))
+                self.video_encryption_label.setToolTip('Media is encrypted using %s (%s)' % (video_info.encryption, video_info.encryption_cipher))
             else:
-                self.video_encryption_label.setToolTip(u'Media is not encrypted')
+                self.video_encryption_label.setToolTip('Media is not encrypted')
             self._update_rtp_encryption_icon(self.video_encryption_label)
 
             self.video_connection_label.setVisible(video_info.remote_address is not None)
@@ -1850,24 +1846,24 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.zrtp_widget.show()
 
             if any(len(path) > 1 for path in (chat_info.full_local_path, chat_info.full_remote_path)):
-                self.chat_value_label.setText(u'Using relay')
+                self.chat_value_label.setText('Using relay')
                 self.chat_connection_label.setPixmap(self.pixmaps.relay_connection)
-                self.chat_connection_label.setToolTip(u'Using relay')
+                self.chat_connection_label.setToolTip('Using relay')
             elif chat_info.full_local_path and chat_info.full_remote_path:
-                self.chat_value_label.setText(u'Peer to peer')
+                self.chat_value_label.setText('Peer to peer')
                 self.chat_connection_label.setPixmap(self.pixmaps.direct_connection)
-                self.chat_connection_label.setToolTip(u'Peer to peer')
+                self.chat_connection_label.setToolTip('Peer to peer')
             else:
-                self.chat_value_label.setText(u'N/A')
+                self.chat_value_label.setText('N/A')
 
             if chat_info.encryption is not None and chat_info.transport == 'tls':
-                self.chat_encryption_label.setToolTip(u'Media is encrypted using TLS and {0.encryption} ({0.encryption_cipher})'.format(chat_info))
+                self.chat_encryption_label.setToolTip('Media is encrypted using TLS and {0.encryption} ({0.encryption_cipher})'.format(chat_info))
             elif chat_info.encryption is not None:
-                self.chat_encryption_label.setToolTip(u'Media is encrypted using {0.encryption} ({0.encryption_cipher})'.format(chat_info))
+                self.chat_encryption_label.setToolTip('Media is encrypted using {0.encryption} ({0.encryption_cipher})'.format(chat_info))
             elif chat_info.transport == 'tls':
-                self.chat_encryption_label.setToolTip(u'Media is encrypted using TLS')
+                self.chat_encryption_label.setToolTip('Media is encrypted using TLS')
             else:
-                self.chat_encryption_label.setToolTip(u'Media is not encrypted')
+                self.chat_encryption_label.setToolTip('Media is not encrypted')
             self._update_chat_encryption_icon()
 
             self.chat_connection_label.setVisible(chat_info.remote_address is not None)
@@ -1885,20 +1881,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.otr_widget.show()
 
             if screen_info.remote_address is not None and screen_info.mode == 'active':
-                self.screen_value_label.setText(u'Viewing remote')
+                self.screen_value_label.setText('Viewing remote')
             elif screen_info.remote_address is not None and screen_info.mode == 'passive':
-                self.screen_value_label.setText(u'Sharing local')
+                self.screen_value_label.setText('Sharing local')
             else:
-                self.screen_value_label.setText(u'N/A')
+                self.screen_value_label.setText('N/A')
 
             if any(len(path) > 1 for path in (screen_info.full_local_path, screen_info.full_remote_path)):
                 self.screen_connection_label.setPixmap(self.pixmaps.relay_connection)
-                self.screen_connection_label.setToolTip(u'Using relay')
+                self.screen_connection_label.setToolTip('Using relay')
             elif screen_info.full_local_path and screen_info.full_remote_path:
                 self.screen_connection_label.setPixmap(self.pixmaps.direct_connection)
-                self.screen_connection_label.setToolTip(u'Peer to peer')
+                self.screen_connection_label.setToolTip('Peer to peer')
 
-            self.screen_encryption_label.setToolTip(u'Media is encrypted using TLS')
+            self.screen_encryption_label.setToolTip('Media is encrypted using TLS')
 
             self.screen_connection_label.setVisible(screen_info.remote_address is not None)
             self.screen_encryption_label.setVisible(screen_info.remote_address is not None and screen_info.transport == 'tls')
@@ -2087,9 +2083,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             title_role = 'title'
             value_role = 'value'
-        for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_title_label') and attr.property('role') is not None):
+        for label in (attr for name, attr in vars(self).items() if name.endswith('_title_label') and attr.property('role') is not None):
             label.setProperty('role', title_role)
-        for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
+        for label in (attr for name, attr in vars(self).items() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
             label.setProperty('role', value_role)
         self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
         self.latency_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
@@ -2120,9 +2116,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 else:
                     title_role = 'title'
                     value_role = 'value'
-                for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_title_label') and attr.property('role') is not None):
+                for label in (attr for name, attr in vars(self).items() if name.endswith('_title_label') and attr.property('role') is not None):
                     label.setProperty('role', title_role)
-                for label in (attr for name, attr in vars(self).iteritems() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
+                for label in (attr for name, attr in vars(self).items() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
                     label.setProperty('role', value_role)
                 self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
             if 'chat_window.session_info.bytes_per_second' in notification.data.modified:
@@ -2212,7 +2208,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         message = notification.data.message
 
         if message.content_type.startswith('image/'):
-            content = u'''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.encode('base64').rstrip())
+            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.encode('base64').rstrip())
         elif message.content_type.startswith('text/'):
             content = HtmlProcessor.autolink(message.content if message.content_type == 'text/html' else QTextDocument(message.content).toHtml())
         else:
@@ -2352,10 +2348,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.selected_session.active_panel = self.participants_panel
 
     def _SH_LatencyGraphUpdated(self):
-        self.latency_label.setText(u'Network Latency: %dms, max=%dms' % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
+        self.latency_label.setText('Network Latency: %dms, max=%dms' % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
 
     def _SH_PacketLossGraphUpdated(self):
-        self.packet_loss_label.setText(u'Packet Loss: %.1f%%, max=%.1f%%' % (max(self.audio_packet_loss_graph.last_value, self.video_packet_loss_graph.last_value), self.packet_loss_graph.max_value))
+        self.packet_loss_label.setText('Packet Loss: %.1f%%, max=%.1f%%' % (max(self.audio_packet_loss_graph.last_value, self.video_packet_loss_graph.last_value), self.packet_loss_graph.max_value))
 
     def _SH_TrafficGraphUpdated(self):
         blink_settings = BlinkSettings()
@@ -2365,7 +2361,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value*8, bits_per_second=True)
             outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value*8, bits_per_second=True)
-        self.traffic_label.setText(u"""<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">\u2193</span> %s <span style="font-family: sans-serif; color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
+        self.traffic_label.setText("""<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">\u2193</span> %s <span style="font-family: sans-serif; color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
 
     def _SH_MuteButtonClicked(self, checked):
         settings = SIPSimpleSettings()
@@ -2581,7 +2577,7 @@ class HtmlProcessor(object):
 
     @classmethod
     def autolink(cls, content):
-        if isinstance(content, basestring):
+        if isinstance(content, str):
             doc = html.fromstring(content)
             autolink(doc, link_regexes=cls._autolink_re)
             return html.tostring(doc, encoding='unicode')  # add method='xml' to get <br/> xhtml style tags and doctype=doc.getroottree().docinfo.doctype for prepending the DOCTYPE line

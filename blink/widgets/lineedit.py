@@ -25,13 +25,13 @@ class SideWidget(QWidget):
 
 
 class LineEdit(QLineEdit):
-    inactiveText  = QtDynamicProperty('inactiveText',  unicode)
+    inactiveText  = QtDynamicProperty('inactiveText',  str)
     widgetSpacing = QtDynamicProperty('widgetSpacing', int)
 
-    def __init__(self, parent=None, contents=u""):
+    def __init__(self, parent=None, contents=""):
         super(LineEdit, self).__init__(contents, parent)
         box_direction = QBoxLayout.RightToLeft if self.isRightToLeft() else QBoxLayout.LeftToRight
-        self.inactiveText = u""
+        self.inactiveText = ""
         self.left_widget = SideWidget(self)
         self.left_widget.resize(0, 0)
         self.left_layout = QHBoxLayout(self.left_widget)
@@ -211,7 +211,7 @@ class ClearButton(QAbstractButton):
         super(ClearButton, self).__init__(parent)
         self.setCursor(Qt.ArrowCursor)
         self.setFocusPolicy(Qt.NoFocus)
-        self.setToolTip(u"Clear")
+        self.setToolTip("Clear")
         self.setVisible(False)
         self.setMinimumSize(size+2, size+2)
         pixmap = QPixmap()
@@ -274,7 +274,7 @@ class SearchBox(LineEdit):
         self.clear_button.hide()
         self.clear_button.clicked.connect(self.clear)
         self.textChanged.connect(self._SH_TextChanged)
-        self.inactiveText = u"Search"
+        self.inactiveText = "Search"
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:

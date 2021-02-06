@@ -3,8 +3,8 @@ import cjson
 import os
 import re
 import sys
-import urllib
-import urllib2
+import urllib.request, urllib.parse, urllib.error
+import urllib.request, urllib.error, urllib.parse
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel, QUrl, QUrlQuery
@@ -68,7 +68,7 @@ class AccountInfo(object):
 
     @property
     def name(self):
-        return u'Bonjour' if self.account is BonjourAccount() else unicode(self.account.id)
+        return 'Bonjour' if self.account is BonjourAccount() else str(self.account.id)
 
     @property
     def icon(self):
@@ -80,7 +80,7 @@ class AccountInfo(object):
             return self.inactive_icon
 
     def __eq__(self, other):
-        if isinstance(other, basestring):
+        if isinstance(other, str):
             return self.name == other
         elif isinstance(other, (Account, BonjourAccount)):
             return self.account == other
@@ -234,9 +234,7 @@ class AccountSelector(QComboBox):
 ui_class, base_class = uic.loadUiType(Resources.get('add_account.ui'))
 
 
-class AddAccountDialog(base_class, ui_class):
-    __metaclass__ = QSingleton
-
+class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
     implements(IObserver)
 
     def __init__(self, parent=None):
@@ -256,7 +254,7 @@ class AddAccountDialog(base_class, ui_class):
         font_metrics = self.create_status_label.fontMetrics()
         self.create_status_label.setMinimumHeight(font_metrics.height() + 2*(font_metrics.height() + font_metrics.leading()))   # reserve space for 3 lines
         font_metrics = self.email_note_label.fontMetrics()
-        self.email_note_label.setMinimumWidth(font_metrics.width(u'The E-mail address is used when sending voicemail'))  # hack to make text justification look nice everywhere
+        self.email_note_label.setMinimumWidth(font_metrics.width('The E-mail address is used when sending voicemail'))  # hack to make text justification look nice everywhere
         self.add_account_button.setChecked(True)
         self.panel_view.setCurrentWidget(self.add_account_panel)
         self.new_password_editor.textChanged.connect(self._SH_PasswordTextChanged)
@@ -362,7 +360,7 @@ class AddAccountDialog(base_class, ui_class):
         self.accept_button.setEnabled(all(input.text_valid for input in inputs))
 
     def _SH_PasswordTextChanged(self, text):
-        self.verify_password_editor.regexp = re.compile(u'^%s$' % re.escape(text))
+        self.verify_password_editor.regexp = re.compile('^%s$' % re.escape(text))
 
     def _SH_ValidityStatusChanged(self):
         red = '#cc0000'
@@ -401,11 +399,11 @@ class AddAccountDialog(base_class, ui_class):
 
     def _initialize(self):
         self.display_name = user_info.fullname
-        self.username = user_info.username.lower().replace(u' ', u'.')
-        self.sip_address = u''
-        self.password = u''
-        self.verify_password = u''
-        self.email_address = u''
+        self.username = user_info.username.lower().replace(' ', '.')
+        self.sip_address = ''
+        self.password = ''
+        self.verify_password = ''
+        self.email_address = ''
 
     @run_in_thread('network-io')
     def _create_sip_account(self, username, password, email_address, display_name, timezone=None):
@@ -425,7 +423,7 @@ class AddAccountDialog(base_class, ui_class):
                                tzinfo=timezone)
         try:
             settings = SIPSimpleSettings()
-            response = urllib2.urlopen(settings.server.enrollment_url, urllib.urlencode(dict(enrollment_data)))
+            response = urllib.request.urlopen(settings.server.enrollment_url, urllib.parse.urlencode(dict(enrollment_data)))
             response_data = cjson.decode(response.read().replace(r'\/', '/'))
             response_data = defaultdict(lambda: None, response_data)
             if response_data['success']:
@@ -460,7 +458,7 @@ class AddAccountDialog(base_class, ui_class):
                 call_in_gui_thread(setattr, self.create_status_label, 'value', Status(response_data['error_message'], color=red))
         except (cjson.DecodeError, KeyError):
             call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Illegal server response', color=red))
-        except urllib2.URLError, e:
+        except urllib.error.URLError as e:
             call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Failed to contact server: %s' % e.reason, color=red))
         finally:
             call_in_gui_thread(self.setEnabled, True)
@@ -476,7 +474,7 @@ class AddAccountDialog(base_class, ui_class):
         makedirs(ApplicationData.get('tls'))
         certificate_path = ApplicationData.get(os.path.join('tls', sip_address+'.crt'))
         certificate_file = open(certificate_path, 'w')
-        os.chmod(certificate_path, 0600)
+        os.chmod(certificate_path, 0o600)
         certificate_file.write(crt+key)
         certificate_file.close()
         ca_path = ApplicationData.get(os.path.join('tls', 'ca.crt'))
@@ -585,7 +583,7 @@ class ServerToolsWebView(QWebView):
     @property
     def query_items(self):
         all_items = ('user_agent', 'tab', 'task', 'realm')
-        return [(name, value) for name, value in self.__dict__.iteritems() if name in all_items and value is not None]
+        return [(name, value) for name, value in self.__dict__.items() if name in all_items and value is not None]
 
     def _get_account(self):
         return self.__dict__['account']
@@ -670,9 +668,7 @@ class ServerToolsWebView(QWebView):
 ui_class, base_class = uic.loadUiType(Resources.get('server_tools.ui'))
 
 
-class ServerToolsWindow(base_class, ui_class):
-    __metaclass__ = QSingleton
-
+class ServerToolsWindow(base_class, ui_class, metaclass=QSingleton):
     implements(IObserver)
 
     def __init__(self, model, parent=None):
@@ -755,12 +751,12 @@ class ServerToolsWindow(base_class, ui_class):
         self._update_navigation_buttons()
 
     def _SH_WebViewTitleChanged(self, title):
-        self.window().setWindowTitle(u'Blink Server Tools: {}'.format(title))
+        self.window().setWindowTitle('Blink Server Tools: {}'.format(title))
 
     def _SH_ModelChanged(self, parent_index, start, end):
         menu = self.account_button.menu()
         menu.clear()
-        for row in xrange(self.model.rowCount()):
+        for row in range(self.model.rowCount()):
             account_info = self.model.data(self.model.index(row, 0), Qt.UserRole)
             action = menu.addAction(account_info.name)
             action.setData(account_info.account)

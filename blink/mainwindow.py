@@ -63,7 +63,7 @@ class MainWindow(base_class, ui_class):
 
         self.pending_watcher_dialogs = []
 
-        self.mwi_icons = [QIcon(Resources.get('icons/mwi-%d.png' % i)) for i in xrange(0, 11)]
+        self.mwi_icons = [QIcon(Resources.get('icons/mwi-%d.png' % i)) for i in range(0, 11)]
         self.mwi_icons.append(QIcon(Resources.get('icons/mwi-many.png')))
 
         with Resources.directory:
@@ -176,12 +176,12 @@ class MainWindow(base_class, ui_class):
         self.about_action.triggered.connect(self.about_panel.show)
         self.add_account_action.triggered.connect(self.preferences_window.show_add_account_dialog)
         self.manage_accounts_action.triggered.connect(self.preferences_window.show_for_accounts)
-        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/help/')))
+        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('http://icanblink.com/help/')))
         self.preferences_action.triggered.connect(self.preferences_window.show)
         self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatActionTriggered)
         self.received_messages_sound_action.triggered.connect(self._AH_ReceivedMessagesSoundActionTriggered)
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineActionTriggered)
-        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl(u'http://icanblink.com/changelog/')))
+        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('http://icanblink.com/changelog/')))
         self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
 
         # Call menu actions
@@ -265,8 +265,8 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map[u'system_default'] = self.output_device_menu.addAction(u'System default')
-        action.setData(u'system_default')
+        action = action_map['system_default'] = self.output_device_menu.addAction('System default')
+        action.setData('system_default')
         action.setCheckable(True)
         self.output_devices_group.addAction(action)
 
@@ -278,7 +278,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.output_devices_group.addAction(action)
 
-        action = action_map[None] = self.output_device_menu.addAction(u'None')
+        action = action_map[None] = self.output_device_menu.addAction('None')
         action.setData(None)
         action.setCheckable(True)
         self.output_devices_group.addAction(action)
@@ -288,8 +288,8 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map[u'system_default'] = self.input_device_menu.addAction(u'System default')
-        action.setData(u'system_default')
+        action = action_map['system_default'] = self.input_device_menu.addAction('System default')
+        action.setData('system_default')
         action.setCheckable(True)
         self.input_devices_group.addAction(action)
 
@@ -301,7 +301,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.input_devices_group.addAction(action)
 
-        action = action_map[None] = self.input_device_menu.addAction(u'None')
+        action = action_map[None] = self.input_device_menu.addAction('None')
         action.setData(None)
         action.setCheckable(True)
         self.input_devices_group.addAction(action)
@@ -311,8 +311,8 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map[u'system_default'] = self.alert_device_menu.addAction(u'System default')
-        action.setData(u'system_default')
+        action = action_map['system_default'] = self.alert_device_menu.addAction('System default')
+        action.setData('system_default')
         action.setCheckable(True)
         self.alert_devices_group.addAction(action)
 
@@ -324,7 +324,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.alert_devices_group.addAction(action)
 
-        action = action_map[None] = self.alert_device_menu.addAction(u'None')
+        action = action_map[None] = self.alert_device_menu.addAction('None')
         action.setData(None)
         action.setCheckable(True)
         self.alert_devices_group.addAction(action)
@@ -337,8 +337,8 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map[u'system_default'] = self.video_camera_menu.addAction(u'System default')
-        action.setData(u'system_default')
+        action = action_map['system_default'] = self.video_camera_menu.addAction('System default')
+        action.setData('system_default')
         action.setCheckable(True)
         self.video_devices_group.addAction(action)
 
@@ -350,7 +350,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.video_devices_group.addAction(action)
 
-        action = action_map[None] = self.video_camera_menu.addAction(u'None')
+        action = action_map[None] = self.video_camera_menu.addAction('None')
         action.setData(None)
         action.setCheckable(True)
         self.video_devices_group.addAction(action)
@@ -488,11 +488,11 @@ class MainWindow(base_class, ui_class):
     def _SH_AccountStateChanged(self):
         self.activity_note.setText(self.account_state.note)
         if self.account_state.state is AccountState.Invisible:
-            self.activity_note.inactiveText = u'(invisible)'
+            self.activity_note.inactiveText = '(invisible)'
             self.activity_note.setEnabled(False)
         else:
             if not self.activity_note.isEnabled():
-                self.activity_note.inactiveText = u'Add an activity note here'
+                self.activity_note.inactiveText = 'Add an activity note here'
                 self.activity_note.setEnabled(True)
         if not self.account_state.state.internal:
             self.saved_account_state = None
@@ -502,7 +502,7 @@ class MainWindow(base_class, ui_class):
         blink_settings.save()
 
     def _SH_AccountStateClicked(self, checked):
-        filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
+        filename = QFileDialog.getOpenFileName(self, 'Select Icon', self.last_icon_directory, "Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
         if filename:
             self.last_icon_directory = os.path.dirname(filename)
             filename = filename if os.path.realpath(filename) != os.path.realpath(self.default_icon_path) else None
@@ -644,7 +644,7 @@ class MainWindow(base_class, ui_class):
     def _SH_IdentityCurrentIndexChanged(self, index):
         if index != -1:
             account = self.identity.itemData(index).account
-            self.display_name.setText(account.display_name or u'')
+            self.display_name.setText(account.display_name or '')
             self.display_name.setEnabled(True)
             self.activity_note.setEnabled(True)
             self.account_state.setEnabled(True)
@@ -720,7 +720,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AudioSessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
-        self.active_sessions_label.setText(u'There is 1 active call' if len(active_sessions) == 1 else u'There are %d active calls' % len(active_sessions))
+        self.active_sessions_label.setText('There is 1 active call' if len(active_sessions) == 1 else 'There are %d active calls' % len(active_sessions))
         self.active_sessions_label.setVisible(any(active_sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
@@ -735,7 +735,7 @@ class MainWindow(base_class, ui_class):
             if self.account_state.state is not AccountState.Invisible:
                 if self.saved_account_state is None:
                     self.saved_account_state = self.account_state.state, self.activity_note.text()
-                self.account_state.setState(AccountState.Busy.Internal, note=u'On the phone')
+                self.account_state.setState(AccountState.Busy.Internal, note='On the phone')
         elif self.saved_account_state is not None:
             state, note = self.saved_account_state
             self.saved_account_state = None
@@ -772,9 +772,9 @@ class MainWindow(base_class, ui_class):
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
         if settings.google_contacts.enabled:
-            self.google_contacts_action.setText(u'Disable &Google Contacts')
+            self.google_contacts_action.setText('Disable &Google Contacts')
         else:
-            self.google_contacts_action.setText(u'Enable &Google Contacts...')
+            self.google_contacts_action.setText('Enable &Google Contacts...')
         if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
@@ -846,9 +846,9 @@ class MainWindow(base_class, ui_class):
                 self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
             if 'google_contacts.enabled' in notification.data.modified:
                 if notification.sender.google_contacts.enabled:
-                    self.google_contacts_action.setText(u'Disable &Google Contacts')
+                    self.google_contacts_action.setText('Disable &Google Contacts')
                 else:
-                    self.google_contacts_action.setText(u'Enable &Google Contacts...')
+                    self.google_contacts_action.setText('Enable &Google Contacts...')
         elif notification.sender is blink_settings:
             if 'presence.current_state' in notification.data.modified:
                 state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
@@ -865,7 +865,7 @@ class MainWindow(base_class, ui_class):
                 action = next(action for action in self.accounts_menu.actions() if action.data() is account)
                 action.setChecked(account.enabled)
             if 'display_name' in notification.data.modified and account is account_manager.default_account:
-                self.display_name.setText(account.display_name or u'')
+                self.display_name.setText(account.display_name or '')
             if {'enabled', 'message_summary.enabled', 'message_summary.voicemail_uri'}.intersection(notification.data.modified):
                 action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
                 action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
@@ -874,7 +874,7 @@ class MainWindow(base_class, ui_class):
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
 
-        action = self.accounts_menu.addAction(account.id if account is not BonjourAccount() else u'Bonjour')
+        action = self.accounts_menu.addAction(account.id if account is not BonjourAccount() else 'Bonjour')
         action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
         action.setCheckable(True)
         action.setChecked(account.enabled)

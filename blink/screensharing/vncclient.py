@@ -22,7 +22,7 @@ class RFBSettings(object):
     def __init__(self, depth, quality, compression, encodings):
         if depth not in (8, 16, 24, 32, None):
             raise ValueError("invalid depth value: %r (should be one of 8, 16, 24, 32 or None)" % depth)
-        allowed_levels = range(10)
+        allowed_levels = list(range(10))
         if quality not in allowed_levels:
             raise ValueError("invalid quality value: %r (should be between 0..9)" % quality)
         if compression not in allowed_levels:
@@ -83,7 +83,7 @@ class VNCClient(QObject):
     imageSizeChanged = pyqtSignal(QSize)
     imageChanged = pyqtSignal(int, int, int, int)
     passwordRequested = pyqtSignal(bool)
-    textCut = pyqtSignal(unicode)
+    textCut = pyqtSignal(str)
 
     def __init__(self, host, port, settings, parent=None):
         super(VNCClient, self).__init__(parent)

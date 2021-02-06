@@ -112,7 +112,7 @@ class BlinkPresenceState(object):
 
             device = pidf.Device('DID-%s' % instance_id, device_id=pidf.DeviceID(instance_id))
             device.timestamp = timestamp
-            device.notes.add(u'%s at %s' % (settings.user_agent, hostname))
+            device.notes.add('%s at %s' % (settings.user_agent, hostname))
             doc.add(device)
 
         return doc
@@ -226,8 +226,8 @@ class PresencePublicationHandler(object):
         if service.id in ('SID-%s' % uuid.UUID(SIPSimpleSettings().instance_id), 'SID-%s' % hashlib.md5(notification.sender.id).hexdigest()):
             # Our current state is the winning one
             return
-        status = unicode(service.status.extended).title()
-        note = None if not service.notes else unicode(list(service.notes)[0])
+        status = str(service.status.extended).title()
+        note = None if not service.notes else str(list(service.notes)[0])
         if status == 'Offline':
             status = 'Invisible'
             note = None
@@ -304,12 +304,12 @@ class ContactIcon(object):
     @classmethod
     def fetch(cls, url, etag=None, descriptor_etag=None):
         headers = {'If-None-Match': etag} if etag else {}
-        req = urllib2.Request(url, headers=headers)
+        req = urllib.request.Request(url, headers=headers)
         try:
-            response = urllib2.urlopen(req)
+            response = urllib.request.urlopen(req)
             content = response.read()
             info = response.info()
-        except (ConnectionLost, urllib2.URLError, urllib2.HTTPError):
+        except (ConnectionLost, urllib.error.URLError, urllib.error.HTTPError):
             return None
         content_type = info.getheader('content-type')
         etag = info.getheader('etag')
@@ -352,7 +352,7 @@ class PresenceSubscriptionHandler(object):
         notification_center.remove_observer(self, name='SIPAccountGotPresenceWinfo')
         self._pidf_map.clear()
         self._winfo_map.clear()
-        for timer in self._winfo_timers.values():
+        for timer in list(self._winfo_timers.values()):
             if timer.active():
                 timer.cancel()
         self._winfo_timers.clear()
@@ -375,9 +375,9 @@ class PresenceSubscriptionHandler(object):
 
         # If no URIs were provided, process all of them
         if not uris:
-            uris = list(chain(*(item.iterkeys() for item in self._pidf_map.itervalues())))
+            uris = list(chain(*(iter(item.keys()) for item in self._pidf_map.values())))
 
-        for uri, pidf_list in chain(*(x.iteritems() for x in self._pidf_map.itervalues())):
+        for uri, pidf_list in chain(*(iter(x.items()) for x in self._pidf_map.values())):
             current_pidf_map.setdefault(uri, []).extend(pidf_list)
 
         for uri in uris:
@@ -385,7 +385,7 @@ class PresenceSubscriptionHandler(object):
             for contact in (contact for contact in addressbook_manager.get_contacts() if uri in (self.sip_prefix_re.sub('', contact_uri.uri) for contact_uri in contact.uris)):
                 contact_pidf_map.setdefault(contact, []).extend(pidf_list)
 
-        for contact, pidf_list in contact_pidf_map.iteritems():
+        for contact, pidf_list in contact_pidf_map.items():
             if not pidf_list:
                 state = note = icon = None
             else:
@@ -393,11 +393,11 @@ class PresenceSubscriptionHandler(object):
                 services.sort(key=service_sort_key, reverse=True)
                 service = services[0]
                 if service.status.extended:
-                    state = unicode(service.status.extended)
+                    state = str(service.status.extended)
                 else:
                     state = 'available' if service.status.basic == 'open' else 'offline'
-                note = unicode(next(iter(service.notes))) if service.notes else None
-                icon_url = unicode(service.icon) if service.icon else None
+                note = str(next(iter(service.notes))) if service.notes else None
+                icon_url = str(service.icon) if service.icon else None
 
                 if icon_url:
                     url, token, icon_hash = icon_url.partition('#blink-icon')
@@ -456,12 +456,12 @@ class PresenceSubscriptionHandler(object):
 
     def _NH_SIPAccountGotPresenceState(self, notification):
         account = notification.sender
-        new_pidf_map = dict((self.sip_prefix_re.sub('', uri), resource.pidf_list) for uri, resource in notification.data.resource_map.iteritems())
+        new_pidf_map = dict((self.sip_prefix_re.sub('', uri), resource.pidf_list) for uri, resource in notification.data.resource_map.items())
         account_map = self._pidf_map.setdefault(account.id, {})
         if notification.data.full_state:
             account_map.clear()
         account_map.update(new_pidf_map)
-        self._process_presence_data(new_pidf_map.keys())
+        self._process_presence_data(list(new_pidf_map.keys()))
 
     def _NH_SIPAccountGotPresenceWinfo(self, notification):
         addressbook_manager = addressbook.AddressbookManager()
@@ -535,7 +535,7 @@ class PendingWatcherDialog(base_class, ui_class):
             icon = icon_manager.get(self.contact.id)
             if icon is not None:
                 self.user_icon.setPixmap(icon.pixmap(48))
-        self.description_label.setText(u'Wants to subscribe to your availability information at {}'.format(account.id))
+        self.description_label.setText('Wants to subscribe to your availability information at {}'.format(account.id))
         self.name_label.setText(display_name or uri)
         self.uri_label.setText(uri)
         self.accept_button.released.connect(self._accept_watcher)

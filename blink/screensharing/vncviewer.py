@@ -1,5 +1,5 @@
 
-from __future__ import division
+
 
 import os
 import platform
@@ -401,7 +401,7 @@ class ScreensharingDialog(base_class, ui_class):
         return False
 
     def get_credentials(self):
-        self.message_label.setText(u'Screen sharing requires authentication')
+        self.message_label.setText('Screen sharing requires authentication')
         self.username_label.show()
         self.username_editor.show()
         self.username_editor.clear()
@@ -413,7 +413,7 @@ class ScreensharingDialog(base_class, ui_class):
         return (self.username_editor.text(), self.password_editor.text()) if result == self.Accepted else (None, None)
 
     def get_password(self):
-        self.message_label.setText(u'Screen sharing requires a password')
+        self.message_label.setText('Screen sharing requires a password')
         self.username_label.hide()
         self.username_editor.hide()
         self.username_editor.clear()

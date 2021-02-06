@@ -28,8 +28,8 @@ class ConferenceButton(ToolButton):
 
     def __init__(self, parent=None):
         super(ConferenceButton, self).__init__(parent)
-        self.make_conference_action = QAction(u'Conference all single sessions', self, triggered=self.makeConference.emit)
-        self.break_conference_action = QAction(u'Break selected conference', self, triggered=self.breakConference.emit)
+        self.make_conference_action = QAction('Conference all single sessions', self, triggered=self.makeConference.emit)
+        self.break_conference_action = QAction('Break selected conference', self, triggered=self.breakConference.emit)
         self.toggled.connect(self._SH_Toggled)
         self.addAction(self.make_conference_action)
 
@@ -105,8 +105,7 @@ class SegmentTypeMeta(type):
         return cls.__name__
 
 
-class SegmentType(object):
-    __metaclass__ = SegmentTypeMeta
+class SegmentType(object, metaclass=SegmentTypeMeta):
     style_sheet = ''
 
 
@@ -260,8 +259,8 @@ class SwitchViewButton(QPushButton):
 
     viewChanged = pyqtSignal(int)
 
-    button_text = {ContactView: u'Switch to Calls', SessionView: u'Switch to Contacts'}
-    button_dnd_text = {ContactView: u'Drag here to add to a conference', SessionView: u'Drag here to go back to contacts'}
+    button_text = {ContactView: 'Switch to Calls', SessionView: 'Switch to Contacts'}
+    button_dnd_text = {ContactView: 'Drag here to add to a conference', SessionView: 'Drag here to go back to contacts'}
 
     dnd_style_sheet1 = """
                           QPushButton {

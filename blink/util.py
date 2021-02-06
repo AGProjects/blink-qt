@@ -90,7 +90,7 @@ class FunctionExecutor(object):
     def wait(self):
         self.event.wait()
         if self.exception is not None:
-            raise type(self.exception), self.exception, self.traceback
+            raise type(self.exception)(self.exception).with_traceback(self.traceback)
         else:
             return self.result
 

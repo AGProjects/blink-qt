@@ -88,9 +88,7 @@ class IPAddressMonitor(object):
             self.greenlet = None
 
 
-class Blink(QApplication):
-    __metaclass__ = QSingleton
-
+class Blink(QApplication, metaclass=QSingleton):
     implements(IObserver)
 
     def __init__(self):
@@ -214,6 +212,6 @@ class Blink(QApplication):
     @run_in_gui_thread
     def _NH_SIPApplicationGotFatalError(self, notification):
         log.error('Fatal error:\n{}'.format(notification.data.traceback))
-        QMessageBox.critical(self.main_window, u"Fatal Error", u"A fatal error occurred, {} will now exit.".format(self.applicationName()))
+        QMessageBox.critical(self.main_window, "Fatal Error", "A fatal error occurred, {} will now exit.".format(self.applicationName()))
         sys.exit(1)
 

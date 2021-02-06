@@ -16,7 +16,7 @@ class SlidingStackedWidget(QStackedWidget):
 
     animationFinished = pyqtSignal()
 
-    LeftToRight, RightToLeft, TopToBottom, BottomToTop, Automatic = range(5)
+    LeftToRight, RightToLeft, TopToBottom, BottomToTop, Automatic = list(range(5))
 
     def __init__(self, parent=None):
         super(SlidingStackedWidget, self).__init__(parent)

@@ -70,9 +70,7 @@ class LogFile(object):
         file.close()
 
 
-class LogManager(object):
-    __metaclass__ = Singleton
-
+class LogManager(object, metaclass=Singleton):
     implements(IObserver)
 
     def __init__(self):

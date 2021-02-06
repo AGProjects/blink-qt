@@ -13,9 +13,7 @@ class EventMeta(type(QEvent)):
         cls.id = QEvent.registerEventType() if name != 'EventBase' else None
 
 
-class EventBase(QEvent):
-    __metaclass__ = EventMeta
-
+class EventBase(QEvent, metaclass=EventMeta):
     def __new__(cls, *args, **kw):
         if cls is EventBase:
             raise TypeError("EventBase cannot be directly instantiated")

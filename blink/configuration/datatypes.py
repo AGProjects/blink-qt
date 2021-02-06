@@ -3,9 +3,8 @@
 
 import os
 import re
-
-from urllib import pathname2url, url2pathname
-from urlparse import urlparse
+from urllib.request import pathname2url, url2pathname
+from urllib.parse import urlparse
 
 from application.python.types import MarkerType
 from sipsimple.configuration.datatypes import Hostname, List
@@ -16,12 +15,12 @@ from blink.resources import ApplicationData
 __all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'IconDescriptor', 'PresenceState', 'PresenceStateList', 'GraphTimeScale']
 
 
-class ApplicationDataPath(unicode):
+class ApplicationDataPath(str):
     def __new__(cls, path):
         path = os.path.normpath(path)
         if path.startswith(ApplicationData.directory+os.path.sep):
             path = path[len(ApplicationData.directory+os.path.sep):]
-        return unicode.__new__(cls, path)
+        return str.__new__(cls, path)
 
     @property
     def normalized(self):
@@ -36,11 +35,11 @@ class SoundFile(object):
             raise ValueError('illegal volume level: %d' % self.volume)
 
     def __getstate__(self):
-        return u'%s,%s' % (self.__dict__['path'], self.volume)
+        return '%s,%s' % (self.__dict__['path'], self.volume)
 
     def __setstate__(self, state):
         try:
-            path, volume = state.rsplit(u',', 1)
+            path, volume = state.rsplit(',', 1)
         except ValueError:
             self.__init__(state)
         else:
@@ -60,7 +59,7 @@ class SoundFile(object):
     del _get_path, _set_path
 
 
-class DefaultPath: __metaclass__ = MarkerType
+class DefaultPath(metaclass=MarkerType): pass
 
 
 class CustomSoundFile(object): # check if this data type is still needed -Dan
@@ -72,9 +71,9 @@ class CustomSoundFile(object): # check if this data type is still needed -Dan
 
     def __getstate__(self):
         if self.path is DefaultPath:
-            return u'default'
+            return 'default'
         else:
-            return u'file:%s,%s' % (self.__dict__['path'], self.volume)
+            return 'file:%s,%s' % (self.__dict__['path'], self.volume)
 
     def __setstate__(self, state):
         match = re.match(r'^(?P<type>default|file:)(?P<path>.+?)?(,(?P<volume>\d+))?$', state)
@@ -102,11 +101,11 @@ class CustomSoundFile(object): # check if this data type is still needed -Dan
     del _get_path, _set_path
 
 
-class HTTPURL(unicode):
+class HTTPURL(str):
     def __new__(cls, value):
-        value = unicode(value)
+        value = str(value)
         url = urlparse(value)
-        if url.scheme not in (u'http', u'https'):
+        if url.scheme not in ('http', 'https'):
             raise ValueError("illegal HTTP URL scheme (http and https only): %s" % url.scheme)
         Hostname(url.hostname)
         if url.port is not None and not (0 < url.port < 65536):
@@ -114,14 +113,14 @@ class HTTPURL(unicode):
         return value
 
 
-class FileURL(unicode):
+class FileURL(str):
     def __new__(cls, value):
         if not value.startswith('file:'):
             value = 'file:' + pathname2url(os.path.abspath(value).encode('utf-8')).decode('utf-8')
-        return unicode.__new__(cls, value)
+        return str.__new__(cls, value)
 
 
-class ParsedURL(unicode):
+class ParsedURL(str):
     fragment = property(lambda self: self.__parsed__.fragment)
     netloc   = property(lambda self: self.__parsed__.netloc)
     params   = property(lambda self: self.__parsed__.params)
@@ -140,13 +139,13 @@ class IconDescriptor(object):
 
     def __getstate__(self):
         if self.etag is None:
-            return unicode(self.url)
+            return str(self.url)
         else:
-            return u'%s,%s' % (self.url, self.etag)
+            return '%s,%s' % (self.url, self.etag)
 
     def __setstate__(self, state):
         try:
-            url, etag = state.rsplit(u',', 1)
+            url, etag = state.rsplit(',', 1)
         except ValueError:
             self.__init__(state)
         else:
@@ -167,18 +166,18 @@ class IconDescriptor(object):
 
 class PresenceState(object):
     def __init__(self, state, note=None):
-        self.state = unicode(state)
+        self.state = str(state)
         self.note = note
 
     def __getstate__(self):
         if not self.note:
-            return unicode(self.state)
+            return str(self.state)
         else:
-            return u'%s,%s' % (self.state, self.note)
+            return '%s,%s' % (self.state, self.note)
 
     def __setstate__(self, data):
         try:
-            state, note = data.split(u',', 1)
+            state, note = data.split(',', 1)
         except ValueError:
             self.__init__(data)
         else:

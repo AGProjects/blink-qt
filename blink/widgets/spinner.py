@@ -1,5 +1,5 @@
 
-from __future__ import division
+
 
 from PyQt5.QtCore import QEvent, QRectF, QSize
 from PyQt5.QtSvg import QSvgWidget
@@ -12,7 +12,7 @@ __all__ = ['Spinner']
 
 
 class Spinner(QSvgWidget):
-    icon_file = QtDynamicProperty('icon_file', type=unicode)
+    icon_file = QtDynamicProperty('icon_file', type=str)
     icon_size = QtDynamicProperty('icon_size', type=QSize)
     icon_crop = QtDynamicProperty('icon_crop', type=int)
 

@@ -41,7 +41,7 @@ class ChatSettingsExtension(ChatSettings):
 
 class GoogleContactsSettings(SettingsGroup):
     enabled = Setting(type=bool, default=False)
-    username = Setting(type=unicode, default=None, nillable=True)
+    username = Setting(type=str, default=None, nillable=True)
 
 
 class LogsSettingsExtension(LogsSettings):
@@ -111,7 +111,7 @@ class BlinkScreenSharingSettings(SettingsGroup):
 class BlinkPresenceSettings(SettingsGroup):
     current_state = Setting(type=PresenceState, default=PresenceState('Available'))
     state_history = Setting(type=PresenceStateList, default=PresenceStateList())
-    offline_note = Setting(type=unicode, nillable=True)
+    offline_note = Setting(type=str, nillable=True)
     icon = Setting(type=IconDescriptor, nillable=True)
 
 

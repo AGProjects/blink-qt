@@ -1,6 +1,6 @@
 
 import os
-import urlparse
+import urllib.parse
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QEvent, QRegExp
@@ -37,46 +37,46 @@ __all__ = ['PreferencesWindow', 'AccountListView', 'SIPPortEditor']
 #
 class IDDPrefixValidator(QRegExpValidator):
     def __init__(self, parent=None):
-        super(IDDPrefixValidator, self).__init__(QRegExp(u'[0-9+*#]+'), parent)
+        super(IDDPrefixValidator, self).__init__(QRegExp('[0-9+*#]+'), parent)
 
     def fixup(self, input):
-        return super(IDDPrefixValidator, self).fixup(input or u'+')
+        return super(IDDPrefixValidator, self).fixup(input or '+')
 
 
 class PrefixValidator(QRegExpValidator):
     def __init__(self, parent=None):
-        super(PrefixValidator, self).__init__(QRegExp(u'(None|[0-9+*#]+)'), parent)
+        super(PrefixValidator, self).__init__(QRegExp('(None|[0-9+*#]+)'), parent)
 
     def fixup(self, input):
-        return super(PrefixValidator, self).fixup(input or u'None')
+        return super(PrefixValidator, self).fixup(input or 'None')
 
 
 class HostnameValidator(QRegExpValidator):
     def __init__(self, parent=None):
-        super(HostnameValidator, self).__init__(QRegExp(u'^([\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
+        super(HostnameValidator, self).__init__(QRegExp('^([\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
 
 
 class SIPAddressValidator(QRegExpValidator):
     def __init__(self, parent=None):
-        super(SIPAddressValidator, self).__init__(QRegExp(u'^([\w\-_+%]+@[\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
+        super(SIPAddressValidator, self).__init__(QRegExp('^([\w\-_+%]+@[\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
 
     def fixup(self, input):
         if input and '@' not in input:
             preferences_window = self.parent()
-            input += u'@%s' % preferences_window.selected_account.id.domain
+            input += '@%s' % preferences_window.selected_account.id.domain
         return super(SIPAddressValidator, self).fixup(input)
 
 
 class WebURLValidator(QRegExpValidator):
     def __init__(self, parent=None):
-        super(WebURLValidator, self).__init__(QRegExp(u'^(https?://[\w\-_]+(\.[\w\-_]+)*(:\d+)?(/.*)?)?$', Qt.CaseInsensitive), parent)
+        super(WebURLValidator, self).__init__(QRegExp('^(https?://[\w\-_]+(\.[\w\-_]+)*(:\d+)?(/.*)?)?$', Qt.CaseInsensitive), parent)
 
 
 class XCAPRootValidator(WebURLValidator):
     def fixup(self, input):
-        url = urlparse.urlparse(input)
+        url = urllib.parse.urlparse(input)
         if not (url.scheme and url.netloc):
-            input = u''
+            input = ''
         return super(XCAPRootValidator, self).fixup(input)
 
     def validate(self, input, pos):
@@ -85,7 +85,7 @@ class XCAPRootValidator(WebURLValidator):
             if input.endswith(('?', ';', '&')):
                 state = QValidator.Invalid
             else:
-                url = urlparse.urlparse(input)
+                url = urllib.parse.urlparse(input)
                 if url.params or url.query or url.fragment:
                     state = QValidator.Invalid
                 elif url.port is not None:
@@ -164,23 +164,21 @@ class blocked_qt_signals(object):
 
 
 class UnspecifiedOutboundProxy(object):
-    host = u''
+    host = ''
     port = 5060
-    transport = u'UDP'
+    transport = 'UDP'
 
 
 class UnspecifiedMSRPRelay(object):
-    host = u''
+    host = ''
     port = 0
-    transport = u'TLS'
+    transport = 'TLS'
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('preferences.ui'))
 
 
-class PreferencesWindow(base_class, ui_class):
-    __metaclass__ = QSingleton
-
+class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     implements(IObserver)
 
     def __init__(self, account_model, parent=None):
@@ -343,10 +341,10 @@ class PreferencesWindow(base_class, ui_class):
 
         # Accounts
         self.key_negotiation_button.clear()
-        self.key_negotiation_button.addItem(u'Opportunistic', 'opportunistic')
-        self.key_negotiation_button.addItem(u'ZRTP', 'zrtp')
-        self.key_negotiation_button.addItem(u'SDES optional', 'sdes_optional')
-        self.key_negotiation_button.addItem(u'SDES mandatory', 'sdes_mandatory')
+        self.key_negotiation_button.addItem('Opportunistic', 'opportunistic')
+        self.key_negotiation_button.addItem('ZRTP', 'zrtp')
+        self.key_negotiation_button.addItem('SDES optional', 'sdes_optional')
+        self.key_negotiation_button.addItem('SDES mandatory', 'sdes_mandatory')
 
         # Audio
 
@@ -404,10 +402,10 @@ class PreferencesWindow(base_class, ui_class):
             action.index = index
             self.section_group.addAction(action)
 
-        for index in xrange(self.idd_prefix_button.count()):
+        for index in range(self.idd_prefix_button.count()):
             text = self.idd_prefix_button.itemText(index)
             self.idd_prefix_button.setItemData(index, None if text == "+" else text)
-        for index in xrange(self.prefix_button.count()):
+        for index in range(self.prefix_button.count()):
             text = self.prefix_button.itemText(index)
             self.prefix_button.setItemData(index, None if text == "None" else text)
 
@@ -467,7 +465,7 @@ class PreferencesWindow(base_class, ui_class):
         combo_box.initStyleOption(option)
         wide_padding = (combo_box.height() - combo_box.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo_box).height() >= 10)
         if False and wide_padding: # TODO: review later and decide if its worth or not -Dan
-            print "found wide padding"
+            print("found wide padding")
             self.audio_alert_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.audio_input_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.audio_output_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
@@ -594,30 +592,30 @@ class PreferencesWindow(base_class, ui_class):
         class Separator: pass
 
         self.audio_input_device_button.clear()
-        self.audio_input_device_button.addItem(u'System Default', 'system_default')
+        self.audio_input_device_button.addItem('System Default', 'system_default')
         self.audio_input_device_button.insertSeparator(1)
         self.audio_input_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.input_devices:
             self.audio_input_device_button.addItem(device, device)
-        self.audio_input_device_button.addItem(u'None', None)
+        self.audio_input_device_button.addItem('None', None)
         self.audio_input_device_button.setCurrentIndex(self.audio_input_device_button.findData(settings.audio.input_device))
 
         self.audio_output_device_button.clear()
-        self.audio_output_device_button.addItem(u'System Default', 'system_default')
+        self.audio_output_device_button.addItem('System Default', 'system_default')
         self.audio_output_device_button.insertSeparator(1)
         self.audio_output_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_output_device_button.addItem(device, device)
-        self.audio_output_device_button.addItem(u'None', None)
+        self.audio_output_device_button.addItem('None', None)
         self.audio_output_device_button.setCurrentIndex(self.audio_output_device_button.findData(settings.audio.output_device))
 
         self.audio_alert_device_button.clear()
-        self.audio_alert_device_button.addItem(u'System Default', 'system_default')
+        self.audio_alert_device_button.addItem('System Default', 'system_default')
         self.audio_alert_device_button.insertSeparator(1)
         self.audio_alert_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_alert_device_button.addItem(device, device)
-        self.audio_alert_device_button.addItem(u'None', None)
+        self.audio_alert_device_button.addItem('None', None)
         self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
 
     def load_video_devices(self):
@@ -626,12 +624,12 @@ class PreferencesWindow(base_class, ui_class):
         class Separator: pass
 
         self.video_camera_button.clear()
-        self.video_camera_button.addItem(u'System Default', 'system_default')
+        self.video_camera_button.addItem('System Default', 'system_default')
         self.video_camera_button.insertSeparator(1)
         self.video_camera_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.video_devices:
             self.video_camera_button.addItem(device, device)
-        self.video_camera_button.addItem(u'None', None)
+        self.video_camera_button.addItem('None', None)
         self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
 
     def load_settings(self):
@@ -667,7 +665,7 @@ class PreferencesWindow(base_class, ui_class):
         # Video devices
         self.load_video_devices()
 
-        self.video_resolution_button.setCurrentIndex(self.video_resolution_button.findData(unicode(settings.video.resolution)))
+        self.video_resolution_button.setCurrentIndex(self.video_resolution_button.findData(str(settings.video.resolution)))
         self.video_framerate_button.setCurrentIndex(self.video_framerate_button.findData(settings.video.framerate))
 
         # Video codecs
@@ -677,7 +675,7 @@ class PreferencesWindow(base_class, ui_class):
                 item = QListWidgetItem(codec, self.video_codecs_list)
                 item.setCheckState(Qt.Checked if codec in settings.rtp.video_codec_list else Qt.Unchecked)
 
-        self.h264_profile_button.setCurrentIndex(self.h264_profile_button.findData(unicode(settings.video.h264.profile)))
+        self.h264_profile_button.setCurrentIndex(self.h264_profile_button.findData(str(settings.video.h264.profile)))
         self.video_codec_bitrate_button.setCurrentIndex(self.video_codec_bitrate_button.findData(settings.video.max_bitrate))
 
         # Chat and SMS settings
@@ -748,9 +746,9 @@ class PreferencesWindow(base_class, ui_class):
         with blocked_qt_signals(self.media_ports):
             self.media_ports.setValue(settings.rtp.port_range.end - settings.rtp.port_range.start)
 
-        self.screenshots_directory_editor.setText(blink_settings.screenshots_directory or u'')
-        self.transfers_directory_editor.setText(blink_settings.transfers_directory or u'')
-        self.tls_ca_file_editor.setText(settings.tls.ca_list or u'')
+        self.screenshots_directory_editor.setText(blink_settings.screenshots_directory or '')
+        self.transfers_directory_editor.setText(blink_settings.transfers_directory or '')
+        self.tls_ca_file_editor.setText(settings.tls.ca_list or '')
 
     def load_account_settings(self, account):
         """Load the account settings from configuration into the UI controls"""
@@ -760,17 +758,17 @@ class PreferencesWindow(base_class, ui_class):
         # Account information tab
         self.account_enabled_button.setChecked(account.enabled)
         self.account_enabled_button.setEnabled(True if account is not bonjour_account else BonjourAccount.mdns_available)
-        self.display_name_editor.setText(account.display_name or u'')
+        self.display_name_editor.setText(account.display_name or '')
         if account is not bonjour_account:
             self.password_editor.setText(account.auth.password)
             selected_index = self.account_list.selectionModel().selectedIndexes()[0]
             selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
             if selected_account_info.registration_state:
-                self.account_registration_label.setText(u'Registration %s' % selected_account_info.registration_state.title())
+                self.account_registration_label.setText('Registration %s' % selected_account_info.registration_state.title())
             else:
-                self.account_registration_label.setText(u'Not Registered')
+                self.account_registration_label.setText('Not Registered')
         else:
-            self.account_registration_label.setText(u'')
+            self.account_registration_label.setText('')
 
         # Media tab
         with blocked_qt_signals(self.account_audio_codecs_list):
@@ -805,7 +803,7 @@ class PreferencesWindow(base_class, ui_class):
             with blocked_qt_signals(self.outbound_proxy_port):
                 self.outbound_proxy_port.setValue(outbound_proxy.port)
             self.outbound_proxy_transport_button.setCurrentIndex(self.outbound_proxy_transport_button.findText(outbound_proxy.transport.upper()))
-            self.auth_username_editor.setText(account.auth.username or u'')
+            self.auth_username_editor.setText(account.auth.username or '')
 
             self.always_use_my_msrp_relay_button.setChecked(account.nat_traversal.use_msrp_relay_for_outbound)
             msrp_relay = account.nat_traversal.msrp_relay or UnspecifiedMSRPRelay
@@ -814,10 +812,10 @@ class PreferencesWindow(base_class, ui_class):
                 self.msrp_relay_port.setValue(msrp_relay.port)
             self.msrp_relay_transport_button.setCurrentIndex(self.msrp_relay_transport_button.findText(msrp_relay.transport.upper()))
 
-            self.voicemail_uri_editor.setText(account.message_summary.voicemail_uri or u'')
-            self.xcap_root_editor.setText(account.xcap.xcap_root or u'')
-            self.server_tools_url_editor.setText(account.server.settings_url or u'')
-            self.conference_server_editor.setText(account.server.conference_server or u'')
+            self.voicemail_uri_editor.setText(account.message_summary.voicemail_uri or '')
+            self.xcap_root_editor.setText(account.xcap.xcap_root or '')
+            self.server_tools_url_editor.setText(account.server.settings_url or '')
+            self.conference_server_editor.setText(account.server.conference_server or '')
 
             # Network tab
             self.use_ice_button.setChecked(account.nat_traversal.use_ice)
@@ -846,7 +844,7 @@ class PreferencesWindow(base_class, ui_class):
 
             self._update_pstn_example_label()
 
-            self.account_tls_cert_file_editor.setText(account.tls.certificate or u'')
+            self.account_tls_cert_file_editor.setText(account.tls.certificate or '')
             self.account_tls_verify_server_button.setChecked(account.tls.verify_server)
 
     def update_chat_preview(self):
@@ -942,12 +940,12 @@ class PreferencesWindow(base_class, ui_class):
                     logs_size += os.stat(os.path.join(path, name)).st_size
                 except (OSError, IOError):
                     pass
-        self.log_files_size_label.setText(u"There are currently %s of log files" % self._normalize_binary_size(logs_size))
+        self.log_files_size_label.setText("There are currently %s of log files" % self._normalize_binary_size(logs_size))
 
     def _update_pstn_example_label(self):
         prefix = self.prefix_button.currentText()
         idd_prefix = self.idd_prefix_button.currentText()
-        self.pstn_example_transformed_label.setText(u"%s%s442079460000" % ('' if prefix == 'None' else prefix, idd_prefix))
+        self.pstn_example_transformed_label.setText("%s%s442079460000" % ('' if prefix == 'None' else prefix, idd_prefix))
 
     def _align_style_preview(self, scroll=False):
         chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
@@ -990,15 +988,15 @@ class PreferencesWindow(base_class, ui_class):
                 self.password_editor.hide()
             else:
                 if tab_widget.indexOf(self.server_settings_tab) == -1:
-                    tab_widget.addTab(self.server_settings_tab, u"Server Settings")
+                    tab_widget.addTab(self.server_settings_tab, "Server Settings")
                 if tab_widget.indexOf(self.network_tab) == -1:
-                    tab_widget.addTab(self.network_tab, u"Network")
+                    tab_widget.addTab(self.network_tab, "Network")
                 if tab_widget.indexOf(self.advanced_tab) == -1:
-                    tab_widget.addTab(self.advanced_tab, u"Advanced")
+                    tab_widget.addTab(self.advanced_tab, "Advanced")
                 self.password_label.show()
                 self.password_editor.show()
-                self.voicemail_uri_editor.inactiveText = u"Discovered by subscribing to %s" % selected_account.id
-                self.xcap_root_editor.inactiveText = u"Taken from the DNS TXT record for xcap.%s" % selected_account.id.domain
+                self.voicemail_uri_editor.inactiveText = "Discovered by subscribing to %s" % selected_account.id
+                self.xcap_root_editor.inactiveText = "Taken from the DNS TXT record for xcap.%s" % selected_account.id.domain
             self.load_account_settings(selected_account)
 
     def _SH_AccountListDataChanged(self, topLeft, bottomRight):
@@ -1011,9 +1009,9 @@ class PreferencesWindow(base_class, ui_class):
             selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
             if selected_account_info is account_info:
                 if account_info.registration_state:
-                    self.account_registration_label.setText(u'Registration %s' % account_info.registration_state.title())
+                    self.account_registration_label.setText('Registration %s' % account_info.registration_state.title())
                 else:
-                    self.account_registration_label.setText(u'Not Registered')
+                    self.account_registration_label.setText('Not Registered')
 
     def _SH_DeleteAccountButtonClicked(self):
         model = self.account_list.model()
@@ -1021,7 +1019,7 @@ class PreferencesWindow(base_class, ui_class):
         selected_index = self.account_list.selectionModel().selectedIndexes()[0]
         selected_account = selected_index.data(Qt.UserRole).account
 
-        title, message = u"Remove Account", u"Permanently remove account %s?" % selected_account.id
+        title, message = "Remove Account", "Permanently remove account %s?" % selected_account.id
         if QMessageBox.question(self, title, message, QMessageBox.Ok|QMessageBox.Cancel) == QMessageBox.Cancel:
             return
 
@@ -1067,14 +1065,14 @@ class PreferencesWindow(base_class, ui_class):
     # Account media settings
     def _SH_AccountAudioCodecsListItemChanged(self, item):
         account = self.selected_account
-        items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
+        items = [self.account_audio_codecs_list.item(row) for row in range(self.account_audio_codecs_list.count())]
         account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.audio_codec_order = [item.text() for item in items]
         account.save()
 
     def _SH_AccountAudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
-        items = [self.account_audio_codecs_list.item(row) for row in xrange(self.account_audio_codecs_list.count())]
+        items = [self.account_audio_codecs_list.item(row) for row in range(self.account_audio_codecs_list.count())]
         account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.audio_codec_order = [item.text() for item in items]
         account.save()
@@ -1097,14 +1095,14 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_AccountVideoCodecsListItemChanged(self, item):
         account = self.selected_account
-        items = [self.account_video_codecs_list.item(row) for row in xrange(self.account_video_codecs_list.count())]
+        items = [self.account_video_codecs_list.item(row) for row in range(self.account_video_codecs_list.count())]
         account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.video_codec_order = [item.text() for item in items]
         account.save()
 
     def _SH_AccountVideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
-        items = [self.account_video_codecs_list.item(row) for row in xrange(self.account_video_codecs_list.count())]
+        items = [self.account_video_codecs_list.item(row) for row in range(self.account_video_codecs_list.count())]
         account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         account.rtp.video_codec_order = [item.text() for item in items]
         account.save()
@@ -1285,7 +1283,7 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         account = self.selected_account
         directory = os.path.dirname(account.tls.certificate.normalized) if account.tls.certificate else Path('~').normalized
-        cert_path = QFileDialog.getOpenFileName(self, u'Select Certificate File', directory, u"TLS certificates (*.crt *.pem)")[0] or None
+        cert_path = QFileDialog.getOpenFileName(self, 'Select Certificate File', directory, "TLS certificates (*.crt *.pem)")[0] or None
         if cert_path is not None:
             cert_path = os.path.normpath(cert_path)
             if cert_path != account.tls.certificate:
@@ -1293,10 +1291,10 @@ class PreferencesWindow(base_class, ui_class):
                     contents = open(cert_path).read()
                     X509Certificate(contents)
                     X509PrivateKey(contents)
-                except (OSError, IOError), e:
-                    QMessageBox.critical(self, u"TLS Certificate Error", u"The certificate file could not be opened: %s" % e.strerror)
-                except GNUTLSError, e:
-                    QMessageBox.critical(self, u"TLS Certificate Error", u"The certificate file is invalid: %s" % e)
+                except (OSError, IOError) as e:
+                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate file could not be opened: %s" % e.strerror)
+                except GNUTLSError as e:
+                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate file is invalid: %s" % e)
                 else:
                     self.account_tls_cert_file_editor.setText(cert_path)
                     account.tls.certificate = cert_path
@@ -1344,13 +1342,13 @@ class PreferencesWindow(base_class, ui_class):
     # Audio codecs signal handlers
     def _SH_AudioCodecsListItemChanged(self, item):
         settings = SIPSimpleSettings()
-        item_iterator = (self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count()))
+        item_iterator = (self.audio_codecs_list.item(row) for row in range(self.audio_codecs_list.count()))
         settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.Checked]
         settings.save()
 
     def _SH_AudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
-        items = [self.audio_codecs_list.item(row) for row in xrange(self.audio_codecs_list.count())]
+        items = [self.audio_codecs_list.item(row) for row in range(self.audio_codecs_list.count())]
         settings.rtp.audio_codec_order = [item.text() for item in items]
         settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         settings.save()
@@ -1363,18 +1361,18 @@ class PreferencesWindow(base_class, ui_class):
 
     def _SH_AnswerDelayValueChanged(self, value):
         if value == 0:
-            self.answer_delay_seconds_label.setText(u'')
+            self.answer_delay_seconds_label.setText('')
         elif value == 1:
-            self.answer_delay_seconds_label.setText(u'second')
+            self.answer_delay_seconds_label.setText('second')
         else:
-            self.answer_delay_seconds_label.setText(u'seconds')
+            self.answer_delay_seconds_label.setText('seconds')
         settings = SIPSimpleSettings()
         if settings.answering_machine.answer_delay != value:
             settings.answering_machine.answer_delay = value
             settings.save()
 
     def _SH_MaxRecordingValueChanged(self, value):
-        self.max_recording_minutes_label.setText(u'minute' if value == 1 else u'minutes')
+        self.max_recording_minutes_label.setText('minute' if value == 1 else 'minutes')
         settings = SIPSimpleSettings()
         if settings.answering_machine.max_recording != value:
             settings.answering_machine.max_recording = value
@@ -1403,13 +1401,13 @@ class PreferencesWindow(base_class, ui_class):
     # Video codecs signal handlers
     def _SH_VideoCodecsListItemChanged(self, item):
         settings = SIPSimpleSettings()
-        item_iterator = (self.video_codecs_list.item(row) for row in xrange(self.video_codecs_list.count()))
+        item_iterator = (self.video_codecs_list.item(row) for row in range(self.video_codecs_list.count()))
         settings.rtp.video_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.Checked]
         settings.save()
 
     def _SH_VideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
-        items = [self.video_codecs_list.item(row) for row in xrange(self.video_codecs_list.count())]
+        items = [self.video_codecs_list.item(row) for row in range(self.video_codecs_list.count())]
         settings.rtp.video_codec_order = [item.text() for item in items]
         settings.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
         settings.save()
@@ -1508,7 +1506,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_ScreenshotsDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = BlinkSettings()
-        directory = QFileDialog.getExistingDirectory(self, u'Select Screenshots Directory', settings.screenshots_directory.normalized) or None
+        directory = QFileDialog.getExistingDirectory(self, 'Select Screenshots Directory', settings.screenshots_directory.normalized) or None
         if directory is not None:
             directory = os.path.normpath(directory)
             if directory != settings.screenshots_directory:
@@ -1535,7 +1533,7 @@ class PreferencesWindow(base_class, ui_class):
     def _SH_TransfersDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = BlinkSettings()
-        directory = QFileDialog.getExistingDirectory(self, u'Select Transfers Directory', settings.transfers_directory.normalized) or None
+        directory = QFileDialog.getExistingDirectory(self, 'Select Transfers Directory', settings.transfers_directory.normalized) or None
         if directory is not None:
             directory = os.path.normpath(directory)
             if directory != settings.transfers_directory:
@@ -1643,16 +1641,16 @@ class PreferencesWindow(base_class, ui_class):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
         settings = SIPSimpleSettings()
         directory = os.path.dirname(settings.tls.ca_list.normalized) if settings.tls.ca_list else Path('~').normalized
-        ca_path = QFileDialog.getOpenFileName(self, u'Select Certificate Authority File', directory, u"TLS certificates (*.crt *.pem)")[0] or None
+        ca_path = QFileDialog.getOpenFileName(self, 'Select Certificate Authority File', directory, "TLS certificates (*.crt *.pem)")[0] or None
         if ca_path is not None:
             ca_path = os.path.normpath(ca_path)
             if ca_path != settings.tls.ca_list:
                 try:
                     X509Certificate(open(ca_path).read())
-                except (OSError, IOError), e:
-                    QMessageBox.critical(self, u"TLS Certificate Error", u"The certificate authority file could not be opened: %s" % e.strerror)
-                except GNUTLSError, e:
-                    QMessageBox.critical(self, u"TLS Certificate Error", u"The certificate authority file is invalid: %s" % e)
+                except (OSError, IOError) as e:
+                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate authority file could not be opened: %s" % e.strerror)
+                except GNUTLSError as e:
+                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate authority file is invalid: %s" % e)
                 else:
                     self.tls_ca_file_editor.setText(ca_path)
                     settings.tls.ca_list = ca_path
@@ -1711,7 +1709,7 @@ class PreferencesWindow(base_class, ui_class):
                 self.account_enabled_button.setChecked(account.enabled)
                 self.reregister_button.setEnabled(account.enabled)
             if 'display_name' in notification.data.modified:
-                self.display_name_editor.setText(account.display_name or u'')
+                self.display_name_editor.setText(account.display_name or '')
             if 'rtp.audio_codec_list' in notification.data.modified:
                 self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_list is not None)
             if 'rtp.video_codec_list' in notification.data.modified:

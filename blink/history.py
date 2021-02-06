@@ -1,6 +1,6 @@
 
 import bisect
-import cPickle as pickle
+import pickle as pickle
 import re
 
 from PyQt5.QtGui import QIcon
@@ -24,8 +24,7 @@ from blink.util import run_in_gui_thread
 __all__ = ['HistoryManager']
 
 
-class HistoryManager(object):
-    __metaclass__ = Singleton
+class HistoryManager(object, metaclass=Singleton):
     implements(IObserver)
 
     history_size = 20
@@ -149,7 +148,7 @@ class HistoryEntry(object):
 
     @property
     def text(self):
-        result = unicode(self.name or self.uri)
+        result = str(self.name or self.uri)
         if self.call_time:
             call_time = self.call_time.astimezone(tzlocal())
             call_date = call_time.date()
@@ -195,6 +194,6 @@ class HistoryEntry(object):
             display_name = session.remote_identity.display_name
         else:
             display_name = contact.name
-        return cls(session.direction, display_name, remote_uri, unicode(session.account.id), call_time, duration)
+        return cls(session.direction, display_name, remote_uri, str(session.account.id), call_time, duration)
 
 

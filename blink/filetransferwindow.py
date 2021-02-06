@@ -66,9 +66,9 @@ class FileTransferWindow(base_class, ui_class):
     def update_status(self):
         total = len(self.model.items)
         active = len([item for item in self.model.items if not item.ended])
-        text = u'%d %s' % (total, 'transfer' if total == 1 else 'transfers')
+        text = '%d %s' % (total, 'transfer' if total == 1 else 'transfers')
         if active > 0:
-            text += u' (%d active)' % active
+            text += ' (%d active)' % active
         self.status_label.setText(text)
 
     def handle_notification(self, notification):

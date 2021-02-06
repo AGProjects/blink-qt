@@ -1,5 +1,5 @@
 
-import cPickle as pickle
+import pickle as pickle
 import locale
 import os
 import re
@@ -55,8 +55,7 @@ from blink.widgets.util import ContextMenuActions
 __all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'URIUtils']
 
 
-class VirtualGroupManager(object):
-    __metaclass__ = Singleton
+class VirtualGroupManager(object, metaclass=Singleton):
     implements(IObserver)
 
     __groups__ = []
@@ -75,7 +74,7 @@ class VirtualGroupManager(object):
         return self.groups[id]
 
     def get_groups(self):
-        return self.groups.values()
+        return list(self.groups.values())
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -97,18 +96,17 @@ class VirtualGroupManager(object):
 
 class VirtualGroupMeta(SettingsObjectMeta):
     def __init__(cls, name, bases, dic):
-        if not (cls.__id__ is None or isinstance(cls.__id__, basestring)):
+        if not (cls.__id__ is None or isinstance(cls.__id__, str)):
             raise TypeError("%s.__id__ must be None or a string" % name)
         super(VirtualGroupMeta, cls).__init__(name, bases, dic)
         if cls.__id__ is not None:
             VirtualGroupManager.__groups__.append(cls)
 
 
-class VirtualGroup(SettingsState):
-    __metaclass__ = VirtualGroupMeta
+class VirtualGroup(SettingsState, metaclass=VirtualGroupMeta):
     __id__ = None
 
-    name = Setting(type=unicode, default='')
+    name = Setting(type=str, default='')
     position = Setting(type=int, default=None, nillable=True)
     collapsed = Setting(type=bool, default=False)
 
@@ -190,7 +188,7 @@ class AllContactsGroup(VirtualGroup):
 
     __id__ = 'all_contacts'
 
-    name = Setting(type=unicode, default='All Contacts')
+    name = Setting(type=str, default='All Contacts')
     contacts = WriteOnceAttribute()
 
     def __init__(self):
@@ -233,9 +231,9 @@ class BonjourNeighbourID(str):
     pass
 
 
-class BonjourURI(unicode):
+class BonjourURI(str):
     def __new__(cls, value):
-        instance = unicode.__new__(cls, unicode(value).partition(':')[2])
+        instance = str.__new__(cls, str(value).partition(':')[2])
         instance.__uri__ = value
         return instance
 
@@ -281,7 +279,7 @@ class BonjourNeighbourURIList(object):
         return id in self._uri_map
 
     def __iter__(self):
-        return iter(self._uri_map.values())
+        return iter(list(self._uri_map.values()))
 
     def __len__(self):
         return len(self._uri_map)
@@ -315,7 +313,7 @@ class BonjourNeighbour(object):
     id = WriteOnceAttribute()
 
     def __init__(self, id, name, hostname, uris, presence=None):
-        self.id = BonjourNeighbourID(id) if isinstance(id, basestring) else id
+        self.id = BonjourNeighbourID(id) if isinstance(id, str) else id
         self.name = name
         self.hostname = hostname
         self.uris = BonjourNeighbourURIList(uris)
@@ -334,7 +332,7 @@ class BonjourNeighboursList(object):
         return id in self._contact_map
 
     def __iter__(self):
-        return iter(self._contact_map.values())
+        return iter(list(self._contact_map.values()))
 
     def __len__(self):
         return len(self._contact_map)
@@ -351,8 +349,7 @@ class BonjourNeighboursList(object):
         return self._contact_map.pop(contact.id, None)
 
 
-class BonjourNeighboursManager(object):
-    __metaclass__ = Singleton
+class BonjourNeighboursManager(object, metaclass=Singleton):
     implements(IObserver)
 
     contacts = WriteOnceAttribute()
@@ -407,7 +404,7 @@ class BonjourNeighboursGroup(VirtualGroup):
 
     __id__ = 'bonjour_neighbours'
 
-    name = Setting(type=unicode, default='Bonjour Neighbours')
+    name = Setting(type=str, default='Bonjour Neighbours')
     contacts = property(lambda self: self.__manager__.contacts)
 
     def __init__(self):
@@ -436,14 +433,14 @@ class BonjourNeighboursGroup(VirtualGroup):
         notification.center.post_notification('VirtualContactDidChange', sender=notification.data.contact)
 
 
-class GoogleContactID(unicode):
+class GoogleContactID(str):
     pass
 
 
 class GoogleContactIconMetadata(object):
     def __init__(self, metadata):
         metadata = metadata or {'source': {'id': None, 'type': None}}
-        self.__dict__.update({name: GoogleContactIconMetadata(value) if isinstance(value, dict) else value for name, value in metadata.iteritems()})
+        self.__dict__.update({name: GoogleContactIconMetadata(value) if isinstance(value, dict) else value for name, value in metadata.items()})
 
     def __getattr__(self, name):  # stop PyCharm from complaining about undefined attributes
         raise AttributeError(name)
@@ -490,7 +487,7 @@ class GoogleContactIconRetriever(object):
             else:
                 response = content = None
         except (HttpLib2Error, socket.error) as e:
-            log.warning(u'could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
+            log.warning('could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
         else:
             if response is None:
                 icon_manager = IconManager()
@@ -501,27 +498,27 @@ class GoogleContactIconRetriever(object):
                 try:
                     icon_manager.store_data(self.contact.id, content)
                 except Exception as e:
-                    log.error(u'could not store icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
+                    log.error('could not store icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                 else:
                     icon.downloaded_url = icon.url
             elif response['status'] in ('403', '404') and icon.alternate_url:  # private or unavailable photo. use old GData protocol if alternate_url is available.
                 try:
                     response, content = http.request(icon.alternate_url, headers={'GData-Version': '3.0'})
                 except (HttpLib2Error, socket.error) as e:
-                    log.warning(u'could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
+                    log.warning('could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                 else:
                     if response['status'] == '200' and response['content-type'].startswith('image/'):
                         icon_manager = IconManager()
                         try:
                             icon_manager.store_data(self.contact.id, content)
                         except Exception as e:
-                            log.error(u'could not store icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
+                            log.error('could not store icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                         else:
                             icon.downloaded_url = icon.url
                     else:
-                        log.error(u'could not retrieve icon for {} (status={}, content-type={!r})'.format(owner, response['status'], response['content-type']))
+                        log.error('could not retrieve icon for {} (status={}, content-type={!r})'.format(owner, response['status'], response['content-type']))
             else:
-                log.error(u'could not retrieve icon for {} (status={}, content-type={!r})'.format(owner, response['status'], response['content-type']))
+                log.error('could not retrieve icon for {} (status={}, content-type={!r})'.format(owner, response['status'], response['content-type']))
         finally:
             self._event.set()
 
@@ -561,7 +558,7 @@ class GoogleContactURIList(object):
         return id in self._uri_map
 
     def __iter__(self):
-        return iter(self._uri_map.values())
+        return iter(list(self._uri_map.values()))
 
     def __len__(self):
         return len(self._uri_map)
@@ -658,7 +655,7 @@ class GoogleContactsList(object):
         return id in self._contact_map
 
     def __iter__(self):
-        return iter(self._contact_map.values())
+        return iter(list(self._contact_map.values()))
 
     def __len__(self):
         return len(self._contact_map)
@@ -678,7 +675,7 @@ class GoogleContactsList(object):
 
 class GoogleAuthorizationView(QWebView):
     finished = pyqtSignal()
-    accepted = pyqtSignal(unicode, unicode)  # accepted.emit(code, email)
+    accepted = pyqtSignal(str, str)  # accepted.emit(code, email)
     rejected = pyqtSignal()
 
     success_token = 'Success code='
@@ -778,8 +775,7 @@ class GoogleAuthorization(object):
         notification_center.post_notification('GoogleAuthorizationWasRejected', sender=self)
 
 
-class GoogleContactsManager(object):
-    __metaclass__ = Singleton
+class GoogleContactsManager(object, metaclass=Singleton):
     implements(IObserver)
 
     def __init__(self):
@@ -866,9 +862,9 @@ class GoogleContactsManager(object):
                 self._sync_token = None
                 self.sync_contacts()
                 return
-            log.warning(u'Could not fetch Google contacts: {!s}'.format(e))
+            log.warning('Could not fetch Google contacts: {!s}'.format(e))
         except (HttpLib2Error, socket.error) as e:
-            log.warning(u'Could not fetch Google contacts: {!s}'.format(e))
+            log.warning('Could not fetch Google contacts: {!s}'.format(e))
         else:
             added_contacts = []
             modified_contacts = []
@@ -981,7 +977,7 @@ class GoogleContactsGroup(VirtualGroup):
 
     __id__ = 'google_contacts'
 
-    name = Setting(type=unicode, default='Google Contacts')
+    name = Setting(type=str, default='Google Contacts')
     contacts = property(lambda self: self.__manager__.contacts)
 
     def __init__(self):
@@ -1012,7 +1008,7 @@ class GoogleContactsGroup(VirtualGroup):
 class DummyContactURI(object):
     id = property(lambda self: self.uri)
 
-    def __init__(self, uri, type=u'', default=False):
+    def __init__(self, uri, type='', default=False):
         self.uri = uri
         self.type = type
         self.default = default
@@ -1032,7 +1028,7 @@ class DummyContactURIList(object):
         return id in self._uri_map
 
     def __iter__(self):
-        return iter(self._uri_map.values())
+        return iter(list(self._uri_map.values()))
 
     def __len__(self):
         return len(self._uri_map)
@@ -1266,7 +1262,7 @@ class Contact(object):
         self.__dict__.update(state)
 
     def __unicode__(self):
-        return self.name or u''
+        return self.name or ''
 
     @property
     def type(self):
@@ -1290,7 +1286,7 @@ class Contact(object):
         if self.type == 'bonjour':
             return '%s (%s)' % (self.settings.name, self.settings.hostname)
         elif self.type == 'google':
-            return self.settings.name or self.settings.organization or u''
+            return self.settings.name or self.settings.organization or ''
         else:
             return self.settings.name
 
@@ -1306,7 +1302,7 @@ class Contact(object):
         try:
             return self.note or ('@' + self.uri.uri.host if self.type == 'bonjour' else self.uri.uri)
         except AttributeError:
-            return u''
+            return ''
 
     @property
     def uris(self):
@@ -1422,7 +1418,7 @@ class ContactDetail(object):
         self.__dict__.update(state)
 
     def __unicode__(self):
-        return self.name or u''
+        return self.name or ''
 
     @property
     def type(self):
@@ -1446,7 +1442,7 @@ class ContactDetail(object):
         if self.type == 'bonjour':
             return '%s (%s)' % (self.settings.name, self.settings.hostname)
         elif self.type == 'google':
-            return self.settings.name or self.settings.organization or u''
+            return self.settings.name or self.settings.organization or ''
         else:
             return self.settings.name
 
@@ -1462,7 +1458,7 @@ class ContactDetail(object):
         try:
             return self.note or ('@' + self.uri.uri.host if self.type == 'bonjour' else self.uri.uri)
         except AttributeError:
-            return u''
+            return ''
 
     @property
     def uris(self):
@@ -1583,7 +1579,7 @@ class ContactURI(object):
         self.__dict__.update(state)
 
     def __unicode__(self):
-        return u'%s (%s)' % (self.uri.uri, self.uri.type) if self.uri.type else unicode(self.uri.uri)
+        return '%s (%s)' % (self.uri.uri, self.uri.type) if self.uri.type else str(self.uri.uri)
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -1811,7 +1807,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
     def _update_list_view(self, group, collapsed):
         list_view = self.parent()
         list_items = list_view.model().items
-        for position in xrange(list_items.index(group)+1, len(list_items)):
+        for position in range(list_items.index(group)+1, len(list_items)):
             if isinstance(list_items[position], Group):
                 break
             list_view.setRowHidden(position, collapsed)
@@ -2114,7 +2110,7 @@ class Operation(object):
     __priority__ = None
 
     def __init__(self, **params):
-        for name, value in params.iteritems():
+        for name, value in params.items():
             setattr(self, name, value)
         for param in set(self.__params__).difference(params):
             raise ValueError("missing operation parameter: '%s'" % param)
@@ -2146,7 +2142,7 @@ class RecallState(object):
 
     def _normalize_state(self, state):
         normalized_state = {}
-        for key, value in state.iteritems():
+        for key, value in state.items():
             if isinstance(value, dict):
                 normalized_state[key] = self._normalize_state(value)
             elif value is not DefaultValue:
@@ -2154,9 +2150,9 @@ class RecallState(object):
         return normalized_state
 
 
-class GroupList:     __metaclass__ = MarkerType
-class GroupElement:  __metaclass__ = MarkerType
-class GroupContacts: __metaclass__ = MarkerType
+class GroupList(metaclass=MarkerType):     pass
+class GroupElement(metaclass=MarkerType):  pass
+class GroupContacts(metaclass=MarkerType): pass
 
 
 class GroupContactList(tuple):
@@ -2169,7 +2165,7 @@ class GroupContactList(tuple):
         return item in self.__contactmap__ or tuple.__contains__(self, item)
 
     def __getitem__(self, index):
-        if isinstance(index, (int, long, slice)):
+        if isinstance(index, (int, slice)):
             return tuple.__getitem__(self, index)
         else:
             return self.__contactmap__[index]
@@ -2319,7 +2315,7 @@ class ContactModel(QAbstractListModel):
         elif role == Qt.SizeHintRole:
             return item.size_hint
         elif role == Qt.DisplayRole:
-            return unicode(item)
+            return str(item)
         return None
 
     def supportedDropActions(self):
@@ -2638,7 +2634,7 @@ class ContactModel(QAbstractListModel):
         contact.name = name
         contact.preferred_media = preferred_media
         contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
-        contact.icon = IconDescriptor(FileURL(icon), unicode(int(os.stat(icon).st_mtime)))
+        contact.icon = IconDescriptor(FileURL(icon), str(int(os.stat(icon).st_mtime)))
         icon_manager = IconManager()
         icon_manager.store_file(id, icon)
         return contact
@@ -2658,7 +2654,7 @@ class ContactModel(QAbstractListModel):
                 contact.uris.default = uri
             modified = True
         if 'icon' in data:
-            icon_descriptor = IconDescriptor(FileURL(data['icon']), unicode(int(os.stat(data['icon']).st_mtime)))
+            icon_descriptor = IconDescriptor(FileURL(data['icon']), str(int(os.stat(data['icon']).st_mtime)))
             if contact.icon != icon_descriptor:
                 icon_manager = IconManager()
                 icon_manager.store_file(contact.id, data['icon'])
@@ -2674,7 +2670,7 @@ class ContactModel(QAbstractListModel):
         next_ok = next_item is None or isinstance(next_item, Group) or next_item >= contact
         if prev_ok and next_ok:
             return None
-        for position in xrange(self.items.index(contact.group)+1, len(self.items)):
+        for position in range(self.items.index(contact.group)+1, len(self.items)):
             item = self.items[position]
             if isinstance(item, Group) or item > contact:
                 break
@@ -2683,7 +2679,7 @@ class ContactModel(QAbstractListModel):
         return position
 
     def _find_contact_insertion_point(self, contact):
-        for position in xrange(self.items.index(contact.group)+1, len(self.items)):
+        for position in range(self.items.index(contact.group)+1, len(self.items)):
             item = self.items[position]
             if isinstance(item, Group) or item > contact:
                 break
@@ -2856,7 +2852,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         if isinstance(item, Group) or not item.group.virtual:
             return False
         search_tokens = self.filterRegExp().pattern().lower().split()
-        searched_item = u' '.join([item.name] + [uri.uri for uri in item.uris]).lower()  # should we only search in the username part of the uris? -Dan
+        searched_item = ' '.join([item.name] + [uri.uri for uri in item.uris]).lower()  # should we only search in the username part of the uris? -Dan
         return all(token in searched_item for token in search_tokens)
 
     def lessThan(self, left_index, right_index):
@@ -2970,7 +2966,7 @@ class ContactDetailModel(QAbstractListModel):
         if role == Qt.UserRole:
             return item
         elif role == Qt.DisplayRole:
-            return unicode(item)
+            return str(item)
         elif role == Qt.SizeHintRole:
             return item.size_hint
         elif role == Qt.CheckStateRole and row > 0:
@@ -3447,7 +3443,7 @@ class ContactListView(QListView):
     def _AH_SendFiles(self):
         session_manager = SessionManager()
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        for filename in QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')[0]:
+        for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
@@ -3837,7 +3833,7 @@ class ContactSearchListView(QListView):
     def _AH_SendFiles(self):
         session_manager = SessionManager()
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        for filename in QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')[0]:
+        for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, contact.uri, filename)
 
     def _AH_RequestScreen(self):
@@ -4145,7 +4141,7 @@ class ContactDetailView(QListView):
             selected_uri = item.uri
         else:
             selected_uri = contact.uri
-        for filename in QFileDialog.getOpenFileNames(self, u'Select File(s)', session_manager.send_file_directory, u'Any file (*.*)')[0]:
+        for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, selected_uri, filename)
 
     def _AH_RequestScreen(self):
@@ -4395,12 +4391,12 @@ class ContactURIModel(QAbstractTableModel):
             return item
         elif role == Qt.DisplayRole:
             if column == ContactURIModel.AddressColumn:
-                return 'Edit to add address' if item.ghost else unicode(item.uri or u'')
+                return 'Edit to add address' if item.ghost else str(item.uri or '')
         elif role == Qt.EditRole:
             if column == ContactURIModel.AddressColumn:
-                return unicode(item.uri or u'')
+                return str(item.uri or '')
             elif column == ContactURIModel.TypeColumn:
-                return item.type or u''
+                return item.type or ''
             elif column == ContactURIModel.DefaultColumn:
                 return item.default
         elif role == Qt.ForegroundRole:
@@ -4567,15 +4563,15 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setItemData(3, 'audio+chat')
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
-    def open_for_add(self, sip_address=u'', target_group=None):
+    def open_for_add(self, sip_address='', target_group=None):
         self.edited_contact = None
         self.target_group = target_group
         self.contact_uri_model.init_with_address(sip_address)
-        self.name_editor.setText(u'')
+        self.name_editor.setText('')
         self.icon_selector.init_with_contact(None)
         self.presence.setChecked(True)
         self.preferred_media.setCurrentIndex(0)
-        self.accept_button.setText(u'Add')
+        self.accept_button.setText('Add')
         self.accept_button.setEnabled(False)
         self.show()
 
@@ -4588,12 +4584,12 @@ class ContactEditorDialog(base_class, ui_class):
         self.icon_selector.init_with_contact(contact)
         self.presence.setChecked(contact.presence.subscribe)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
-        self.accept_button.setText(u'Ok')
+        self.accept_button.setText('Ok')
         self.accept_button.setEnabled(True)
         self.show()
 
     def _SH_NameEditorTextChanged(self, text):
-        self.accept_button.setEnabled(text != u'')
+        self.accept_button.setEnabled(text != '')
 
     def _SH_Accepted(self):
         if self.edited_contact is not None:
@@ -4636,7 +4632,7 @@ class ContactEditorDialog(base_class, ui_class):
             icon_manager.remove(contact.id + '_alt')
             contact.alternate_icon = None
         else:
-            icon_descriptor = IconDescriptor(FileURL(self.icon_selector.filename), unicode(int(os.stat(self.icon_selector.filename).st_mtime)))
+            icon_descriptor = IconDescriptor(FileURL(self.icon_selector.filename), str(int(os.stat(self.icon_selector.filename).st_mtime)))
             if contact.alternate_icon != icon_descriptor:
                 icon_manager.store_file(contact.id + '_alt', icon_descriptor.url.path)
                 contact.alternate_icon = icon_descriptor

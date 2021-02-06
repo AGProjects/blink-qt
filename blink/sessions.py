@@ -1,6 +1,6 @@
 
 import bisect
-import cPickle as pickle
+import pickle as pickle
 import contextlib
 import os
 import re
@@ -61,9 +61,7 @@ class Container(object):
     pass
 
 
-class RTPStreamInfo(object):
-    __metaclass__ = ABCMeta
-
+class RTPStreamInfo(object, metaclass=ABCMeta):
     dataset_size = 5000
     average_interval = 10
 
@@ -132,9 +130,7 @@ class RTPStreamInfo(object):
         self.__init__()
 
 
-class MSRPStreamInfo(object):
-    __metaclass__ = ABCMeta
-
+class MSRPStreamInfo(object, metaclass=ABCMeta):
     def __init__(self):
         self.local_address = None
         self.remote_address = None
@@ -270,7 +266,7 @@ class StreamDescription(object):
 
     def __repr__(self):
         if self.attributes:
-            return "%s(%r, %s)" % (self.__class__.__name__, self.type, ', '.join("%s=%r" % pair for pair in self.attributes.iteritems()))
+            return "%s(%r, %s)" % (self.__class__.__name__, self.type, ', '.join("%s=%r" % pair for pair in self.attributes.items()))
         else:
             return "%s(%r)" % (self.__class__.__name__, self.type)
 
@@ -283,13 +279,13 @@ class StreamSet(object):
         return self._stream_map[key]
 
     def __contains__(self, key):
-        return key in self._stream_map or key in self._stream_map.values()
+        return key in self._stream_map or key in list(self._stream_map.values())
 
     def __iter__(self):
-        return iter(sorted(self._stream_map.values(), key=attrgetter('type')))
+        return iter(sorted(list(self._stream_map.values()), key=attrgetter('type')))
 
     def __reversed__(self):
-        return iter(sorted(self._stream_map.values(), key=attrgetter('type'), reverse=True))
+        return iter(sorted(list(self._stream_map.values()), key=attrgetter('type'), reverse=True))
 
     __hash__ = None
 
@@ -320,13 +316,13 @@ class StreamContainerView(object):
         return self._stream_map[key]
 
     def __contains__(self, key):
-        return key in self._stream_map or key in self._stream_map.values()
+        return key in self._stream_map or key in list(self._stream_map.values())
 
     def __iter__(self):
-        return iter(sorted(self._stream_map.values(), key=attrgetter('type')))
+        return iter(sorted(list(self._stream_map.values()), key=attrgetter('type')))
 
     def __reversed__(self):
-        return iter(sorted(self._stream_map.values(), key=attrgetter('type'), reverse=True))
+        return iter(sorted(list(self._stream_map.values()), key=attrgetter('type'), reverse=True))
 
     __hash__ = None
 
@@ -374,7 +370,7 @@ class StreamContainer(StreamContainerView):
             self.add(item)
 
     def clear(self):
-        for stream in self._stream_map.values():
+        for stream in list(self._stream_map.values()):
             self.remove(stream)
 
 
@@ -401,7 +397,7 @@ class SessionState(str):
     def __eq__(self, other):
         if isinstance(other, SessionState):
             return self.state == other.state and self.substate == other.substate
-        elif isinstance(other, basestring):
+        elif isinstance(other, str):
             state    = other.partition('/')[0] or None
             substate = other.partition('/')[2] or None
             if state == '*':
@@ -441,9 +437,7 @@ class BlinkSessionType(type):
         return instance
 
 
-class BlinkSessionBase(object):
-    __metaclass__ = BlinkSessionType
-
+class BlinkSessionBase(object, metaclass=BlinkSessionType):
     def __establish__(self):
         pass
 
@@ -822,8 +816,8 @@ class BlinkSession(BlinkSessionBase):
             path = os.path.join(settings.audio.recordings_directory.normalized, self.account.id)
             try:
                 audio_stream.start_recording(os.path.join(path, filename))
-            except (SIPCoreError, IOError, OSError), e:
-                print 'Failed to record: %s' % e
+            except (SIPCoreError, IOError, OSError) as e:
+                print('Failed to record: %s' % e)
             else:
                 self.recording = True
 
@@ -926,7 +920,7 @@ class BlinkSession(BlinkSessionBase):
 
     def _sync_chat_peer_name(self):
         chat_stream = self.streams.active.get('chat', Null)
-        if chat_stream.encryption.active and chat_stream.encryption.peer_name == u'':
+        if chat_stream.encryption.active and chat_stream.encryption.peer_name == '':
             chat_stream.encryption.peer_name = self.info.streams.audio.zrtp_peer_name
 
     def _SH_TimerFired(self):
@@ -1199,16 +1193,16 @@ class BlinkSession(BlinkSessionBase):
 
 
 class SMPVerification(Enum):
-    Unavailable = u'Unavailable'
-    InProgress = u'In progress'
-    Succeeded = u'Succeeded'
-    Failed = u'Failed'
+    Unavailable = 'Unavailable'
+    InProgress = 'In progress'
+    Succeeded = 'Succeeded'
+    Failed = 'Failed'
 
 
 class SMPVerificationHandler(object):
     implements(IObserver)
 
-    question = u'What is the ZRTP authentication string?'.encode('utf-8')
+    question = 'What is the ZRTP authentication string?'.encode('utf-8')
 
     def __init__(self, blink_session):
         """@type blink_session: BlinkSession"""
@@ -1377,7 +1371,7 @@ class ConferenceParticipant(object):
                 self.active_media.add(media.media_type.value)
         audio_endpoints = [endpt for endpt in data if any(media.media_type == 'audio' for media in endpt)]
         self.on_hold = all(endpt.status == 'on-hold' for endpt in audio_endpoints) if audio_endpoints else False
-        for attr, value in old_values.iteritems():
+        for attr, value in old_values.items():
             if value != getattr(self, attr):
                 NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
                 break
@@ -1451,10 +1445,10 @@ class ServerConference(object):
         from blink.contacts import URIUtils
         users = dict((self.sip_prefix_re.sub('', str(user.entity)), user) for user in notification.data.conference_info.users)
 
-        removed_participants = [participant for participant in self.participants.itervalues() if participant.uri not in users and participant not in self.pending_additions]
-        confirmed_participants = [participant for participant in self.participants.itervalues() if participant in self.pending_additions and participant.uri in users]
+        removed_participants = [participant for participant in self.participants.values() if participant.uri not in users and participant not in self.pending_additions]
+        confirmed_participants = [participant for participant in self.participants.values() if participant in self.pending_additions and participant.uri in users]
         updated_participants = [self.participants[uri] for uri in users if uri in self.participants]
-        added_users = set(users.keys()).difference(self.participants.keys())
+        added_users = set(users.keys()).difference(list(self.participants.keys()))
 
         for participant in removed_participants:
             self.participants.pop(participant.uri)
@@ -1532,9 +1526,9 @@ class ServerConference(object):
 #
 
 # positions for sessions in a client conference.
-class Top:    __metaclass__ = MarkerType
-class Middle: __metaclass__ = MarkerType
-class Bottom: __metaclass__ = MarkerType
+class Top(metaclass=MarkerType):    pass
+class Middle(metaclass=MarkerType): pass
+class Bottom(metaclass=MarkerType): pass
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
@@ -1789,9 +1783,9 @@ class DraggedAudioSessionWidget(base_class, ui_class):
 
         self.address_label.setText(session_widget.address_label.text())
         if self.in_conference:
-            self.note_label.setText(u'Drop outside the conference to detach')
+            self.note_label.setText('Drop outside the conference to detach')
         else:
-            self.note_label.setText(u'<p><b>Drop</b>:&nbsp;Conference&nbsp; <b>Alt+Drop</b>:&nbsp;Transfer</p>')
+            self.note_label.setText('<p><b>Drop</b>:&nbsp;Conference&nbsp; <b>Alt+Drop</b>:&nbsp;Transfer</p>')
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1864,11 +1858,11 @@ class AudioSessionItem(object):
 
     def __unicode__(self):
         if self.status is not None:
-            return u'{0.type} call with {0.name} ({0.status})'.format(self)
+            return '{0.type} call with {0.name} ({0.status})'.format(self)
         elif self.codec_info:
-            return u'{0.type} call with {0.name} using {0.codec_info} ({0.duration!s})'.format(self)
+            return '{0.type} call with {0.name} using {0.codec_info} ({0.duration!s})'.format(self)
         else:
-            return u'{0.type} call with {0.name}'.format(self)
+            return '{0.type} call with {0.name}'.format(self)
 
     @property
     def audio_stream(self):
@@ -2104,9 +2098,9 @@ class AudioSessionItem(object):
             self.type = 'HD Audio' if audio_info.sample_rate >= 16000 else 'Audio'
             self.codec_info = audio_info.codec
             if audio_info.encryption is not None:
-                self.widget.srtp_label.setToolTip(u'Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
+                self.widget.srtp_label.setToolTip('Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
             else:
-                self.widget.srtp_label.setToolTip(u'Media is not encrypted')
+                self.widget.srtp_label.setToolTip('Media is not encrypted')
             self.widget.update_rtp_encryption_icon()
             self.srtp = audio_info.encryption is not None
         if 'statistics' in notification.data.elements:
@@ -2293,7 +2287,7 @@ class AudioSessionModel(QAbstractListModel):
         if role == Qt.UserRole:
             return item
         elif role == Qt.DisplayRole:
-            return unicode(item)
+            return str(item)
         return None
 
     def supportedDropActions(self):
@@ -2682,7 +2676,7 @@ class AudioSessionListView(QListView):
         char = event.text().upper()
         if char and char in string.digits+string.uppercase+'#*':
             digit_map  = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
-            letter_map = {letter: digit for digit, letter_group in digit_map.iteritems() for letter in letter_group}
+            letter_map = {letter: digit for digit, letter_group in digit_map.items() for letter in letter_group}
             for session in (s for s in self.model().sessions if s.active):
                 session.send_dtmf(letter_map.get(char, char))
         elif event.key() in (Qt.Key_Up, Qt.Key_Down):
@@ -2976,9 +2970,9 @@ class ChatSessionIconLabel(QLabel):
 ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
 
 class ChatSessionWidget(base_class, ui_class):
-    class StandardDisplayMode:  __metaclass__ = MarkerType
-    class AlternateDisplayMode: __metaclass__ = MarkerType
-    class SelectedDisplayMode:  __metaclass__ = MarkerType
+    class StandardDisplayMode(metaclass=MarkerType):  pass
+    class AlternateDisplayMode(metaclass=MarkerType): pass
+    class SelectedDisplayMode(metaclass=MarkerType):  pass
 
     def __init__(self, parent=None):
         super(ChatSessionWidget, self).__init__(parent)
@@ -3375,7 +3369,7 @@ class ChatSessionModel(QAbstractListModel):
         elif role == Qt.SizeHintRole:
             return item.size_hint
         elif role == Qt.DisplayRole:
-            return unicode(item)
+            return str(item)
         return None
 
     def supportedDropActions(self):
@@ -3788,7 +3782,7 @@ ScreenSharingStream.ViewerHandler = EmbeddedVNCViewerHandler
 # File transfers
 #
 
-class RandomID: __metaclass__ = MarkerType
+class RandomID(metaclass=MarkerType): pass
 
 
 class FileSizeFormatter(object):
@@ -4092,8 +4086,8 @@ class BlinkFileTransfer(BlinkSessionBase):
 
 
 class TransferStateLabel(QLabel, ColorHelperMixin):
-    class ProgressDisplayMode: __metaclass__ = MarkerType
-    class InactiveDisplayMode: __metaclass__ = MarkerType
+    class ProgressDisplayMode(metaclass=MarkerType): pass
+    class InactiveDisplayMode(metaclass=MarkerType): pass
 
     def __init__(self, parent=None):
         super(TransferStateLabel, self).__init__(parent)
@@ -4226,9 +4220,9 @@ ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_item.ui'))
 
 
 class FileTransferItemWidget(base_class, ui_class):
-    class StandardDisplayMode:  __metaclass__ = MarkerType
-    class AlternateDisplayMode: __metaclass__ = MarkerType
-    class SelectedDisplayMode:  __metaclass__ = MarkerType
+    class StandardDisplayMode(metaclass=MarkerType):  pass
+    class AlternateDisplayMode(metaclass=MarkerType): pass
+    class SelectedDisplayMode(metaclass=MarkerType):  pass
 
     def __init__(self, parent=None):
         super(FileTransferItemWidget, self).__init__(parent)
@@ -4287,10 +4281,10 @@ class FileTransferItemWidget(base_class, ui_class):
     def update_content(self, item, initial=False):
         if initial:
             if item.direction == 'outgoing':
-                self.name_label.setText(u'To: ' + item.name)
+                self.name_label.setText('To: ' + item.name)
                 self.icon_label.setPixmap(self.pixmaps.outgoing_transfer)
             else:
-                self.name_label.setText(u'From: ' + item.name)
+                self.name_label.setText('From: ' + item.name)
                 self.icon_label.setPixmap(self.pixmaps.incoming_transfer)
         self.filename_label.setText(os.path.basename(item.filename))
         self.status_label.setText(item.status)
@@ -4353,7 +4347,7 @@ class FileTransferItem(object):
 
     @property
     def filename(self):
-        return self.transfer.filename or u''
+        return self.transfer.filename or ''
 
     @property
     def name(self):
@@ -4375,17 +4369,17 @@ class FileTransferItem(object):
     def _NH_BlinkFileTransferDidChangeState(self, notification):
         state = notification.data.new_state
         if state == 'connecting/dns_lookup':
-            self.status = u'Looking up destination...'
+            self.status = 'Looking up destination...'
         elif state == 'connecting':
-            self.status = u'Connecting...'
+            self.status = 'Connecting...'
         elif state == 'connecting/ringing':
-            self.status = u'Ringing...'
+            self.status = 'Ringing...'
         elif state == 'connecting/starting':
-            self.status = u'Starting...'
+            self.status = 'Starting...'
         elif state == 'connected':
-            self.status = u'Connected'
+            self.status = 'Connected'
         elif state == 'ending':
-            self.status = u'Ending...'
+            self.status = 'Ending...'
         else:
             self.status = None
         self.progress = None
@@ -4394,7 +4388,7 @@ class FileTransferItem(object):
 
     def _NH_BlinkFileTransferDidInitialize(self, notification):
         self.progress = None
-        self.status = u'Connecting...'
+        self.status = 'Connecting...'
         self.widget.update_content(self)
         notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
@@ -4402,7 +4396,7 @@ class FileTransferItem(object):
         progress = notification.data.progress
         if self.progress is None or progress > self.progress:
             self.progress = progress
-            self.status = u'Computing hash (%s%%)' % notification.data.progress
+            self.status = 'Computing hash (%s%%)' % notification.data.progress
             self.widget.update_content(self)
             notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
@@ -4410,7 +4404,7 @@ class FileTransferItem(object):
         self.bytes = notification.data.bytes
         self.total_bytes = notification.data.total_bytes
         progress = int(self.bytes * 100 / self.total_bytes)
-        status = u'Transferring: %s/%s (%s%%)' % (FileSizeFormatter.format(self.bytes), FileSizeFormatter.format(self.total_bytes), progress)
+        status = 'Transferring: %s/%s (%s%%)' % (FileSizeFormatter.format(self.bytes), FileSizeFormatter.format(self.total_bytes), progress)
         if self.progress is None or progress > self.progress or status != self.status:
             self.progress = progress
             self.status = status
@@ -4574,7 +4568,7 @@ class FileTransferModel(QAbstractListModel):
         elif role == Qt.SizeHintRole:
             return item.widget.sizeHint()
         elif role == Qt.DisplayRole:
-            return unicode(item)
+            return str(item)
         return None
 
     def addItem(self, item):
@@ -4826,7 +4820,7 @@ class ConferenceParticipantModel(QAbstractListModel):
         elif role == Qt.SizeHintRole:
             return item.size_hint
         elif role == Qt.DisplayRole:
-            return unicode(item)
+            return str(item)
         return None
 
     def supportedDropActions(self):
@@ -5063,7 +5057,7 @@ class DialogSlots(object):
 
 
 class IncomingDialogBase(QDialog):
-    _slots = DialogSlots(range(1, 100))
+    _slots = DialogSlots(list(range(1, 100)))
 
     slot = None
 
@@ -5160,22 +5154,22 @@ class IncomingDialog(IncomingDialogBase, ui_class):
             self.chat_stream.active = True
             self.screensharing_stream.active = True
             self.video_stream.active = True
-            self.note_label.setText(u'To refuse a media type click its icon')
+            self.note_label.setText('To refuse a media type click its icon')
         else:
             self.audio_stream.active = False
             self.chat_stream.active = False
             self.screensharing_stream.active = False
             self.video_stream.active = False
             if self.audio_stream.in_use:
-                self.note_label.setText(u'Audio call')
+                self.note_label.setText('Audio call')
             elif self.chat_stream.in_use:
-                self.note_label.setText(u'Chat session')
+                self.note_label.setText('Chat session')
             elif self.video_stream.in_use:
-                self.note_label.setText(u'Video call')
+                self.note_label.setText('Video call')
             elif self.screensharing_stream.in_use:
-                self.note_label.setText(u'Screen sharing request')
+                self.note_label.setText('Screen sharing request')
             else:
-                self.note_label.setText(u'')
+                self.note_label.setText('')
         self._update_accept_button()
 
 del ui_class, base_class
@@ -5199,11 +5193,11 @@ class IncomingRequest(QObject):
         self.screensharing_stream = screensharing_stream
 
         if proposal:
-            self.dialog.setWindowTitle(u'Incoming Session Update')
+            self.dialog.setWindowTitle('Incoming Session Update')
             self.dialog.busy_button.hide()
         else:
-            self.dialog.setWindowTitle(u'Incoming Session Request')
-        address = u'%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
+            self.dialog.setWindowTitle('Incoming Session Request')
+        address = '%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
         self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
@@ -5213,9 +5207,9 @@ class IncomingRequest(QObject):
         self.dialog.screensharing_stream.setVisible(self.screensharing_stream is not None)
         if self.screensharing_stream is not None:
             if self.screensharing_stream.handler.type == 'active':
-                self.dialog.screensharing_label.setText(u'is offering to share his screen')
+                self.dialog.screensharing_label.setText('is offering to share his screen')
             else:
-                self.dialog.screensharing_label.setText(u'is asking to share your screen')
+                self.dialog.screensharing_label.setText('is asking to share your screen')
                 # self.dialog.screensharing_stream.accepted = bool(proposal)
 
         self.dialog.finished.connect(self._SH_DialogFinished)
@@ -5278,7 +5272,7 @@ class IncomingRequest(QObject):
         elif self.chat_stream:
             return 3
         else:
-            return sys.maxint
+            return sys.maxsize
 
     @property
     def stream_types(self):
@@ -5343,9 +5337,9 @@ class IncomingFileTransferRequest(QObject):
         filename = os.path.basename(self.stream.file_selector.name)
         size = self.stream.file_selector.size
         if size:
-            self.dialog.file_label.setText(u'File: %s (%s)' % (filename, FileSizeFormatter.format(size)))
+            self.dialog.file_label.setText('File: %s (%s)' % (filename, FileSizeFormatter.format(size)))
         else:
-            self.dialog.file_label.setText(u'File: %s' % filename)
+            self.dialog.file_label.setText('File: %s' % filename)
 
         self.dialog.finished.connect(self._SH_DialogFinished)
 
@@ -5418,7 +5412,7 @@ class IncomingCallTransferRequest(QObject):
         self.dialog.uri_label.setText(contact_uri.uri)
         self.dialog.username_label.setText(contact.name)
         self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
-        self.dialog.transfer_label.setText(u'transfer requested by {}'.format(blink_session.contact.name or blink_session.contact_uri.uri))
+        self.dialog.transfer_label.setText('transfer requested by {}'.format(blink_session.contact.name or blink_session.contact_uri.uri))
 
         self.dialog.finished.connect(self._SH_DialogFinished)
 
@@ -5462,10 +5456,10 @@ class ConferenceDialog(base_class, ui_class):
         self.accepted.connect(self.join_conference)
 
     def _SH_MediaButtonClicked(self, checked):
-        self.accept_button.setEnabled(self.room_button.currentText() != u'' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+        self.accept_button.setEnabled(self.room_button.currentText() != '' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
 
     def _SH_RoomButtonEditTextChanged(self, text):
-        self.accept_button.setEnabled(text != u'' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+        self.accept_button.setEnabled(text != '' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
 
     def show(self):
         self.room_button.setCurrentIndex(-1)
@@ -5487,9 +5481,9 @@ class ConferenceDialog(base_class, ui_class):
         session_manager = SessionManager()
         account = account_manager.default_account
         if account is not BonjourAccount():
-            conference_uri = u'%s@%s' % (current_text, account.server.conference_server or 'conference.sip2sip.info')
+            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.sip2sip.info')
         else:
-            conference_uri = u'%s@%s' % (current_text, 'conference.sip2sip.info')
+            conference_uri = '%s@%s' % (current_text, 'conference.sip2sip.info')
         contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')
         streams = []
         if self.audio_button.isChecked():
@@ -5526,7 +5520,7 @@ class RingtoneDescriptor(object):
 
 class RequestList(list):
     def __getitem__(self, key):
-        if isinstance(key, (int, long)):
+        if isinstance(key, int):
             return super(RequestList, self).__getitem__(key)
         elif isinstance(key, tuple):
             session, item_type = key
@@ -5535,13 +5529,11 @@ class RequestList(list):
             return [item for item in self if item.session is key]
 
 
-class SessionManager(object):
-    __metaclass__ = Singleton
-
+class SessionManager(object, metaclass=Singleton):
     implements(IObserver)
 
-    class PrimaryRingtone:   __metaclass__ = MarkerType
-    class SecondaryRingtone: __metaclass__ = MarkerType
+    class PrimaryRingtone(metaclass=MarkerType):   pass
+    class SecondaryRingtone(metaclass=MarkerType): pass
 
     inbound_ringtone  = RingtoneDescriptor()
     outbound_ringtone = RingtoneDescriptor()

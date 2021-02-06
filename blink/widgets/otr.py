@@ -56,10 +56,10 @@ class OTRWidget(base_class, ui_class):
     @peer_verified.setter
     def peer_verified(self, verified):
         self.__dict__['peer_verified'] = verified
-        self.validate_button.setText(u'Invalidate' if verified else u'Validate')
+        self.validate_button.setText('Invalidate' if verified else 'Validate')
         self.validate_button.setChecked(verified)
         self.validate_button.setEnabled(verified or self.verification_stack.currentWidget() is not self.smp_panel or self.smp_status is SMPVerification.Succeeded)
-        self.peer_fingerprint_value.setStyleSheet(u'QLabel {{ color: {}; }}'.format(self.color_table['green'] if verified else self.color_table['orange']))
+        self.peer_fingerprint_value.setStyleSheet('QLabel {{ color: {}; }}'.format(self.color_table['green'] if verified else self.color_table['orange']))
         self.smp_status_value.setText(self.smp_status_text)
 
     @property
@@ -93,13 +93,13 @@ class OTRWidget(base_class, ui_class):
     @property
     def smp_status_text(self):
         if self.peer_verified:
-            return u'<span style="color: {[green]};">Verified</span>'.format(self.color_table)
+            return '<span style="color: {[green]};">Verified</span>'.format(self.color_table)
         elif self.smp_status is SMPVerification.Succeeded:
-            return u'<span style="color: {[green]};">Succeeded</span>'.format(self.color_table)
+            return '<span style="color: {[green]};">Succeeded</span>'.format(self.color_table)
         elif self.smp_status is SMPVerification.Failed:
-            return u'<span style="color: {[orange]};">Failed</span>'.format(self.color_table)
+            return '<span style="color: {[orange]};">Failed</span>'.format(self.color_table)
         else:
-            return u'{}'.format(self.smp_status.value)
+            return '{}'.format(self.smp_status.value)
 
     def hideEvent(self, event):
         if not event.spontaneous():

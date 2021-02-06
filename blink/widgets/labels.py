@@ -22,13 +22,13 @@ class IconSelector(QLabel):
     default_icon = QtDynamicProperty('default_icon', QIcon)
     icon_size = QtDynamicProperty('icon_size', int)
 
-    class NotSelected: __metaclass__ = MarkerType
+    class NotSelected(metaclass=MarkerType): pass
 
     def __init__(self, parent=None):
         super(IconSelector, self).__init__(parent)
         self.actions = ContextMenuActions()
-        self.actions.select_icon = QAction(u'Select icon...', self, triggered=self._SH_ChangeIconActionTriggered)
-        self.actions.remove_icon = QAction(u'Use contact provided icon', self, triggered=self._SH_RemoveIconActionTriggered)
+        self.actions.select_icon = QAction('Select icon...', self, triggered=self._SH_ChangeIconActionTriggered)
+        self.actions.remove_icon = QAction('Use contact provided icon', self, triggered=self._SH_RemoveIconActionTriggered)
         self.icon_size = 48
         self.default_icon = None
         self.contact_icon = None
@@ -107,7 +107,7 @@ class IconSelector(QLabel):
         super(IconSelector, self).mouseReleaseEvent(event)
 
     def _SH_ChangeIconActionTriggered(self):
-        filename = QFileDialog.getOpenFileName(self, u'Select Icon', self.last_icon_directory, u"Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
+        filename = QFileDialog.getOpenFileName(self, 'Select Icon', self.last_icon_directory, "Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
         if filename:
             self.filename = filename
 
@@ -147,11 +147,11 @@ class StreamInfoLabel(QLabel):
 
     def update_content(self):
         if self.session_type and self.codec_info:
-            text = u'%s (%s)' % (self.session_type, self.codec_info)
+            text = '%s (%s)' % (self.session_type, self.codec_info)
             if self.width() < QFontMetrics(self.font()).width(text):
                 text = self.session_type
         else:
-            text = self.session_type or u''
+            text = self.session_type or ''
         self.setText(text)
 
 
@@ -168,7 +168,7 @@ class DurationLabel(QLabel):
         seconds = value.seconds % 60
         minutes = value.seconds // 60 % 60
         hours = value.seconds//3600 + value.days*24
-        self.setText(u'%d:%02d:%02d' % (hours, minutes, seconds))
+        self.setText('%d:%02d:%02d' % (hours, minutes, seconds))
 
     value = property(_get_value, _set_value)
     del _get_value, _set_value
@@ -186,7 +186,7 @@ class LatencyLabel(QLabel):
     def _set_value(self, value):
         self.__dict__['value'] = value
         if value > self.threshold:
-            text = u'Latency %sms' % value
+            text = 'Latency %sms' % value
             self.setMinimumWidth(QFontMetrics(self.font()).width(text))
             self.setText(text)
             self.show()
@@ -209,7 +209,7 @@ class PacketLossLabel(QLabel):
     def _set_value(self, value):
         self.__dict__['value'] = value
         if value > self.threshold:
-            text = u'Packet loss %s%%' % value
+            text = 'Packet loss %s%%' % value
             self.setMinimumWidth(QFontMetrics(self.font()).width(text))
             self.setText(text)
             self.show()
@@ -220,7 +220,7 @@ class PacketLossLabel(QLabel):
     del _get_value, _set_value
 
 
-class Status(unicode):
+class Status(str):
     def __new__(cls, value, color='black', context=None):
         instance = super(Status, cls).__new__(cls, value)
         instance.color = color
@@ -230,7 +230,7 @@ class Status(unicode):
     def __eq__(self, other):
         if isinstance(other, Status):
             return super(Status, self).__eq__(other) and self.color == other.color and self.context == other.context
-        elif isinstance(other, basestring):
+        elif isinstance(other, str):
             return super(Status, self).__eq__(other)
         return NotImplemented
 
@@ -256,9 +256,9 @@ class StatusLabel(QLabel):
             palette.setColor(QPalette.Inactive, QPalette.WindowText, color)
             palette.setColor(QPalette.Inactive, QPalette.Text, color)
             self.setPalette(palette)
-            self.setText(unicode(value))
+            self.setText(str(value))
         else:
-            self.setText(u'')
+            self.setText('')
 
     value = property(_get_value, _set_value)
     del _get_value, _set_value
@@ -301,7 +301,7 @@ class StateColorMapping(dict):
 
 
 class ContactState(QLabel, ColorHelperMixin):
-    state = QtDynamicProperty('state', unicode)
+    state = QtDynamicProperty('state', str)
 
     def __init__(self, parent=None):
         super(ContactState, self).__init__(parent)

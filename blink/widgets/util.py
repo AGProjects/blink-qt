@@ -4,7 +4,7 @@ __all__ = ['QtDynamicProperty', 'ContextMenuActions']
 
 
 class QtDynamicProperty(object):
-    def __init__(self, name, type=unicode):
+    def __init__(self, name, type=str):
         self.name = name
         self.type = type
 

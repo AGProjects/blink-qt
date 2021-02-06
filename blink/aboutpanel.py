@@ -34,16 +34,14 @@ credits_text = """
 ui_class, base_class = uic.loadUiType(Resources.get('about_panel.ui'))
 
 
-class AboutPanel(base_class, ui_class):
-    __metaclass__ = QSingleton
-
+class AboutPanel(base_class, ui_class, metaclass=QSingleton):
     def __init__(self, parent=None):
         super(AboutPanel, self).__init__(parent)
 
         with Resources.directory:
             self.setupUi(self)
 
-        self.version.setText(u'Version %s\n%s' % (__version__, __date__))
+        self.version.setText('Version %s\n%s' % (__version__, __date__))
 
         credits_width = self.credits_text.fontMetrics().width("NLnet Foundation" + "http://sipsimpleclient.org") + 40
         self.credits_text.setFixedWidth(credits_width)

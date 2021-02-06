@@ -16,9 +16,7 @@ from blink.widgets.util import QtDynamicProperty
 __all__ = ['Graph', 'GraphWidget', 'HeightScaler', 'LogarithmicScaler', 'MaxScaler', 'SoftScaler']
 
 
-class HeightScaler(object):
-    __metaclass__ = ABCMeta
-
+class HeightScaler(object, metaclass=ABCMeta):
     @abstractmethod
     def get_height(self, max_value):
         raise NotImplementedError
@@ -91,7 +89,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
     fillEnvelope = QtDynamicProperty('fillEnvelope', type=bool)
     fillTransparency = QtDynamicProperty('fillTransparency', type=int)
 
-    EnvelopeStyle, BarStyle = range(2)
+    EnvelopeStyle, BarStyle = list(range(2))
     AutomaticHeight = 0
 
     updated = pyqtSignal()
