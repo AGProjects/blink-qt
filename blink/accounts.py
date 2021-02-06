@@ -20,7 +20,7 @@ from application.system import makedirs
 from collections import defaultdict
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.configuration import DuplicateIDError
@@ -92,8 +92,8 @@ class AccountInfo(object):
         return not self.__eq__(other)
 
 
+@implementer(IObserver)
 class AccountModel(QAbstractListModel):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(AccountModel, self).__init__(parent)
@@ -199,8 +199,8 @@ class ActiveAccountModel(QSortFilterProxyModel):
         return account_info.account.enabled
 
 
+@implementer(IObserver)
 class AccountSelector(QComboBox):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(AccountSelector, self).__init__(parent)
@@ -234,8 +234,8 @@ class AccountSelector(QComboBox):
 ui_class, base_class = uic.loadUiType(Resources.get('add_account.ui'))
 
 
+@implementer(IObserver)
 class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(AddAccountDialog, self).__init__(parent)
@@ -561,8 +561,8 @@ class ServerToolsAccountModel(QSortFilterProxyModel):
         return bool(account_info.account is not BonjourAccount() and account_info.account.enabled and account_info.account.server.settings_url)
 
 
+@implementer(IObserver)
 class ServerToolsWebView(QWebView):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(ServerToolsWebView, self).__init__(parent)
@@ -668,8 +668,8 @@ class ServerToolsWebView(QWebView):
 ui_class, base_class = uic.loadUiType(Resources.get('server_tools.ui'))
 
 
+@implementer(IObserver)
 class ServerToolsWindow(base_class, ui_class, metaclass=QSingleton):
-    implements(IObserver)
 
     def __init__(self, model, parent=None):
         super(ServerToolsWindow, self).__init__(parent)

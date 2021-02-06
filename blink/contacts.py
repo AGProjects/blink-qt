@@ -33,7 +33,7 @@ from oauth2client.client import OAuth2WebServerFlow, AccessTokenRefreshError
 from oauth2client.file import Storage
 from operator import attrgetter
 from threading import Event
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple import addressbook
 from sipsimple.account import AccountManager, BonjourAccount
@@ -55,8 +55,8 @@ from blink.widgets.util import ContextMenuActions
 __all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'URIUtils']
 
 
+@implementer(IObserver)
 class VirtualGroupManager(object, metaclass=Singleton):
-    implements(IObserver)
 
     __groups__ = []
 
@@ -183,8 +183,8 @@ class AllContactsList(object):
     __hash__ = None
 
 
+@implementer(IObserver)
 class AllContactsGroup(VirtualGroup):
-    implements(IObserver)
 
     __id__ = 'all_contacts'
 
@@ -349,8 +349,8 @@ class BonjourNeighboursList(object):
         return self._contact_map.pop(contact.id, None)
 
 
+@implementer(IObserver)
 class BonjourNeighboursManager(object, metaclass=Singleton):
-    implements(IObserver)
 
     contacts = WriteOnceAttribute()
 
@@ -399,8 +399,8 @@ class BonjourNeighboursManager(object, metaclass=Singleton):
         notification.center.post_notification('BonjourNeighboursManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
 
 
+@implementer(IObserver)
 class BonjourNeighboursGroup(VirtualGroup):
-    implements(IObserver)
 
     __id__ = 'bonjour_neighbours'
 
@@ -775,8 +775,8 @@ class GoogleAuthorization(object):
         notification_center.post_notification('GoogleAuthorizationWasRejected', sender=self)
 
 
+@implementer(IObserver)
 class GoogleContactsManager(object, metaclass=Singleton):
-    implements(IObserver)
 
     def __init__(self):
         self.contacts = GoogleContactsList()
@@ -972,8 +972,8 @@ class GoogleContactsManager(object, metaclass=Singleton):
                 self._stop()
 
 
+@implementer(IObserver)
 class GoogleContactsGroup(VirtualGroup):
-    implements(IObserver)
 
     __id__ = 'google_contacts'
 
@@ -1077,8 +1077,8 @@ class RelocationInfo(object):
         self.successor = successor
 
 
+@implementer(IObserver)
 class Group(object):
-    implements(IObserver)
 
     size_hint = QSize(200, 18)
 
@@ -1201,8 +1201,8 @@ class ContactIconDescriptor(object):
         raise AttributeError("attribute cannot be deleted")
 
 
+@implementer(IObserver)
 class Contact(object):
-    implements(IObserver)
 
     size_hint = QSize(200, 36)
 
@@ -1379,8 +1379,8 @@ class Contact(object):
         notification.center.post_notification('BlinkContactDidChange', sender=self)
 
 
+@implementer(IObserver)
 class ContactDetail(object):
-    implements(IObserver)
 
     size_hint = QSize(200, 36)
 
@@ -1535,8 +1535,8 @@ class ContactDetail(object):
         notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
 
 
+@implementer(IObserver)
 class ContactURI(object):
-    implements(IObserver)
 
     size_hint = QSize(200, 24)
 
@@ -2246,8 +2246,8 @@ class ItemList(list):
         self.__groupmap__.pop(item.settings, None)
 
 
+@implementer(IObserver)
 class ContactModel(QAbstractListModel):
-    implements(IObserver)
 
     itemsAdded = pyqtSignal(list)
     itemsRemoved = pyqtSignal(list)
@@ -2905,8 +2905,8 @@ class ContactSearchModel(QSortFilterProxyModel):
         return True
 
 
+@implementer(IObserver)
 class ContactDetailModel(QAbstractListModel):
-    implements(IObserver)
 
     contactDeleted = pyqtSignal()
 
@@ -3089,8 +3089,8 @@ class ContactDetailModel(QAbstractListModel):
             self.dataChanged.emit(index, index)
 
 
+@implementer(IObserver)
 class ContactListView(QListView):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(ContactListView, self).__init__(parent)
@@ -3561,8 +3561,8 @@ class ContactListView(QListView):
                 self.actions.transfer_call.setEnabled(contact.uri is not None and active_session is not None and active_session.state == 'connected')
 
 
+@implementer(IObserver)
 class ContactSearchListView(QListView):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(ContactSearchListView, self).__init__(parent)
@@ -3897,8 +3897,8 @@ class ContactSearchListView(QListView):
                 self.actions.transfer_call.setEnabled(contact.uri is not None and active_session is not None and active_session.state == 'connected')
 
 
+@implementer(IObserver)
 class ContactDetailView(QListView):
-    implements(IObserver)
 
     def __init__(self, contact_list):
         super(ContactDetailView, self).__init__(contact_list.parent())
@@ -4539,8 +4539,8 @@ class ContactURITableView(QTableView):
 ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
 
 
+@implementer(IObserver)
 class ContactEditorDialog(base_class, ui_class):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(ContactEditorDialog, self).__init__(parent)

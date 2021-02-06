@@ -1,6 +1,4 @@
 
-
-
 import locale
 import os
 import re
@@ -25,7 +23,7 @@ from itertools import count
 from lxml import etree, html
 from lxml.html.clean import autolink
 from weakref import proxy
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.account import AccountManager
 from sipsimple.application import SIPApplication
@@ -617,8 +615,8 @@ class FileDescriptor(object):
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
 
+@implementer(IObserver)
 class ChatWidget(base_class, ui_class):
-    implements(IObserver)
 
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
 
@@ -880,8 +878,8 @@ class VideoToolButton(QToolButton):
 ui_class, base_class = uic.loadUiType(Resources.get('video_widget.ui'))
 
 
+@implementer(IObserver)
 class VideoWidget(VideoSurface, ui_class):
-    implements(IObserver)
 
     def __init__(self, session_item, parent=None):
         super(VideoWidget, self).__init__(parent)
@@ -1428,8 +1426,8 @@ class NoSessionsLabel(QLabel):
 ui_class, base_class = uic.loadUiType(Resources.get('chat_window.ui'))
 
 
+@implementer(IObserver)
 class ChatWindow(base_class, ui_class, ColorHelperMixin):
-    implements(IObserver)
 
     sliding_panels = True
 

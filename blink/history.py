@@ -10,7 +10,7 @@ from application.python import Null
 from application.python.types import Singleton
 from datetime import date
 from dateutil.tz import tzlocal
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.account import BonjourAccount
 from sipsimple.addressbook import AddressbookManager
@@ -24,8 +24,8 @@ from blink.util import run_in_gui_thread
 __all__ = ['HistoryManager']
 
 
+@implementer(IObserver)
 class HistoryManager(object, metaclass=Singleton):
-    implements(IObserver)
 
     history_size = 20
 

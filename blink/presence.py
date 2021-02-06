@@ -16,7 +16,7 @@ from eventlib.green import urllib2
 from itertools import chain
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionLost
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple import addressbook
 from sipsimple.account import AccountManager, BonjourAccount
@@ -150,8 +150,8 @@ class BlinkPresenceState(object):
         return doc
 
 
+@implementer(IObserver)
 class PresencePublicationHandler(object):
-    implements(IObserver)
 
     def __init__(self):
         self._should_set_offline_status = set()
@@ -327,8 +327,8 @@ class ContactIcon(object):
             return None
 
 
+@implementer(IObserver)
 class PresenceSubscriptionHandler(object):
-    implements(IObserver)
 
     sip_prefix_re = re.compile("^sips?:")
 

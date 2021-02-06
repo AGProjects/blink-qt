@@ -27,7 +27,7 @@ from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
 from application.python.weakref import weakobjectmap, defaultweakobjectmap
 from eventlib.proc import spawn
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
@@ -442,8 +442,8 @@ class BlinkSessionBase(object, metaclass=BlinkSessionType):
         pass
 
 
+@implementer(IObserver)
 class BlinkSession(BlinkSessionBase):
-    implements(IObserver)
 
     streams = StreamListDescriptor()
     items = SessionItemsDescriptor()
@@ -1199,8 +1199,8 @@ class SMPVerification(Enum):
     Failed = 'Failed'
 
 
+@implementer(IObserver)
 class SMPVerificationHandler(object):
-    implements(IObserver)
 
     question = 'What is the ZRTP authentication string?'.encode('utf-8')
 
@@ -1312,8 +1312,8 @@ class ClientConference(object):
         self.audio_conference.unhold()
 
 
+@implementer(IObserver)
 class ConferenceParticipant(object):
-    implements(IObserver)
 
     def __init__(self, contact, contact_uri):
         self.contact = contact
@@ -1384,8 +1384,8 @@ class ConferenceParticipant(object):
         notification.center.post_notification('ConferenceParticipantDidChange', sender=self)
 
 
+@implementer(IObserver)
 class ServerConference(object):
-    implements(IObserver)
 
     sip_prefix_re = re.compile('^sips?:')
 
@@ -1819,8 +1819,8 @@ class DraggedAudioSessionWidget(base_class, ui_class):
 del ui_class, base_class
 
 
+@implementer(IObserver)
 class AudioSessionItem(object):
-    implements(IObserver)
 
     def __init__(self, session):
         assert session.items.audio is None
@@ -2238,8 +2238,8 @@ class AudioSessionDelegate(QStyledItemDelegate):
             selection_model.select(model.index(model.sessions.index(session)), selection_model.ClearAndSelect)
 
 
+@implementer(IObserver)
 class AudioSessionModel(QAbstractListModel):
-    implements(IObserver)
 
     sessionAboutToBeAdded = pyqtSignal(AudioSessionItem)
     sessionAboutToBeRemoved = pyqtSignal(AudioSessionItem)
@@ -2645,8 +2645,8 @@ class AudioSessionModel(QAbstractListModel):
                     session.widget.mute_button.show()
 
 
+@implementer(IObserver)
 class AudioSessionListView(QListView):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(AudioSessionListView, self).__init__(parent)
@@ -3062,8 +3062,8 @@ class ChatSessionWidget(base_class, ui_class):
 del ui_class, base_class
 
 
+@implementer(IObserver)
 class ChatSessionItem(object):
-    implements(IObserver)
 
     size_hint = QSize(200, 36)
 
@@ -3330,8 +3330,8 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         return index.data(Qt.SizeHintRole)
 
 
+@implementer(IObserver)
 class ChatSessionModel(QAbstractListModel):
-    implements(IObserver)
 
     sessionAboutToBeAdded = pyqtSignal(ChatSessionItem)
     sessionAboutToBeRemoved = pyqtSignal(ChatSessionItem)
@@ -3451,8 +3451,8 @@ class ChatSessionModel(QAbstractListModel):
         self.sessionRemoved.emit(session)
 
 
+@implementer(IObserver)
 class ChatSessionListView(QListView):
-    implements(IObserver)
 
     def __init__(self, chat_window):
         super(ChatSessionListView, self).__init__(chat_window.session_panel)
@@ -3800,8 +3800,8 @@ class FileSizeFormatter(object):
             return "%d bytes" % size
 
 
+@implementer(IObserver)
 class BlinkFileTransfer(BlinkSessionBase):
-    implements(IObserver)
 
     def __init__(self):
         self.id = None
@@ -4302,8 +4302,8 @@ class FileTransferItemWidget(base_class, ui_class):
 del ui_class, base_class
 
 
+@implementer(IObserver)
 class FileTransferItem(object):
-    implements(IObserver)
 
     def __init__(self, transfer):
         self.transfer = transfer
@@ -4528,8 +4528,8 @@ class TransferHistory(object):
             self._pending_items = items
 
 
+@implementer(IObserver)
 class FileTransferModel(QAbstractListModel):
-    implements(IObserver)
 
     itemAboutToBeAdded = pyqtSignal(FileTransferItem)
     itemAboutToBeRemoved = pyqtSignal(FileTransferItem)
@@ -4638,8 +4638,8 @@ class ConferenceParticipantWidget(ChatSessionWidget):
         self.screen_sharing_icon.setVisible('screen-sharing' in participant.active_media)
 
 
+@implementer(IObserver)
 class ConferenceParticipantItem(object):
-    implements(IObserver)
 
     size_hint = QSize(200, 36)
 
@@ -4783,8 +4783,8 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         return index.data(Qt.SizeHintRole)
 
 
+@implementer(IObserver)
 class ConferenceParticipantModel(QAbstractListModel):
-    implements(IObserver)
 
     participantAboutToBeAdded = pyqtSignal(ConferenceParticipantItem)
     participantAboutToBeRemoved = pyqtSignal(ConferenceParticipantItem)
@@ -5529,8 +5529,8 @@ class RequestList(list):
             return [item for item in self if item.session is key]
 
 
+@implementer(IObserver)
 class SessionManager(object, metaclass=Singleton):
-    implements(IObserver)
 
     class PrimaryRingtone(metaclass=MarkerType):   pass
     class SecondaryRingtone(metaclass=MarkerType): pass

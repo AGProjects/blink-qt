@@ -10,7 +10,7 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null
 from application.system import host, makedirs
 from eventlib import api
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
@@ -88,8 +88,8 @@ class IPAddressMonitor(object):
             self.greenlet = None
 
 
+@implementer(IObserver)
 class Blink(QApplication, metaclass=QSingleton):
-    implements(IObserver)
 
     def __init__(self):
         super(Blink, self).__init__(sys.argv)

@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QAction, QMenu
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
 from application.system import makedirs
-from zope.interface import implements
+from zope.interface import implementer
 
 from blink.configuration.settings import BlinkSettings
 from blink.resources import Resources
@@ -23,8 +23,8 @@ __all__ = ['FileTransferWindow']
 ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_window.ui'))
 
 
+@implementer(IObserver)
 class FileTransferWindow(base_class, ui_class):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(FileTransferWindow, self).__init__(parent)

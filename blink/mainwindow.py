@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import QAction, QActionGroup, QApplication, QFileDialog, QM
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
 from application.system import makedirs
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
@@ -40,8 +40,8 @@ __all__ = ['MainWindow']
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
 
 
+@implementer(IObserver)
 class MainWindow(base_class, ui_class):
-    implements(IObserver)
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)

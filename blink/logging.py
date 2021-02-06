@@ -12,7 +12,7 @@ from application.python.queue import EventQueue
 from application.python import Null
 from application.python.types import Singleton
 from application.system import makedirs
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.configuration.settings import SIPSimpleSettings
 
@@ -22,8 +22,8 @@ from blink.resources import ApplicationData
 __all__ = ['LogManager']
 
 
+@implementer(IObserver)
 class NotificationQueue(object):
-    implements(IObserver)
 
     def __init__(self):
         self.notifications = deque()
@@ -70,8 +70,8 @@ class LogFile(object):
         file.close()
 
 
+@implementer(IObserver)
 class LogManager(object, metaclass=Singleton):
-    implements(IObserver)
 
     def __init__(self):
         self.name = os.path.basename(sys.argv[0]).rsplit('.py', 1)[0]

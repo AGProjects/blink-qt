@@ -12,7 +12,7 @@ from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
-from zope.interface import implements
+from zope.interface import implementer
 
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
@@ -178,8 +178,8 @@ class UnspecifiedMSRPRelay(object):
 ui_class, base_class = uic.loadUiType(Resources.get('preferences.ui'))
 
 
+@implementer(IObserver)
 class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
-    implements(IObserver)
 
     def __init__(self, account_model, parent=None):
         super(PreferencesWindow, self).__init__(parent)
