@@ -1,34 +1,33 @@
 Source: blink
 Section: python
 Priority: optional
-Maintainer: Dan Pascu <dan@ag-projects.com>
+Maintainer: Adrian Georgescu <ag@ag-projects.com>
 Uploaders: Adrian Georgescu <ag@ag-projects.com>
 Build-Depends: debhelper (>= 11),
                dh-python,
-               python-all-dev (>= 2.7),
-               python-all-dbg (>= 2.7),
-               cython-dbg (>= 0.19),
+               python-all-dev,
+               python-all-dbg,
+               cython-dbg,
                libvncserver-dev
 Standards-Version: 4.5.0
 Homepage: http://icanblink.com
 
-Package: blink
+Package: blink3
 Architecture: any
-Depends: ${python:Depends}, ${shlibs:Depends}, ${misc:Depends},
+Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          libavahi-compat-libdnssd1,
-         python-application (>= 2.8.0),
-         python-cjson,
+         python3-application,
          python-enum34,
-         python-eventlib,
-         python-googleapi (>= 1.5.0),
-         python-lxml,
-         python-oauth2client,
-         python-pyqt5,
-         python-pyqt5.qtsvg,
-         python-pyqt5.qtwebkit,
-         python-sipsimple (>= 3.5.0),
-         python-twisted-core,
-         python-zope.interface,
+         python3-eventlib,
+         python3-googleapi,
+         python3-lxml,
+         python3-oauth2client,
+         python3-pyqt5,
+         python3-pyqt5.qtsvg,
+         python3-pyqt5.qtwebkit,
+         python3-sipsimple,
+         python3-twisted,
+         python3-zope.interface,
          x11vnc
 Description: Fully featured, easy to use SIP client with a Qt based UI
  Blink is a fully featured SIP client written in Python and built on top of

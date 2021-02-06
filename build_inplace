@@ -1,5 +1,4 @@
 #!/bin/sh
 
-python setup.py build_ext --inplace "$@"
-test -d build && python setup.py clean
-
+python3 setup.py build_ext --inplace "$@"
+test -d build && python3 setup.py clean

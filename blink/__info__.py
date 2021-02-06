@@ -1,13 +1,13 @@
 
 """Package information"""
 
-__project__ = "blink"
+__project__ = "blink3"
 __summary__ = "Blink Qt"
 __webpage__ = "http://icanblink.com/"
 
-__version__ = "3.2.1"
+__version__ = "4.0.0"
 
-__date__ = "February 14th 2020"
+__date__ = "February 6th 2021"
 
 __author__ = "AG Projects"
 __email__ = "support@ag-projects.com"
