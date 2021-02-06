@@ -42,7 +42,7 @@ class ApplicationData(object):
                 from Foundation import NSApplicationSupportDirectory, NSSearchPathForDirectoriesInDomains, NSUserDomainMask
                 cls._cached_directory = os.path.join(NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, True)[0], 'Blink')
             elif platform.system() == 'Windows':
-                cls._cached_directory = os.path.join(os.environ['APPDATA'].decode(sys.getfilesystemencoding()), 'Blink')
+                cls._cached_directory = os.path.join(os.environ['APPDATA'], 'Blink')
             else:
                 cls._cached_directory = Path('~/.blink').normalized
         return DirectoryContextManager(cls._cached_directory)
@@ -73,9 +73,9 @@ class Resources(object):
                 else:
                     application_directory = binary_directory
             if os.path.exists(os.path.join(application_directory, 'resources', 'blink.ui')):
-                cls._cached_directory = os.path.join(application_directory, 'resources').decode(sys.getfilesystemencoding())
+                cls._cached_directory = os.path.join(application_directory, 'resources')
             else:
-                cls._cached_directory = os.path.join(application_directory, 'share', 'blink').decode(sys.getfilesystemencoding())
+                cls._cached_directory = os.path.join(application_directory, 'share', 'blink')
         return DirectoryContextManager(cls._cached_directory)
 
     @classmethod
