@@ -1,5 +1,5 @@
 
-import cjson
+import json
 import os
 import re
 import sys
@@ -424,7 +424,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         try:
             settings = SIPSimpleSettings()
             response = urllib.request.urlopen(settings.server.enrollment_url, urllib.parse.urlencode(dict(enrollment_data)))
-            response_data = cjson.decode(response.read().replace(r'\/', '/'))
+            response_data = json.loads(response.read().replace(r'\/', '/'))
             response_data = defaultdict(lambda: None, response_data)
             if response_data['success']:
                 try:
@@ -456,7 +456,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
                 call_in_gui_thread(self.username_editor.addException, username)
             else:
                 call_in_gui_thread(setattr, self.create_status_label, 'value', Status(response_data['error_message'], color=red))
-        except (cjson.DecodeError, KeyError):
+        except (json.decoder.JSONDecodeError, KeyError):
             call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Illegal server response', color=red))
         except urllib.error.URLError as e:
             call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Failed to contact server: %s' % e.reason, color=red))
