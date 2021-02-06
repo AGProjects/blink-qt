@@ -24,7 +24,7 @@ cdef extern from "stdarg.h":
 
 
 cdef extern from "Python.h":
-    object PyString_FromStringAndSize(const char *u, Py_ssize_t size)
+    object PyBytes_FromStringAndSize(const char *u, Py_ssize_t size)
     int PyOS_vsnprintf(char *buf, size_t size, const char *format, va_list va)
 
 
@@ -376,8 +376,8 @@ cdef class RFBClient:
         self.parent.imageChanged.emit(x, y, w, h)
 
     cdef void _update_cursor_callback(self, int xhot, int yhot, int width, int height, int bytes_per_pixel):
-        image = PyString_FromStringAndSize(<const char*>self.client.rcSource, width*height*bytes_per_pixel)
-        mask  = PyString_FromStringAndSize(<const char*>self.client.rcMask, width*height)
+        image = PyBytes_FromStringAndSize(<const char*>self.client.rcSource, width*height*bytes_per_pixel)
+        mask  = PyBytes_FromStringAndSize(<const char*>self.client.rcMask, width*height)
         #print "-- update cursor shape:", xhot, yhot, width, height, bytes_per_pixel, repr(image), repr(mask)
 
     cdef rfbBool _update_cursor_position_callback(self, int x, int y):
@@ -401,7 +401,7 @@ cdef class RFBClient:
         return credential
 
     cdef void _text_cut_callback(self, const char *text, int length):
-        cut_text = PyString_FromStringAndSize(text, length).decode('latin1')
+        cut_text = PyBytes_FromStringAndSize(text, length).decode('latin1')
         if cut_text:
             self.parent.textCut.emit(cut_text)
 
