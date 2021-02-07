@@ -3474,10 +3474,11 @@ class ChatSessionListView(QListView):
         self.setSelectionMode(QListView.SingleSelection)  # default
 
         self.setStyleSheet("""QListView { border: 1px inset palette(dark); border-radius: 3px; }""")
-        self.animation = QPropertyAnimation(self, 'geometry')
-        self.animation.setDuration(250)
-        self.animation.setEasingCurve(QEasingCurve.Linear)
-        self.animation.finished.connect(self._SH_AnimationFinished)
+        self.animation = None
+        #self.animation = QPropertyAnimation(self, 'geometry')
+        #self.animation.setDuration(250)
+        #self.animation.setEasingCurve(QEasingCurve.Linear)
+        #self.animation.finished.connect(self._SH_AnimationFinished)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.drop_indicator_index = QModelIndex()
@@ -3527,7 +3528,7 @@ class ChatSessionListView(QListView):
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Resize:
             new_size = event.size()
-            geometry = self.animation.endValue()
+            geometry = self.animation.endValue() if self.animation else None
             if geometry is not None:
                 old_size = geometry.size()
                 geometry.setSize(new_size)

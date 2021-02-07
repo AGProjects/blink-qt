@@ -3915,10 +3915,10 @@ class ContactDetailView(QListView):
         self.setAlternatingRowColors(True)
         self.setSelectionMode(QListView.SingleSelection)
         self.setDropIndicatorShown(False)
-        self.animation = QPropertyAnimation(self, 'geometry')
-        self.animation.setDuration(250)
-        self.animation.setEasingCurve(QEasingCurve.Linear)
-        self.animation.finished.connect(self._SH_AnimationFinished)
+        #self.animation = QPropertyAnimation(self, 'geometry')
+        #self.animation.setDuration(250)
+        #self.animation.setEasingCurve(QEasingCurve.Linear)
+        #self.animation.finished.connect(self._SH_AnimationFinished)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.actions.delete_contact = QAction("Delete Contact", self, triggered=self._AH_DeleteContact)
@@ -3957,7 +3957,9 @@ class ContactDetailView(QListView):
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Resize:
             new_size = event.size()
-            geometry = self.animation.endValue()
+            #geometry = self.animation.endValue()
+            geometry = None
+            # TODO3
             if geometry is not None:
                 old_size = geometry.size()
                 geometry.setSize(new_size)

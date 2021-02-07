@@ -897,8 +897,8 @@ class VideoWidget(VideoSurface, ui_class):
         self.close_button.clicked.connect(self._SH_CloseButtonClicked)
         self.screenshot_button.customContextMenuRequested.connect(self._SH_ScreenshotButtonContextMenuRequested)
         self.camera_preview.adjusted.connect(self._SH_CameraPreviewAdjusted)
-        self.detach_animation.finished.connect(self._SH_DetachAnimationFinished)
-        self.preview_animation.finished.connect(self._SH_PreviewAnimationFinished)
+        #self.detach_animation.finished.connect(self._SH_DetachAnimationFinished)
+        #self.preview_animation.finished.connect(self._SH_PreviewAnimationFinished)
         self.idle_timer.timeout.connect(self._SH_IdleTimerTimeout)
         if parent is not None:
             parent.installEventFilter(self)
@@ -928,14 +928,14 @@ class VideoWidget(VideoSurface, ui_class):
         self.camera_preview.lower()
         self.camera_preview.scale_factor = 1.0
 
-        self.detach_animation = QPropertyAnimation(self, 'geometry')
-        self.detach_animation.setDuration(200)
-        # self.detach_animation.setEasingCurve(QEasingCurve.Linear)
+        #self.detach_animation = QPropertyAnimation(self, 'geometry')
+        #self.detach_animation.setDuration(200)
+        #self.detach_animation.setEasingCurve(QEasingCurve.Linear)
 
-        self.preview_animation = QPropertyAnimation(self.camera_preview, 'geometry')
-        self.preview_animation.setDuration(500)
-        self.preview_animation.setDirection(QPropertyAnimation.Forward)
-        self.preview_animation.setEasingCurve(QEasingCurve.OutQuad)
+        #self.preview_animation = QPropertyAnimation(self.camera_preview, 'geometry')
+        #self.preview_animation.setDuration(500)
+        #self.preview_animation.setDirection(QPropertyAnimation.Forward)
+        #self.preview_animation.setEasingCurve(QEasingCurve.OutQuad)
 
         self.idle_timer = QTimer()
         self.idle_timer.setSingleShot(True)
@@ -1047,7 +1047,7 @@ class VideoWidget(VideoSurface, ui_class):
         self.idle_timer.start()
 
     def resizeEvent(self, event):
-        if self.preview_animation.state() == QPropertyAnimation.Running:
+        if self.preview_animation and self.preview_animation.state() == QPropertyAnimation.Running:
             return
 
         if not event.oldSize().isValid():
@@ -1229,7 +1229,7 @@ class VideoWidget(VideoSurface, ui_class):
         self.session_item = None
         self.blink_session = None
         self.parent_widget = None
-        self.detach_animation = None
+        #self.detach_animation = None
         self.preview_animation = None
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
@@ -1240,10 +1240,11 @@ class VideoWidget(VideoSurface, ui_class):
             self.setGeometry(self.geometryHint())
 
     def _NH_VideoStreamReceivedKeyFrame(self, notification):
-        if notification.sender.blink_session is self.blink_session and self.preview_animation.state() != QPropertyAnimation.Running and self.camera_preview.size() == self.size():
-            self.preview_animation.setStartValue(self.rect())
-            self.preview_animation.setEndValue(QRect(0, 0, self.camera_preview.width_for_height(81), 81))
-            self.preview_animation.start()
+        if notification.sender.blink_session is self.blink_session and self.preview_animation and self.preview_animation.state() != QPropertyAnimation.Running and self.camera_preview.size() == self.size():
+            if self.preview_animation:
+	            self.preview_animation.setStartValue(self.rect())
+	            self.preview_animation.setEndValue(QRect(0, 0, self.camera_preview.width_for_height(81), 81))
+	            self.preview_animation.start()
 
     def _NH_VideoDeviceDidChangeCamera(self, notification):
         # self.camera_preview.producer = SIPApplication.video_device.producer
@@ -1316,11 +1317,11 @@ class VideoWidget(VideoSurface, ui_class):
             self.show()
             self.no_flicker_widget.hide()
 
-            self.detach_animation.setDirection(QPropertyAnimation.Forward)
-            self.detach_animation.setEasingCurve(QEasingCurve.OutQuad)
-            self.detach_animation.setStartValue(start_geometry)
-            self.detach_animation.setEndValue(final_geometry)
-            self.detach_animation.start()
+            ##self.detach_animation.setDirection(QPropertyAnimation.Forward)
+            ##self.detach_animation.setEasingCurve(QEasingCurve.OutQuad)
+            ##self.detach_animation.setStartValue(start_geometry)
+            #self.detach_animation.setEndValue(final_geometry)
+            #self.detach_animation.start()
         else:
             start_geometry = self.geometry()
             final_geometry = self.geometryHint(self.parent_widget).translated(self.parent_widget.mapToGlobal(QPoint(0, 0)))
@@ -1328,11 +1329,11 @@ class VideoWidget(VideoSurface, ui_class):
             # do this early or late? -Dan
             self.parent_widget.window().show()
 
-            self.detach_animation.setDirection(QPropertyAnimation.Backward)
-            self.detach_animation.setEasingCurve(QEasingCurve.InQuad)
-            self.detach_animation.setStartValue(final_geometry)  # start and end are reversed because we go backwards
-            self.detach_animation.setEndValue(start_geometry)
-            self.detach_animation.start()
+            #self.detach_animation.setDirection(QPropertyAnimation.Backward)
+            #self.detach_animation.setEasingCurve(QEasingCurve.InQuad)
+            #self.detach_animation.setStartValue(final_geometry)  # start and end are reversed because we go backwards
+            #self.detach_animation.setEndValue(start_geometry)
+            #self.detach_animation.start()
         self.fullscreen_button.setChecked(False)
 
     def _SH_ScreenshotButtonClicked(self):
@@ -1366,7 +1367,7 @@ class VideoWidget(VideoSurface, ui_class):
         QDesktopServices.openUrl(QUrl.fromLocalFile(settings.screenshots_directory.normalized))
 
     def _SH_DetachAnimationFinished(self):
-        if self.detach_animation.direction() == QPropertyAnimation.Backward:
+        if self.detach_animationself.detach_animation.direction() == QPropertyAnimation.Backward:
             pixmap = self.grab()
             self.no_flicker_widget.resize(pixmap.size())
             self.no_flicker_widget.setPixmap(pixmap)
