@@ -693,7 +693,7 @@ class GoogleAuthorizationView(QWebView):
 
     @run_in_gui_thread
     def open(self, url):
-        self.load(QUrl.fromEncoded(url))
+        self.load(QUrl.fromEncoded(url.encode()))
         self.show()
 
     def closeEvent(self, event):
