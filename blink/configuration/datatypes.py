@@ -116,7 +116,7 @@ class HTTPURL(str):
 class FileURL(str):
     def __new__(cls, value):
         if not value.startswith('file:'):
-            value = 'file:' + pathname2url(os.path.abspath(value).encode('utf-8')).decode('utf-8')
+            value = 'file:' + pathname2url(os.path.abspath(value))
         return str.__new__(cls, value)
 
 

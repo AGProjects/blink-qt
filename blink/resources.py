@@ -127,7 +127,7 @@ class IconManager(object, metaclass=Singleton):
                 pixmap.save(buffer, 'png')
                 data = str(buffer.data())
             with open(filename, 'wb') as f:
-                f.write(data)
+                f.write(data.encode())
             icon = QIcon(pixmap)
             icon.filename = filename
             icon.content = data
@@ -154,7 +154,7 @@ class IconManager(object, metaclass=Singleton):
             pixmap.save(buffer, 'png')
             data = str(buffer.data())
             with open(filename, 'wb') as f:
-                f.write(data)
+                f.write(data.encode())
             icon = QIcon(pixmap)
             icon.filename = filename
             icon.content = data

@@ -61,9 +61,9 @@ class ChatStyleError(Exception): pass
 class ChatHtmlTemplates(object):
     def __init__(self, style_path):
         try:
-            self.message = open(os.path.join(style_path, 'html/message.html')).read().decode('utf-8')
-            self.message_continuation = open(os.path.join(style_path, 'html/message_continuation.html')).read().decode('utf-8')
-            self.notification = open(os.path.join(style_path, 'html/notification.html')).read().decode('utf-8')
+            self.message = open(os.path.join(style_path, 'html/message.html')).read()
+            self.message_continuation = open(os.path.join(style_path, 'html/message_continuation.html')).read()
+            self.notification = open(os.path.join(style_path, 'html/notification.html')).read()
         except (OSError, IOError):
             raise ChatStyleError("missing or unreadable chat message html template files in %s" % os.path.join(style_path, 'html'))
 
@@ -107,7 +107,7 @@ class ChatMessageStyle(object):
 #
 
 class Link(object):
-    __slots__ = 'prev', 'next', 'key', '__weakref__'
+    __slots__ = 'prev', 'next', '__next__', 'key', '__weakref__'
 
 
 class OrderedSet(MutableSet):
@@ -241,12 +241,12 @@ class ChatContent(object, metaclass=ABCMeta):
     @property
     def date(self):
         language, encoding = locale.getlocale(locale.LC_TIME)
-        return self.timestamp.strftime('%d %b %Y').decode(encoding or 'ascii')
+        return self.timestamp.strftime('%d %b %Y')
 
     @property
     def time(self):
         language, encoding = locale.getlocale(locale.LC_TIME)
-        return self.timestamp.strftime('%H:%M').decode(encoding or 'ascii')
+        return self.timestamp.strftime('%H:%M')
 
     @property
     def text_direction(self):
@@ -1739,21 +1739,22 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         video_info = blink_session.info.streams.video
         chat_info = blink_session.info.streams.chat
         screen_info = blink_session.info.streams.screen_sharing
+        state = "%s" % blink_session.state
 
         if 'status' in elements and blink_session.state in ('initialized', 'connecting/*', 'connected/*', 'ended'):
             state_map = {'initialized': 'Disconnected',
-                         'connecting/dns_lookup': 'Finding destination',
-                         'connecting': 'Connecting',
+                         'connecting/dns_lookup': 'Finding destination...',
+                         'connecting': 'Connecting...',
                          'connecting/ringing': 'Ringing',
-                         'connecting/starting': 'Starting media',
+                         'connecting/starting': 'Starting media...',
                          'connected': 'Connected'}
 
             if blink_session.state == 'ended':
                 self.status_value_label.setForegroundRole(QPalette.AlternateBase if blink_session.state.error else QPalette.WindowText)
                 self.status_value_label.setText(blink_session.state.reason)
-            elif blink_session.state in state_map:
+            elif state in state_map:
                 self.status_value_label.setForegroundRole(QPalette.WindowText)
-                self.status_value_label.setText(state_map[blink_session.state])
+                self.status_value_label.setText(state_map[state])
 
             want_duration = blink_session.state == 'connected/*' or blink_session.state == 'ended' and not blink_session.state.error
             self.status_title_label.setVisible(not want_duration)
@@ -2206,13 +2207,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         message = notification.data.message
 
         if message.content_type.startswith('image/'):
-            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.encode('base64').rstrip())
+            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
         elif message.content_type.startswith('text/'):
-            content = HtmlProcessor.autolink(message.content if message.content_type == 'text/html' else QTextDocument(message.content).toHtml())
+            content = message.content.decode()
+            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         else:
             return
 
-        uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
+        uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
         account_manager = AccountManager()
         if account_manager.has_account(uri):
             account = account_manager.get_account(uri)

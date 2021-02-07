@@ -423,8 +423,9 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
                                tzinfo=timezone)
         try:
             settings = SIPSimpleSettings()
-            response = urllib.request.urlopen(settings.server.enrollment_url, urllib.parse.urlencode(dict(enrollment_data)))
-            response_data = json.loads(response.read().replace(r'\/', '/'))
+            data = urllib.parse.urlencode(dict(enrollment_data))
+            response = urllib.request.urlopen(settings.server.enrollment_url, data.encode())
+            response_data = json.loads(response.read().decode('utf-8').replace(r'\/', '/'))
             response_data = defaultdict(lambda: None, response_data)
             if response_data['success']:
                 try:

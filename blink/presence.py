@@ -62,7 +62,7 @@ class BlinkPresenceState(object):
             hostname = socket.gethostname()
         except Exception:
             hostname = 'localhost'
-        account_id = hashlib.md5(self.account.id).hexdigest()
+        account_id = hashlib.md5(self.account.id.encode()).hexdigest()
         timestamp = ISOTimestamp.now()
 
         doc = pidf.PIDF(str(self.account.uri))

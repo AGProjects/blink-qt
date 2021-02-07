@@ -54,6 +54,7 @@ from blink.widgets.util import ContextMenuActions
 
 __all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'URIUtils']
 
+translation_table = dict.fromkeys(map(ord, ' \t'), None)
 
 @implementer(IObserver)
 class VirtualGroupManager(object, metaclass=Singleton):
@@ -4681,11 +4682,11 @@ class URIUtils(object):
 
     @classmethod
     def is_number(cls, token):
-        return cls.number_re.match(token) is not None
+        return cls.number_re.match(token.decode()) is not None
 
     @classmethod
     def trim_number(cls, token):
-        return cls.number_trim_re.sub('', token)
+        return cls.number_trim_re.sub('', token.decode()).encode()
 
     @classmethod
     def find_contact(cls, uri, display_name=None, exact=True):
@@ -4697,7 +4698,7 @@ class URIUtils(object):
                 uri += '@' + AccountManager().default_account.id.domain
             if not uri.startswith(('sip:', 'sips:')):
                 uri = 'sip:' + uri
-            uri = SIPURI.parse(str(uri).translate(None, ' \t'))
+            uri = SIPURI.parse(str(uri).translate(translation_table))
         if cls.is_number(uri.user):
             uri.user = cls.trim_number(uri.user)
             is_number = True

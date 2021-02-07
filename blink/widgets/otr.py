@@ -115,7 +115,7 @@ class OTRWidget(base_class, ui_class):
 
     @staticmethod
     def _encode_fingerprint(fingerprint):
-        return re.sub('....', lambda match: match.group(0) + {match.endpos: '', match.endpos//2: '<br/>'}.get(match.end(), ' '), fingerprint.encode('hex').upper())
+        return re.sub('....', lambda match: match.group(0) + {match.endpos: '', match.endpos//2: '<br/>'}.get(match.end(), ' '), fingerprint.encode().hex().upper())
 
     def _check_name_changes(self):
         peer_name = self.peer_name_value.text()

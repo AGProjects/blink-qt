@@ -57,6 +57,8 @@ from blink.widgets.zrtp import ZRTPWidget
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
 
+translation_table = dict.fromkeys(map(ord, ' \t'), None)
+
 class Container(object):
     pass
 
@@ -159,7 +161,7 @@ class MSRPStreamInfo(object, metaclass=ABCMeta):
 class AudioStreamInfo(RTPStreamInfo):
     @property
     def codec(self):
-        return '{} {}kHz'.format(self.codec_name, self.sample_rate//1000) if self.codec_name else None
+        return '{} {}kHz'.format(self.codec_name.decode().capitalize(), self.sample_rate//1000) if self.codec_name else None
 
 
 class VideoStreamInfo(RTPStreamInfo):
@@ -169,7 +171,7 @@ class VideoStreamInfo(RTPStreamInfo):
 
     @property
     def codec(self):
-        return '{0.codec_name} {0.framerate:.3g}fps'.format(self) if self.codec_name else None
+        return '{0.codec_name.decode()} {0.framerate:.3g}fps'.format(self) if self.codec_name else None
 
     def update(self, stream):
         super(VideoStreamInfo, self).update(stream)
@@ -196,8 +198,8 @@ class ChatStreamInfo(MSRPStreamInfo):
             self.encryption = 'OTR' if stream.encryption.active else None
             self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
             if self.encryption == 'OTR':
-                self.otr_key_fingerprint = stream.encryption.key_fingerprint
-                self.otr_peer_fingerprint = stream.encryption.peer_fingerprint
+                self.otr_key_fingerprint = stream.encryption.key_fingerprint.hex().upper()
+                self.otr_peer_fingerprint = stream.encryption.peer_fingerprint.hex().upper()
                 self.otr_peer_name = stream.encryption.peer_name
                 self.otr_verified = stream.encryption.verified
 
@@ -908,7 +910,8 @@ class BlinkSession(BlinkSessionBase):
             uri += '@' + self.account.id.domain
         if not uri.startswith(('sip:', 'sips:')):
             uri = 'sip:' + uri
-        uri = SIPURI.parse(str(uri).translate(None, ' \t'))
+
+        uri = SIPURI.parse(str(uri).translate(translation_table))
         if URIUtils.is_number(uri.user):
             uri.user = URIUtils.trim_number(uri.user)
             if isinstance(self.account, Account):
@@ -1656,7 +1659,7 @@ class AudioSessionWidget(base_class, ui_class):
             session.zrtp_widget.hide()
             session.zrtp_widget.peer_name = stream_info.zrtp_peer_name
             session.zrtp_widget.peer_verified = stream_info.zrtp_verified
-            session.zrtp_widget.sas = stream_info.zrtp_sas
+            session.zrtp_widget.sas = stream_info.zrtp_sas.decode()
             session.zrtp_widget.setGeometry(rect)
             session.zrtp_widget.show()
             session.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
@@ -2095,7 +2098,7 @@ class AudioSessionItem(object):
     def _NH_BlinkSessionInfoUpdated(self, notification):
         if 'media' in notification.data.elements:
             audio_info = self.blink_session.info.streams.audio
-            self.type = 'HD Audio' if audio_info.sample_rate >= 16000 else 'Audio'
+            self.type = 'HD Audio' if audio_info.sample_rate and audio_info.sample_rate >= 16000 else 'Audio'
             self.codec_info = audio_info.codec
             if audio_info.encryption is not None:
                 self.widget.srtp_label.setToolTip('Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
@@ -4003,7 +4006,7 @@ class BlinkFileTransfer(BlinkSessionBase):
             uri += '@' + self.account.id.domain
         if not uri.startswith(('sip:', 'sips:')):
             uri = 'sip:' + uri
-        return SIPURI.parse(str(uri).translate(None, ' \t'))
+        return SIPURI.parse(str(uri).translate(translation_table))
 
     def _terminate(self, failure_reason=None):
         self.state = 'ending'    # if the state is not ending already, simulate it
