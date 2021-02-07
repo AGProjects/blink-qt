@@ -2210,7 +2210,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if message.content_type.startswith('image/'):
             content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
         elif message.content_type.startswith('text/'):
-            content = message.content.decode()
+            content = message.content
             content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         else:
             return
@@ -2410,9 +2410,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.close()
             self.no_sessions_label.show()
         elif not self.session_list.isVisibleTo(self):
-            self.session_list.animation.setDirection(QPropertyAnimation.Forward)
-            self.session_list.animation.setStartValue(self.session_widget.geometry())
-            self.session_list.animation.setEndValue(self.session_panel.rect())
+            if self.session_list.animation:
+                self.session_list.animation.setDirection(QPropertyAnimation.Forward)
+                self.session_list.animation.setStartValue(self.session_widget.geometry())
+                self.session_list.animation.setEndValue(self.session_panel.rect())
             self.session_list.show()
             self.session_list.animation.start()
 

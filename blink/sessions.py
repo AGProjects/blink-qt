@@ -497,6 +497,7 @@ class BlinkSession(BlinkSessionBase):
         self._sibling = None
 
         self._smp_handler = Null
+        self.routes = None
 
     def _get_state(self):
         return self.__dict__['state']
@@ -713,7 +714,7 @@ class BlinkSession(BlinkSessionBase):
 
         self.stream_descriptions = None
 
-        self.state = 'connecting'
+        self.state = 'initializing'
         notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
 
     def connect(self):
@@ -737,6 +738,7 @@ class BlinkSession(BlinkSessionBase):
                 uri = self.uri
         else:
             uri = self.uri
+
         self.lookup = DNSLookup()
         notification_center.add_observer(self, sender=self.lookup)
         self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
@@ -912,13 +914,14 @@ class BlinkSession(BlinkSessionBase):
             uri = 'sip:' + uri
 
         uri = SIPURI.parse(str(uri).translate(translation_table))
-        if URIUtils.is_number(uri.user):
-            uri.user = URIUtils.trim_number(uri.user)
+        if URIUtils.is_number(uri.user.decode()):
+            user = URIUtils.trim_number(uri.user.decode())
             if isinstance(self.account, Account):
                 if self.account.pstn.idd_prefix is not None:
-                    uri.user = re.sub(r'^\+', self.account.pstn.idd_prefix, uri.user)
+                    user = re.sub(r'^\+', self.account.pstn.idd_prefix, user)
                 if self.account.pstn.prefix is not None:
-                    uri.user = self.account.pstn.prefix + uri.user
+                    user = self.account.pstn.prefix + user
+            uri.user = user.encode()
         return uri
 
     def _sync_chat_peer_name(self):
@@ -943,9 +946,13 @@ class BlinkSession(BlinkSessionBase):
         if notification.sender is self.lookup:
             routes = notification.data.result
             if routes:
+                self.routes = routes
+                self.state = 'connection/dns_lookup_succeeded'
+                self.info.update(self)
                 self.sip_session = Session(self.account)
                 self.sip_session.connect(ToHeader(self.uri), routes, list(self.streams))
             else:
+                self.routes = None
                 self._terminate(reason='Destination not found', error=True)
 
     def _NH_DNSLookupDidFail(self, notification):
@@ -1659,7 +1666,7 @@ class AudioSessionWidget(base_class, ui_class):
             session.zrtp_widget.hide()
             session.zrtp_widget.peer_name = stream_info.zrtp_peer_name
             session.zrtp_widget.peer_verified = stream_info.zrtp_verified
-            session.zrtp_widget.sas = stream_info.zrtp_sas.decode()
+            session.zrtp_widget.sas = stream_info.zrtp_sas
             session.zrtp_widget.setGeometry(rect)
             session.zrtp_widget.show()
             session.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
@@ -2083,11 +2090,15 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionConnectionProgress(self, notification):
         stage = notification.data.stage
-        if stage == 'dns_lookup':
+        if stage == 'initializing':
+            self.status = Status('Initializing...')
+        elif stage == 'connecting/dns_lookup':
             self.status = Status('Looking up destination...')
-        elif stage == 'connecting':
+        elif stage == 'connecting' and self.blink_session.routes:
             self.tls = self.blink_session.transport == 'tls'
-            self.status = Status('Connecting...')
+            uri = self.blink_session.routes[0].uri
+            destination = '%s:%s' % (self.blink_session.transport, uri.host.decode())
+            self.status = Status('Trying %s' % destination)
         elif stage == 'ringing':
             self.status = Status('Ringing...')
         elif stage == 'starting':
@@ -2677,7 +2688,7 @@ class AudioSessionListView(QListView):
 
     def keyPressEvent(self, event):
         char = event.text().upper()
-        if char and char in string.digits+string.uppercase+'#*':
+        if char and char in string.digits + string.ascii_uppercase + '#*':
             digit_map  = {'2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL', '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ'}
             letter_map = {letter: digit for digit, letter_group in digit_map.items() for letter in letter_group}
             for session in (s for s in self.model().sessions if s.active):
@@ -3150,10 +3161,12 @@ class ChatSessionItem(object):
         elif data.state == 'idle':
             self.remote_composing = False
             self.remote_composing_timer.stop()
+        self.widget.update_content(self)
 
     def _SH_RemoteComposingTimerTimeout(self):
         self.remote_composing_timer.stop()
         self.remote_composing = False
+        self.widget.update_content(self)
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -4036,10 +4049,13 @@ class BlinkFileTransfer(BlinkSessionBase):
         notification.center.remove_observer(self, sender=notification.sender)
         if self.state in ('ending', 'ended'):
             return
+        self.state = 'connecting'
         routes = notification.data.result
         if not routes:
             self._terminate(failure_reason='Destination not found')
+            self.routes = None
             return
+        self.routes = routes
         self.sip_session = Session(self.account)
         self.stream = MediaStreamRegistry.FileTransferStream(self.file_selector, 'sendonly', transfer_id=self.id)
         self.handler = self.stream.handler
@@ -4052,7 +4068,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self._terminate(failure_reason='DNS Lookup failed')
 
     def _NH_SIPSessionNewOutgoing(self, notification):
-        self.state = 'connecting'
+        self.state = 'initializing'
 
     def _NH_SIPSessionGotProvisionalResponse(self, notification):
         if notification.data.code == 180:

@@ -1301,8 +1301,8 @@ class Contact(object):
     @property
     def info(self):
         try:
-            return self.note or ('@' + self.uri.uri.host if self.type == 'bonjour' else self.uri.uri)
-        except AttributeError:
+            return self.note or (self.uri.uri.split('@')[1] if self.type == 'bonjour' else self.uri.uri)
+        except (AttributeError, TypeError):
             return ''
 
     @property
@@ -4684,11 +4684,11 @@ class URIUtils(object):
 
     @classmethod
     def is_number(cls, token):
-        return cls.number_re.match(token.decode()) is not None
+        return cls.number_re.match(token) is not None
 
     @classmethod
     def trim_number(cls, token):
-        return cls.number_trim_re.sub('', token.decode()).encode()
+        return cls.number_trim_re.sub('', token)
 
     @classmethod
     def find_contact(cls, uri, display_name=None, exact=True):
@@ -4701,8 +4701,9 @@ class URIUtils(object):
             if not uri.startswith(('sip:', 'sips:')):
                 uri = 'sip:' + uri
             uri = SIPURI.parse(str(uri).translate(translation_table))
-        if cls.is_number(uri.user):
-            uri.user = cls.trim_number(uri.user)
+
+        if cls.is_number(uri.user.decode()):
+            uri.user = cls.trim_number(uri.user.decode()).encode()
             is_number = True
         else:
             is_number = False
@@ -4714,7 +4715,7 @@ class URIUtils(object):
                     return contact, contact_uri
 
         if not exact and is_number:
-            number = uri.user.lstrip('0')
+            number = uri.user.decode().lstrip('0')
             counter = count()
             matched_numbers = []
             for contact in (contact for contact in contact_model.iter_contacts() if contact.group.virtual):
@@ -4732,7 +4733,7 @@ class URIUtils(object):
             if matched_numbers:
                 return matched_numbers[0][2:]  # ratio, index, contact, uri
 
-        display_name = display_name or "%s@%s" % (uri.user, uri.host)
+        display_name = display_name or "%s@%s" % (uri.user.decode(), uri.host.decode())
         contact = Contact(DummyContact(display_name, [DummyContactURI(str(uri).partition(':')[2], default=True)]), None)
         return contact, contact.uri
 

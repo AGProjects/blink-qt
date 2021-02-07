@@ -19,6 +19,7 @@ from sipsimple.util import ISOTimestamp
 
 from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread
+import traceback
 
 
 __all__ = ['HistoryManager']
@@ -31,10 +32,11 @@ class HistoryManager(object, metaclass=Singleton):
 
     def __init__(self):
         try:
-            data = pickle.load(open(ApplicationData.get('calls_history')))
+            data = pickle.load(open(ApplicationData.get('calls_history'), "rb"))
             if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text and isinstance(item.call_time, ISOTimestamp) for item in data):
                 raise ValueError("invalid save data")
-        except Exception:
+        except Exception as e:
+            traceback.print_exc()            
             self.calls = []
         else:
             self.calls = data[-self.history_size:]
@@ -66,6 +68,7 @@ class HistoryManager(object, metaclass=Singleton):
             return
         session = notification.sender
         entry = HistoryEntry.from_session(session)
+        
         if session.direction == 'incoming':
             if notification.data.code != 487 or notification.data.failure_reason != 'Call completed elsewhere':
                 entry.failed = True
@@ -184,7 +187,13 @@ class HistoryEntry(object):
             duration = session.end_time - session.start_time
         else:
             duration = None
-        remote_uri = '%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
+        user = session.remote_identity.uri.user
+        domain = session.remote_identity.uri.host
+
+        user = user.decode() if isinstance(user, bytes) else user
+        domain = domain.decode() if isinstance(domain, bytes) else domain
+        
+        remote_uri = '%s@%s' % (user, domain)
         match = cls.phone_number_re.match(remote_uri)
         if match:
             remote_uri = match.group('number')
@@ -195,5 +204,3 @@ class HistoryEntry(object):
         else:
             display_name = contact.name
         return cls(session.direction, display_name, remote_uri, str(session.account.id), call_time, duration)
-
-
