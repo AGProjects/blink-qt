@@ -12,7 +12,7 @@ Build-Depends: debhelper (>= 11),
 Standards-Version: 4.5.0
 Homepage: http://icanblink.com
 
-Package: blink3
+Package: blink
 Architecture: any
 Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          libavahi-compat-libdnssd1,

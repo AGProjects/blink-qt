@@ -1,3 +1,9 @@
+blink (4.0.0) unstable; urgency=medium
+
+  * Migrate to Python 3
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Sun, 07 Feb 2021 20:18:16 -0300
+
 blink (3.2.1) unstable; urgency=medium
 
   * Updated windows installation instructions

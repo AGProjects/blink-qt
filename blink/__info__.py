@@ -1,7 +1,7 @@
 
 """Package information"""
 
-__project__ = "blink3"
+__project__ = "blink"
 __summary__ = "Blink Qt"
 __webpage__ = "http://icanblink.com/"
 
