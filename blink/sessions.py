@@ -3487,11 +3487,10 @@ class ChatSessionListView(QListView):
         self.setSelectionMode(QListView.SingleSelection)  # default
 
         self.setStyleSheet("""QListView { border: 1px inset palette(dark); border-radius: 3px; }""")
-        self.animation = None
-        #self.animation = QPropertyAnimation(self, 'geometry')
-        #self.animation.setDuration(250)
-        #self.animation.setEasingCurve(QEasingCurve.Linear)
-        #self.animation.finished.connect(self._SH_AnimationFinished)
+        self.animation = QPropertyAnimation(self, b'geometry')
+        self.animation.setDuration(250)
+        self.animation.setEasingCurve(QEasingCurve.Linear)
+        self.animation.finished.connect(self._SH_AnimationFinished)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.drop_indicator_index = QModelIndex()
