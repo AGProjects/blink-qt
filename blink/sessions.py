@@ -171,7 +171,7 @@ class VideoStreamInfo(RTPStreamInfo):
 
     @property
     def codec(self):
-        return '{0.codec_name.decode()} {0.framerate:.3g}fps'.format(self) if self.codec_name else None
+        return '{} {}fps'.format(self.codec_name.decode(), int(self.framerate)) if self.codec_name else None
 
     def update(self, stream):
         super(VideoStreamInfo, self).update(stream)
