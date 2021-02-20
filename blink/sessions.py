@@ -198,8 +198,8 @@ class ChatStreamInfo(MSRPStreamInfo):
             self.encryption = 'OTR' if stream.encryption.active else None
             self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
             if self.encryption == 'OTR':
-                self.otr_key_fingerprint = stream.encryption.key_fingerprint.hex().upper()
-                self.otr_peer_fingerprint = stream.encryption.peer_fingerprint.hex().upper()
+                self.otr_key_fingerprint = stream.encryption.key_fingerprint.upper()
+                self.otr_peer_fingerprint = stream.encryption.peer_fingerprint.upper()
                 self.otr_peer_name = stream.encryption.peer_name
                 self.otr_verified = stream.encryption.verified
 
