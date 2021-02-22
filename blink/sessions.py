@@ -1240,7 +1240,7 @@ class SMPVerificationHandler(object):
             return
         audio_stream = self.audio_stream
         if audio_stream.encryption.active and audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.verified:
-            self.chat_stream.encryption.smp_verify(audio_stream.encryption.zrtp.sas, question=self.question)
+            self.chat_stream.encryption.smp_verify(audio_stream.encryption.zrtp.sas.encode(), question=self.question)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
