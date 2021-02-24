@@ -1,61 +1,39 @@
+
 Debian / Ubuntu or other Linux systems
 ======================================
 
-Configure Repository
---------------------
-
-Install the AG Projects debian software signing key:
-
-wget http://download.ag-projects.com/agp-debian-gpg.key
-sudo apt-key add agp-debian-gpg.key
-
-Add the appropriate repository to /etc/apt/sources.list, see:
-http://projects.ag-projects.com/projects/documentation/wiki/Repositories
-
-
-Note for Ubuntu users
----------------------
-
-The "universe" repository needs to be enabled. See:
-https://help.ubuntu.com/community/Repositories/Ubuntu
-
-
-Update package list
--------------------
-
-Update the list of available packages:
-
-sudo apt-get update
-
-
-Install Blink
--------------
-
-sudo apt-get install blink
-
+See debian/control file for the precise version numbers.
 
 Manual Installation
 -------------------
 
-Retrieve and unpack the tar archive from:
-http://download.ag-projects.com/Blink/Linux/
-
 Install the runtime dependencies:
 
- * python (2.7)
- * python-application (>= 2.8.0)
- * python-cjson
- * python-eventlib
- * python-qt5 (>= 5.0)
- * python-twisted-core
- * python-sipsimple (>= 3.5.0)
- * python-zope.interface
- * google-api-python-client
+ * libavahi-compat-libdnssd1
+ * python3-application
+ * python-enum34
+ * python3-eventlib
+ * python3-googleapi
+ * python3-lxml
+ * python3-oauth2client
+ * python3-pyqt5
+ * python3-pyqt5.qtsvg
+ * python3-pyqt5.qtwebkit
+ * python3-sipsimple
+ * python3-twisted
+ * python3-zope.interface
+ * x11vnc
+
+
+Download and install python3-sipsimple and its dependencies:
+
+https://github.com/AGProjects/python3-sipsimple/blob/master/docs/Install.linux
+
 
 After installing the above dependencies, install Blink system wide using:
 
-python setup.py build_ext
-sudo python setup.py install
+python3 setup.py build_ext
+sudo python3 setup.py install
 
 
 Creating Debian Packages
@@ -63,18 +41,18 @@ Creating Debian Packages
 
 Install the building dependencies:
 
- * debhelper (>= 7)
- * python-all (>= 2.7, not 3)
- * python-qt5 (>= 5.0)
- * python-support
- * build-essential
- * python-all-dev
- * devscripts
- * libvncserver-dev (or libvncserver-devel)
+  * debhelper
+  * python3-all-dev
+  * python3-all-dbg
+  * python3-qt5
+  * python3-support
+  * build-essential
+  * devscripts
+  * libvncserver-dev
 
 Create a clean distribution file:
 
-python setup.py sdist
+python3 setup.py sdist
 
 Go to the ./dist directory and untar the file created at the step above.
 
