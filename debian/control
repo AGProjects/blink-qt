@@ -5,9 +5,9 @@ Maintainer: Adrian Georgescu <ag@ag-projects.com>
 Uploaders: Adrian Georgescu <ag@ag-projects.com>
 Build-Depends: debhelper (>= 11),
                dh-python,
-               python-all-dev,
-               python-all-dbg,
-               cython-dbg,
+               python3-all-dev,
+               python3-all-dbg,
+               cython3-dbg,
                libvncserver-dev
 Standards-Version: 4.5.0
 Homepage: http://icanblink.com
