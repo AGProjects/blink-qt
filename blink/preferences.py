@@ -465,7 +465,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         combo_box.initStyleOption(option)
         wide_padding = (combo_box.height() - combo_box.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo_box).height() >= 10)
         if False and wide_padding: # TODO: review later and decide if its worth or not -Dan
-            print("found wide padding")
             self.audio_alert_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.audio_input_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.audio_output_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
@@ -763,8 +762,15 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.password_editor.setText(account.auth.password)
             selected_index = self.account_list.selectionModel().selectedIndexes()[0]
             selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
+            if not account.enabled:
+                selected_account_info.registration_state = None
+                selected_account_info.registrar = None
+                
             if selected_account_info.registration_state:
-                self.account_registration_label.setText('Registration %s' % selected_account_info.registration_state.title())
+                if selected_account_info.registration_state == 'succeeded' and selected_account_info.registrar is not None:
+                    self.account_registration_label.setText('Registered at %s' % selected_account_info.registrar)
+                else:
+                    self.account_registration_label.setText('Registration %s' % selected_account_info.registration_state.title())
             else:
                 self.account_registration_label.setText('Not Registered')
         else:
@@ -969,6 +975,21 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self._update_logs_size_label()
         self.pages.setCurrentIndex(action.index)
 
+    def _NH_SIPRegistrationInfoDidChange(self, notification):
+        self.refresh_account_registration_widgets(notification.sender)
+
+    def refresh_account_registration_widgets(self, account):
+        try:
+            selected_index = self.account_list.selectionModel().selectedIndexes()[0]
+        except IndexError:
+            return
+
+        selected_account = selected_index.data(Qt.UserRole).account
+        if account.id != selected_account.id:
+            return
+    
+        self.load_account_settings(selected_account)
+    
     def _SH_AccountListSelectionChanged(self, selected, deselected):
         try:
             selected_index = self.account_list.selectionModel().selectedIndexes()[0]
@@ -1668,6 +1689,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         notification.center.add_observer(self, name='VideoDevicesDidChange')
         notification.center.add_observer(self, name='VideoDeviceDidChangeCamera')
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification.center.add_observer(self, name='SIPRegistrationInfoDidChange')
 
     def _NH_AudioDevicesDidChange(self, notification):
         self.load_audio_devices()
@@ -1707,6 +1729,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account = notification.sender
             if 'enabled' in notification.data.modified:
                 self.account_enabled_button.setChecked(account.enabled)
+                if not account.enabled:
+                    self.refresh_account_registration_widgets(account)
                 self.reregister_button.setEnabled(account.enabled)
             if 'display_name' in notification.data.modified:
                 self.display_name_editor.setText(account.display_name or '')

@@ -65,6 +65,7 @@ class AccountInfo(object):
     def __init__(self, account):
         self.account = account
         self.registration_state = None
+        self.registrar = None
 
     @property
     def name(self):
@@ -105,6 +106,7 @@ class AccountModel(QAbstractListModel):
         notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='SIPAccountRegistrationDidFail')
         notification_center.add_observer(self, name='SIPAccountRegistrationDidEnd')
+        notification_center.add_observer(self, name='SIPAccountDidDeactivate')
         notification_center.add_observer(self, name='BonjourAccountWillRegister')
         notification_center.add_observer(self, name='BonjourAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='BonjourAccountRegistrationDidFail')
@@ -154,6 +156,7 @@ class AccountModel(QAbstractListModel):
         except ValueError:
             return
         self.accounts[position].registration_state = 'started'
+        self.accounts[position].registrar = None
         self.dataChanged.emit(self.index(position), self.index(position))
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
@@ -162,15 +165,41 @@ class AccountModel(QAbstractListModel):
         except ValueError:
             return
         self.accounts[position].registration_state = 'succeeded'
+        if notification.sender is not BonjourAccount():
+            registrar = notification.data.registrar
+            self.accounts[position].registrar = "%s:%s:%s" % (registrar.transport, registrar.address, registrar.port)
+        
         self.dataChanged.emit(self.index(position), self.index(position))
+        notification.center.post_notification('SIPRegistrationInfoDidChange', sender=notification.sender)
+
+    def _NH_SIPAccountDidDeactivate(self, notification):
+        try:
+            position = self.accounts.index(notification.sender)
+        except ValueError:
+            return
+        
+        self.accounts[position].registration_state = None
+        self.accounts[position].registrar = None
+        self.dataChanged.emit(self.index(position), self.index(position))
+        notification.center.post_notification('SIPRegistrationInfoDidChange', sender=notification.sender)
 
     def _NH_SIPAccountRegistrationDidFail(self, notification):
         try:
             position = self.accounts.index(notification.sender)
         except ValueError:
             return
-        self.accounts[position].registration_state = 'failed'
+        
+        reason = 'Unknown reason'
+
+        if hasattr(notification.data, 'error'):
+            reason = notification.data.error
+        elif hasattr(notification.data, 'reason'):
+            reason = notification.data.reason
+        
+        self.accounts[position].registration_state = 'failed (%s)' % (reason.decode() if isinstance(reason, bytes) else reason)
+        self.accounts[position].registrar = None
         self.dataChanged.emit(self.index(position), self.index(position))
+        notification.center.post_notification('SIPRegistrationInfoDidChange', sender=notification.sender)
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
         try:
@@ -178,6 +207,7 @@ class AccountModel(QAbstractListModel):
         except ValueError:
             return
         self.accounts[position].registration_state = 'ended'
+        self.accounts[position].registrar = None
         self.dataChanged.emit(self.index(position), self.index(position))
 
     _NH_BonjourAccountWillRegister = _NH_SIPAccountWillRegister
