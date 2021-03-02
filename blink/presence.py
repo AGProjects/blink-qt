@@ -124,7 +124,7 @@ class BlinkPresenceState(object):
 
         blink_settings = BlinkSettings()
 
-        account_id = hashlib.md5(self.account.id).hexdigest()
+        account_id = hashlib.md5(self.account.id.encode()).hexdigest()
         timestamp = ISOTimestamp.now()
 
         doc = pidf.PIDF(str(self.account.uri))
@@ -223,7 +223,7 @@ class PresencePublicationHandler(object):
         blink_settings = BlinkSettings()
         services.sort(key=lambda obj: obj.timestamp.value if obj.timestamp else epoch, reverse=True)
         service = services[0]
-        if service.id in ('SID-%s' % uuid.UUID(SIPSimpleSettings().instance_id), 'SID-%s' % hashlib.md5(notification.sender.id).hexdigest()):
+        if service.id in ('SID-%s' % uuid.UUID(SIPSimpleSettings().instance_id), 'SID-%s' % hashlib.md5(notification.sender.id.encode()).hexdigest()):
             # Our current state is the winning one
             return
         status = str(service.status.extended).title()
