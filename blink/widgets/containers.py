@@ -78,13 +78,13 @@ class SlidingStackedWidget(QStackedWidget):
         next_widget.show()
         next_widget.raise_()
 
-        prev_widget_animation = QPropertyAnimation(prev_widget, "pos")
+        prev_widget_animation = QPropertyAnimation(prev_widget, b"pos")
         prev_widget_animation.setDuration(self.animationDuration)
         prev_widget_animation.setEasingCurve(QEasingCurve(self.animationEasingCurve))
         prev_widget_animation.setStartValue(prev_widget_position)
         prev_widget_animation.setEndValue(prev_widget_position + offset)
 
-        next_widget_animation = QPropertyAnimation(next_widget, "pos")
+        next_widget_animation = QPropertyAnimation(next_widget, b"pos")
         next_widget_animation.setDuration(self.animationDuration)
         next_widget_animation.setEasingCurve(QEasingCurve(self.animationEasingCurve))
         next_widget_animation.setStartValue(next_widget_position - offset)
