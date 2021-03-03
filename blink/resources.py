@@ -6,6 +6,7 @@ import imghdr
 import os
 import platform
 import sys
+import pathlib
 
 from PyQt5.QtCore import Qt, QBuffer
 from PyQt5.QtGui import QIcon, QPixmap
@@ -60,6 +61,7 @@ class Resources(object):
     @classproperty
     def directory(cls):
         if cls._cached_directory is None:
+            parent_dir = pathlib.Path(__file__).parent.absolute()
             try:
                 binary_directory = os.path.dirname(os.path.realpath(__main__.__file__))
             except AttributeError:
@@ -72,7 +74,11 @@ class Resources(object):
                     application_directory = os.path.dirname(binary_directory)
                 else:
                     application_directory = binary_directory
-            if os.path.exists(os.path.join(application_directory, 'resources', 'blink.ui')):
+            unit_test_dir = '%s/../../../../resources' % parent_dir
+            if os.path.exists(os.path.join(unit_test_dir, 'blink.ui')):
+                # this is to make happy the self unit-testing, there must be a better way -adi
+                cls._cached_directory = unit_test_dir
+            elif os.path.exists(os.path.join(application_directory, 'resources', 'blink.ui')):
                 cls._cached_directory = os.path.join(application_directory, 'resources')
             else:
                 cls._cached_directory = os.path.join(application_directory, 'share', 'blink')
