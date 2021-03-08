@@ -81,6 +81,7 @@ class LogManager(object, metaclass=Singleton):
         self.msrptrace_file = Null
         self.pjsiptrace_file = Null
         self.notifications_file = Null
+        self.xcaptrace_file = Null
         self.event_queue = Null
         self.notification_queue = NotificationQueue()
         self._siptrace_start_time = None
@@ -98,6 +99,8 @@ class LogManager(object, metaclass=Singleton):
             self.pjsiptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'pjsip_trace.txt'))
         if settings.logs.trace_notifications:
             self.notifications_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'notifications_trace.txt'))
+        if settings.logs.trace_xcap:
+            self.xcaptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'xcap_trace.txt'))
         self._siptrace_start_time = datetime.now()
         self._siptrace_packet_count = 0
         self.event_queue = EventQueue(handler=self._process_notification, name='Blink LogManager')
@@ -119,6 +122,7 @@ class LogManager(object, metaclass=Singleton):
         self.msrptrace_file = Null
         self.pjsiptrace_file = Null
         self.notifications_file = Null
+        self.xcaptrace_file = Null
 
     def handle_notification(self, notification):
         self.event_queue.put(notification)
@@ -150,6 +154,8 @@ class LogManager(object, metaclass=Singleton):
                 self.pjsiptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'pjsip_trace.txt')) if settings.logs.trace_pjsip else Null
             if 'logs.trace_notifications' in notification.data.modified:
                 self.notifications_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'notifications_trace.txt')) if settings.logs.trace_notifications else Null
+            if 'logs.trace_xcap' in notification.data.modified:
+                self.notifications_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'xcap_trace.txt')) if settings.logs.trace_xcap else Null
 
     def _LH_SIPEngineSIPTrace(self, notification):
         settings = SIPSimpleSettings()
@@ -236,3 +242,168 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
+    def log_xcap(self, notification, message):
+        try:
+            self.xcaptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
+            self.xcaptrace_file.flush()
+        except Exception:
+            pass
+
+    def _LH_XCAPTrace(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        data = notification.data
+        if data.result == 'failure':
+            message = ("%s %s %s failed: %s (%s)" % (notification.datetime, data.method, data.url, data.reason, data.code))
+        else:
+            if data.code == 304:
+                message = ("%s %s %s with etag=%s did not change (304)" % (notification.datetime, data.method, data.url, data.etag))
+            else:
+                message = ("%s %s %s changed to etag=%s (%d bytes)" % (notification.datetime, data.method, data.url, data.etag, data.size))
+
+        self.log_xcap(notification, message)                
+
+    def _LH_XCAPDocumentsDidChange(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        data = notification.data
+        for k in list(data.notified_etags.keys()):
+            if k not in data.documents:
+                message = ("%s %s etag has changed on server to %s but is already stored locally" % (notification.datetime, data.notified_etags[k]['url'], data.notified_etags[k]['new_etag']))
+            else:
+                message = ("%s %s etag has changed: %s -> %s" % (notification.datetime, data.notified_etags[k]['url'], data.notified_etags[k]['new_etag'], data.notified_etags[k]['previous_etag']))
+
+        self.log_xcap(notification, message)    
+
+    def _LH_XCAPManagerDidDiscoverServerCapabilities(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        account = notification.sender.account
+        xcap_root = notification.sender.xcap_root
+        if xcap_root is None:
+            # The XCAP manager might be stopped because this notification is processed in a different
+            # thread from which it was posted
+            return
+        message = "%s Using XCAP root %s for account %s" % (notification.datetime, xcap_root, account.id)
+        self.log_xcap(notification, message)
+        message = ("%s XCAP server capabilities: %s" % (notification.datetime, ", ".join(notification.data.auids)))
+        self.log_xcap(notification, message)    
+          
+    def _LH_XCAPManagerDidStart(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager of account %s started" % (notification.datetime, notification.sender.account.id))
+        self.log_xcap(notification, message)
+            
+    def _LH_XCAPManagerDidChangeState(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager of account %s changed state from %s to %s" % (notification.datetime, notification.sender.account.id, notification.data.prev_state.capitalize(), notification.data.state.capitalize()))
+        self.log_xcap(notification, message)
+            
+    def _LH_XCAPManagerDidAddContact(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager added contact %s" % (notification.datetime, notification.data.contact.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerDidUpdateContact(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager updated contact %s" % (notification.datetime, notification.data.contact.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerDidRemoveContact(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager removed contact %s" % (notification.datetime, notification.data.contact.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerDidAddGroup(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager added group %s" % (notification.datetime, notification.data.group.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerDidUpdateGroup(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager updated group %s" % (notification.datetime, notification.data.group.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerDidRemoveGroup(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager removed group %s" % (notification.datetime, notification.data.group.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManageDidAddGroupMember(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager added member %s to group %s" % (notification.datetime,  notification.data.contact.id, notification.data.group.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManageDidRemoveGroupMember(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager removed member %s from group %s" % (notification.datetime, notification.data.contact.id, notification.data.group.id))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerClientWillInitialize(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager client will initialized for XCAP root %s" % (notification.datetime, notification.data.root))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerDidInitialize(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager initialized with XCAP client %s" % (notification.datetime, notification.data.client))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerClientDidInitialize(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager client %s initialized for XCAP root %s" % (notification.datetime, notification.data.client, notification.data.root))
+        self.log_xcap(notification, message)
+
+    def _LH_XCAPManagerClientDidNotInitialize(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_xcap:
+            return
+
+        message = ("%s XCAP manager client did not initialize: %s" % (notification.datetime, notification.data.error))
+        self.log_xcap(notification, message)
+        
