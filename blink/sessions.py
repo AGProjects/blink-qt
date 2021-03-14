@@ -161,7 +161,7 @@ class MSRPStreamInfo(object, metaclass=ABCMeta):
 class AudioStreamInfo(RTPStreamInfo):
     @property
     def codec(self):
-        return '{} {}kHz'.format(self.codec_name.decode().capitalize(), self.sample_rate//1000) if self.codec_name else None
+        return '{} {}kHz'.format(self.codec_name.capitalize(), self.sample_rate//1000) if self.codec_name else None
 
 
 class VideoStreamInfo(RTPStreamInfo):
@@ -171,7 +171,7 @@ class VideoStreamInfo(RTPStreamInfo):
 
     @property
     def codec(self):
-        return '{} {}fps'.format(self.codec_name.decode(), int(self.framerate)) if self.codec_name else None
+        return '{} {}fps'.format(self.codec_name, int(self.framerate)) if self.codec_name else None
 
     def update(self, stream):
         super(VideoStreamInfo, self).update(stream)
