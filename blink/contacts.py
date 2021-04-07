@@ -3186,14 +3186,81 @@ class ContactListView(QListView):
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         else:
             contact = selected_items[0]
-            menu.addAction(self.actions.start_audio_call)
-            menu.addAction(self.actions.start_video_call)
-            menu.addAction(self.actions.start_chat_session)
-            #menu.addAction(self.actions.send_sms)
-            menu.addAction(self.actions.send_files)
-            menu.addAction(self.actions.request_screen)
-            menu.addAction(self.actions.share_my_screen)
-            menu.addAction(self.actions.transfer_call)
+            account_manager = AccountManager()
+            session_manager = SessionManager()
+            can_call = account_manager.default_account is not None and contact.uri is not None
+            can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
+
+            if len(contact.uris) > 1 and can_call:
+                call_submenu = menu.addMenu('Start Audio Call')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_StartAudioCall, uri))
+                    call_submenu.addAction(call_item)
+
+                call_submenu = menu.addMenu('Start Video Call')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_StartVideoCall, uri))
+                    call_submenu.addAction(call_item)
+
+                call_submenu = menu.addMenu('Start Chat Session')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_StartChatSession, uri))
+                    call_submenu.addAction(call_item)
+
+                call_submenu = menu.addMenu('Send File(s)...')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_SendFiles, uri))
+                    call_submenu.addAction(call_item)
+
+                call_submenu = menu.addMenu('Request Screen')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_RequestScreen, uri))
+                    call_submenu.addAction(call_item)
+
+                call_submenu = menu.addMenu('Share My Screen')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_ShareMyScreen, uri))
+                    call_submenu.addAction(call_item)
+
+            else:
+                menu.addAction(self.actions.start_audio_call)
+                menu.addAction(self.actions.start_video_call)
+                menu.addAction(self.actions.start_chat_session)
+                menu.addAction(self.actions.send_files)
+                menu.addAction(self.actions.request_screen)
+                menu.addAction(self.actions.share_my_screen)
+
+                self.actions.start_audio_call.setEnabled(can_call)
+                self.actions.start_video_call.setEnabled(can_call)
+                self.actions.start_chat_session.setEnabled(can_call)
+                self.actions.send_sms.setEnabled(can_call)
+                self.actions.send_files.setEnabled(can_call)
+                self.actions.request_screen.setEnabled(can_call)
+                self.actions.share_my_screen.setEnabled(can_call)
+
+            if len(contact.uris) > 1 and can_transfer:
+                call_submenu = menu.addMenu('Transfer Call')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(lambda: self._AH_TransferCall(uri))
+                    call_submenu.addAction(call_item)
+            else:
+                menu.addAction(self.actions.transfer_call)
+                self.actions.transfer_call.setEnabled(can_transfer)
+
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
@@ -3201,18 +3268,7 @@ class ContactListView(QListView):
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
-            account_manager = AccountManager()
-            session_manager = SessionManager()
-            can_call = account_manager.default_account is not None and contact.uri is not None
-            can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
-            self.actions.start_audio_call.setEnabled(can_call)
-            self.actions.start_video_call.setEnabled(can_call)
-            self.actions.start_chat_session.setEnabled(can_call)
-            self.actions.send_sms.setEnabled(can_call)
-            self.actions.send_files.setEnabled(can_call)
-            self.actions.request_screen.setEnabled(can_call)
-            self.actions.share_my_screen.setEnabled(can_call)
-            self.actions.transfer_call.setEnabled(can_transfer)
+
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
@@ -3423,39 +3479,40 @@ class ContactListView(QListView):
                     modified_settings.append(group)
         model._atomic_update(save=modified_settings)
 
-    def _AH_StartAudioCall(self):
+    def _AH_StartAudioCall(self, uri=None):
+        print('_AH_StartAudioCall to %s' % uri.uri)
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('audio')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio')])
 
-    def _AH_StartVideoCall(self):
+    def _AH_StartVideoCall(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('audio'), StreamDescription('video')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio'), StreamDescription('video')])
 
-    def _AH_StartChatSession(self):
+    def _AH_StartChatSession(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('chat')], connect=False)
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self):
         pass
 
-    def _AH_SendFiles(self):
+    def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
-            session_manager.send_file(contact, contact.uri, filename)
+            session_manager.send_file(contact, uri or contact.uri, filename)
 
-    def _AH_RequestScreen(self):
+    def _AH_RequestScreen(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
-    def _AH_ShareMyScreen(self):
+    def _AH_ShareMyScreen(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _AH_TransferCall(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -3813,44 +3870,44 @@ class ContactSearchListView(QListView):
                     modified_settings.append(group)
         model._atomic_update(save=modified_settings)
 
-    def _AH_StartAudioCall(self):
+    def _AH_StartAudioCall(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('audio')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio')])
 
-    def _AH_StartVideoCall(self):
+    def _AH_StartVideoCall(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('audio'), StreamDescription('video')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio'), StreamDescription('video')])
 
-    def _AH_StartChatSession(self):
+    def _AH_StartChatSession(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('chat')], connect=False)
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self):
         pass
 
-    def _AH_SendFiles(self):
+    def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
-            session_manager.send_file(contact, contact.uri, filename)
+            session_manager.send_file(contact, uri or contact.uri, filename)
 
-    def _AH_RequestScreen(self):
+    def _AH_RequestScreen(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
-    def _AH_ShareMyScreen(self):
+    def _AH_ShareMyScreen(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
-    def _AH_TransferCall(self):
+    def _AH_TransferCall(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.active_session.transfer(contact.uri)
+        session_manager.active_session.transfer(uri or contact.uri)
 
     def _DH_TextUriList(self, event, index, rect, item):
         if index.isValid():
@@ -4097,43 +4154,43 @@ class ContactDetailView(QListView):
         model.contact.uris.default = contact_uri.uri
         model.contact.save()
 
-    def _AH_StartAudioCall(self):
+    def _AH_StartAudioCall(self, uri=None):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
         item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = contact.uri
+            selected_uri = uri or contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('audio')])
 
-    def _AH_StartVideoCall(self):
+    def _AH_StartVideoCall(self, uri=None):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
         item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = contact.uri
+            selected_uri = uri or contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('audio'), StreamDescription('video')])
 
-    def _AH_StartChatSession(self):
+    def _AH_StartChatSession(self, uri=None):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
         item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = contact.uri
+            selected_uri = uri or contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self):
         pass
 
-    def _AH_SendFiles(self):
+    def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
@@ -4141,40 +4198,40 @@ class ContactDetailView(QListView):
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = contact.uri
+            selected_uri = uri or contact.uri
         for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, selected_uri, filename)
 
-    def _AH_RequestScreen(self):
+    def _AH_RequestScreen(self, uri=None):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
         item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = contact.uri
+            selected_uri = uri or contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
-    def _AH_ShareMyScreen(self):
+    def _AH_ShareMyScreen(self, uri=None):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
         item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = contact.uri
+            selected_uri = uri or contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
-    def _AH_TransferCall(self):
+    def _AH_TransferCall(self, uri=None):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
         item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = contact.uri
+            selected_uri = uri or contact.uri
         session_manager = SessionManager()
         session_manager.active_session.transfer(selected_uri)
 
