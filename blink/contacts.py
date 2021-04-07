@@ -3485,7 +3485,6 @@ class ContactListView(QListView):
         model._atomic_update(save=modified_settings)
 
     def _AH_StartAudioCall(self, uri=None):
-        print('_AH_StartAudioCall to %s' % uri.uri)
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio')])
