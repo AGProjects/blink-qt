@@ -119,6 +119,7 @@ class IconManager(object, metaclass=Singleton):
 
     @run_in_gui_thread(wait=True)
     def store_data(self, id, data):
+        data = data if isinstance(data, bytes) else data.encode()
         id = id.replace('/', '_')
         directory = ApplicationData.get('images')
         filename = os.path.join(directory, id + '.png')
@@ -133,7 +134,7 @@ class IconManager(object, metaclass=Singleton):
                 pixmap.save(buffer, 'png')
                 data = str(buffer.data())
             with open(filename, 'wb') as f:
-                f.write(data.encode())
+                f.write(data)
             icon = QIcon(pixmap)
             icon.filename = filename
             icon.content = data
