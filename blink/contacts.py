@@ -620,6 +620,7 @@ class GoogleContact(object):
         uris.extend(GoogleContactURI.from_im(address) for address in contact_data.get('imClients', Null))
         uris.extend(GoogleContactURI.from_email(address) for address in contact_data.get('emailAddresses', Null))
 
+        name = name if not organization else '%s (%s)' % (name, organization)
         self.name = name
         self.organization = organization
         self.uris = GoogleContactURIList(uris)
@@ -641,7 +642,7 @@ class GoogleContact(object):
         uris.extend(GoogleContactURI.from_email(address) for address in contact_data.get('emailAddresses', Null))
 
         icon = GoogleContactIcon(icon_url, icon_metadata)
-
+        name = name if not organization else '%s (%s)' % (name, organization)
         return cls(contact_id, name, organization, uris, icon, etag)
 
 
