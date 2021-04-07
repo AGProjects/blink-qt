@@ -946,9 +946,13 @@ class GoogleContactsManager(object, metaclass=Singleton):
         settings = SIPSimpleSettings()
         settings.google_contacts.username = notification.data.email
         settings.save()
-        self._service = build('people', 'v1', credentials=notification.data.credentials, http=Http(timeout=10), cache_discovery=False)  # todo: what's the best fix for cache?
-        self.active = True
-        self.sync_contacts()  # sync_contacts is always scheduled in order to not queue posting notifications until after sync_contacts finishes, when called from a notification handler
+        try:
+            self._service = build('people', 'v1', credentials=notification.data.credentials, http=Http(timeout=10), cache_discovery=False)  # todo: what's the best fix for cache?
+        except Exception as e:
+            log.error('Error fetching Google contacts: %s' % str(e))
+        else:
+            self.active = True
+            self.sync_contacts()  # sync_contacts is always scheduled in order to not queue posting notifications until after sync_contacts finishes, when called from a notification handler
 
     def _NH_GoogleAuthorizationWasRejected(self, notification):
         self._service = None
