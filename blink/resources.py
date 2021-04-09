@@ -134,6 +134,7 @@ class IconManager(object, metaclass=Singleton):
                 pixmap.save(buffer, 'png')
                 data = str(buffer.data())
             with open(filename, 'wb') as f:
+                data = data if isinstance(data, bytes) else data.encode()
                 f.write(data)
             icon = QIcon(pixmap)
             icon.filename = filename

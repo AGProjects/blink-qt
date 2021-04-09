@@ -528,7 +528,7 @@ class GoogleContactURI(object):
     id = property(lambda self: self.uri)
 
     def __init__(self, uri, type, default=False):
-        self.uri = uri
+        self.uri = uri.strip() if uri is not None else uri
         self.type = type
         self.default = default
 
@@ -541,11 +541,11 @@ class GoogleContactURI(object):
 
     @classmethod
     def from_im(cls, address):
-        return cls(re.sub('^sips?:', '', address['username']), address.get('formattedType', 'Other'), False)  # for now do not let IM addresses become default URIs -Dan
+        return cls(re.sub('^sips?:', '', address['username']), address.get('formattedType', 'Other'), address['metadata'].get('primary', False))
 
     @classmethod
     def from_email(cls, address):
-        return cls(re.sub('^sips?:', '', address['value']), address.get('formattedType', 'Other'), False)  # for now do not let email addresses become default URIs -Dan
+        return cls(re.sub('^sips?:', '', address['value']), address.get('formattedType', 'Other'), address['metadata'].get('primary', False))
 
 
 class GoogleContactURIList(object):
@@ -616,6 +616,9 @@ class GoogleContact(object):
         organization = next((entry.get('name') for entry in contact_data.get('organizations', Null)), None)
         icon_url, icon_metadata = next(((entry['url'], entry['metadata']) for entry in contact_data.get('photos', Null)), (None, None))
 
+        name = name.strip() if name is not None else 'Unknown'
+        organization = organization.strip() if organization is not None else organization
+
         uris = [GoogleContactURI.from_number(number) for number in contact_data.get('phoneNumbers', Null)]
         uris.extend(GoogleContactURI.from_im(address) for address in contact_data.get('imClients', Null))
         uris.extend(GoogleContactURI.from_email(address) for address in contact_data.get('emailAddresses', Null))
@@ -636,6 +639,9 @@ class GoogleContact(object):
         name = next((entry['displayName'] for entry in contact_data.get('names', Null)), None)
         organization = next((entry.get('name') for entry in contact_data.get('organizations', Null)), None)
         icon_url, icon_metadata = next(((entry['url'], entry['metadata']) for entry in contact_data.get('photos', Null)), (None, None))
+
+        name = name.strip() if name is not None else 'Unknown'
+        organization = organization.strip() if organization is not None else organization
 
         uris = [GoogleContactURI.from_number(number) for number in contact_data.get('phoneNumbers', Null)]
         uris.extend(GoogleContactURI.from_im(address) for address in contact_data.get('imClients', Null))
