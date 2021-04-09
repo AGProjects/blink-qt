@@ -1,3 +1,10 @@
+blink (4.1.0) unstable; urgency=medium
+
+  * Google Contacts integration solved
+  * Allow calling to all URIs belonging to a contact
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Fri, 09 Apr 2021 07:29:17 -0300
+
 blink (4.0.0) unstable; urgency=medium
 
   * Migrate to Python 3
