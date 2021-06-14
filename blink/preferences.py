@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QActionGroup, QButtonGroup, QFileDialog, QListView, 
 
 from application import log
 from application.notification import IObserver, NotificationCenter
+from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
