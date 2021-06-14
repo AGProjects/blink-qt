@@ -166,9 +166,10 @@ class LogManager(object, metaclass=Singleton):
             direction = "RECEIVED"
         else:
             direction = "SENDING"
+        data = notification.data.data.decode() if isinstance(notification.data.data, bytes) else notification.data.data
         buf = ["%s: Packet %d, +%s" % (direction, self._siptrace_packet_count, (notification.datetime - self._siptrace_start_time)),
                "%(source_ip)s:%(source_port)d -(SIP over %(transport)s)-> %(destination_ip)s:%(destination_port)d" % notification.data.__dict__,
-               notification.data.data,
+               data,
                '--']
         message = '\n'.join(buf)
         try:
