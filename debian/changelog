@@ -21,7 +21,7 @@ blink (4.0.0) unstable; urgency=medium
   * Migrate to Python 3
   * Show sip account registrar address in preferences panel
 
- -- Adrian Georgescu <ag@ag-projects.com>  Wed Mar  3 14:46:47 -03 2021
+ -- Adrian Georgescu <ag@ag-projects.com>  Wed, 03 Mar 2021 14:46:47 -0300
 
 blink (3.2.1) unstable; urgency=medium
 

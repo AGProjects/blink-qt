@@ -2,7 +2,7 @@ Source: blink
 Section: python
 Priority: optional
 Maintainer: Adrian Georgescu <ag@ag-projects.com>
-Uploaders: Adrian Georgescu <ag@ag-projects.com>
+Uploaders: Tijmen de Mes <tijmen@ag-projects.com>
 Build-Depends: debhelper (>= 11),
                dh-python,
                python3-all-dev,
