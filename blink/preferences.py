@@ -251,9 +251,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.reregister_button.clicked.connect(self._SH_ReregisterButtonClicked)
         self.idd_prefix_button.activated[str].connect(self._SH_IDDPrefixButtonActivated)
         self.prefix_button.activated[str].connect(self._SH_PrefixButtonActivated)
-        self.account_tls_cert_file_editor.locationCleared.connect(self._SH_AccountTLSCertFileEditorLocationCleared)
-        self.account_tls_cert_file_browse_button.clicked.connect(self._SH_AccountTLSCertFileBrowseButtonClicked)
-        self.account_tls_verify_server_button.clicked.connect(self._SH_AccountTLSVerifyServerButtonClicked)
+        self.account_tls_name_editor.editingFinished.connect(self._SH_TLSPeerNameEditorEditingFinished)
 
         # Audio devices
         self.audio_alert_device_button.activated[int].connect(self._SH_AudioAlertDeviceButtonActivated)
@@ -331,6 +329,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # TLS settings
         self.tls_ca_file_editor.locationCleared.connect(self._SH_TLSCAFileEditorLocationCleared)
         self.tls_ca_file_browse_button.clicked.connect(self._SH_TLSCAFileBrowseButtonClicked)
+        self.tls_cert_file_editor.locationCleared.connect(self._SH_TLSCertFileEditorLocationCleared)
+        self.tls_cert_file_browse_button.clicked.connect(self._SH_TLSCertFileBrowseButtonClicked)
+        self.tls_verify_server_button.clicked.connect(self._SH_TLSVerifyServerButtonClicked)
 
         # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
@@ -445,12 +446,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # account advanced tab
         font_metrics = self.register_interval_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.register_interval_label, self.publish_interval_label, self.subscribe_interval_label,
-                  self.idd_prefix_label, self.prefix_label, self.account_tls_cert_file_label)
+                  self.idd_prefix_label, self.prefix_label)
         text_width = max(font_metrics.width(label.text()) for label in labels) + 15
         self.register_interval_label.setMinimumWidth(text_width)
         self.idd_prefix_label.setMinimumWidth(text_width)
-        self.account_tls_cert_file_label.setMinimumWidth(text_width)
+        self.tls_cert_file_label.setMinimumWidth(text_width)
 
+        
         # audio settings
         font_metrics = self.answer_delay_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.audio_input_device_label, self.audio_output_device_label, self.audio_alert_device_label, self.audio_sample_rate_label,
@@ -748,6 +750,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.screenshots_directory_editor.setText(blink_settings.screenshots_directory or '')
         self.transfers_directory_editor.setText(blink_settings.transfers_directory or '')
         self.tls_ca_file_editor.setText(settings.tls.ca_list or '')
+        self.tls_cert_file_editor.setText(settings.tls.certificate or '')
+        self.tls_verify_server_button.setChecked(settings.tls.verify_server)
 
     def load_account_settings(self, account):
         """Load the account settings from configuration into the UI controls"""
@@ -828,6 +832,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.msrp_transport_button.setCurrentIndex(self.msrp_transport_button.findText(account.msrp.transport.upper()))
 
             # Advanced tab
+            self.account_tls_name_editor.setText(account.sip.tls_name or account.id.domain)
+
             with blocked_qt_signals(self.register_interval):
                 self.register_interval.setValue(account.sip.register_interval)
             with blocked_qt_signals(self.publish_interval):
@@ -847,11 +853,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if index == -1:
                 self.prefix_button.addItem(item_text)
             self.prefix_button.setCurrentIndex(self.prefix_button.findText(item_text))
-
             self._update_pstn_example_label()
 
-            self.account_tls_cert_file_editor.setText(account.tls.certificate or '')
-            self.account_tls_verify_server_button.setChecked(account.tls.verify_server)
+
 
     def update_chat_preview(self):
         blink_settings = BlinkSettings()
@@ -1055,11 +1059,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             else:
                 account_manager.default_account = None
 
-        if selected_account.tls.certificate is not None and selected_account.tls.certificate.normalized.startswith(ApplicationData.directory):
-            try:
-                os.unlink(selected_account.tls.certificate.normalized)
-            except (AttributeError, OSError, IOError):
-                pass
 
         selected_account.delete()
 
@@ -1194,6 +1193,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account.auth.username = auth_username
             account.save()
 
+    def _SH_TLSPeerNameEditorEditingFinished(self):
+        account = self.selected_account
+        tls_name = self.account_tls_name_editor.text() or None
+        if account.sip.tls_name != tls_name:
+            account.sip.tls_name = tls_name
+            account.save()
+
     def _SH_AlwaysUseMyMSRPRelayButtonClicked(self, checked):
         account = self.selected_account
         account.nat_traversal.use_msrp_relay_for_outbound = checked
@@ -1295,19 +1301,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account.pstn.prefix = prefix
             account.save()
 
-    def _SH_AccountTLSCertFileEditorLocationCleared(self):
-        account = self.selected_account
-        account.tls.certificate = None
-        account.save()
+    def _SH_TLSCertFileEditorLocationCleared(self):
+        settings = SIPSimpleSettings()
+        settings.tls.certificate = None
+        settings.save()
 
-    def _SH_AccountTLSCertFileBrowseButtonClicked(self, checked):
+    def _SH_TLSCertFileBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode (and the error messages boxes as well). -Dan
-        account = self.selected_account
-        directory = os.path.dirname(account.tls.certificate.normalized) if account.tls.certificate else Path('~').normalized
+        settings = SIPSimpleSettings()
+        directory = os.path.dirname(settings.tls.certificate.normalized) if settings.tls.certificate else Path('~').normalized
         cert_path = QFileDialog.getOpenFileName(self, 'Select Certificate File', directory, "TLS certificates (*.crt *.pem)")[0] or None
         if cert_path is not None:
             cert_path = os.path.normpath(cert_path)
-            if cert_path != account.tls.certificate:
+            if cert_path != settings.tls.certificate:
                 try:
                     contents = open(cert_path).read()
                     X509Certificate(contents)
@@ -1317,14 +1323,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 except GNUTLSError as e:
                     QMessageBox.critical(self, "TLS Certificate Error", "The certificate file is invalid: %s" % e)
                 else:
-                    self.account_tls_cert_file_editor.setText(cert_path)
-                    account.tls.certificate = cert_path
-                    account.save()
+                    self.tls_cert_file_editor.setText(cert_path)
+                    settings.tls.certificate = cert_path
+                    settings.save()
 
-    def _SH_AccountTLSVerifyServerButtonClicked(self, checked):
-        account = self.selected_account
-        account.tls.verify_server = checked
-        account.save()
+    def _SH_TLSVerifyServerButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.tls.verify_server = checked
+        settings.save()
 
     # Audio devices signal handlers
     def _SH_AudioAlertDeviceButtonActivated(self, index):

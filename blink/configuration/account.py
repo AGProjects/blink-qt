@@ -3,7 +3,7 @@
 
 __all__ = ['AccountExtension', 'BonjourAccountExtension']
 
-from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, PresenceSettings, RTPSettings, SIPSettings, TLSSettings, XCAPSettings
+from sipsimple.account import BonjourMSRPSettings, MessageSummarySettings, MSRPSettings, PresenceSettings, RTPSettings, SIPSettings, XCAPSettings
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObjectExtension, RuntimeSetting
 from sipsimple.configuration.datatypes import AudioCodecList, Hostname, MSRPConnectionModel, MSRPTransport, NonNegativeInteger, SIPTransportList, VideoCodecList
 from sipsimple.util import user_info
@@ -18,6 +18,7 @@ class BonjourMSRPSettingsExtension(BonjourMSRPSettings):
 
 class BonjourSIPSettings(SettingsGroup):
     transport_order = Setting(type=SIPTransportList, default=SIPTransportList(['tcp', 'udp', 'tls']))
+    tls_name = Setting(type=str, default='Blink')
 
 
 class MessageSummarySettingsExtension(MessageSummarySettings):
@@ -50,6 +51,7 @@ class SIPSettingsExtension(SIPSettings):
     register_interval = Setting(type=NonNegativeInteger, default=600)
     subscribe_interval = Setting(type=NonNegativeInteger, default=600)
     publish_interval = Setting(type=NonNegativeInteger, default=600)
+    tls_name = Setting(type=str, default=None, nillable=True)
 
 
 class ServerSettings(SettingsGroup):
@@ -60,9 +62,6 @@ class ServerSettings(SettingsGroup):
 class SoundSettings(SettingsGroup):
     inbound_ringtone = Setting(type=SoundFile, default=None, nillable=True)
 
-
-class TLSSettingsExtension(TLSSettings):
-    certificate = Setting(type=ApplicationDataPath, default=ApplicationDataPath(Resources.get('tls/default.crt')), nillable=True)
 
 
 class XCAPSettingsExtension(XCAPSettings):
@@ -80,7 +79,6 @@ class AccountExtension(SettingsObjectExtension):
     server = ServerSettings
     sip = SIPSettingsExtension
     sounds = SoundSettings
-    tls = TLSSettingsExtension
     xcap = XCAPSettingsExtension
 
 
@@ -90,6 +88,5 @@ class BonjourAccountExtension(SettingsObjectExtension):
     rtp = RTPSettingsExtension
     sip = BonjourSIPSettings
     sounds = SoundSettings
-    tls = TLSSettingsExtension
 
 

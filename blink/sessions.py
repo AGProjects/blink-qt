@@ -741,7 +741,7 @@ class BlinkSession(BlinkSessionBase):
 
         self.lookup = DNSLookup()
         notification_center.add_observer(self, sender=self.lookup)
-        self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
+        self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
     def add_stream(self, stream_description):
         self.add_streams([stream_description])
@@ -3937,7 +3937,7 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         lookup = DNSLookup()
         notification_center.add_observer(self, sender=lookup)
-        lookup.lookup_sip_proxy(uri, settings.sip.transport_list)
+        lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
         self.state = 'connecting/dns_lookup'
 
