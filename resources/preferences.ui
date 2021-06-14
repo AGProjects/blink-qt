@@ -579,6 +579,14 @@
                 <enum>Checked</enum>
                </property>
               </item>
+              <item>
+               <property name="text">
+                <string>VP9</string>
+               </property>
+               <property name="checkState">
+                <enum>Checked</enum>
+               </property>
+              </item>
              </widget>
             </item>
             <item row="4" column="0" colspan="2">
@@ -2074,6 +2082,14 @@
              <item>
               <property name="text">
                <string>VP8</string>
+              </property>
+              <property name="checkState">
+               <enum>Checked</enum>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>VP9</string>
               </property>
               <property name="checkState">
                <enum>Checked</enum>
