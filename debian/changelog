@@ -1,3 +1,14 @@
+blink (5.0.0) unstable; urgency=medium
+
+  * Added VP9 codec
+  * Implemented TLS certificate verification
+  * Added per account TLS peer name to verify against
+  * Update default CA list
+  * Enable by default TLS transport
+  * Fixed logging
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Mon, 14 Jun 2021 11:18:44 -0300
+
 blink (4.1.0) unstable; urgency=medium
 
   * Google Contacts integration solved
