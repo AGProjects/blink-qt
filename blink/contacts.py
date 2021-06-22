@@ -4651,6 +4651,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.name_editor.setText(contact.name)
         self.icon_selector.init_with_contact(contact)
         self.presence.setChecked(contact.presence.subscribe)
+        self.auto_answer.setChecked(contact.auto_answer)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
         self.accept_button.setText('Ok')
         self.accept_button.setEnabled(True)
@@ -4693,6 +4694,11 @@ class ContactEditorDialog(base_class, ui_class):
         else:
             contact.presence.policy = 'block'
             contact.presence.subscribe = False
+
+        if self.auto_answer.isChecked():
+            contact.auto_answer = True
+        else:
+            contact.auto_answer = False
 
         if self.icon_selector.filename is self.icon_selector.NotSelected:
             pass

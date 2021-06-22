@@ -1,4 +1,3 @@
-- Auto answer
 - Device switching window when detected at runtime
 - Dial SIP URIs from the system
 - Desktop notifications
@@ -29,4 +28,3 @@
   instance of blink and it publishes its old state on startup
 - when accepting a new contact from a presence request it adds the URI but
   it is not set as type SIP (it has no type selected)
-

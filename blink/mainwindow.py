@@ -195,6 +195,7 @@ class MainWindow(base_class, ui_class):
         self.video_devices_group.triggered.connect(self._AH_VideoDeviceChanged)
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
+        self.auto_answer_action.triggered.connect(self._SH_AutoAnswerButtonClicked)
 
         # Tools menu actions
         self.sip_server_settings_action.triggered.connect(self._AH_SIPServerSettings)
@@ -741,6 +742,11 @@ class MainWindow(base_class, ui_class):
             self.saved_account_state = None
             self.account_state.setState(state, note)
 
+    def _SH_AutoAnswerButtonClicked(self, answer):
+        settings = SIPSimpleSettings()
+        settings.audio.auto_answer = not settings.audio.auto_answer
+        settings.save()
+
     def _SH_SilentButtonClicked(self, silent):
         settings = SIPSimpleSettings()
         settings.audio.silent = silent
@@ -768,6 +774,7 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
+        self.auto_answer_action.setChecked(settings.audio.auto_answer)
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
@@ -826,6 +833,8 @@ class MainWindow(base_class, ui_class):
             if 'audio.silent' in notification.data.modified:
                 self.silent_action.setChecked(settings.audio.silent)
                 self.silent_button.setChecked(settings.audio.silent)
+            if 'audio.auto_answer' in notification.data.modified:
+                self.auto_answer_action.setChecked(settings.audio.auto_answer)
             if 'audio.output_device' in notification.data.modified:
                 action = next(action for action in self.output_devices_group.actions() if action.data() == settings.audio.output_device)
                 action.setChecked(True)

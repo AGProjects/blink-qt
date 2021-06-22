@@ -5142,6 +5142,11 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self.reject_button.released.connect(self._set_reject_mode)
         self.screensharing_stream.hidden.connect(self.screensharing_label.hide)
         self.screensharing_stream.shown.connect(self.screensharing_label.show)
+        self.auto_answer_label.setText('Auto-answer is inactive')
+        self.auto_answer_interval = None
+        self._auto_answer_timer = None
+        self.passed_time = 0
+        self.auto_answer_confirmed =  False
 
     def show(self, activate=True):
         self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
@@ -5167,6 +5172,22 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         if self.accept_button.isEnabled() != was_enabled:
             self.accept_button.setFocus()
 
+    def setAutoAnswer(self, interval):
+        self.auto_answer_interval = interval
+        self._auto_answer_timer = QTimer()
+        self._auto_answer_timer.setInterval(1000)
+        self._auto_answer_timer.timeout.connect(self._update_auto_answer)
+        self._auto_answer_timer.start()
+        self.auto_answer_label.setText('Auto answer in %d seconds' % interval)
+            
+    def _update_auto_answer(self):
+        self.passed_time = self.passed_time + 1
+        remaining_time = self.auto_answer_interval - self.passed_time
+        self.auto_answer_label.setText('Auto answer in %d seconds' % remaining_time) 
+        if remaining_time == 0:
+            self._auto_answer_timer.stop()
+            self.hide()
+       
     def _update_streams_layout(self):
         if len([stream for stream in self.streams if stream.in_use]) > 1:
             self.audio_stream.active = True
@@ -5210,6 +5231,7 @@ class IncomingRequest(QObject):
         self.video_stream = video_stream
         self.chat_stream = chat_stream
         self.screensharing_stream = screensharing_stream
+        self._auto_answer_timer = None
 
         if proposal:
             self.dialog.setWindowTitle('Incoming Session Update')
@@ -5219,6 +5241,16 @@ class IncomingRequest(QObject):
         address = '%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
+        settings = SIPSimpleSettings()
+            
+        if settings.audio.auto_answer and contact and contact.settings.auto_answer and settings.audio.auto_answer_interval:
+            self.dialog.setAutoAnswer(settings.audio.auto_answer_interval)
+            self._auto_answer_timer = QTimer()
+            self._auto_answer_timer.setInterval(settings.audio.auto_answer_interval * 1000)
+            self._auto_answer_timer.setSingleShot(True)
+            self._auto_answer_timer.timeout.connect(self._auto_answer)
+            self._auto_answer_timer.start()
+
         self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
         self.dialog.audio_stream.setVisible(self.audio_stream is not None)
         self.dialog.video_stream.setVisible(self.video_stream is not None)
@@ -5231,8 +5263,9 @@ class IncomingRequest(QObject):
                 self.dialog.screensharing_label.setText('is asking to share your screen')
                 # self.dialog.screensharing_stream.accepted = bool(proposal)
 
-        self.dialog.finished.connect(self._SH_DialogFinished)
 
+        self.dialog.finished.connect(self._SH_DialogFinished)
+        
     def __eq__(self, other):
         return self is other
 
@@ -5297,7 +5330,13 @@ class IncomingRequest(QObject):
     def stream_types(self):
         return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream) if stream is not None}
 
+    def _auto_answer(self):
+        self._SH_DialogFinished(QDialog.Accepted)
+
     def _SH_DialogFinished(self, result):
+        if self._auto_answer_timer and self._auto_answer_timer.isActive():
+            self._auto_answer_timer.stop()
+
         self.finished.emit(self)
         if result == QDialog.Accepted:
             self.accepted.emit(self)

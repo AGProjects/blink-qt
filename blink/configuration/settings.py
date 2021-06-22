@@ -31,6 +31,8 @@ class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'))
     sample_rate = Setting(type=SampleRate, default=32000)
     echo_canceller = EchoCancellerSettingsExtension
+    auto_answer_interval = Setting(type=int, default=15)
+    auto_answer = Setting(type=bool, default=False)
 
 
 class ChatSettingsExtension(ChatSettings):

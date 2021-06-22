@@ -22,7 +22,7 @@ class ContactExtension(ContactExtension):
     icon = Setting(type=IconDescriptor, nillable=True, default=None)
     alternate_icon = Setting(type=IconDescriptor, nillable=True, default=None)
     preferred_media = SharedSetting(type=str, default='audio')
-    #auto_answer = SharedSetting(type=bool, default=False)
+    auto_answer = Setting(type=bool, default=False)
 
 
 class GroupExtension(GroupExtension):

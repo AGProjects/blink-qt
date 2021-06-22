@@ -220,16 +220,6 @@
      </attribute>
     </widget>
    </item>
-   <item row="3" column="0" colspan="3">
-    <widget class="QCheckBox" name="presence">
-     <property name="text">
-      <string>Exchange Availability Information</string>
-     </property>
-     <property name="checked">
-      <bool>true</bool>
-     </property>
-    </widget>
-   </item>
    <item row="4" column="0" colspan="3">
     <widget class="QComboBox" name="preferred_media">
      <property name="sizePolicy">
@@ -258,6 +248,23 @@
        <string>Start voice + chat sessions by default</string>
       </property>
      </item>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QCheckBox" name="presence">
+     <property name="text">
+      <string>Enable Presence</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="2">
+    <widget class="QCheckBox" name="auto_answer">
+     <property name="text">
+      <string>Auto-answer</string>
+     </property>
     </widget>
    </item>
   </layout>

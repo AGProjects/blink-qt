@@ -1054,7 +1054,7 @@ padding: 2px;</string>
      <x>0</x>
      <y>0</y>
      <width>285</width>
-     <height>29</height>
+     <height>25</height>
     </rect>
    </property>
    <widget class="QMenu" name="blink_menu">
@@ -1173,6 +1173,7 @@ padding: 2px;</string>
     <addaction name="separator"/>
     <addaction name="mute_action"/>
     <addaction name="silent_action"/>
+    <addaction name="auto_answer_action"/>
    </widget>
    <widget class="QMenu" name="window_menu">
     <property name="title">
@@ -1281,10 +1282,6 @@ padding: 2px;</string>
    </property>
   </action>
   <action name="redial_action">
-   <property name="icon">
-    <iconset>
-     <normaloff>icons/retry.svg</normaloff>icons/retry.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;Redial</string>
    </property>
@@ -1422,6 +1419,17 @@ padding: 2px;</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="auto_answer_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Auto-answer</string>
    </property>
   </action>
  </widget>
