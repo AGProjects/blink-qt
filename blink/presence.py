@@ -4,6 +4,7 @@ import hashlib
 import re
 import socket
 import uuid
+import urllib
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QTimer
@@ -12,7 +13,6 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null, limit
 from datetime import datetime
 from dateutil.tz import tzutc
-from eventlib.green import urllib2
 from itertools import chain
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionLost
