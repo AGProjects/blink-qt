@@ -311,8 +311,8 @@ class ContactIcon(object):
             info = response.info()
         except (ConnectionLost, urllib.error.URLError, urllib.error.HTTPError):
             return None
-        content_type = info.getheader('content-type')
-        etag = info.getheader('etag')
+        content_type = info.get('content-type')
+        etag = info.get('etag')
         if etag.startswith('W/'):
             etag = etag[2:]
         etag = etag.replace('\"', '')
