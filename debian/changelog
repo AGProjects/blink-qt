@@ -1,3 +1,13 @@
+blink (5.1.0) unstable; urgency=medium
+
+  * Implement auto answer
+  * Fixed getheaders of HTTP objects, renamed to get in Python3
+  * Fixed xcap trace logging
+  * Fixed saving local icon
+  * Fixed broken import
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 22 Jun 2021 18:22:20 -0300
+
 blink (5.0.0) unstable; urgency=medium
 
   * Added VP9 codec
