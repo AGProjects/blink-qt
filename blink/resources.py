@@ -160,9 +160,9 @@ class IconManager(object, metaclass=Singleton):
                 pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             buffer = QBuffer()
             pixmap.save(buffer, 'png')
-            data = str(buffer.data())
+            data = buffer.data()
             with open(filename, 'wb') as f:
-                f.write(data.encode())
+                f.write(data)
             icon = QIcon(pixmap)
             icon.filename = filename
             icon.content = data
