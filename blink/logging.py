@@ -255,16 +255,20 @@ class LogManager(object, metaclass=Singleton):
         if not settings.logs.trace_xcap:
             return
 
+        message = None
         data = notification.data
         if data.result == 'failure':
             message = ("%s %s %s failed: %s (%s)" % (notification.datetime, data.method, data.url, data.reason, data.code))
-        else:
+        elif data.result == 'success':
             if data.code == 304:
                 message = ("%s %s %s with etag=%s did not change (304)" % (notification.datetime, data.method, data.url, data.etag))
             else:
                 message = ("%s %s %s changed to etag=%s (%d bytes)" % (notification.datetime, data.method, data.url, data.etag, data.size))
+        elif data.result == 'fetch':
+            message = ("%s %s %s with etag=%s" % (notification.datetime, data.method, data.url, data.etag))
 
-        self.log_xcap(notification, message)                
+        if message:
+            self.log_xcap(notification, message)
 
     def _LH_XCAPDocumentsDidChange(self, notification):
         settings = SIPSimpleSettings()
@@ -274,11 +278,11 @@ class LogManager(object, metaclass=Singleton):
         data = notification.data
         for k in list(data.notified_etags.keys()):
             if k not in data.documents:
-                message = ("%s %s etag has changed on server to %s but is already stored locally" % (notification.datetime, data.notified_etags[k]['url'], data.notified_etags[k]['new_etag']))
+                pass
+                #message = ("%s %s etag has changed on server to %s but is already stored locally" % (notification.datetime, data.notified_etags[k]['url'], data.notified_etags[k]['new_etag']))
             else:
                 message = ("%s %s etag has changed: %s -> %s" % (notification.datetime, data.notified_etags[k]['url'], data.notified_etags[k]['new_etag'], data.notified_etags[k]['previous_etag']))
-
-        self.log_xcap(notification, message)    
+                self.log_xcap(notification, message)    
 
     def _LH_XCAPManagerDidDiscoverServerCapabilities(self, notification):
         settings = SIPSimpleSettings()
