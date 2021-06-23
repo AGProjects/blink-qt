@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>285</width>
+    <width>321</width>
     <height>550</height>
    </rect>
   </property>
@@ -1053,7 +1053,7 @@ padding: 2px;</string>
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>285</width>
+     <width>321</width>
      <height>25</height>
     </rect>
    </property>
@@ -1072,40 +1072,18 @@ padding: 2px;</string>
      <addaction name="add_account_action"/>
      <addaction name="manage_accounts_action"/>
      <addaction name="separator"/>
-    </widget>
-    <widget class="QMenu" name="quick_settings_menu">
-     <property name="title">
-      <string>Quick &amp;settings</string>
-     </property>
-     <property name="icon">
-      <iconset>
-       <normaloff>icons/quick-settings.png</normaloff>icons/quick-settings.png</iconset>
-     </property>
-     <addaction name="auto_accept_chat_action"/>
-     <addaction name="answering_machine_action"/>
-     <addaction name="received_messages_sound_action"/>
+     <addaction name="google_contacts_action"/>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
     <addaction name="separator"/>
     <addaction name="preferences_action"/>
-    <addaction name="quick_settings_menu"/>
     <addaction name="accounts_menu"/>
     <addaction name="separator"/>
     <addaction name="help_action"/>
     <addaction name="release_notes_action"/>
     <addaction name="separator"/>
     <addaction name="quit_action"/>
-   </widget>
-   <widget class="QMenu" name="tools_menu">
-    <property name="title">
-     <string>&amp;Tools</string>
-    </property>
-    <addaction name="sip_server_settings_action"/>
-    <addaction name="history_on_server_action"/>
-    <addaction name="search_for_people_action"/>
-    <addaction name="separator"/>
-    <addaction name="google_contacts_action"/>
    </widget>
    <widget class="QMenu" name="call_menu">
     <property name="title">
@@ -1125,9 +1103,27 @@ padding: 2px;</string>
        <normaloff>icons/clock.svg</normaloff>icons/clock.svg</iconset>
      </property>
     </widget>
+    <addaction name="redial_action"/>
+    <addaction name="voicemail_menu"/>
+    <addaction name="auto_answer_action"/>
+    <addaction name="separator"/>
+    <addaction name="history_menu"/>
+   </widget>
+   <widget class="QMenu" name="chat_menu">
+    <property name="title">
+     <string>&amp;Chat</string>
+    </property>
+    <addaction name="join_conference_action"/>
+    <addaction name="auto_accept_chat_action"/>
+    <addaction name="received_messages_sound_action"/>
+   </widget>
+   <widget class="QMenu" name="devices_menu">
+    <property name="title">
+     <string>&amp;Devices</string>
+    </property>
     <widget class="QMenu" name="output_device_menu">
      <property name="title">
-      <string>&amp;Output device</string>
+      <string>&amp;Audio output device</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1136,7 +1132,7 @@ padding: 2px;</string>
     </widget>
     <widget class="QMenu" name="input_device_menu">
      <property name="title">
-      <string>&amp;Input device</string>
+      <string>&amp;Audio input device</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1145,7 +1141,7 @@ padding: 2px;</string>
     </widget>
     <widget class="QMenu" name="alert_device_menu">
      <property name="title">
-      <string>&amp;Alert device</string>
+      <string>&amp;Audio alert device</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1154,18 +1150,13 @@ padding: 2px;</string>
     </widget>
     <widget class="QMenu" name="video_camera_menu">
      <property name="title">
-      <string>Video &amp;Camera</string>
+      <string>&amp;Video camera</string>
      </property>
      <property name="icon">
       <iconset>
        <normaloff>icons/camera.svg</normaloff>icons/camera.svg</iconset>
      </property>
     </widget>
-    <addaction name="redial_action"/>
-    <addaction name="join_conference_action"/>
-    <addaction name="voicemail_menu"/>
-    <addaction name="history_menu"/>
-    <addaction name="separator"/>
     <addaction name="input_device_menu"/>
     <addaction name="output_device_menu"/>
     <addaction name="alert_device_menu"/>
@@ -1173,7 +1164,6 @@ padding: 2px;</string>
     <addaction name="separator"/>
     <addaction name="mute_action"/>
     <addaction name="silent_action"/>
-    <addaction name="auto_answer_action"/>
    </widget>
    <widget class="QMenu" name="window_menu">
     <property name="title">
@@ -1184,10 +1174,15 @@ padding: 2px;</string>
     <addaction name="logs_window_action"/>
     <addaction name="received_files_window_action"/>
     <addaction name="screenshots_window_action"/>
+    <addaction name="separator"/>
+    <addaction name="sip_server_settings_action"/>
+    <addaction name="history_on_server_action"/>
+    <addaction name="search_for_people_action"/>
    </widget>
    <addaction name="blink_menu"/>
+   <addaction name="devices_menu"/>
    <addaction name="call_menu"/>
-   <addaction name="tools_menu"/>
+   <addaction name="chat_menu"/>
    <addaction name="window_menu"/>
   </widget>
   <action name="quit_action">
@@ -1297,7 +1292,7 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>&amp;Mute</string>
+    <string>&amp;Mute microphone</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+M</string>
@@ -1340,7 +1335,7 @@ padding: 2px;</string>
   </action>
   <action name="help_action">
    <property name="text">
-    <string>Blink &amp;Help</string>
+    <string>&amp;Help</string>
    </property>
    <property name="shortcut">
     <string>F1</string>
@@ -1429,7 +1424,7 @@ padding: 2px;</string>
     <bool>false</bool>
    </property>
    <property name="text">
-    <string>Auto-answer</string>
+    <string>&amp;Auto-answer</string>
    </property>
   </action>
  </widget>
