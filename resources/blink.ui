@@ -1071,8 +1071,8 @@ padding: 2px;</string>
      </property>
      <addaction name="add_account_action"/>
      <addaction name="manage_accounts_action"/>
-     <addaction name="separator"/>
      <addaction name="google_contacts_action"/>
+     <addaction name="separator"/>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
