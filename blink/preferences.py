@@ -18,7 +18,7 @@ from zope.interface import implementer
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration import DefaultValue
-from sipsimple.configuration.datatypes import H264Profile, MSRPRelayAddress, Path, PortRange, SIPProxyAddress
+from sipsimple.configuration.datatypes import H264Profile, MSRPRelayAddress, Path, PortRange, SIPProxyAddress, STUNServerAddress, STUNServerAddressList
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
@@ -234,6 +234,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.auth_username_editor.editingFinished.connect(self._SH_AuthUsernameEditorEditingFinished)
         self.always_use_my_msrp_relay_button.clicked.connect(self._SH_AlwaysUseMyMSRPRelayButtonClicked)
         self.msrp_relay_host_editor.editingFinished.connect(self._SH_MSRPRelayHostEditorEditingFinished)
+        self.stun_server_list_editor.editingFinished.connect(self._SH_StunServerListEditorEditingFinished)
         self.msrp_relay_port.valueChanged[int].connect(self._SH_MSRPRelayPortValueChanged)
         self.msrp_relay_transport_button.activated[str].connect(self._SH_MSRPRelayTransportButtonActivated)
         self.voicemail_uri_editor.editingFinished.connect(self._SH_VoicemailURIEditorEditingFinished)
@@ -241,7 +242,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.server_tools_url_editor.editingFinished.connect(self._SH_ServerToolsURLEditorEditingFinished)
         self.conference_server_editor.editingFinished.connect(self._SH_ConferenceServerEditorEditingFinished)
 
-        # Account network settings
+        # Account NAT traversal settings
         self.use_ice_button.clicked.connect(self._SH_UseICEButtonClicked)
         self.msrp_transport_button.activated[str].connect(self._SH_MSRPTransportButtonActivated)
 
@@ -820,6 +821,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.always_use_my_proxy_button.setChecked(account.sip.always_use_my_proxy)
             outbound_proxy = account.sip.outbound_proxy or UnspecifiedOutboundProxy
             self.outbound_proxy_host_editor.setText(outbound_proxy.host)
+            if account.nat_traversal.stun_server_list:
+                stun_server_list = ", ".join('%s:%s' % (s.host, s.port) for s in account.nat_traversal.stun_server_list)
+            else:
+                stun_server_list = ""
+            self.stun_server_list_editor.setText(stun_server_list)
+            
             with blocked_qt_signals(self.outbound_proxy_port):
                 self.outbound_proxy_port.setValue(outbound_proxy.port)
             self.outbound_proxy_transport_button.setCurrentIndex(self.outbound_proxy_transport_button.findText(outbound_proxy.transport.upper()))
@@ -1026,7 +1033,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 if tab_widget.indexOf(self.server_settings_tab) == -1:
                     tab_widget.addTab(self.server_settings_tab, "Server Settings")
                 if tab_widget.indexOf(self.network_tab) == -1:
-                    tab_widget.addTab(self.network_tab, "Network")
+                    tab_widget.addTab(self.network_tab, "NAT Traversal")
                 if tab_widget.indexOf(self.advanced_tab) == -1:
                     tab_widget.addTab(self.advanced_tab, "Advanced")
                 self.password_label.show()
@@ -1233,12 +1240,44 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account.nat_traversal.msrp_relay = msrp_relay
             account.save()
 
+    def _SH_StunServerListEditorEditingFinished(self):
+        account = self.selected_account
+        stun_server_list = self.stun_server_list_editor.text().strip().lower() or ''
+        new_stun_server_list = []
+        if stun_server_list:
+            for server in stun_server_list.split(","):
+                try:
+                    (host, port) = server.strip().split(':') 
+                except ValueError:
+                     host = server
+                     port = STUNServerAddress.default_port
+                else:
+                     try:
+                         int(port)
+                     except (TypeError, ValueError) as e:
+                         port = STUNServerAddress.default_port
+                
+                try:
+                    new_stun_server_list.append(STUNServerAddress(host, port))
+                except ValueError as e:
+                    continue
+        
+        new_stun_server_list = new_stun_server_list or None
+
+        if account.nat_traversal.stun_server_list != new_stun_server_list:
+            try:
+                account.nat_traversal.stun_server_list = new_stun_server_list
+                account.save()
+            except ValueError as e:
+                pass
+
     def _SH_MSRPRelayPortValueChanged(self, value):
         account = self.selected_account
         msrp_relay = self.account_msrp_relay
         if account.nat_traversal.msrp_relay != msrp_relay:
             account.nat_traversal.msrp_relay = msrp_relay
             account.save()
+            
 
     def _SH_MSRPRelayTransportButtonActivated(self, text):
         account = self.selected_account

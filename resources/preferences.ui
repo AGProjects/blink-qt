@@ -10,6 +10,12 @@
     <height>630</height>
    </rect>
   </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
   <property name="minimumSize">
    <size>
     <width>890</width>
@@ -72,7 +78,7 @@
           </property>
          </widget>
         </item>
-        <item row="1" column="0" colspan="2">
+        <item row="1" column="0" colspan="4">
          <widget class="QWidget" name="account_buttons_widget" native="true">
           <layout class="QHBoxLayout" name="account_buttons_layout">
            <property name="spacing">
@@ -155,10 +161,10 @@
           </layout>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item row="0" column="3">
          <widget class="QTabWidget" name="account_tab_widget">
           <property name="currentIndex">
-           <number>1</number>
+           <number>3</number>
           </property>
           <widget class="QWidget" name="account_information_tab">
            <attribute name="title">
@@ -239,7 +245,7 @@
             <item row="0" column="0" colspan="2">
              <widget class="QCheckBox" name="account_enabled_button">
               <property name="text">
-               <string>Use account</string>
+               <string>Enable account</string>
               </property>
              </widget>
             </item>
@@ -255,369 +261,6 @@
                </size>
               </property>
              </spacer>
-            </item>
-           </layout>
-          </widget>
-          <widget class="QWidget" name="media_tab">
-           <attribute name="title">
-            <string>Media</string>
-           </attribute>
-           <layout class="QGridLayout" name="media_tab_layout">
-            <property name="leftMargin">
-             <number>10</number>
-            </property>
-            <property name="topMargin">
-             <number>10</number>
-            </property>
-            <property name="rightMargin">
-             <number>10</number>
-            </property>
-            <property name="bottomMargin">
-             <number>10</number>
-            </property>
-            <property name="spacing">
-             <number>5</number>
-            </property>
-            <item row="5" column="0" colspan="2">
-             <widget class="QWidget" name="rtp_options_widget" native="true">
-              <layout class="QGridLayout" name="rtp_options_widget_layout">
-               <property name="leftMargin">
-                <number>0</number>
-               </property>
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <property name="rightMargin">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
-               <item row="2" column="1" colspan="2">
-                <widget class="QCheckBox" name="inband_dtmf_button">
-                 <property name="text">
-                  <string>Send inband DTMF</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="5" column="1">
-                <widget class="QComboBox" name="key_negotiation_button">
-                 <item>
-                  <property name="text">
-                   <string>Opportunistic</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>ZRTP</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>SDES optional</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>SDES mandatory</string>
-                  </property>
-                 </item>
-                </widget>
-               </item>
-               <item row="5" column="0">
-                <widget class="QLabel" name="key_negotiation_label">
-                 <property name="text">
-                  <string>Encryption:</string>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                 </property>
-                </widget>
-               </item>
-               <item row="0" column="0" colspan="3">
-                <widget class="QLabel" name="rtp_options_label">
-                 <property name="font">
-                  <font>
-                   <weight>75</weight>
-                   <bold>true</bold>
-                  </font>
-                 </property>
-                 <property name="text">
-                  <string>Options</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="1" column="0" colspan="3">
-                <widget class="Line" name="line_8">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                </widget>
-               </item>
-               <item row="5" column="2">
-                <spacer name="key_negotiation_spacer">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>40</width>
-                   <height>20</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-               <item row="3" column="1" colspan="2">
-                <widget class="QCheckBox" name="rtp_encryption_button">
-                 <property name="text">
-                  <string>Encrypt audio and video</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="4" column="1">
-                <widget class="QCheckBox" name="account_auto_answer">
-                 <property name="text">
-                  <string>Auto answer from allowed contacts</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </widget>
-            </item>
-            <item row="0" column="0">
-             <widget class="QLabel" name="account_audio_codecs_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>Audio Codecs</string>
-              </property>
-             </widget>
-            </item>
-            <item row="6" column="0" colspan="2">
-             <spacer name="media_spacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="0" column="1">
-             <widget class="QLabel" name="account_video_codecs_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>Video Codecs</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="Line" name="line_7">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0">
-             <widget class="QListWidget" name="account_audio_codecs_list">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="horizontalScrollBarPolicy">
-               <enum>Qt::ScrollBarAlwaysOff</enum>
-              </property>
-              <property name="dragEnabled">
-               <bool>true</bool>
-              </property>
-              <property name="dragDropMode">
-               <enum>QAbstractItemView::InternalMove</enum>
-              </property>
-              <item>
-               <property name="text">
-                <string>opus</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>speex</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>G722</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>GSM</string>
-               </property>
-               <property name="checkState">
-                <enum>Unchecked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>iLBC</string>
-               </property>
-               <property name="checkState">
-                <enum>Unchecked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>PCMU</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>PCMA</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item row="3" column="0" colspan="2">
-             <widget class="QWidget" name="reset_buttons_widget" native="true">
-              <layout class="QHBoxLayout" name="reset_buttons_widget_layout">
-               <property name="leftMargin">
-                <number>0</number>
-               </property>
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <property name="rightMargin">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
-               <item>
-                <widget class="QPushButton" name="reset_account_audio_codecs_button">
-                 <property name="text">
-                  <string>Reset</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="codecs_note_label">
-                 <property name="sizePolicy">
-                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                   <horstretch>0</horstretch>
-                   <verstretch>0</verstretch>
-                  </sizepolicy>
-                 </property>
-                 <property name="text">
-                  <string>Drag codecs to change their order</string>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignCenter</set>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="reset_account_video_codecs_button">
-                 <property name="text">
-                  <string>Reset</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </widget>
-            </item>
-            <item row="2" column="1">
-             <widget class="QListWidget" name="account_video_codecs_list">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="horizontalScrollBarPolicy">
-               <enum>Qt::ScrollBarAlwaysOff</enum>
-              </property>
-              <property name="dragEnabled">
-               <bool>true</bool>
-              </property>
-              <property name="dragDropMode">
-               <enum>QAbstractItemView::InternalMove</enum>
-              </property>
-              <item>
-               <property name="text">
-                <string>H264</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>VP8</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>VP9</string>
-               </property>
-               <property name="checkState">
-                <enum>Checked</enum>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item row="4" column="0" colspan="2">
-             <spacer name="media_spacer_2">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeType">
-               <enum>QSizePolicy::Fixed</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>25</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="1" column="0">
-             <widget class="Line" name="line_6">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
             </item>
            </layout>
           </widget>
@@ -650,7 +293,7 @@
                </font>
               </property>
               <property name="text">
-               <string>SIP Proxy</string>
+               <string>SIP Proxy server</string>
               </property>
              </widget>
             </item>
@@ -664,7 +307,7 @@
             <item row="2" column="1" colspan="5">
              <widget class="QCheckBox" name="always_use_my_proxy_button">
               <property name="text">
-               <string>Always use my proxy for outgoing sessions</string>
+               <string>Always use the proxy server for outgoing sessions</string>
               </property>
              </widget>
             </item>
@@ -753,106 +396,6 @@
              <widget class="QLineEdit" name="auth_username_editor"/>
             </item>
             <item row="5" column="0" colspan="6">
-             <widget class="QLabel" name="msrp_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">margin-top: 20px;</string>
-              </property>
-              <property name="text">
-               <string>MSRP Relay</string>
-              </property>
-             </widget>
-            </item>
-            <item row="6" column="0" colspan="6">
-             <widget class="Line" name="line_4">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="7" column="1" colspan="5">
-             <widget class="QCheckBox" name="always_use_my_msrp_relay_button">
-              <property name="text">
-               <string>Always use my relay for outgoing sessions</string>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="0">
-             <widget class="QLabel" name="msrp_relay_label">
-              <property name="text">
-               <string>MSRP Relay:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="1">
-             <widget class="LineEdit" name="msrp_relay_host_editor">
-              <property name="inactiveText" stdset="0">
-               <string>Relay address taken from DNS</string>
-              </property>
-              <property name="widgetSpacing" stdset="0">
-               <number>0</number>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="2">
-             <widget class="QLabel" name="msrp_relay_port_label">
-              <property name="text">
-               <string>Port:</string>
-              </property>
-              <property name="indent">
-               <number>3</number>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="3">
-             <widget class="QSpinBox" name="msrp_relay_port">
-              <property name="specialValueText">
-               <string>2855</string>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>65535</number>
-              </property>
-              <property name="value">
-               <number>0</number>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="4">
-             <widget class="QLabel" name="msrp_relay_transport_label">
-              <property name="text">
-               <string>Transport:</string>
-              </property>
-              <property name="indent">
-               <number>3</number>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="5">
-             <widget class="QComboBox" name="msrp_relay_transport_button">
-              <item>
-               <property name="text">
-                <string>TLS</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>TCP</string>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item row="9" column="0" colspan="6">
              <widget class="QLabel" name="voicemail_label">
               <property name="font">
                <font>
@@ -864,18 +407,18 @@
                <string notr="true">margin-top: 20px;</string>
               </property>
               <property name="text">
-               <string>Extra Server Settings</string>
+               <string>Other Servers</string>
               </property>
              </widget>
             </item>
-            <item row="10" column="0" colspan="6">
+            <item row="6" column="0" colspan="6">
              <widget class="Line" name="line_5">
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
              </widget>
             </item>
-            <item row="11" column="0">
+            <item row="7" column="0">
              <widget class="QLabel" name="voicemail_uri_label">
               <property name="text">
                <string>Voicemail URI:</string>
@@ -885,7 +428,7 @@
               </property>
              </widget>
             </item>
-            <item row="11" column="1" colspan="5">
+            <item row="7" column="1" colspan="5">
              <widget class="LineEdit" name="voicemail_uri_editor">
               <property name="inactiveText" stdset="0">
                <string>Discovered by subscribing to myself</string>
@@ -895,7 +438,7 @@
               </property>
              </widget>
             </item>
-            <item row="12" column="0">
+            <item row="8" column="0">
              <widget class="QLabel" name="xcap_root_label">
               <property name="text">
                <string>XCAP Root URL:</string>
@@ -905,7 +448,7 @@
               </property>
              </widget>
             </item>
-            <item row="12" column="1" colspan="5">
+            <item row="8" column="1" colspan="5">
              <widget class="LineEdit" name="xcap_root_editor">
               <property name="inactiveText" stdset="0">
                <string>Taken from the DNS TXT record for xcap.domain</string>
@@ -915,20 +458,20 @@
               </property>
              </widget>
             </item>
-            <item row="13" column="1" colspan="5">
+            <item row="9" column="1" colspan="5">
              <widget class="QLineEdit" name="server_tools_url_editor"/>
             </item>
-            <item row="13" column="0">
+            <item row="9" column="0">
              <widget class="QLabel" name="server_tools_url_label">
               <property name="text">
-               <string>Server Tools URL:</string>
+               <string>Server Setting URL:</string>
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
               </property>
              </widget>
             </item>
-            <item row="15" column="0" colspan="6">
+            <item row="11" column="0" colspan="6">
              <spacer name="server_settings_spacer">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -941,7 +484,7 @@
               </property>
              </spacer>
             </item>
-            <item row="14" column="0">
+            <item row="10" column="0">
              <widget class="QLabel" name="conference_server_label">
               <property name="text">
                <string>Conference Server:</string>
@@ -951,7 +494,7 @@
               </property>
              </widget>
             </item>
-            <item row="14" column="1" colspan="5">
+            <item row="10" column="1" colspan="5">
              <widget class="LineEdit" name="conference_server_editor">
               <property name="widgetSpacing" stdset="0">
                <number>0</number>
@@ -967,112 +510,718 @@
            <attribute name="title">
             <string>NAT Traversal</string>
            </attribute>
-           <layout class="QGridLayout" name="network_tab_layout">
-            <property name="leftMargin">
-             <number>10</number>
+           <widget class="QWidget" name="widget" native="true">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>170</y>
+              <width>621</width>
+              <height>201</height>
+             </rect>
             </property>
-            <property name="topMargin">
-             <number>10</number>
+            <widget class="Line" name="rtp_line">
+             <property name="geometry">
+              <rect>
+               <x>9</x>
+               <y>45</y>
+               <width>611</width>
+               <height>16</height>
+              </rect>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+            <widget class="QLabel" name="rtp_label">
+             <property name="geometry">
+              <rect>
+               <x>6</x>
+               <y>10</y>
+               <width>171</width>
+               <height>41</height>
+              </rect>
+             </property>
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">margin-top: 20px;</string>
+             </property>
+             <property name="text">
+              <string>Audio and Video</string>
+             </property>
+            </widget>
+            <widget class="QCheckBox" name="use_ice_button">
+             <property name="geometry">
+              <rect>
+               <x>108</x>
+               <y>60</y>
+               <width>199</width>
+               <height>22</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>Enable ICE</string>
+             </property>
+            </widget>
+            <widget class="QLineEdit" name="stun_server_list_editor">
+             <property name="geometry">
+              <rect>
+               <x>110</x>
+               <y>90</y>
+               <width>490</width>
+               <height>27</height>
+              </rect>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>server1.com:3566, server2.com:3456</string>
+             </property>
+            </widget>
+            <widget class="QLabel" name="stun_label">
+             <property name="geometry">
+              <rect>
+               <x>6</x>
+               <y>88</y>
+               <width>96</width>
+               <height>27</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>STUN servers:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </widget>
+           <widget class="QWidget" name="widget_2" native="true">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>-20</y>
+              <width>631</width>
+              <height>201</height>
+             </rect>
             </property>
-            <property name="rightMargin">
-             <number>10</number>
-            </property>
-            <property name="bottomMargin">
-             <number>10</number>
-            </property>
-            <property name="spacing">
-             <number>5</number>
-            </property>
-            <item row="2" column="1" colspan="2">
-             <widget class="QCheckBox" name="use_ice_button">
+            <widget class="Line" name="msrp_line">
+             <property name="geometry">
+              <rect>
+               <x>9</x>
+               <y>43</y>
+               <width>613</width>
+               <height>16</height>
+              </rect>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+            <widget class="QLabel" name="msrp_label">
+             <property name="geometry">
+              <rect>
+               <x>6</x>
+               <y>10</y>
+               <width>181</width>
+               <height>37</height>
+              </rect>
+             </property>
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">margin-top: 20px;</string>
+             </property>
+             <property name="text">
+              <string>Chat and File transfers</string>
+             </property>
+            </widget>
+            <widget class="LineEdit" name="msrp_relay_host_editor">
+             <property name="geometry">
+              <rect>
+               <x>110</x>
+               <y>89</y>
+               <width>490</width>
+               <height>27</height>
+              </rect>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="inactiveText" stdset="0">
+              <string>Relay address is learned from DNS</string>
+             </property>
+             <property name="widgetSpacing" stdset="0">
+              <number>0</number>
+             </property>
+            </widget>
+            <widget class="QLabel" name="msrp_relay_label">
+             <property name="geometry">
+              <rect>
+               <x>9</x>
+               <y>92</y>
+               <width>95</width>
+               <height>17</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>MSRP Relay:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+            <widget class="QLabel" name="msrp_relay_transport_label">
+             <property name="geometry">
+              <rect>
+               <x>30</x>
+               <y>160</y>
+               <width>73</width>
+               <height>17</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>Transport:</string>
+             </property>
+             <property name="indent">
+              <number>3</number>
+             </property>
+            </widget>
+            <widget class="QSpinBox" name="msrp_relay_port">
+             <property name="geometry">
+              <rect>
+               <x>110</x>
+               <y>122</y>
+               <width>74</width>
+               <height>27</height>
+              </rect>
+             </property>
+             <property name="specialValueText">
+              <string>2855</string>
+             </property>
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>65535</number>
+             </property>
+             <property name="value">
+              <number>0</number>
+             </property>
+            </widget>
+            <widget class="QComboBox" name="msrp_relay_transport_button">
+             <property name="geometry">
+              <rect>
+               <x>110</x>
+               <y>155</y>
+               <width>55</width>
+               <height>27</height>
+              </rect>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <item>
               <property name="text">
-               <string>Enable ICE</string>
+               <string>TLS</string>
               </property>
-             </widget>
-            </item>
-            <item row="3" column="0">
-             <widget class="QLabel" name="msrp_transport_label">
-              <property name="minimumSize">
-               <size>
-                <width>105</width>
-                <height>0</height>
-               </size>
-              </property>
+             </item>
+             <item>
               <property name="text">
-               <string>MSRP Transport:</string>
+               <string>TCP</string>
               </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="1">
-             <widget class="QComboBox" name="msrp_transport_button">
-              <property name="minimumSize">
-               <size>
-                <width>70</width>
-                <height>0</height>
-               </size>
-              </property>
-              <item>
+             </item>
+            </widget>
+            <widget class="QCheckBox" name="always_use_my_msrp_relay_button">
+             <property name="geometry">
+              <rect>
+               <x>108</x>
+               <y>61</y>
+               <width>317</width>
+               <height>22</height>
+              </rect>
+             </property>
+             <property name="toolTip">
+              <string>Normally the realy is used only for incoming sessions</string>
+             </property>
+             <property name="toolTipDuration">
+              <number>5</number>
+             </property>
+             <property name="text">
+              <string>Always use the relay for outgoing sessions</string>
+             </property>
+            </widget>
+            <widget class="QLabel" name="msrp_relay_port_label">
+             <property name="geometry">
+              <rect>
+               <x>66</x>
+               <y>127</y>
+               <width>37</width>
+               <height>17</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>Port:</string>
+             </property>
+             <property name="indent">
+              <number>3</number>
+             </property>
+            </widget>
+           </widget>
+          </widget>
+          <widget class="QWidget" name="media_tab">
+           <attribute name="title">
+            <string>Media</string>
+           </attribute>
+           <widget class="QWidget" name="rtp_options_widget" native="true">
+            <property name="geometry">
+             <rect>
+              <x>10</x>
+              <y>290</y>
+              <width>571</width>
+              <height>181</height>
+             </rect>
+            </property>
+            <layout class="QGridLayout" name="rtp_options_widget_layout">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item row="4" column="1" colspan="2">
+              <widget class="QCheckBox" name="inband_dtmf_button">
                <property name="text">
-                <string>TLS</string>
+                <string>Send inband DTMF</string>
                </property>
-              </item>
-              <item>
+              </widget>
+             </item>
+             <item row="7" column="1">
+              <widget class="QComboBox" name="key_negotiation_button">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="sizeIncrement">
+                <size>
+                 <width>0</width>
+                 <height>20</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <pointsize>11</pointsize>
+                </font>
+               </property>
+               <item>
+                <property name="text">
+                 <string>Opportunistic</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>ZRTP</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>SDES optional</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>SDES mandatory</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item row="7" column="0">
+              <widget class="QLabel" name="key_negotiation_label">
                <property name="text">
-                <string>TCP</string>
+                <string>Audio/Video Encryption:</string>
                </property>
-              </item>
-             </widget>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0" colspan="3">
+              <widget class="Line" name="line_8">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+              </widget>
+             </item>
+             <item row="5" column="1" colspan="2">
+              <widget class="QCheckBox" name="rtp_encryption_button">
+               <property name="text">
+                <string>Encrypt audio and video</string>
+               </property>
+              </widget>
+             </item>
+             <item row="6" column="1">
+              <widget class="QCheckBox" name="account_auto_answer">
+               <property name="text">
+                <string>Auto answer from allowed contacts</string>
+               </property>
+              </widget>
+             </item>
+             <item row="8" column="0">
+              <widget class="QLabel" name="msrp_transport_label">
+               <property name="font">
+                <font>
+                 <weight>50</weight>
+                 <bold>false</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>MSRP transport:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item row="8" column="1">
+              <widget class="QComboBox" name="msrp_transport_button">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>70</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <item>
+                <property name="text">
+                 <string>TLS</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>TCP</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QLabel" name="account_audio_codecs_label">
+            <property name="geometry">
+             <rect>
+              <x>20</x>
+              <y>10</y>
+              <width>97</width>
+              <height>17</height>
+             </rect>
+            </property>
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Audio Codecs</string>
+            </property>
+           </widget>
+           <widget class="QLabel" name="account_video_codecs_label">
+            <property name="geometry">
+             <rect>
+              <x>140</x>
+              <y>10</y>
+              <width>97</width>
+              <height>17</height>
+             </rect>
+            </property>
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Video Codecs</string>
+            </property>
+           </widget>
+           <widget class="QListWidget" name="account_audio_codecs_list">
+            <property name="geometry">
+             <rect>
+              <x>10</x>
+              <y>40</y>
+              <width>121</width>
+              <height>161</height>
+             </rect>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="dragEnabled">
+             <bool>true</bool>
+            </property>
+            <property name="dragDropMode">
+             <enum>QAbstractItemView::InternalMove</enum>
+            </property>
+            <item>
+             <property name="text">
+              <string>opus</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
             </item>
-            <item row="3" column="2">
-             <spacer name="msrp_transport_spacer">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
+            <item>
+             <property name="text">
+              <string>speex</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
             </item>
-            <item row="4" column="0" colspan="3">
-             <spacer name="account_network_spacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
-              </property>
-             </spacer>
+            <item>
+             <property name="text">
+              <string>G722</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
             </item>
-            <item row="0" column="0" colspan="3">
-             <widget class="QLabel" name="label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>Network Settings</string>
-              </property>
-             </widget>
+            <item>
+             <property name="text">
+              <string>GSM</string>
+             </property>
+             <property name="checkState">
+              <enum>Unchecked</enum>
+             </property>
             </item>
-            <item row="1" column="0" colspan="3">
-             <widget class="Line" name="line_2">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
+            <item>
+             <property name="text">
+              <string>iLBC</string>
+             </property>
+             <property name="checkState">
+              <enum>Unchecked</enum>
+             </property>
             </item>
-           </layout>
+            <item>
+             <property name="text">
+              <string>PCMU</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>PCMA</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
+            </item>
+           </widget>
+           <widget class="QWidget" name="reset_buttons_widget" native="true">
+            <property name="geometry">
+             <rect>
+              <x>10</x>
+              <y>203</y>
+              <width>571</width>
+              <height>31</height>
+             </rect>
+            </property>
+            <layout class="QHBoxLayout" name="reset_buttons_widget_layout">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+            </layout>
+           </widget>
+           <widget class="QListWidget" name="account_video_codecs_list">
+            <property name="geometry">
+             <rect>
+              <x>130</x>
+              <y>40</y>
+              <width>121</width>
+              <height>161</height>
+             </rect>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="horizontalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOff</enum>
+            </property>
+            <property name="dragEnabled">
+             <bool>true</bool>
+            </property>
+            <property name="dragDropMode">
+             <enum>QAbstractItemView::InternalMove</enum>
+            </property>
+            <item>
+             <property name="text">
+              <string>H264</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>VP8</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>VP9</string>
+             </property>
+             <property name="checkState">
+              <enum>Checked</enum>
+             </property>
+            </item>
+           </widget>
+           <widget class="Line" name="line_6">
+            <property name="geometry">
+             <rect>
+              <x>10</x>
+              <y>23</y>
+              <width>581</width>
+              <height>16</height>
+             </rect>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           </widget>
+           <widget class="QLabel" name="codecs_note_label">
+            <property name="geometry">
+             <rect>
+              <x>280</x>
+              <y>40</y>
+              <width>231</width>
+              <height>27</height>
+             </rect>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Drag codecs to change their order</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
+           <widget class="QPushButton" name="reset_account_audio_codecs_button">
+            <property name="geometry">
+             <rect>
+              <x>30</x>
+              <y>210</y>
+              <width>85</width>
+              <height>27</height>
+             </rect>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Reset</string>
+            </property>
+           </widget>
+           <widget class="QPushButton" name="reset_account_video_codecs_button">
+            <property name="geometry">
+             <rect>
+              <x>150</x>
+              <y>210</y>
+              <width>85</width>
+              <height>27</height>
+             </rect>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>Reset</string>
+            </property>
+           </widget>
+           <widget class="QLabel" name="rtp_options_label">
+            <property name="geometry">
+             <rect>
+              <x>10</x>
+              <y>260</y>
+              <width>413</width>
+              <height>27</height>
+             </rect>
+            </property>
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Options</string>
+            </property>
+           </widget>
           </widget>
           <widget class="QWidget" name="advanced_tab">
            <attribute name="title">
@@ -1368,7 +1517,7 @@
                   </font>
                  </property>
                  <property name="text">
-                  <string>Dialing landline and mobile numbers</string>
+                  <string>When calling to phone numbers</string>
                  </property>
                 </widget>
                </item>
@@ -1516,8 +1665,14 @@
               </layout>
              </widget>
             </item>
-            <item row="4" column="0">
+            <item row="5" column="0">
              <widget class="QLabel" name="account_peer_name_label">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
               <property name="minimumSize">
                <size>
                 <width>140</width>
@@ -1532,8 +1687,14 @@
               </property>
              </widget>
             </item>
-            <item row="4" column="2">
+            <item row="5" column="1" colspan="2">
              <widget class="QLineEdit" name="account_tls_name_editor">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
               <property name="toolTip">
                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Verify the remote TLS certifcate Common Name against this name&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
               </property>
@@ -2823,7 +2984,7 @@
            <property name="geometry">
             <rect>
              <x>18</x>
-             <y>373</y>
+             <y>365</y>
              <width>856</width>
              <height>16</height>
             </rect>
@@ -2979,7 +3140,7 @@
            <property name="geometry">
             <rect>
              <x>18</x>
-             <y>26</y>
+             <y>0</y>
              <width>86</width>
              <height>17</height>
             </rect>
@@ -3072,7 +3233,7 @@
            <property name="geometry">
             <rect>
              <x>18</x>
-             <y>49</y>
+             <y>14</y>
              <width>856</width>
              <height>16</height>
             </rect>
@@ -3168,7 +3329,7 @@
            <property name="geometry">
             <rect>
              <x>18</x>
-             <y>244</y>
+             <y>237</y>
              <width>856</width>
              <height>16</height>
             </rect>
@@ -3285,10 +3446,10 @@
           <widget class="QLabel" name="port_note_label">
            <property name="geometry">
             <rect>
-             <x>170</x>
-             <y>200</y>
+             <x>180</x>
+             <y>30</y>
              <width>288</width>
-             <height>17</height>
+             <height>22</height>
             </rect>
            </property>
            <property name="sizePolicy">
@@ -3588,13 +3749,10 @@
   <tabstop>account_list</tabstop>
   <tabstop>add_account_button</tabstop>
   <tabstop>delete_account_button</tabstop>
-  <tabstop>account_tab_widget</tabstop>
   <tabstop>account_enabled_button</tabstop>
   <tabstop>display_name_editor</tabstop>
   <tabstop>password_editor</tabstop>
-  <tabstop>reset_account_audio_codecs_button</tabstop>
   <tabstop>account_audio_codecs_list</tabstop>
-  <tabstop>reset_account_video_codecs_button</tabstop>
   <tabstop>account_video_codecs_list</tabstop>
   <tabstop>inband_dtmf_button</tabstop>
   <tabstop>rtp_encryption_button</tabstop>
@@ -3604,16 +3762,10 @@
   <tabstop>outbound_proxy_port</tabstop>
   <tabstop>outbound_proxy_transport_button</tabstop>
   <tabstop>auth_username_editor</tabstop>
-  <tabstop>always_use_my_msrp_relay_button</tabstop>
-  <tabstop>msrp_relay_host_editor</tabstop>
-  <tabstop>msrp_relay_port</tabstop>
-  <tabstop>msrp_relay_transport_button</tabstop>
   <tabstop>voicemail_uri_editor</tabstop>
   <tabstop>xcap_root_editor</tabstop>
   <tabstop>server_tools_url_editor</tabstop>
   <tabstop>conference_server_editor</tabstop>
-  <tabstop>use_ice_button</tabstop>
-  <tabstop>msrp_transport_button</tabstop>
   <tabstop>reregister_button</tabstop>
   <tabstop>register_interval</tabstop>
   <tabstop>publish_interval</tabstop>
