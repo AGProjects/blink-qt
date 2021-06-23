@@ -40,7 +40,7 @@
     <item row="0" column="0">
      <widget class="QStackedWidget" name="pages">
       <property name="currentIndex">
-       <number>6</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="accounts_page">
        <layout class="QGridLayout" name="accounts_layout">
@@ -958,7 +958,7 @@
           </widget>
           <widget class="QWidget" name="network_tab">
            <attribute name="title">
-            <string>Network</string>
+            <string>NAT Traversal</string>
            </attribute>
            <layout class="QGridLayout" name="network_tab_layout">
             <property name="leftMargin">
@@ -979,7 +979,7 @@
             <item row="2" column="1" colspan="2">
              <widget class="QCheckBox" name="use_ice_button">
               <property name="text">
-               <string>Use ICE to improve NAT traversal for media</string>
+               <string>Enable ICE</string>
               </property>
              </widget>
             </item>
