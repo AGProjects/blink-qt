@@ -1,10 +1,16 @@
 blink (5.1.0) unstable; urgency=medium
 
-  * Implement auto answer
-  * Fixed getheaders of HTTP objects, renamed to get in Python3
+  * Implemented auto answer
+  * Added per contact auto answer setting
+  * Added NAT traversal preferences panel
+  * Fixed XCAP getheaders of HTTP objects, renamed to get in Python3
   * Fixed xcap trace logging
   * Fixed saving local icon
-  * Fixed broken import
+  * Fixed a broken import
+  * Rename chat window title
+  * Automatically set sip2sip.info server settings URL
+  * Refactored application menus
+  * Rename some preferences options
 
  -- Adrian Georgescu <ag@ag-projects.com>  Tue, 22 Jun 2021 18:22:20 -0300
 
