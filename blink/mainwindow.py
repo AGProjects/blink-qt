@@ -744,7 +744,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AutoAnswerButtonClicked(self, answer):
         settings = SIPSimpleSettings()
-        settings.audio.auto_answer = not settings.audio.auto_answer
+        settings.sip.auto_answer = not settings.sip.auto_answer
         settings.save()
 
     def _SH_SilentButtonClicked(self, silent):
@@ -774,7 +774,7 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
-        self.auto_answer_action.setChecked(settings.audio.auto_answer)
+        self.auto_answer_action.setChecked(settings.sip.auto_answer)
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)

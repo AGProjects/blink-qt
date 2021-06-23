@@ -5242,20 +5242,24 @@ class IncomingRequest(QObject):
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
         settings = SIPSimpleSettings()
-            
-        try:
-            if settings.audio.auto_answer and contact.settings.auto_answer and settings.audio.auto_answer_interval:
-                auto_answer_interval = settings.audio.auto_answer_interval        
-        except AttributeError:
-            pass
-        else:
-            if auto_answer_interval > 0:
-                self.dialog.setAutoAnswer(settings.audio.auto_answer_interval)
-                self._auto_answer_timer = QTimer()
-                self._auto_answer_timer.setInterval(settings.audio.auto_answer_interval * 1000)
-                self._auto_answer_timer.setSingleShot(True)
-                self._auto_answer_timer.timeout.connect(self._auto_answer)
-                self._auto_answer_timer.start()
+
+        auto_answer_interval = 0
+
+        if settings.sip.auto_answer and settings.sip.auto_answer_interval and session.account.sip.auto_answer:
+            if session.account is BonjourAccount():
+                auto_answer_interval = settings.sip.auto_answer_interval
+            else:
+                if hasattr(contact.settings, 'auto_answer'):
+                    if contact.settings.auto_answer:
+                        auto_answer_interval = settings.sip.auto_answer_interval
+
+        if auto_answer_interval > 0:
+            self.dialog.setAutoAnswer(auto_answer_interval)
+            self._auto_answer_timer = QTimer()
+            self._auto_answer_timer.setInterval(auto_answer_interval * 1000)
+            self._auto_answer_timer.setSingleShot(True)
+            self._auto_answer_timer.timeout.connect(self._auto_answer)
+            self._auto_answer_timer.start()
 
         self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
         self.dialog.audio_stream.setVisible(self.audio_stream is not None)

@@ -19,6 +19,7 @@ class BonjourMSRPSettingsExtension(BonjourMSRPSettings):
 class BonjourSIPSettings(SettingsGroup):
     transport_order = Setting(type=SIPTransportList, default=SIPTransportList(['tcp', 'udp', 'tls']))
     tls_name = Setting(type=str, default='Blink')
+    auto_answer = Setting(type=bool, default=False)
 
 
 class MessageSummarySettingsExtension(MessageSummarySettings):
@@ -52,6 +53,7 @@ class SIPSettingsExtension(SIPSettings):
     subscribe_interval = Setting(type=NonNegativeInteger, default=600)
     publish_interval = Setting(type=NonNegativeInteger, default=600)
     tls_name = Setting(type=str, default=None, nillable=True)
+    auto_answer = Setting(type=bool, default=True)
 
 
 class ServerSettings(SettingsGroup):

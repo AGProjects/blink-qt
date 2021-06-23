@@ -282,7 +282,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_codec_bitrate_button.activated[int].connect(self._SH_VideoCodecBitrateButtonActivated)
         self.h264_profile_button.activated[int].connect(self._SH_H264ProfileButtonActivated)
 
-        # Chat and SMS
+        # Chat
         self.style_view.sizeChanged.connect(self._SH_StyleViewSizeChanged)
         self.style_view.page().mainFrame().contentsSizeChanged.connect(self._SH_StyleViewFrameContentsSizeChanged)
 
@@ -333,6 +333,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.tls_cert_file_editor.locationCleared.connect(self._SH_TLSCertFileEditorLocationCleared)
         self.tls_cert_file_browse_button.clicked.connect(self._SH_TLSCertFileBrowseButtonClicked)
         self.tls_verify_server_button.clicked.connect(self._SH_TLSVerifyServerButtonClicked)
+
+        # Auto answer
+        self.auto_answer_interval.valueChanged[int].connect(self._SH_AutoAnswerIntervalChanged)
+        self.account_auto_answer.clicked.connect(self._SH_AccountAutoAnswerChanged)
 
         # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
@@ -680,7 +684,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.h264_profile_button.setCurrentIndex(self.h264_profile_button.findData(str(settings.video.h264.profile)))
         self.video_codec_bitrate_button.setCurrentIndex(self.video_codec_bitrate_button.findData(settings.video.max_bitrate))
 
-        # Chat and SMS settings
+        # Chat
         style_index = self.style_button.findText(blink_settings.chat_window.style)
         if style_index == -1:
             style_index = 0
@@ -747,6 +751,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.media_ports_start.setValue(settings.rtp.port_range.start)
         with blocked_qt_signals(self.media_ports):
             self.media_ports.setValue(settings.rtp.port_range.end - settings.rtp.port_range.start)
+        with blocked_qt_signals(self.auto_answer_interval):
+            self.auto_answer_interval.setValue(settings.sip.auto_answer_interval)
 
         self.screenshots_directory_editor.setText(blink_settings.screenshots_directory or '')
         self.transfers_directory_editor.setText(blink_settings.transfers_directory or '')
@@ -805,8 +811,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.rtp_encryption_button.setChecked(account.rtp.encryption.enabled)
         self.key_negotiation_button.setEnabled(account.rtp.encryption.enabled)
         self.key_negotiation_button.setCurrentIndex(self.key_negotiation_button.findData(account.rtp.encryption.key_negotiation))
+        
+        self.account_auto_answer.setChecked(account.sip.auto_answer)
 
         if account is not bonjour_account:
+            self.account_auto_answer.setText('Auto answer from allowed contacts')
             # Server settings tab
             self.always_use_my_proxy_button.setChecked(account.sip.always_use_my_proxy)
             outbound_proxy = account.sip.outbound_proxy or UnspecifiedOutboundProxy
@@ -855,7 +864,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.prefix_button.addItem(item_text)
             self.prefix_button.setCurrentIndex(self.prefix_button.findText(item_text))
             self._update_pstn_example_label()
-
+        else:
+            self.account_auto_answer.setText('Auto answer from all neighbours')
 
 
     def update_chat_preview(self):
@@ -1153,6 +1163,16 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.key_negotiation_button.setEnabled(checked)
         account = self.selected_account
         account.rtp.encryption.enabled = checked
+        account.save()
+ 
+    def _SH_AutoAnswerIntervalChanged(self, interval):
+       settings = SIPSimpleSettings()
+       settings.sip.auto_answer_interval = interval
+       settings.save()
+
+    def _SH_AccountAutoAnswerChanged(self, auto_answer):
+        account = self.selected_account
+        account.sip.auto_answer = not account.sip.auto_answer
         account.save()
 
     def _SH_KeyNegotiationButtonActivated(self, index):
@@ -1730,10 +1750,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
             if 'sounds.play_message_alerts' in notification.data.modified:
                 self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
+            if 'sip.auto_answer_interval' in notification.data.modified:
+                self.auto_answer_interval.setValue(settings.sip.auto_answer_interval)                
             if 'video.device' in notification.data.modified:
                 self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
         elif notification.sender is self.selected_account is not None:
             account = notification.sender
+            if 'sip.auto_answer' in notification.data.modified:
+                self.account_auto_answer.setChecked(account.sip.auto_answer)                
             if 'enabled' in notification.data.modified:
                 self.account_enabled_button.setChecked(account.enabled)
                 if not account.enabled:

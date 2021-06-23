@@ -8,7 +8,7 @@ import sys
 
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObject, SettingsObjectExtension
 from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger, PositiveInteger, Path, SampleRate, VideoCodecList
-from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, LogsSettings, RTPSettings, TLSSettings
+from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, LogsSettings, RTPSettings, SIPSettings, TLSSettings
 
 from blink import __version__
 from blink.configuration.datatypes import ApplicationDataPath, GraphTimeScale, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
@@ -31,8 +31,10 @@ class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'))
     sample_rate = Setting(type=SampleRate, default=32000)
     echo_canceller = EchoCancellerSettingsExtension
+
+class SIPSettingsExtension(SIPSettings):
     auto_answer_interval = Setting(type=int, default=15)
-    auto_answer = Setting(type=bool, default=False)
+    auto_answer = Setting(type=bool, default=True)
 
 
 class ChatSettingsExtension(ChatSettings):
@@ -86,6 +88,7 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
     server = ServerSettings
     sounds = SoundSettings
     tls = TLSSettingsExtension
+    sip = SIPSettingsExtension
 
     user_agent = Setting(type=str, default='Blink %s (%s)' % (__version__, platform.system() if sys.platform != 'darwin' else 'MacOSX Qt'))
 
