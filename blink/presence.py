@@ -319,7 +319,7 @@ class ContactIcon(object):
         if content_type == prescontent.PresenceContentDocument.content_type:
             try:
                 pres_content = prescontent.PresenceContentDocument.parse(content)
-                data = base64.decodestring(pres_content.data.value)
+                data = base64.b64decode(pres_content.data.value)
             except Exception:
                 return None
             return cls(data, IconDescriptor(url, descriptor_etag or etag))
