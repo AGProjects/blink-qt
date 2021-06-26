@@ -1,3 +1,10 @@
+blink (5.1.1) unstable; urgency=medium
+
+  * Fixed loading icons from XCAP server
+  * Increase the size of some widgets
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Sat, 26 Jun 2021 14:42:58 -0300
+
 blink (5.1.0) unstable; urgency=medium
 
   * Implemented auto answer
