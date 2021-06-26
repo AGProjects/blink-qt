@@ -2218,7 +2218,7 @@ class AudioSessionItem(object):
 
 
 class AudioSessionDelegate(QStyledItemDelegate):
-    size_hint = QSize(200, 62)
+    size_hint = QSize(220, 76)
 
     def __init__(self, parent=None):
         super(AudioSessionDelegate, self).__init__(parent)

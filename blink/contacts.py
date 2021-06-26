@@ -1216,7 +1216,7 @@ class ContactIconDescriptor(object):
 @implementer(IObserver)
 class Contact(object):
 
-    size_hint = QSize(200, 36)
+    size_hint = QSize(220, 42)
 
     native = property(lambda self: self.type == 'addressbook')
 
