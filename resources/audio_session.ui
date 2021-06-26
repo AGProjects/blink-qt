@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>304</width>
-    <height>66</height>
+    <width>335</width>
+    <height>102</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -50,6 +50,7 @@
        </property>
        <property name="font">
         <font>
+         <pointsize>13</pointsize>
          <weight>75</weight>
          <bold>true</bold>
         </font>
@@ -88,18 +89,21 @@
        </property>
        <property name="minimumSize">
         <size>
-         <width>14</width>
-         <height>14</height>
+         <width>25</width>
+         <height>25</height>
         </size>
        </property>
        <property name="maximumSize">
         <size>
-         <width>14</width>
-         <height>14</height>
+         <width>25</width>
+         <height>25</height>
         </size>
        </property>
        <property name="toolTip">
         <string>Session is encrypted using TLS</string>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Sunken</enum>
        </property>
        <property name="pixmap">
         <pixmap>icons/lock-blue-12.svg</pixmap>
@@ -240,7 +244,7 @@
        </property>
        <property name="font">
         <font>
-         <pointsize>8</pointsize>
+         <pointsize>9</pointsize>
         </font>
        </property>
        <property name="text">
@@ -337,7 +341,7 @@
        </property>
        <property name="font">
         <font>
-         <pointsize>8</pointsize>
+         <pointsize>9</pointsize>
         </font>
        </property>
        <property name="text">
@@ -352,14 +356,14 @@
       <widget class="QLabel" name="srtp_label">
        <property name="minimumSize">
         <size>
-         <width>14</width>
-         <height>14</height>
+         <width>25</width>
+         <height>25</height>
         </size>
        </property>
        <property name="maximumSize">
         <size>
-         <width>14</width>
-         <height>14</height>
+         <width>25</width>
+         <height>25</height>
         </size>
        </property>
        <property name="toolTip">
@@ -385,6 +389,11 @@
      </property>
      <item>
       <widget class="DurationLabel" name="duration_label">
+       <property name="font">
+        <font>
+         <pointsize>11</pointsize>
+        </font>
+       </property>
        <property name="text">
         <string>0:00:00</string>
        </property>
@@ -409,14 +418,14 @@
         <widget class="SegmentButton" name="mute_button">
          <property name="minimumSize">
           <size>
-           <width>18</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>18</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="toolTip">
@@ -461,14 +470,14 @@ QToolButton#mute_button:pressed {
         <widget class="SegmentButton" name="hold_button">
          <property name="minimumSize">
           <size>
-           <width>18</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>18</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="toolTip">
@@ -512,14 +521,14 @@ QToolButton:pressed {
         <widget class="RecordButton" name="record_button">
          <property name="minimumSize">
           <size>
-           <width>18</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>18</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="toolTip">
@@ -563,14 +572,14 @@ QToolButton:pressed {
         <widget class="SegmentButton" name="hangup_button">
          <property name="minimumSize">
           <size>
-           <width>17</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>17</width>
-           <height>16</height>
+           <width>22</width>
+           <height>22</height>
           </size>
          </property>
          <property name="toolTip">

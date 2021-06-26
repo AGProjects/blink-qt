@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>275</width>
-    <height>36</height>
+    <width>276</width>
+    <height>64</height>
    </rect>
   </property>
   <property name="palette">
@@ -130,6 +130,9 @@
        </property>
        <property name="text">
         <string>Display Name</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
        </property>
       </widget>
      </item>

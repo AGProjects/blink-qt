@@ -325,6 +325,11 @@ QWidget#session_widget_no:hover {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="font">
+                     <font>
+                      <pointsize>12</pointsize>
+                     </font>
+                    </property>
                     <property name="text">
                      <string>Display Name</string>
                     </property>
@@ -2064,8 +2069,8 @@ QToolButton:hover {
              </property>
              <property name="iconSize">
               <size>
-               <width>20</width>
-               <height>20</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="checkable">
@@ -2101,8 +2106,8 @@ QToolButton:hover {
              </property>
              <property name="iconSize">
               <size>
-               <width>20</width>
-               <height>20</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="checkable">
@@ -2138,8 +2143,8 @@ QToolButton:hover {
              </property>
              <property name="iconSize">
               <size>
-               <width>20</width>
-               <height>20</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="checkable">
@@ -2186,8 +2191,8 @@ QToolButton:hover {
              </property>
              <property name="iconSize">
               <size>
-               <width>20</width>
-               <height>20</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="popupMode">
@@ -2308,6 +2313,11 @@ QToolButton:hover {
    <header>QtWebKitWidgets/QWebView</header>
   </customwidget>
   <customwidget>
+   <class>DurationLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
+  </customwidget>
+  <customwidget>
    <class>ToolButton</class>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
@@ -2343,11 +2353,6 @@ QToolButton:hover {
    <extends>QWidget</extends>
    <header>blink.widgets.graph</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>DurationLabel</class>
-   <extends>QLabel</extends>
-   <header>blink.widgets.labels</header>
   </customwidget>
   <customwidget>
    <class>ConferenceParticipantListView</class>
