@@ -1,4 +1,5 @@
 
+import base64
 import locale
 import os
 import re
@@ -557,7 +558,7 @@ class Thumbnail(object):
         if image_reader.canRead() and image_reader.size().isValid():
             if image_reader.supportsAnimation() and image_reader.imageCount() > 1:
                 image_format = str(image_reader.format())
-                image_data = str(image_reader.device().readAll())
+                image_data = image_reader.device().read()
             else:
                 file_format = str(image_reader.format())
                 file_size = image_reader.device().size()
@@ -568,7 +569,7 @@ class Thumbnail(object):
                 image_buffer = QBuffer()
                 image_format = 'png' if image.hasAlphaChannel() or (file_format in {'png', 'tiff', 'ico'} and file_size <= 100*1024) else 'jpeg'
                 image.save(image_buffer, image_format)
-                image_data = str(image_buffer.data())
+                image_data = image_buffer.data()
             instance = super(Thumbnail, cls).__new__(cls)
             instance.__dict__['data'] = image_data
             instance.__dict__['type'] = 'image/{}'.format(image_format)
@@ -751,11 +752,12 @@ class ChatWidget(base_class, ui_class):
 
         for image in image_descriptors:
             try:
-                self.send_message(image.thumbnail.data, content_type=image.thumbnail.type)
+                image_data = base64.b64encode(image.thumbnail.data).decode()
+                self.send_message(image_data, content_type=image.thumbnail.type)
             except Exception as e:
-                self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), e)))  # decide what type to use here. -Dan
+                self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), str(e))))  # decide what type to use here. -Dan
             else:
-                content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image.thumbnail.data.encode('base64').rstrip())
+                content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
                 sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
                 self.add_message(ChatMessage(content, sender, 'outgoing'))
 
@@ -766,9 +768,11 @@ class ChatWidget(base_class, ui_class):
         match = self.image_data_re.match(text)
         if match is not None:
             try:
-                self.send_message(match.group('data').decode('base64'), content_type=match.group('type'))
+                data = match.group('data') if isinstance(match.group('data'), bytes) else match.group('data').encode()
+                image_data = base64.b64encode(data).decode()
+                self.send_message(image_data, content_type=match.group('type'))
             except Exception as e:
-                self.add_message(ChatStatus('Error sending image: %s' % e))  # decide what type to use here. -Dan
+                self.add_message(ChatStatus('Error sending image: %s' % str(e)))
             else:
                 account = self.session.blink_session.account
                 content = '''<img src="{}" class="scaled-to-fit" />'''.format(text)
