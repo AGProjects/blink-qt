@@ -1,4 +1,10 @@
-blink (5.1.2) UNRELEASED; urgency=medium
+blink (5.1.3) unstable; urgency=medium
+
+  * Bump SDK minimum version to benefit of bug fixes
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Wed, 07 Jul 2021 13:48:34 -0300
+
+blink (5.1.2) unstable; urgency=medium
 
   * Fixed handling drag and drop inline images in chat window
 
