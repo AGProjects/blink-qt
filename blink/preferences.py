@@ -212,6 +212,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # Account information
         self.account_enabled_button.clicked.connect(self._SH_AccountEnabledButtonClicked)
+        self.account_enabled_presence_button.clicked.connect(self._SH_AccountEnabledPresenceButtonClicked)
+        self.account_enabled_mwi_button.clicked.connect(self._SH_AccountEnabledMWIButtonClicked)
         self.display_name_editor.editingFinished.connect(self._SH_DisplayNameEditorEditingFinished)
         self.password_editor.editingFinished.connect(self._SH_PasswordEditorEditingFinished)
 
@@ -769,7 +771,15 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Account information tab
         self.account_enabled_button.setChecked(account.enabled)
         self.account_enabled_button.setEnabled(True if account is not bonjour_account else BonjourAccount.mdns_available)
+
+        self.account_enabled_presence_button.setEnabled(account is not bonjour_account)
+        self.account_enabled_presence_button.setChecked(account.presence.enabled if account is not bonjour_account else False)
+
+        self.account_enabled_mwi_button.setEnabled(account is not bonjour_account)
+        self.account_enabled_mwi_button.setChecked(account.message_summary.enabled if account is not bonjour_account else False)
+        
         self.display_name_editor.setText(account.display_name or '')
+
         if account is not bonjour_account:
             self.password_editor.setText(account.auth.password)
             selected_index = self.account_list.selectionModel().selectedIndexes()[0]
@@ -1084,6 +1094,16 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_AccountEnabledButtonClicked(self, checked):
         account = self.selected_account
         account.enabled = checked
+        account.save()
+
+    def _SH_AccountEnabledPresenceButtonClicked(self, checked):
+        account = self.selected_account
+        account.presence.enabled = checked
+        account.save()
+
+    def _SH_AccountEnabledMWIButtonClicked(self, checked):
+        account = self.selected_account
+        account.message_summary.enabled = checked
         account.save()
 
     def _SH_DisplayNameEditorEditingFinished(self):
@@ -1802,6 +1822,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 if not account.enabled:
                     self.refresh_account_registration_widgets(account)
                 self.reregister_button.setEnabled(account.enabled)
+            if 'message_summary.enabled' in notification.data.modified:
+                self.account_enabled_mwi_button.setChecked(account.message_summary.enabled)
+            if 'presence.enabled' in notification.data.modified:
+                self.account_enabled_presence_button.setChecked(account.presence.enabled)
             if 'display_name' in notification.data.modified:
                 self.display_name_editor.setText(account.display_name or '')
             if 'rtp.audio_codec_list' in notification.data.modified:

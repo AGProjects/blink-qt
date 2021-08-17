@@ -164,7 +164,7 @@
         <item row="0" column="3">
          <widget class="QTabWidget" name="account_tab_widget">
           <property name="currentIndex">
-           <number>3</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="account_information_tab">
            <attribute name="title">
@@ -186,29 +186,6 @@
             <property name="spacing">
              <number>5</number>
             </property>
-            <item row="3" column="0">
-             <widget class="QLabel" name="password_label">
-              <property name="text">
-               <string>Password:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="1">
-             <widget class="QLineEdit" name="display_name_editor"/>
-            </item>
-            <item row="2" column="0">
-             <widget class="QLabel" name="display_name_label">
-              <property name="text">
-               <string>Display Name:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
             <item row="1" column="0" colspan="2">
              <widget class="Line" name="line">
               <property name="minimumSize">
@@ -222,13 +199,49 @@
               </property>
              </widget>
             </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="display_name_label">
+              <property name="text">
+               <string>Display Name:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
             <item row="6" column="0" colspan="2">
+             <spacer name="account_information_spacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="7" column="0" colspan="2">
              <widget class="QLabel" name="account_registration_label">
               <property name="layoutDirection">
                <enum>Qt::LeftToRight</enum>
               </property>
               <property name="text">
                <string/>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLineEdit" name="display_name_editor"/>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="password_label">
+              <property name="text">
+               <string>Password:</string>
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -249,18 +262,19 @@
               </property>
              </widget>
             </item>
-            <item row="5" column="0" colspan="2">
-             <spacer name="account_information_spacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
+            <item row="4" column="1">
+             <widget class="QCheckBox" name="account_enabled_presence_button">
+              <property name="text">
+               <string>Enable presence</string>
               </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
+             </widget>
+            </item>
+            <item row="5" column="1">
+             <widget class="QCheckBox" name="account_enabled_mwi_button">
+              <property name="text">
+               <string>Enable Message Waiting Indicator</string>
               </property>
-             </spacer>
+             </widget>
             </item>
            </layout>
           </widget>
