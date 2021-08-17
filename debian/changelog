@@ -1,3 +1,9 @@
+blink (5.1.4) unstable; urgency=medium
+
+  * Added presence and message_summary account settings
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 17 Aug 2021 15:14:21 -0300
+
 blink (5.1.3) unstable; urgency=medium
 
   * Bump SDK minimum version to benefit of bug fixes
