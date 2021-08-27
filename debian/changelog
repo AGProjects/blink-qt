@@ -1,3 +1,9 @@
+blink (5.1.5) unstable; urgency=medium
+
+  * Screen sharing fixes
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Fri, 27 Aug 2021 10:58:55 -0300
+
 blink (5.1.4) unstable; urgency=medium
 
   * Added presence and message_summary account settings
