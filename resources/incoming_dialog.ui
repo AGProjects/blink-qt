@@ -265,7 +265,7 @@
          </palette>
         </property>
         <property name="text">
-         <string extracomment="is offering to share his screen">is asking to share your screen</string>
+         <string extracomment="is offering screen sharing">is asking to share your screen</string>
         </property>
         <property name="indent">
          <number>3</number>
