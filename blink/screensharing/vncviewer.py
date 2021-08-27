@@ -438,7 +438,7 @@ class ScreensharingToolbox(base_class, ui_class):
         with Resources.directory:
             self.setupUi()
         parent.installEventFilter(self)
-        self.animation = QPropertyAnimation(self, 'pos')
+        self.animation = QPropertyAnimation(self, b'pos')
         self.animation.setDuration(250)
         self.animation.setDirection(QPropertyAnimation.Forward)
         self.animation.setEasingCurve(QEasingCurve.Linear)  # or OutCirc with 300ms

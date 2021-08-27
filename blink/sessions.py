@@ -5268,7 +5268,7 @@ class IncomingRequest(QObject):
         self.dialog.screensharing_stream.setVisible(self.screensharing_stream is not None)
         if self.screensharing_stream is not None:
             if self.screensharing_stream.handler.type == 'active':
-                self.dialog.screensharing_label.setText('is offering to share his screen')
+                self.dialog.screensharing_label.setText('is offering screen sharing')
             else:
                 self.dialog.screensharing_label.setText('is asking to share your screen')
                 # self.dialog.screensharing_stream.accepted = bool(proposal)

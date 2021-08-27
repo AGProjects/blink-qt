@@ -164,7 +164,7 @@ cdef class RFBClient:
         try:
             with nogil:
                 self.client = rfbGetClient(8, 3, 4) # 24 bit color depth in 32 bits per pixel. Will change color depth and bpp later if needed.
-            server_host = strdup(parent.host)
+            server_host = strdup(<bytes>parent.host.encode('utf8'))
             client_data = <rfbClientData*> calloc(1, sizeof(rfbClientData))
             if not server_host or not client_data or not self.client:
                 raise MemoryError("could not allocate RFB client")
@@ -246,7 +246,7 @@ cdef class RFBClient:
             self.client.format.blueMax = 0xff
         self.client.appData.requestedDepth = self.client.format.depth
         self.client.appData.enableJPEG = bool(self.client.format.bitsPerPixel != 8)
-        self.client.appData.encodingsString = self.parent.settings.encodings
+        self.client.appData.encodingsString = strdup(<bytes>self.parent.settings.encodings.encode('utf-8'))
         self.client.appData.compressLevel = self.parent.settings.compression
         self.client.appData.qualityLevel = self.parent.settings.quality
         if self.connected:
