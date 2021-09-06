@@ -17,7 +17,6 @@ Architecture: any
 Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          libavahi-compat-libdnssd1,
          python3-application,
-         python-enum34,
          python3-eventlib,
          python3-googleapi,
          python3-lxml,

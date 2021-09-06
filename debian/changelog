@@ -1,3 +1,9 @@
+blink (5.1.6) UNRELEASED; urgency=medium
+
+  * Remove obsolete python-enum34 dependency
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Mon, 06 Sep 2021 09:07:41 -0300
+
 blink (5.1.5) unstable; urgency=medium
 
   * Screen sharing fixes
