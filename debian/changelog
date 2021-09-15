@@ -1,4 +1,10 @@
-blink (5.1.6) UNRELEASED; urgency=medium
+blink (5.1.7) unstable; urgency=medium
+
+  * Fix for account creation
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Wed, 15 Sep 2021 10:33:07 -0300
+
+blink (5.1.6) unstable; urgency=medium
 
   * Remove obsolete python-enum34 dependency
 
