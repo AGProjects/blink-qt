@@ -5094,13 +5094,13 @@ class IncomingDialogBase(QDialog):
             total_width = width + window_frame_size.width()
             total_height = height + window_frame_size.height()
 
-            x = limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width)
+            x = int(limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width))
             if slot is None:
                 y = -1
             elif slot % 2 == 0:
-                y = screen_geometry.center().y() + (slot-1)*total_height/2
+                y = int(screen_geometry.center().y() + (slot-1)*total_height/2)
             else:
-                y = screen_geometry.center().y() - slot*total_height/2
+                y = int(screen_geometry.center().y() - slot*total_height/2)
 
             if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
                 self.setGeometry(x, y, width, height)

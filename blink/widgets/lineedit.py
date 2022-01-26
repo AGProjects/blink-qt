@@ -68,13 +68,13 @@ class LineEdit(QLineEdit):
         text_rect.adjust(spacing, 0, -spacing, 0)
         mid_height = text_rect.center().y() + 1 - (text_rect.height() % 2)  # need -1 correction for odd heights -Dan
         if self.left_layout.count() > 0:
-            left_height = mid_height - self.left_widget.height()/2
+            left_height = int(mid_height - self.left_widget.height()/2)
             left_width = self.left_widget.width()
             if left_width == 0:
-                left_height = mid_height - self.left_widget.sizeHint().height()/2
+                left_height = int(mid_height - self.left_widget.sizeHint().height()/2)
             self.left_widget.move(text_rect.x(), left_height)
         text_rect.setX(self.left_margin)
-        text_rect.setY(mid_height - self.right_widget.sizeHint().height()/2.0)
+        text_rect.setY(int(mid_height - self.right_widget.sizeHint().height()/2.0))
         text_rect.setHeight(self.right_widget.sizeHint().height())
         self.right_widget.setGeometry(text_rect)
 
@@ -201,8 +201,8 @@ class SearchIcon(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         if self.icon is not None:
-            x = (self.width() - self.icon.width()) / 2
-            y = (self.height() - self.icon.height()) / 2
+            x = int((self.width() - self.icon.width()) / 2)
+            y = int((self.height() - self.icon.height()) / 2)
             painter.drawPixmap(x, y, self.icon)
 
 
@@ -232,8 +232,8 @@ class ClearButton(QAbstractButton):
         painter = QPainter(self)
         icon = self.icon_pressed if self.isDown() else self.icon
         if icon is not None:
-            x = (self.width() - icon.width()) / 2
-            y = (self.height() - icon.height()) / 2
+            x = int((self.width() - icon.width()) / 2)
+            y = int((self.height() - icon.height()) / 2)
             painter.drawPixmap(x, y, icon)
         else:
             width = self.width()

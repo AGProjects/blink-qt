@@ -56,7 +56,7 @@ class VideoSurface(QWidget):
         self.cursors.resize_bottom = QCursor(QIcon(Resources.get('icons/resize-bottom.svg')).pixmap(16), hotX=8,  hotY=16)
         if framerate is not None:
             self._clock = QTimer()
-            self._clock.setInterval(1000/framerate)
+            self._clock.setInterval(int(1000/framerate))
             self._clock.timeout.connect(self.update)
         else:
             self._clock = None
