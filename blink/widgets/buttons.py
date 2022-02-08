@@ -620,8 +620,8 @@ class StateButton(QToolButton):
             return pixmap
 
         size = max(pixmap.width(), pixmap.height())
-        offset_x = (size - pixmap.width())/2
-        offset_y = (size - pixmap.height())/2
+        offset_x = int((size - pixmap.width())/2)
+        offset_y = int((size - pixmap.height())/2)
 
         new_pixmap = QPixmap(size, size)
         new_pixmap.fill(Qt.transparent)

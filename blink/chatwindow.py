@@ -18,7 +18,8 @@ from application.python import Null, limit
 from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType
 from application.system import makedirs
-from collections import MutableSet, deque
+from collections.abc import MutableSet
+from collections import deque
 from datetime import datetime, timedelta
 from itertools import count
 from lxml import etree, html
