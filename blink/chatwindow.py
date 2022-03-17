@@ -109,14 +109,14 @@ class ChatMessageStyle(object):
 #
 
 class Link(object):
-    __slots__ = 'prev', 'next', '__next__', 'key', '__weakref__'
+    __slots__ = 'prev', 'next', 'key', '__weakref__'
 
 
 class OrderedSet(MutableSet):
     def __init__(self, iterable=None):
         self.__hardroot = Link()  # sentinel node for doubly linked list
         self.__root = root = proxy(self.__hardroot)
-        root.prev = root.__next__ = root
+        root.prev = root.next = root
         self.__map = {}
         if iterable is not None:
             self |= iterable
@@ -129,10 +129,10 @@ class OrderedSet(MutableSet):
 
     def __iter__(self):
         root = self.__root
-        curr = root.__next__
+        curr = root.next
         while curr is not root:
             yield curr.key
-            curr = curr.__next__
+            curr = curr.next
 
     def __reversed__(self):
         root = self.__root
@@ -157,13 +157,13 @@ class OrderedSet(MutableSet):
         if key in self.__map:
             link = self.__map.pop(key)
             link_prev = link.prev
-            link_next = link.__next__
+            link_next = link.next
             link_prev.next = link_next
             link_next.prev = link_prev
 
     def clear(self):
         root = self.__root
-        root.prev = root.__next__ = root
+        root.prev = root.next = root
         self.__map.clear()
 
 
