@@ -36,7 +36,7 @@
      </property>
      <property name="styleSheet">
       <string>QFrame#background_frame {
-	background: url(resources/icons/blink.png);
+	background: url(icons/blink.png);
 	background-repeat: no-repeat;
 	background-position: center left;
 }
