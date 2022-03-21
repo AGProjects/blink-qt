@@ -12,9 +12,9 @@ from application.system import host, makedirs
 from eventlib import api
 from zope.interface import implementer
 
+from sipsimple.application import SIPApplication
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
-from sipsimple.application import SIPApplication
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.payloads import XMLDocument
 from sipsimple.storage import FileStorage
