@@ -105,7 +105,7 @@ class RTPStreamInfo(object, metaclass=ABCMeta):
             self.encryption = stream.encryption.type if stream.encryption.active else None
             self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
             if self.encryption == 'ZRTP':
-                self.zrtp_sas = stream.encryption.zrtp.sas
+                self.zrtp_sas = stream.encryption.zrtp.sas.decode()
                 self.zrtp_verified = stream.encryption.zrtp.verified
                 self.zrtp_peer_name = stream.encryption.zrtp.peer_name
             if stream.session and not stream.session.account.nat_traversal.use_ice:
