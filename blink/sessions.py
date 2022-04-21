@@ -498,6 +498,7 @@ class BlinkSession(BlinkSessionBase):
 
         self._smp_handler = Null
         self.routes = None
+        self.chat_type = None
 
     def _get_state(self):
         return self.__dict__['state']
@@ -604,6 +605,15 @@ class BlinkSession(BlinkSessionBase):
     client_conference = property(_get_client_conference, _set_client_conference)
     del _get_client_conference, _set_client_conference
 
+    def _get_chat_type(self):
+        return self.__dict__['chat_type']
+
+    def _set_chat_type(self, value):
+        self.__dict__['chat_type'] = value
+
+    chat_type = property(_get_chat_type, _set_chat_type)
+    del _get_chat_type, _set_chat_type
+
     @property
     def persistent(self):
         return not self._delete_when_done and not self._delete_requested
@@ -671,6 +681,9 @@ class BlinkSession(BlinkSessionBase):
         # reevaluate later, after we add the .active/.proposed attributes to streams, if creating the sip session and the streams at this point is desirable -Dan
         # note: creating the sip session early also need the test in hold/unhold/end to change from sip_session is (not) None to sip_session.state is (not) None -Dan
         self.stream_descriptions = StreamSet(stream_descriptions)
+        for stream_description in self.stream_descriptions:
+            if stream_description.type == 'chat':
+                self.chat_type = 'MSRP'
         self._sibling = sibling
         self.state = 'initialized'
         self.info.update(self)
@@ -1095,9 +1108,12 @@ class BlinkSession(BlinkSessionBase):
             secure_chat = stream.transport == 'tls' and all(len(path) == 1 for path in (stream.msrp.full_local_path, stream.msrp.full_remote_path))  # tls & direct connection
             if audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.sas is not None and not audio_stream.encryption.zrtp.verified and secure_chat:
                 stream.send_message(audio_stream.encryption.zrtp.sas, 'application/blink-zrtp-sas')
+        if stream.type == 'chat':
+            self.chat_type = 'MSRP'
 
     def _NH_MediaStreamWillEnd(self, notification):
         if notification.sender.type == 'chat':
+            self.chat_type = ''
             self._smp_handler.stop()
             self._smp_handler = Null
 
