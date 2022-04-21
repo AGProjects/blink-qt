@@ -66,6 +66,7 @@ class ChatHtmlTemplates(object):
             self.message = open(os.path.join(style_path, 'html/message.html')).read()
             self.message_continuation = open(os.path.join(style_path, 'html/message_continuation.html')).read()
             self.notification = open(os.path.join(style_path, 'html/notification.html')).read()
+            self.status = open(os.path.join(style_path, 'html/message_status.html')).read()
         except (OSError, IOError):
             raise ChatStyleError("missing or unreadable chat message html template files in %s" % os.path.join(style_path, 'html'))
 
@@ -268,6 +269,19 @@ class ChatContent(object, metaclass=ABCMeta):
     @abstractmethod
     def to_html(self, style, **kw):
         raise NotImplementedError
+
+
+class ChatMessageStatus(ChatContent):
+    __cssclasses__ = ('status-icon',)
+
+    def __init__(self, status, iconpath, id):
+        super(ChatMessageStatus, self).__init__(status)
+        self.status = status
+        self.iconpath = QUrl.fromLocalFile(iconpath).toString()
+        self.id = id
+
+    def to_html(self, style, **kw):
+        return style.html.status.format(message=self, **kw)
 
 
 class ChatNotification(ChatContent):
@@ -621,6 +635,8 @@ ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 class ChatWidget(base_class, ui_class):
 
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
+    checkmark_icon = IconDescriptor(Resources.get('icons/checkmark.svg'))
+    warning_icon = IconDescriptor(Resources.get('icons/warning.svg'))
 
     chat_template = open(Resources.get('chat/template.html')).read()
 
