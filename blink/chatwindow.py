@@ -2641,5 +2641,3 @@ class VideoScreenshot(object):
             filename = next(filename for filename in self.filename_generator() if not os.path.exists(filename))
             makedirs(os.path.dirname(filename))
             self.image.save(filename)
-
-

@@ -214,4 +214,3 @@ class Blink(QApplication, metaclass=QSingleton):
         log.error('Fatal error:\n{}'.format(notification.data.traceback))
         QMessageBox.critical(self.main_window, "Fatal Error", "A fatal error occurred, {} will now exit.".format(self.applicationName()))
         sys.exit(1)
-

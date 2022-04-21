@@ -930,6 +930,7 @@ class MainWindow(base_class, ui_class):
         self.pending_watcher_dialogs.append(dialog)
         dialog.show()
 
+
     def _NH_BlinkSessionNewOutgoing(self, notification):
         self.search_box.clear()
 

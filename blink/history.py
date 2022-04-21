@@ -36,7 +36,7 @@ class HistoryManager(object, metaclass=Singleton):
             if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text and isinstance(item.call_time, ISOTimestamp) for item in data):
                 raise ValueError("invalid save data")
         except Exception as e:
-            traceback.print_exc()            
+            traceback.print_exc()
             self.calls = []
         else:
             self.calls = data[-self.history_size:]
@@ -68,7 +68,7 @@ class HistoryManager(object, metaclass=Singleton):
             return
         session = notification.sender
         entry = HistoryEntry.from_session(session)
-        
+
         if session.direction == 'incoming':
             if notification.data.code != 487 or notification.data.failure_reason != 'Call completed elsewhere':
                 entry.failed = True
@@ -192,7 +192,7 @@ class HistoryEntry(object):
 
         user = user.decode() if isinstance(user, bytes) else user
         domain = domain.decode() if isinstance(domain, bytes) else domain
-        
+
         remote_uri = '%s@%s' % (user, domain)
         match = cls.phone_number_re.match(remote_uri)
         if match:

@@ -459,7 +459,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.idd_prefix_label.setMinimumWidth(text_width)
         self.tls_cert_file_label.setMinimumWidth(text_width)
 
-        
         # audio settings
         font_metrics = self.answer_delay_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.audio_input_device_label, self.audio_output_device_label, self.audio_alert_device_label, self.audio_sample_rate_label,

@@ -65,7 +65,6 @@ class SoundSettings(SettingsGroup):
     inbound_ringtone = Setting(type=SoundFile, default=None, nillable=True)
 
 
-
 class XCAPSettingsExtension(XCAPSettings):
     enabled = Setting(type=bool, default=True)
     icon = RuntimeSetting(type=IconDescriptor, nillable=True, default=None)
