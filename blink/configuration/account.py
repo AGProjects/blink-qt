@@ -61,6 +61,11 @@ class ServerSettings(SettingsGroup):
     settings_url = Setting(type=HTTPURL, default=None, nillable=True)
 
 
+class SMSSettings(SettingsGroup):
+    use_cpim = Setting(type=bool, default=True)
+    enable_iscomposing = Setting(type=bool, default=True)
+
+
 class SoundSettings(SettingsGroup):
     inbound_ringtone = Setting(type=SoundFile, default=None, nillable=True)
 
@@ -79,6 +84,7 @@ class AccountExtension(SettingsObjectExtension):
     rtp = RTPSettingsExtension
     server = ServerSettings
     sip = SIPSettingsExtension
+    sms = SMSSettings
     sounds = SoundSettings
     xcap = XCAPSettingsExtension
 
@@ -88,6 +94,7 @@ class BonjourAccountExtension(SettingsObjectExtension):
     presence = PresenceSettingsExtension
     rtp = RTPSettingsExtension
     sip = BonjourSIPSettings
+    sms = SMSSettings
     sounds = SoundSettings
 
 
