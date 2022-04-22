@@ -24,6 +24,7 @@ from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountM
 from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager
+from blink.messages import MessageManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
@@ -797,6 +798,7 @@ class MainWindow(base_class, ui_class):
         self.account_state.history = [(item.state, item.note) for item in blink_settings.presence.state_history]
         state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
         self.account_state.setState(state, blink_settings.presence.current_state.note)
+        MessageManager()
 
     def _NH_AudioDevicesDidChange(self, notification):
         self.output_device_menu.clear()  # because actions are owned by the menu and only referenced by their corresponding action groups,
