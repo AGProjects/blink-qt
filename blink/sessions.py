@@ -3323,8 +3323,8 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
         arrow_rect.translate(option.rect.topLeft())
 
-        arrow = QPolygonF([QPointF(3, 1.5), QPointF(-0.5, -2.5), QPointF(-4, 1.5)])
-        arrow.translate(2, 1)
+        arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
+        arrow.translate(1, 1)
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)

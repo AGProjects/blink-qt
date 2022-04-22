@@ -2108,8 +2108,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         arrow_rect = QRect(0, 0, 14, 14)
         arrow_rect.moveBottomRight(rect.bottomRight())
 
-        arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
-        arrow.translate(1, 1)
+        arrow = QPolygonF([QPointF(3, 1.5), QPointF(-0.5, -2.5), QPointF(-4, 1.5)])
+        arrow.translate(2, 1)
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
