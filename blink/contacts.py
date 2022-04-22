@@ -3123,7 +3123,7 @@ class ContactListView(QListView):
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
+        self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
@@ -3224,6 +3224,13 @@ class ContactListView(QListView):
                     call_item.triggered.connect(partial(self._AH_StartChatSession, uri))
                     call_submenu.addAction(call_item)
 
+                call_submenu = menu.addMenu('Send Messages')
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_SendSMS, uri))
+                    call_submenu.addAction(call_item)
+
                 call_submenu = menu.addMenu('Send File(s)...')
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
@@ -3249,6 +3256,7 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.start_audio_call)
                 menu.addAction(self.actions.start_video_call)
                 menu.addAction(self.actions.start_chat_session)
+                menu.addAction(self.actions.send_sms)
                 menu.addAction(self.actions.send_files)
                 menu.addAction(self.actions.request_screen)
                 menu.addAction(self.actions.share_my_screen)
@@ -3505,8 +3513,10 @@ class ContactListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('chat')], connect=False)
 
-    def _AH_SendSMS(self):
-        pass
+    def _AH_SendSMS(self, uri=None):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('message')], connect=False)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
@@ -3649,7 +3659,7 @@ class ContactSearchListView(QListView):
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
+        self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
@@ -3712,7 +3722,7 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.start_audio_call)
             menu.addAction(self.actions.start_video_call)
             menu.addAction(self.actions.start_chat_session)
-            #menu.addAction(self.actions.send_sms)
+            menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
             menu.addAction(self.actions.request_screen)
             menu.addAction(self.actions.share_my_screen)
@@ -3895,8 +3905,10 @@ class ContactSearchListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('chat')], connect=False)
 
-    def _AH_SendSMS(self):
-        pass
+    def _AH_SendSMS(self, uri=None):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('message')], connect=False)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
@@ -3994,7 +4006,7 @@ class ContactDetailView(QListView):
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction("Start Chat Session", self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction("Send SMS", self, triggered=self._AH_SendSMS)
+        self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
@@ -4047,7 +4059,7 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.start_audio_call)
         menu.addAction(self.actions.start_video_call)
         menu.addAction(self.actions.start_chat_session)
-        #menu.addAction(self.actions.send_sms)
+        menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.send_files)
         menu.addAction(self.actions.request_screen)
         menu.addAction(self.actions.share_my_screen)
@@ -4198,7 +4210,9 @@ class ContactDetailView(QListView):
         session_manager.create_session(contact, selected_uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self):
-        pass
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        session_manager = SessionManager()
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('message')], connect=False)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
