@@ -2444,6 +2444,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             session.chat_widget.add_message(ChatStatus('Disconnected: %s' % notification.data.error))
         else:
             session.chat_widget.add_message(ChatStatus('Disconnected'))
+            # Set type back for message as the stream ended cleanly -- Tijmen
+            notification.sender.blink_session.chat_type = None
 
     def _NH_MediaStreamWillEnd(self, notification):
         stream = notification.sender
