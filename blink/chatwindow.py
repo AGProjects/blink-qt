@@ -2272,47 +2272,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
 
-    def _NH_ChatStreamGotMessage(self, notification):
-        blink_session = notification.sender.blink_session
-        session = blink_session.items.chat
-
-        if session is None:
-            return
-
-        message = notification.data.message
-
-        if message.content_type.startswith('image/'):
-            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
-        elif message.content_type.startswith('text/'):
-            content = message.content
-            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
-        else:
-            return
-
-        uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
-        account_manager = AccountManager()
-        if account_manager.has_account(uri):
-            account = account_manager.get_account(uri)
-            sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
-        elif blink_session.remote_focus:
-            contact, contact_uri = URIUtils.find_contact(uri)
-            sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
-        else:
-            sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
-
-        is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
-        if is_status_message:
-            session.chat_widget.add_message(ChatStatus(content))
-        else:
-            session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
-
-        session.remote_composing = False
-        settings = SIPSimpleSettings()
-        if settings.sounds.play_message_alerts and self.selected_session is session:
-            player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_received.wav'), volume=20)
-            SIPApplication.alert_audio_bridge.add(player)
-            player.start()
-
     def _NH_GotMessage(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
@@ -2375,6 +2334,47 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         session.update_composing_indication(notification.data)
+
+    def _NH_ChatStreamGotMessage(self, notification):
+        blink_session = notification.sender.blink_session
+        session = blink_session.items.chat
+
+        if session is None:
+            return
+
+        message = notification.data.message
+
+        if message.content_type.startswith('image/'):
+            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
+        elif message.content_type.startswith('text/'):
+            content = message.content
+            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+        else:
+            return
+
+        uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
+        account_manager = AccountManager()
+        if account_manager.has_account(uri):
+            account = account_manager.get_account(uri)
+            sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
+        elif blink_session.remote_focus:
+            contact, contact_uri = URIUtils.find_contact(uri)
+            sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
+        else:
+            sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
+
+        is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
+        if is_status_message:
+            session.chat_widget.add_message(ChatStatus(content))
+        else:
+            session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
+
+        session.remote_composing = False
+        settings = SIPSimpleSettings()
+        if settings.sounds.play_message_alerts and self.selected_session is session:
+            player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_received.wav'), volume=20)
+            SIPApplication.alert_audio_bridge.add(player)
+            player.start()
 
     def _NH_ChatStreamGotComposingIndication(self, notification):
         session = notification.sender.blink_session.items.chat
