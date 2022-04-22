@@ -256,6 +256,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.prefix_button.activated[str].connect(self._SH_PrefixButtonActivated)
         self.account_tls_name_editor.editingFinished.connect(self._SH_TLSPeerNameEditorEditingFinished)
 
+        self.message_cpim_enabled_button.clicked.connect(self._SH_EnableMessageCPIMButtonClicked)
+        self.message_iscomposing_enabled_button.clicked.connect(self._SH_EnableMessageIsComposingButtonClicked)
+
         # Audio devices
         self.audio_alert_device_button.activated[int].connect(self._SH_AudioAlertDeviceButtonActivated)
         self.audio_input_device_button.activated[int].connect(self._SH_AudioInputDeviceButtonActivated)
@@ -822,6 +825,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.key_negotiation_button.setCurrentIndex(self.key_negotiation_button.findData(account.rtp.encryption.key_negotiation))
         
         self.account_auto_answer.setChecked(account.sip.auto_answer)
+
+        # SMS settings tab, also relevant for bonjour
+        self.message_cpim_enabled_button.setChecked(account.sms.use_cpim)
+        self.message_iscomposing_enabled_button.setChecked(account.sms.enable_iscomposing)
 
         if account is not bonjour_account:
             self.account_auto_answer.setText('Auto answer from allowed contacts')
@@ -1409,6 +1416,16 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings = SIPSimpleSettings()
         settings.tls.verify_server = checked
         settings.save()
+
+    def _SH_EnableMessageCPIMButtonClicked(self, checked):
+        account = self.selected_account
+        account.sms.use_cpim = checked
+        account.save()
+
+    def _SH_EnableMessageIsComposingButtonClicked(self, checked):
+        account = self.selected_account
+        account.sms.enable_iscomposing = checked
+        account.save()
 
     # Audio devices signal handlers
     def _SH_AudioAlertDeviceButtonActivated(self, index):
