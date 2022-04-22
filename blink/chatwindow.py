@@ -1818,6 +1818,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if blink_session.state == 'ended':
                 self.status_value_label.setForegroundRole(QPalette.AlternateBase if blink_session.state.error else QPalette.WindowText)
                 self.status_value_label.setText(blink_session.state.reason)
+
+                self.chat_value_widget.setEnabled(True)
+                self.chat_value_label.setText('Using SIP Message')
+                self.chat_encryption_label.setVisible(False)
+                self.chat_connection_label.setVisible(False)
             elif state in state_map:
                 self.status_value_label.setForegroundRole(QPalette.WindowText)
                 self.status_value_label.setText(state_map[state])
@@ -1918,6 +1923,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.chat_value_label.setText('Peer to peer')
                 self.chat_connection_label.setPixmap(self.pixmaps.direct_connection)
                 self.chat_connection_label.setToolTip('Peer to peer')
+            elif blink_session.chat_type is None:
+                self.chat_value_widget.setEnabled(True)
+                self.chat_value_label.setText('Using SIP Message')
+                self.chat_connection_label.setToolTip('Using SIP Message')
             else:
                 self.chat_value_label.setText('N/A')
 
