@@ -3,6 +3,7 @@ import base64
 import locale
 import os
 import re
+import uuid
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
@@ -37,6 +38,7 @@ from sipsimple.threading import run_in_thread
 from blink.configuration.datatypes import FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
+from blink.messages import MessageManager
 from blink.resources import IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
 from blink.util import run_in_gui_thread
@@ -305,10 +307,12 @@ class ChatMessage(ChatContent):
     direction = ChatContentStringAttribute('direction', allowed_values=('incoming', 'outgoing'))
     autoreply = ChatContentBooleanOption('autoreply')
 
-    def __init__(self, message, sender, direction, history=False, focus=False):
+    def __init__(self, message, sender, direction, history=False, focus=False, id=None):
         super(ChatMessage, self).__init__(message, history, focus)
         self.sender = sender
         self.direction = direction
+        self.id = str(uuid.uuid4()) if id is None else id
+        self.status = ''
 
     def is_related_to(self, other):
         return super(ChatMessage, self).is_related_to(other) and self.sender == other.sender and self.direction == other.direction
@@ -682,8 +686,26 @@ class ChatWidget(base_class, ui_class):
             self.chat_element.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class))
         self.last_message = message
 
-    def send_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None):
+    def update_message_status(self, id, status):
+        if status == 'failed':
+            icon = self.warning_icon
+        else:
+            icon = self.checkmark_icon
+        insertion_point = self.chat_element.findFirst(f'span#status-{id}')
+        insertion_point.replace(ChatMessageStatus(status, icon.filename, id).to_html(self.style))
+
+    def send_sip_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
+        account = self.session.blink_session.account
+        contact = self.session.blink_session.contact
+        manager = MessageManager()
+        manager.send_message(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id)
+
+    def send_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         blink_session = self.session.blink_session
+
+        if blink_session.chat_type is None:
+            self.send_sip_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id)
+            return
 
         if blink_session.state in ('initialized', 'ended'):
             blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, [StreamDescription('chat')], reinitialize=True)
@@ -810,9 +832,19 @@ class ChatWidget(base_class, ui_class):
         self._align_chat(scroll=True)
 
     def _SH_ChatInputTextChanged(self):
-        chat_stream = self.session.chat_stream
-        if chat_stream is None:
-            return
+        if self.session.blink_session.chat_type is None:
+            manager = MessageManager()
+            if self.chat_input.empty:
+                if self.composing_timer.isActive():
+                    self.composing_timer.stop()
+                    manager.send_composing_indication(self.session.blink_session, 'idle')
+            elif not self.composing_timer.isActive():
+                manager.send_composing_indication(self.session.blink_session, 'active')
+                self.composing_timer.start(10000)
+        else:
+            chat_stream = self.session.chat_stream
+            if chat_stream is None:
+                return
         if self.chat_input.empty:
             if self.composing_timer.isActive():
                 self.composing_timer.stop()
@@ -845,15 +877,16 @@ class ChatWidget(base_class, ui_class):
             except AttributeError:
                 pass
             return
+        id = str(uuid.uuid4())
         try:
-            self.send_message(text, content_type='text/html')
+            self.send_message(text, content_type='text/html', id=id)
         except Exception as e:
             self.add_message(ChatStatus('Error sending message: %s' % e))  # decide what type to use here. -Dan
         else:
             account = self.session.blink_session.account
             content = HtmlProcessor.autolink(text)
             sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
-            self.add_message(ChatMessage(content, sender, 'outgoing'))
+            self.add_message(ChatMessage(content, sender, 'outgoing', id=id))
 
     def _SH_ChatInputLockReleased(self, lock_type):
         if lock_type is EncryptionLock:
@@ -861,6 +894,11 @@ class ChatWidget(base_class, ui_class):
 
     def _SH_ComposingTimerTimeout(self):
         self.composing_timer.stop()
+        if self.session.blink_session.chat_type is None:
+            manager = MessageManager()
+            manager.send_composing_indication(self.session.blink_session, 'idle')
+            return
+
         chat_stream = self.session.chat_stream or Null
         try:
             chat_stream.send_composing_indication('idle')
@@ -1455,7 +1493,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     sliding_panels = True
 
-    __streamtypes__ = {'chat', 'screen-sharing', 'video'} # the stream types for which we show the chat window
+    __streamtypes__ = {'chat', 'screen-sharing', 'video', 'message'} # the stream types for which we show the chat window
 
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)
@@ -1522,6 +1560,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MediaStreamDidFail')
         notification_center.add_observer(self, name='MediaStreamDidEnd')
         notification_center.add_observer(self, name='MediaStreamWillEnd')
+        notification_center.add_observer(self, name='GotMessage')
+        notification_center.add_observer(self, name='GotComposingIndication')
+        notification_center.add_observer(self, name='DidAcceptMessage')
+        notification_center.add_observer(self, name='DidNotDeliverMessage')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -2261,6 +2303,69 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_received.wav'), volume=20)
             SIPApplication.alert_audio_bridge.add(player)
             player.start()
+
+    def _NH_GotMessage(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+
+        message = notification.data
+
+        if session is None:
+            return
+
+        if message.content_type.startswith('image/'):
+            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
+        elif message.content_type.startswith('text/'):
+            content = message.content
+            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+        else:
+            return
+
+        try:
+            uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
+        except AttributeError:
+            uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
+
+        account_manager = AccountManager()
+        if account_manager.has_account(uri):
+            account = account_manager.get_account(uri)
+            sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
+        elif blink_session.remote_focus:
+            contact, contact_uri = URIUtils.find_contact(uri)
+            sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
+        else:
+            sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
+
+        session.chat_widget.add_message(ChatMessage(content, sender, 'incoming', id=message.id))
+
+        session.remote_composing = False
+        settings = SIPSimpleSettings()
+        if settings.sounds.play_message_alerts and self.selected_session is session:
+            player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_received.wav'), volume=20)
+            SIPApplication.alert_audio_bridge.add(player)
+            player.start()
+
+    def _NH_DidAcceptMessage(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+        if session is None:
+            return
+        session.chat_widget.update_message_status(id=notification.data.id, status='accepted')
+
+
+    def _NH_DidNotDeliverMessage(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+        if session is None:
+            return
+        session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
+        session.chat_widget.update_message_status(id=notification.data.id, status='failed')
+
+    def _NH_GotComposingIndication(self, notification):
+        session = notification.sender.items.chat
+        if session is None:
+            return
+        session.update_composing_indication(notification.data)
 
     def _NH_ChatStreamGotComposingIndication(self, notification):
         session = notification.sender.blink_session.items.chat
