@@ -114,7 +114,6 @@ class OutgoingMessage(object):
             return
 
         notification_center = NotificationCenter()
-        notification_center.post_notification(notification, sender=self.session)
         notification_center.post_notification('DidNotDeliverMessage', sender=self.session, data=NotificationData(data=NotificationData(code=404, reason=notification.data.error), id=self.id))
 
     def _NH_SIPMessageDidSucceed(self, notification):
@@ -125,7 +124,6 @@ class OutgoingMessage(object):
         if self.content_type.lower() == IsComposingDocument.content_type:
             return
         notification_center = NotificationCenter()
-        notification_center.post_notification(notification, sender=self.session)
         notification_center.post_notification('DidNotDeliverMessage', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
 
