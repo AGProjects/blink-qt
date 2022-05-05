@@ -2298,9 +2298,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if account_manager.has_account(uri):
             account = account_manager.get_account(uri)
             sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
-        elif blink_session.remote_focus:
-            contact, contact_uri = URIUtils.find_contact(uri)
-            sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
 
