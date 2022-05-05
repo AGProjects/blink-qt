@@ -1560,10 +1560,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MediaStreamDidFail')
         notification_center.add_observer(self, name='MediaStreamDidEnd')
         notification_center.add_observer(self, name='MediaStreamWillEnd')
-        notification_center.add_observer(self, name='GotMessage')
-        notification_center.add_observer(self, name='GotComposingIndication')
-        notification_center.add_observer(self, name='DidAcceptMessage')
-        notification_center.add_observer(self, name='DidNotDeliverMessage')
+        notification_center.add_observer(self, name='BlinkGotMessage')
+        notification_center.add_observer(self, name='BlinkGotComposingIndication')
+        notification_center.add_observer(self, name='BlinkMessageDidSucceed')
+        notification_center.add_observer(self, name='BlinkMessageDidFail')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -2272,7 +2272,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
 
-    def _NH_GotMessage(self, notification):
+    def _NH_BlinkGotMessage(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
 
@@ -2316,15 +2316,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         session.update_composing_indication(notification.data)
 
-    def _NH_DidAcceptMessage(self, notification):
+    def _NH_BlinkMessageDidSucceed(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
         if session is None:
             return
         session.chat_widget.update_message_status(id=notification.data.id, status='accepted')
 
-
-    def _NH_DidNotDeliverMessage(self, notification):
+    def _NH_BlinkMessageDidFail(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
         if session is None:

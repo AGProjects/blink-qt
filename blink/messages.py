@@ -118,13 +118,13 @@ class OutgoingMessage(object):
 
     def _NH_SIPMessageDidSucceed(self, notification):
         notification_center = NotificationCenter()
-        notification_center.post_notification('DidAcceptMessage', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
+        notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
     def _NH_SIPMessageDidFail(self, notification):
         if self.content_type.lower() == IsComposingDocument.content_type:
             return
         notification_center = NotificationCenter()
-        notification_center.post_notification('DidNotDeliverMessage', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
+        notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
 
 @implementer(IObserver)
@@ -199,13 +199,13 @@ class MessageManager(object, metaclass=Singleton):
                                             content_type=document.content_type.value if document.content_type is not None else None,
                                             last_active=document.last_active.value if document.last_active is not None else None,
                                             sender=sender)
-                    notification_center.post_notification('GotComposingIndication', sender=blink_session, data=data)
+                    notification_center.post_notification('BlinkGotComposingIndication', sender=blink_session, data=data)
                 return
 
             timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
             message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id)
 
-            notification_center.post_notification('GotMessage', sender=blink_session, data=message)
+            notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
         else:
             pass
             # TODO handle replicated messages
