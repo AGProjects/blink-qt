@@ -2310,6 +2310,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             SIPApplication.alert_audio_bridge.add(player)
             player.start()
 
+    def _NH_BlinkGotComposingIndication(self, notification):
+        session = notification.sender.items.chat
+        if session is None:
+            return
+        session.update_composing_indication(notification.data)
+
     def _NH_DidAcceptMessage(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
@@ -2326,11 +2332,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
         session.chat_widget.update_message_status(id=notification.data.id, status='failed')
 
-    def _NH_GotComposingIndication(self, notification):
-        session = notification.sender.items.chat
-        if session is None:
-            return
-        session.update_composing_indication(notification.data)
 
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session
