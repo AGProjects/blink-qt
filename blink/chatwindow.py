@@ -718,7 +718,8 @@ class ChatWidget(base_class, ui_class):
         else:
             raise RuntimeError("Cannot send messages in the '%s' state" % blink_session.state)
 
-        self.session.chat_stream.send_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
+        message_id = self.session.chat_stream.send_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
+        return message_id
 
     def _align_chat(self, scroll=False):
         # frame_height = self.chat_view.page().mainFrame().contentsSize().height()
@@ -879,10 +880,12 @@ class ChatWidget(base_class, ui_class):
             return
         id = str(uuid.uuid4())
         try:
-            self.send_message(text, content_type='text/html', id=id)
+            msg_id = self.send_message(text, content_type='text/html', id=id)
         except Exception as e:
             self.add_message(ChatStatus('Error sending message: %s' % e))  # decide what type to use here. -Dan
         else:
+            if msg_id is not None:
+                id = msg_id
             account = self.session.blink_session.account
             content = HtmlProcessor.autolink(text)
             sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
