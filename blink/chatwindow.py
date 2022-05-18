@@ -2383,18 +2383,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
+        session.chat_widget.update_message_status(id=notification.data.message.message_id, status='accepted')
         # TODO: do we want to use this? Play the message sent tone? -Saul
 
     def _NH_ChatStreamDidDeliverMessage(self, notification):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
+        session.chat_widget.update_message_status(id=notification.data.message.message_id, status='delivered')
         # TODO: implement -Saul
 
     def _NH_ChatStreamDidNotDeliverMessage(self, notification):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
+        session.chat_widget.update_message_status(id=notification.data.message.message_id, status='failed')
         # TODO: implement -Saul
 
     def _NH_ChatStreamOTREncryptionStateChanged(self, notification):
