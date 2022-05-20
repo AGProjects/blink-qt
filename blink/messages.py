@@ -61,9 +61,49 @@ class OutgoingMessage(object):
         notification_center.add_observer(self, sender=self.lookup)
         self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
+    def _send(self):
+        if self.session.routes:
+            from_uri = self.account.uri
+            content = self.content if isinstance(self.content, bytes) else self.content.encode()
+            additional_sip_headers = []
+            if self.account.sms.use_cpim:
+                ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
+                additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
+                if self.account.sms.enable_imdn and self.content_type not in self.__disabled_imdn_content_types__:
+                    additional_headers.append(CPIMHeader('Disposition-Notification', ns, 'positive-delivery, display'))
+                payload = CPIMPayload(content,
+                                      self.content_type,
+                                      charset='utf-8',
+                                      sender=ChatIdentity(from_uri, self.account.display_name),
+                                      recipients=[ChatIdentity(self.sip_uri, None)],
+                                      timestamp=str(self.timestamp),
+                                      additional_headers=additional_headers)
+                payload, content_type = payload.encode()
+            else:
+                payload = content
+                content_type = self.content_type
+
+            route = self.session.routes[0]
+            message_request = Message(FromHeader(from_uri, self.account.display_name),
+                                      ToHeader(self.sip_uri),
+                                      RouteHeader(route.uri),
+                                      content_type,
+                                      payload,
+                                      credentials=self.account.credentials,
+                                      extra_headers=additional_sip_headers)
+            notification_center = NotificationCenter()
+            notification_center.add_observer(self, sender=message_request)
+            message_request.send()
+        else:
+            pass
+            # TODO
+
     def send(self, session):
         self.session = session
-        self._lookup()
+        if self.session.routes:
+            self._send()
+        else:
+            self._lookup()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -74,39 +114,8 @@ class OutgoingMessage(object):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
             routes = notification.data.result
-            if routes:
-                from_uri = self.account.uri
-                content = self.content if isinstance(self.content, bytes) else self.content.encode()
-                ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
-                additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
-                additional_sip_headers = []
-                if self.account.sms.use_cpim:
-                    payload = CPIMPayload(content,
-                                          self.content_type,
-                                          charset='utf-8',
-                                          sender=ChatIdentity(from_uri, self.account.display_name),
-                                          recipients=[ChatIdentity(self.sip_uri, None)],
-                                          timestamp=self.timestamp if self.timestamp is not None else str(ISOTimestamp.now()),
-                                          additional_headers=additional_headers)
-                    payload, content_type = payload.encode()
-                else:
-                    payload = content
-                    content_type = self.content_type
-
-                route = routes[0]
-                message_request = Message(FromHeader(from_uri, self.account.display_name),
-                                          ToHeader(self.sip_uri),
-                                          RouteHeader(route.uri),
-                                          content_type,
-                                          payload,
-                                          credentials=self.account.credentials,
-                                          extra_headers=additional_sip_headers)
-                notification_center = NotificationCenter()
-                notification_center.add_observer(self, sender=message_request)
-                message_request.send()
-            else:
-                pass
-                # TODO
+            self.session.routes = routes
+            self._send()
 
     def _NH_DNSLookupDidFail(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
