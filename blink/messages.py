@@ -19,7 +19,7 @@ from blink.sessions import SessionManager, StreamDescription
 from blink.util import run_in_gui_thread
 
 
-__all__ = ['MessageManager']
+__all__ = ['MessageManager', 'BlinkMessage']
 
 
 class BlinkMessage(MSRPChatMessage):
@@ -43,6 +43,10 @@ class OutgoingMessage(object):
         self.id = id if id is not None else str(uuid.uuid4())
         self.timestamp = timestamp
         self.sip_uri = None
+
+    @property
+    def message(self):
+        return BlinkMessage(self.content, self.content_type, self.account, timestamp=self.timestamp, id=self.id)
 
     def _lookup(self):
         settings = SIPSimpleSettings()
