@@ -41,8 +41,8 @@ class OutgoingMessage(object):
         self.content_type = content_type
         self.content = content
         self.id = id if id is not None else str(uuid.uuid4())
-        self.timestamp = timestamp
-        self.sip_uri = None
+        self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
+        self.sip_uri = SIPURI.parse('sip:%s' % self.uri)
 
     @property
     def message(self):
@@ -50,7 +50,6 @@ class OutgoingMessage(object):
 
     def _lookup(self):
         settings = SIPSimpleSettings()
-        self.sip_uri = SIPURI.parse('sip:%s' % self.uri)
         if isinstance(self.account, Account):
             if self.account.sip.outbound_proxy is not None:
                 proxy = self.account.sip.outbound_proxy
