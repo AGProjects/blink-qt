@@ -132,7 +132,7 @@ class OutgoingMessage(object):
             return
 
         notification_center = NotificationCenter()
-        notification_center.post_notification('DidNotDeliverMessage', sender=self.session, data=NotificationData(data=NotificationData(code=404, reason=notification.data.error), id=self.id))
+        notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=NotificationData(code=404, reason=notification.data.error), id=self.id))
 
     def _NH_SIPMessageDidSucceed(self, notification):
         notification_center = NotificationCenter()
