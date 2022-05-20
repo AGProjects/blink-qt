@@ -141,11 +141,10 @@ class OutgoingMessage(object):
 @implementer(IObserver)
 class MessageManager(object, metaclass=Singleton):
     def __init__(self):
+        self.sessions = []
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
-
-        self.sessions = []
 
     @run_in_gui_thread
     def handle_notification(self, notification):
