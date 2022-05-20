@@ -2566,7 +2566,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         pass
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
-        # print "-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()])
+        # print("-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()]))
         self.selected_session = selected[0].topLeft().data(Qt.UserRole) if selected else None
         if self.selected_session is not None:
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
