@@ -102,6 +102,9 @@ class OutgoingMessage(object):
 
     def send(self, session):
         self.session = session
+        if self.content_type.lower() not in self.__ignored_content_types__:
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkMessageIsPending', sender=self.session, data=NotificationData(message=self.message, id=self.id))
         if self.session.routes:
             self._send()
         else:
