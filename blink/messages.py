@@ -32,6 +32,8 @@ class BlinkMessage(MSRPChatMessage):
 
 @implementer(IObserver)
 class OutgoingMessage(object):
+    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type} #Content types to ignore in notifications
+
     def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         self.lookup = None
         self.account = account
@@ -130,7 +132,7 @@ class OutgoingMessage(object):
         notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
     def _NH_SIPMessageDidFail(self, notification):
-        if self.content_type.lower() == IsComposingDocument.content_type:
+        if self.content_type.lower() in self.__ignored_content_types__:
             return
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
