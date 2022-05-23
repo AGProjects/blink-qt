@@ -641,6 +641,7 @@ class ChatWidget(base_class, ui_class):
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
     checkmark_icon = IconDescriptor(Resources.get('icons/checkmark.svg'))
     warning_icon = IconDescriptor(Resources.get('icons/warning.svg'))
+    done_all_icon = IconDescriptor(Resources.get('icons/done-all.svg'))
 
     chat_template = open(Resources.get('chat/template.html')).read()
 
@@ -687,8 +688,12 @@ class ChatWidget(base_class, ui_class):
         self.last_message = message
 
     def update_message_status(self, id, status):
+        if status == 'pending':
+            return
         if status == 'failed':
             icon = self.warning_icon
+        elif status == 'displayed':
+            icon = self.done_all_icon
         else:
             icon = self.checkmark_icon
         insertion_point = self.chat_element.findFirst(f'span#status-{id}')

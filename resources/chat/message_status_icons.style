@@ -55,10 +55,11 @@
     filter: invert(38%) sepia(17%) saturate(0%) hue-rotate(177deg) brightness(94%) contrast(97%);
 }
 
-.delivered {
+.delivered, .displayed {
     filter: invert(28%) sepia(98%) saturate(2550%) hue-rotate(107deg) brightness(102%) contrast(103%);
 }
 
 .failed {
     filter: invert(12%) sepia(77%) saturate(5700%) hue-rotate(357deg) brightness(73%) contrast(112%);
 }
+
