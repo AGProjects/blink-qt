@@ -23,11 +23,12 @@ __all__ = ['MessageManager', 'BlinkMessage']
 
 
 class BlinkMessage(MSRPChatMessage):
-    __slots__ = 'id'
+    __slots__ = 'id', 'disposition'
 
-    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
+    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, disposition=None):
         super(BlinkMessage, self).__init__(content, content_type, sender, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
         self.id = id if id is not None else str(uuid.uuid4())
+        self.disposition = disposition
 
 
 @implementer(IObserver)
