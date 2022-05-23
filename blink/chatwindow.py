@@ -644,6 +644,7 @@ class ChatWidget(base_class, ui_class):
     done_all_icon = IconDescriptor(Resources.get('icons/done-all.svg'))
 
     chat_template = open(Resources.get('chat/template.html')).read()
+    loading_template = open(Resources.get('chat/loading.html')).read()
 
     image_data_re = re.compile(r"data:(?P<type>image/.+?);base64,(?P<data>.*)", re.I|re.U)
 
@@ -659,6 +660,7 @@ class ChatWidget(base_class, ui_class):
         self.user_icons_css_class = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
         self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path)+'/', style_url=self.style_variant+'.style', font_family=self.font_family, font_size=self.font_size))
         self.chat_element = self.chat_view.page().mainFrame().findFirstElement('#chat')
+        self.loading_element = self.chat_view.page().mainFrame().findFirstElement('#loading')
         self.composing_timer = QTimer()
         self.last_message = None
         self.session = session
