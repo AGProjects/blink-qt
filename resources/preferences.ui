@@ -1278,34 +1278,21 @@
                <property name="bottomMargin">
                 <number>0</number>
                </property>
-               <item row="4" column="0">
-                <widget class="QCheckBox" name="message_cpim_enabled_button">
+               <item row="5" column="1">
+                <widget class="QCheckBox" name="message_iscomposing_enabled_button">
                  <property name="text">
-                  <string>Use CPIM envelope</string>
+                  <string>Enable Is-Composing</string>
                  </property>
                 </widget>
                </item>
-               <item row="2" column="0">
+               <item row="2" column="1">
                 <widget class="Line" name="line_2">
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
                  </property>
                 </widget>
                </item>
-               <item row="6" column="0">
-                <spacer name="verticalSpacer">
-                 <property name="orientation">
-                  <enum>Qt::Vertical</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>20</width>
-                   <height>20</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-               <item row="1" column="0">
+               <item row="1" column="1">
                 <widget class="QLabel" name="message_label">
                  <property name="font">
                   <font>
@@ -1321,14 +1308,64 @@
                  </property>
                 </widget>
                </item>
-               <item row="5" column="0">
-                <widget class="QCheckBox" name="message_iscomposing_enabled_button">
+               <item row="4" column="1">
+                <widget class="QCheckBox" name="message_cpim_enabled_button">
                  <property name="text">
-                  <string>Enable Is-Composing</string>
+                  <string>Use CPIM envelope</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="1">
+                <widget class="QLabel" name="label">
+                 <property name="font">
+                  <font>
+                   <weight>75</weight>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="text">
+                  <string>When sending and receiving messages</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="8" column="1">
+                <widget class="Line" name="line_4">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
                  </property>
                 </widget>
                </item>
               </layout>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QCheckBox" name="message_imdn_enabled_button">
+              <property name="text">
+               <string>Enable IMDN (Read receipts)</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <spacer name="verticalSpacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_4">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="text">
+               <string>If you turn off IMDN you won't be able to see receipts from other people</string>
+              </property>
              </widget>
             </item>
            </layout>

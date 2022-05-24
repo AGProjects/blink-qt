@@ -256,8 +256,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.prefix_button.activated[str].connect(self._SH_PrefixButtonActivated)
         self.account_tls_name_editor.editingFinished.connect(self._SH_TLSPeerNameEditorEditingFinished)
 
+        # Account sms settings
         self.message_cpim_enabled_button.clicked.connect(self._SH_EnableMessageCPIMButtonClicked)
         self.message_iscomposing_enabled_button.clicked.connect(self._SH_EnableMessageIsComposingButtonClicked)
+        self.message_imdn_enabled_button.clicked.connect(self._SH_EnableMessageIMDNButtonClicked)
 
         # Audio devices
         self.audio_alert_device_button.activated[int].connect(self._SH_AudioAlertDeviceButtonActivated)
@@ -829,6 +831,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # SMS settings tab, also relevant for bonjour
         self.message_cpim_enabled_button.setChecked(account.sms.use_cpim)
         self.message_iscomposing_enabled_button.setChecked(account.sms.enable_iscomposing)
+        self.message_imdn_enabled_button.setEnabled(account.sms.use_cpim)
+        self.message_imdn_enabled_button.setChecked(account.sms.enable_imdn)
 
         if account is not bonjour_account:
             self.account_auto_answer.setText('Auto answer from allowed contacts')
@@ -1420,11 +1424,17 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_EnableMessageCPIMButtonClicked(self, checked):
         account = self.selected_account
         account.sms.use_cpim = checked
+        self.message_imdn_enabled_button.setEnabled(account.sms.use_cpim)
         account.save()
 
     def _SH_EnableMessageIsComposingButtonClicked(self, checked):
         account = self.selected_account
         account.sms.enable_iscomposing = checked
+        account.save()
+
+    def _SH_EnableMessageIMDNButtonClicked(self, checked):
+        account = self.selected_account
+        account.sms.enable_imdn = checked
         account.save()
 
     # Audio devices signal handlers
