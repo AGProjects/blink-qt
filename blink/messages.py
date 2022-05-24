@@ -192,6 +192,12 @@ class MessageManager(object, metaclass=Singleton):
                 disposition = None
                 message_id = str(uuid.uuid4())
 
+            if (content_type.lower().startswith('text/') and
+                '-----BEGIN PGP MESSAGE-----' in body and
+                body.strip().endswith('-----END PGP MESSAGE-----') and
+                content_type != 'text/pgp-private-key'):
+                return
+
             from blink.contacts import URIUtils
             contact, contact_uri = URIUtils.find_contact(sender.uri)
             session_manager = SessionManager()
