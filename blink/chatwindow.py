@@ -21,7 +21,7 @@ from application.python.types import MarkerType
 from application.system import makedirs
 from collections.abc import MutableSet
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from itertools import count
 from lxml import etree, html
 from lxml.html.clean import autolink
@@ -34,11 +34,13 @@ from sipsimple.audio import WavePlayer
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.streams.msrp.chat import OTRState
 from sipsimple.threading import run_in_thread
+from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
-from blink.messages import MessageManager
+from blink.history import HistoryManager
+from blink.messages import MessageManager, BlinkMessage
 from blink.resources import IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
 from blink.util import run_in_gui_thread
@@ -307,12 +309,13 @@ class ChatMessage(ChatContent):
     direction = ChatContentStringAttribute('direction', allowed_values=('incoming', 'outgoing'))
     autoreply = ChatContentBooleanOption('autoreply')
 
-    def __init__(self, message, sender, direction, history=False, focus=False, id=None):
+    def __init__(self, message, sender, direction, history=False, focus=False, id=None, timestamp=None):
         super(ChatMessage, self).__init__(message, history, focus)
         self.sender = sender
         self.direction = direction
         self.id = str(uuid.uuid4()) if id is None else id
         self.status = ''
+        self.timestamp = timestamp if timestamp is not None else datetime.now()
 
     def is_related_to(self, other):
         return super(ChatMessage, self).is_related_to(other) and self.sender == other.sender and self.direction == other.direction
@@ -664,9 +667,12 @@ class ChatWidget(base_class, ui_class):
         self.composing_timer = QTimer()
         self.last_message = None
         self.session = session
+        self.history_loaded = False
+        self.show_loading_screen(True)
         if session is not None:
             notification_center = NotificationCenter()
             notification_center.add_observer(ObserverWeakrefProxy(self), sender=session.blink_session)
+
         # connect to signals
         self.chat_input.textChanged.connect(self._SH_ChatInputTextChanged)
         self.chat_input.textEntered.connect(self._SH_ChatInputTextEntered)
@@ -701,6 +707,12 @@ class ChatWidget(base_class, ui_class):
         insertion_point = self.chat_element.findFirst(f'span#status-{id}')
         insertion_point.replace(ChatMessageStatus(status, icon.filename, id).to_html(self.style))
 
+    def show_loading_screen(self, visible):
+        if visible:
+            self.loading_element.appendInside(self.loading_template)
+        else:
+            self.loading_element.removeAllChildren()
+
     def send_sip_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         account = self.session.blink_session.account
         contact = self.session.blink_session.contact
@@ -726,6 +738,10 @@ class ChatWidget(base_class, ui_class):
             raise RuntimeError("Cannot send messages in the '%s' state" % blink_session.state)
 
         message_id = self.session.chat_stream.send_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
+        notification_center = NotificationCenter()
+
+        timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
+        notification_center.post_notification('ChatStreamWillSendMessage', blink_session, data=BlinkMessage(content, content_type, blink_session.account , recipients, timestamp=timestamp, id=message_id))
         return message_id
 
     def _align_chat(self, scroll=False):
@@ -931,6 +947,7 @@ class ChatWidget(base_class, ui_class):
         if notification.data.stream.type == 'chat':
             self.composing_timer.stop()
             self.chat_input.reset_locks()
+
 
 del ui_class, base_class
 
@@ -1552,6 +1569,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.restoreGeometry(geometry)
 
         self.pending_displayed_notifications = {}
+        self.render_after_load = []
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -1577,6 +1595,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkMessageDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageDidFail')
+        notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidSucceed')
+        notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -2227,10 +2247,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionNewIncoming(self, notification):
         if notification.sender.streams.types.intersection(self.__streamtypes__):
             self.show()
+        history = HistoryManager()
+        history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             self.show()
+        history = HistoryManager()
+        history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         model = self.session_model
@@ -2319,8 +2343,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
-
-        session.chat_widget.add_message(ChatMessage(content, sender, 'incoming', id=message.id))
+        if session.chat_widget.history_loaded:
+            session.chat_widget.add_message(ChatMessage(content, sender, 'incoming', id=message.id))
+        else:
+            self.render_after_load.append(ChatMessage(content, sender, 'incoming', id=message.id))
 
         if message.disposition is not None and 'display' in message.disposition:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
@@ -2364,6 +2390,68 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
         session.chat_widget.update_message_status(id=notification.data.id, status='failed')
 
+    def _NH_BlinkMessageHistoryLoadDidSucceed(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+
+        messages = notification.data.messages
+
+        if session is None:
+            return
+
+        for message in messages:
+            if message.content_type.startswith('image/'):
+                content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
+            elif message.content_type.startswith('text/'):
+                content = message.content
+                content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+            else:
+                return
+            # message.sender = SIPURI.parse(f'sip:{message.remote_uri}')
+            if message.direction == 'outgoing':
+                message.sender = blink_session.account
+                try:
+                    uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
+                except AttributeError:
+                    uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
+            else:
+                uri = message.remote_uri
+
+            timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+            # print(f"t: {timestamp}")
+            account_manager = AccountManager()
+            if account_manager.has_account(uri):
+                account = account_manager.get_account(uri)
+                sender = ChatSender(message.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
+            else:
+                sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
+
+            session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True))
+            # session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.id, timestamp=timestamp))
+
+            if message.direction == "outgoing":
+                session.chat_widget.update_message_status(id=message.message_id, status=message.state)
+            elif message.state != 'displayed' and 'display' in message.disposition:
+                if message.state != 'delivered' and 'positive-delivery' in message.disposition:
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered')
+
+                if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed')
+                else:
+                    self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp))
+
+        session.chat_widget.history_loaded = True
+
+        while len(self.render_after_load) > 0:
+            session.chat_widget.add_message(self.render_after_load.pop())
+        session.chat_widget.show_loading_screen(False)
+
+    def _NH_BlinkMessageHistoryLoadDidFail(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+        # TODO Should we attempt to reload history if it fails? -- Tijmen
+        session.chat_widget.history_loaded = True
+        session.chat_widget.show_loading_screen(False)
 
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session
