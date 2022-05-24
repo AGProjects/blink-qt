@@ -168,7 +168,7 @@ class AccountModel(QAbstractListModel):
         if notification.sender is not BonjourAccount():
             registrar = notification.data.registrar
             self.accounts[position].registrar = "%s:%s:%s" % (registrar.transport, registrar.address, registrar.port)
-        
+
         self.dataChanged.emit(self.index(position), self.index(position))
         notification.center.post_notification('SIPRegistrationInfoDidChange', sender=notification.sender)
 
@@ -177,7 +177,7 @@ class AccountModel(QAbstractListModel):
             position = self.accounts.index(notification.sender)
         except ValueError:
             return
-        
+
         self.accounts[position].registration_state = None
         self.accounts[position].registrar = None
         self.dataChanged.emit(self.index(position), self.index(position))
@@ -188,14 +188,14 @@ class AccountModel(QAbstractListModel):
             position = self.accounts.index(notification.sender)
         except ValueError:
             return
-        
+
         reason = 'Unknown reason'
 
         if hasattr(notification.data, 'error'):
             reason = notification.data.error
         elif hasattr(notification.data, 'reason'):
             reason = notification.data.reason
-        
+
         self.accounts[position].registration_state = 'failed (%s)' % (reason.decode() if isinstance(reason, bytes) else reason)
         self.accounts[position].registrar = None
         self.dataChanged.emit(self.index(position), self.index(position))
@@ -519,7 +519,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         else:
             if ca not in existing_cas:
                 certificate_file = open(ca_path, 'w')
-                certificate_file.write(existing_cas+ca)
+                certificate_file.write(existing_cas + ca)
                 certificate_file.close()
         settings = SIPSimpleSettings()
         settings.tls.ca_list = ca_path
@@ -550,6 +550,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         self.accept_button.setEnabled(False)
         self._initialize()
         self.show()
+
 
 del ui_class, base_class
 
