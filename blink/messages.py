@@ -234,7 +234,12 @@ class MessageManager(object, metaclass=Singleton):
     def send_composing_indication(self, session, state, refresh=None, last_active=None):
         if not session.account.sms.enable_iscomposing:
             return
-        content = IsComposingDocument.create(state=State(state), refresh=Refresh(refresh) if refresh is not None else None, last_active=LastActive(last_active) if last_active is not None else None, content_type=ContentType('text'))
+
+        content = IsComposingDocument.create(state=State(state),
+                                             refresh=Refresh(refresh) if refresh is not None else None,
+                                             last_active=LastActive(last_active) if last_active is not None else None, 
+                                             content_type=ContentType('text'))
+
         self.send_message(session.account, session.contact, content, IsComposingDocument.content_type)
 
     def send_message(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
