@@ -1551,6 +1551,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if geometry:
             self.restoreGeometry(geometry)
 
+        self.pending_displayed_notifications = {}
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
@@ -1572,6 +1574,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MediaStreamWillEnd')
         notification_center.add_observer(self, name='BlinkGotMessage')
         notification_center.add_observer(self, name='BlinkGotComposingIndication')
+        notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkMessageDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageDidFail')
 
@@ -2025,7 +2028,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def closeEvent(self, event):
         QSettings().setValue("chat_window/geometry", self.saveGeometry())
         super(ChatWindow, self).closeEvent(event)
-
+ 
     def eventFilter(self, watched, event):
         event_type = event.type()
         if watched is self.session_widget:
@@ -2151,6 +2154,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         painter.drawLine(-3.5, -3.5, 3.5, 3.5)
         painter.drawLine(-3.5, 3.5, 3.5, -3.5)
         painter.restore()
+
+    def send_pending_imdn_messages(self, session):
+        if session and session.blink_session in self.pending_displayed_notifications:
+            item = self.pending_displayed_notifications.pop(self.selected_session.blink_session)
+            for (id, timestamp) in item:
+                MessageManager().send_imdn_message(session.blink_session, id, timestamp, 'displayed')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -2313,6 +2322,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         session.chat_widget.add_message(ChatMessage(content, sender, 'incoming', id=message.id))
 
+        if message.disposition is not None and 'display' in message.disposition:
+            if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
+                MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed')
+            else:
+                self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp))
+
         session.remote_composing = False
         settings = SIPSimpleSettings()
         if settings.sounds.play_message_alerts and self.selected_session is session:
@@ -2325,6 +2340,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         session.update_composing_indication(notification.data)
+
+    def _NH_BlinkGotDispositionNotification(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+        if session is None:
+            return
+        data = notification.data
+        session.chat_widget.update_message_status(id=data.id, status=data.status)
 
     def _NH_BlinkMessageDidSucceed(self, notification):
         blink_session = notification.sender
@@ -2580,6 +2603,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.session_details.setCurrentWidget(self.selected_session.active_panel)
             self.participants_list.setModel(self.selected_session.participants_model)
             self.control_button.setEnabled(True)
+            if not self.isMinimized():
+               self.send_pending_imdn_messages(self.selected_session)
         else:
             self.tab_widget.setCurrentWidget(self.dummy_tab)
             self.session_details.setCurrentWidget(self.info_panel)

@@ -11,7 +11,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPURI, FromHeader, ToHeader, Message, RouteHeader
 from sipsimple.lookup import DNSLookup
 from sipsimple.payloads.iscomposing import IsComposingDocument, IsComposingMessage, State, LastActive, Refresh, ContentType
-from sipsimple.payloads.imdn import IMDNDocument
+from sipsimple.payloads.imdn import IMDNDocument, DeliveryNotification, DisplayNotification
 from sipsimple.streams.msrp.chat import CPIMPayload, CPIMParserError, CPIMNamespace, CPIMHeader, ChatIdentity, Message as MSRPChatMessage, SimplePayload
 from sipsimple.util import ISOTimestamp
 
@@ -34,6 +34,7 @@ class BlinkMessage(MSRPChatMessage):
 @implementer(IObserver)
 class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type} #Content types to ignore in notifications
+    __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key'}.union(__ignored_content_types__) #Content types to ignore in notifications
 
     def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         self.lookup = None
@@ -136,11 +137,20 @@ class OutgoingMessage(object):
 
     def _NH_SIPMessageDidSucceed(self, notification):
         notification_center = NotificationCenter()
+        if self.content_type.lower() in self.__ignored_content_types__:
+            if self.content_type.lower() == IMDNDocument.content_type:
+                document = IMDNDocument.parse(self.content)
+                imdn_message_id = document.message_id.value
+                imdn_status = document.notification.status.__str__()
+                notification_center.post_notification('BlinkDidSendDispositionNotification', sender=self.session, data=NotificationData(id=imdn_message_id, status=imdn_status))
+            return
+
         notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
     def _NH_SIPMessageDidFail(self, notification):
         if self.content_type.lower() in self.__ignored_content_types__:
             return
+
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
@@ -226,12 +236,28 @@ class MessageManager(object, metaclass=Singleton):
                 return
 
             timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
-            message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id)
+
+            if account.sms.use_cpim and account.sms.enable_imdn and content_type.lower() == IMDNDocument.content_type:
+                # print("-- IMDN received")
+                document = IMDNDocument.parse(body)
+                imdn_message_id = document.message_id.value
+                imdn_status = document.notification.status.__str__()
+                imdn_datetime = document.datetime.__str__()
+                notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
+                return
+
+
+            message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition)
+            notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
+
+            if disposition is not None and 'positive-delivery' in disposition:
+                # print("-- Should send delivered imdn")
+                self.send_imdn_message(blink_session, message_id, timestamp, 'delivered')
 
             notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
         else:
-            pass
             # TODO handle replicated messages
+            pass
 
     def _NH_BlinkSessionWasCreated(self, notification):
         self.sessions.append(notification.sender)
@@ -247,6 +273,25 @@ class MessageManager(object, metaclass=Singleton):
                                              content_type=ContentType('text'))
 
         self.send_message(session.account, session.contact, content, IsComposingDocument.content_type)
+
+    def send_imdn_message(self, session, id, timestamp, state):
+        if not session.account.sms.use_cpim and not session.account.sms.enable_imdn:
+            return
+
+        # print(f"-- Will send imdn for {id} -> {state}")
+        if state == 'delivered':
+            notification = DeliveryNotification(state)
+        elif state == 'displayed':
+            notification = DisplayNotification(state)
+        elif state == 'error':
+            notification = DisplayNotification(state)
+
+        content = IMDNDocument.create(message_id=id,
+                                      datetime=timestamp,
+                                      recipient_uri=session.contact.uri.uri,
+                                      notification=notification)
+
+        self.send_message(session.account, session.contact, content, IMDNDocument.content_type)
 
     def send_message(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
