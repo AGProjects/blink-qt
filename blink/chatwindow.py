@@ -2659,6 +2659,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
+        self.session_list.animation.setStartValue(self.session_widget.geometry())
+        self.session_list.show()
         session.chat_widget.chat_input.setFocus(Qt.OtherFocusReason)
 
     def _SH_SessionModelSessionRemoved(self, session):
