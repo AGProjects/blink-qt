@@ -2692,7 +2692,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.participants_list.setModel(self.selected_session.participants_model)
             self.control_button.setEnabled(True)
             if not self.isMinimized():
-               self.send_pending_imdn_messages(self.selected_session)
+                self.send_pending_imdn_messages(self.selected_session)
         else:
             self.tab_widget.setCurrentWidget(self.dummy_tab)
             self.session_details.setCurrentWidget(self.info_panel)
