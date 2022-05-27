@@ -23,7 +23,7 @@ from blink.messages import BlinkMessage
 from blink.util import run_in_gui_thread
 import traceback
 
-from sqlobject import SQLObject, StringCol, DateTimeCol, DateCol, IntCol, UnicodeCol, DatabaseIndex
+from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex
 from sqlobject import connectionForURI
 from sqlobject import dberrors
 
