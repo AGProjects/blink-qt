@@ -245,7 +245,6 @@ class MessageHistory(object, metaclass=Singleton):
         db_uri = f'sqlite://{db_file}'
         self._initialize(db_uri)
 
-
     @run_in_thread('db')
     def _initialize(self, db_uri):
         self.db = connectionForURI(db_uri)
