@@ -39,7 +39,7 @@ body
 .x-container.history.x-container,
 .x-container.history.x-notification_container
 {
-	opacity: .7;
+	/* opacity: .7; */
 }
 
 .x-container.history .x-buddyicon,
