@@ -10,7 +10,7 @@ from application.python import Null
 from application.python.types import Singleton
 
 from datetime import date, timezone
-from dateutil.parser import isoparse
+from dateutil.parser import parse
 from dateutil.tz import tzlocal
 from zope.interface import implementer
 
@@ -294,7 +294,7 @@ class MessageHistory(object, metaclass=Singleton):
         timestamp_native = message.timestamp
         timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
         message.timestamp = timestamp_utc - message.timestamp.utcoffset()
-        timestamp = isoparse(str(message.timestamp))
+        timestamp = parse(str(message.timestamp))
 
         optional_fields = {}
         if state is not None:
