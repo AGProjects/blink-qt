@@ -184,7 +184,7 @@ class Message(SQLObject):
     disposition     = StringCol(default='')
     remote_idx      = DatabaseIndex('remote_uri')
     id_idx          = DatabaseIndex('message_id')
-
+    unq_idx         = DatabaseIndex(message_id, account_id, remote_uri, unique=True)
 
 class TableVersions(object, metaclass=Singleton):
     __version__ = 1
@@ -238,7 +238,7 @@ class TableVersions(object, metaclass=Singleton):
 
 
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 1
+    __version__ = 2
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -264,7 +264,25 @@ class MessageHistory(object, metaclass=Singleton):
     def _check_table_version(self):
         db_table_version = self.table_versions.version(Message.sqlmeta.table)
         if self.__version__ != db_table_version:
-            pass
+            if db_table_version == 1:
+                query = f'CREATE UNIQUE INDEX messages_msg_id ON {Message.sqlmeta.table} (message_id, account_id, remote_uri)'
+                try:
+                    self.db.queryAll(query)
+                except (dberrors.IntegrityError, dberrors.DuplicateEntryError):
+                    fix_query = f'select message_id from {Message.sqlmeta.table} group by message_id having count(id) > 1'
+                    result = self.db.queryAll(fix_query)
+                    for row in result:
+                        messages = Message.selectBy(message_id=row[0])
+                        for message in list(messages)[1:]:
+                            message.destroySelf()
+                    try:
+                        self.db.queryAll(query)
+                    except (dberrors.IntegrityError, dberrors.DuplicateEntryError):
+                        pass
+                    else:
+                        self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+                else:
+                    self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
 
     @classmethod
     @run_in_thread('db')
@@ -308,18 +326,20 @@ class MessageHistory(object, metaclass=Singleton):
                 optional_fields['encryption_type'] = str(['{0.encryption} ({0.encryption_cipher}'.format(chat_info)])
             elif chat_info.transport == 'tls':
                 optional_fields['encryption_type'] = str(['TLS'])
-
-        db_message = Message(remote_uri=remote_uri,
-                             display_name=display_name,
-                             uri=str(message.sender.uri),
-                             content=message.content,
-                             content_type=message.content_type,
-                             message_id=message.id,
-                             account_id=str(session.account.id),
-                             direction=direction,
-                             timestamp=timestamp,
-                             disposition=str(message.disposition),
-                             **optional_fields)
+        try:
+            Message(remote_uri=remote_uri,
+                    display_name=display_name,
+                    uri=str(message.sender.uri),
+                    content=message.content,
+                    content_type=message.content_type,
+                    message_id=message.id,
+                    account_id=str(session.account.id),
+                    direction=direction,
+                    timestamp=timestamp,
+                    disposition=str(message.disposition),
+                    **optional_fields)
+        except dberrors.DuplicateEntryError:
+            pass
 
     @run_in_thread('db')
     def update(self, id, state):
