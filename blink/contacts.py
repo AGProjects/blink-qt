@@ -4209,10 +4209,16 @@ class ContactDetailView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('chat')], connect=False)
 
-    def _AH_SendSMS(self):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+    def _AH_SendSMS(self, uri=None):
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = uri or contact.uri
         session_manager = SessionManager()
-        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('message')], connect=False)
+        session_manager.create_session(contact, selected_uri, [StreamDescription('message')], connect=False)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
