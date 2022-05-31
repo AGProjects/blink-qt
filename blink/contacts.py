@@ -225,7 +225,7 @@ class PreferredMedia(str):
 
     @property
     def autoconnect(self):
-        return self != 'chat'
+        return self != 'chat' and self != 'messages'
 
 
 class BonjourNeighbourID(str):
@@ -3516,7 +3516,7 @@ class ContactListView(QListView):
     def _AH_SendSMS(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('message')], connect=False)
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('messages')], connect=False)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
@@ -3908,7 +3908,7 @@ class ContactSearchListView(QListView):
     def _AH_SendSMS(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = SessionManager()
-        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('message')], connect=False)
+        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('messages')], connect=False)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
@@ -4218,7 +4218,7 @@ class ContactDetailView(QListView):
         else:
             selected_uri = uri or contact.uri
         session_manager = SessionManager()
-        session_manager.create_session(contact, selected_uri, [StreamDescription('message')], connect=False)
+        session_manager.create_session(contact, selected_uri, [StreamDescription('messages')], connect=False)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
@@ -4649,6 +4649,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setItemData(1, 'video')
         self.preferred_media.setItemData(2, 'chat')
         self.preferred_media.setItemData(3, 'audio+chat')
+        self.preferred_media.setItemData(4, 'messages')
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
     def open_for_add(self, sip_address='', target_group=None):
@@ -4765,6 +4766,7 @@ class ContactEditorDialog(base_class, ui_class):
             self.contact_uri_model.update_from_contact(contact)
         if 'icon' in modified_attributes:
             self.icon_selector.update_from_contact(contact)
+
 
 del ui_class, base_class
 

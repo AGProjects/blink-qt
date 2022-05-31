@@ -1520,7 +1520,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     sliding_panels = True
 
-    __streamtypes__ = {'chat', 'screen-sharing', 'video', 'message'} # the stream types for which we show the chat window
+    __streamtypes__ = {'chat', 'screen-sharing', 'video', 'messages'}  # the stream types for which we show the chat window
 
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)

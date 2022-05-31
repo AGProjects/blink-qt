@@ -219,7 +219,7 @@ class MessageManager(object, metaclass=Singleton):
                 if content_type.lower() in [IsComposingDocument.content_type, IMDNDocument.content_type]:
                     return
                 else:
-                    blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('message')], account=account, connect=False)
+                    blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
 
             if content_type.lower() == IsComposingDocument.content_type:
                 try:

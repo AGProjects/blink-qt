@@ -572,7 +572,7 @@ class MainWindow(base_class, ui_class):
             else:
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
             session_manager = SessionManager()
-            session_manager.create_session(contact, contact_uri, [StreamDescription('message')], connect=False)
+            session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], connect=False)
 
     def _AH_RequestScreenActionTriggered(self):
         list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
