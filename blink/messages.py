@@ -208,6 +208,9 @@ class MessageManager(object, metaclass=Singleton):
                 content_type != 'text/pgp-private-key'):
                 return
 
+            if content_type.lower() == 'text/pgp-public-key':
+                return
+
             from blink.contacts import URIUtils
             contact, contact_uri = URIUtils.find_contact(sender.uri)
             session_manager = SessionManager()
