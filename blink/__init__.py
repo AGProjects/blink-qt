@@ -176,7 +176,10 @@ class Blink(QApplication, metaclass=QSingleton):
                     self.main_window.preferences_window.close()
         if watched is self.chat_window:
             if event.type() == QEvent.WindowActivate:
-                watched.send_pending_imdn_messages(watched.selected_session)
+                try:
+                    watched.send_pending_imdn_messages(watched.selected_session)
+                except KeyError:
+                    pass
         return False
 
     def customEvent(self, event):
