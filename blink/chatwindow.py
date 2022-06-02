@@ -668,10 +668,10 @@ class ChatWidget(base_class, ui_class):
         self.last_message = None
         self.session = session
         self.history_loaded = False
-        self.show_loading_screen(True)
         if session is not None:
             notification_center = NotificationCenter()
             notification_center.add_observer(ObserverWeakrefProxy(self), sender=session.blink_session)
+            self.show_loading_screen(True)
 
         # connect to signals
         self.chat_input.textChanged.connect(self._SH_ChatInputTextChanged)
