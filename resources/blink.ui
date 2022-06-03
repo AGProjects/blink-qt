@@ -1131,6 +1131,7 @@ padding: 2px;</string>
      <string>&amp;Chat</string>
     </property>
     <addaction name="join_conference_action"/>
+    <addaction name="show_last_messages_action"/>
     <addaction name="auto_accept_chat_action"/>
     <addaction name="received_messages_sound_action"/>
    </widget>
@@ -1442,6 +1443,17 @@ padding: 2px;</string>
    </property>
    <property name="text">
     <string>&amp;Auto-answer</string>
+   </property>
+  </action>
+  <action name="show_last_messages_action">
+   <property name="text">
+    <string>&amp;Show last messages/chats</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
    </property>
   </action>
  </widget>

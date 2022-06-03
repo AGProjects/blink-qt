@@ -1597,6 +1597,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkMessageDidFail')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
+        notification_center.add_observer(self, name='BlinkMessageHistoryLastContactsDidSucceed')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -2045,6 +2046,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.raise_()
         self.activateWindow()
 
+    def show_with_messages(self):
+        super(ChatWindow, self).show()
+        self.raise_()
+        self.activateWindow()
+        history = HistoryManager()
+        history.get_last_contacts()
+
     def closeEvent(self, event):
         QSettings().setValue("chat_window/geometry", self.saveGeometry())
         super(ChatWindow, self).closeEvent(event)
@@ -2452,6 +2460,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         # TODO Should we attempt to reload history if it fails? -- Tijmen
         session.chat_widget.history_loaded = True
         session.chat_widget.show_loading_screen(False)
+
+    def _NH_BlinkMessageHistoryLastContactsDidSucceed(self, notification):
+        contacts = notification.data.contacts
+        message_manager = MessageManager()
+        for contact in contacts[::-1]:
+            message_manager.create_message_session(contact)
 
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session

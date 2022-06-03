@@ -300,3 +300,14 @@ class MessageManager(object, metaclass=Singleton):
 
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id)
         outgoing_message.send(blink_session)
+
+    def create_message_session(self, uri):
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(uri)
+        session_manager = SessionManager()
+
+        account = AccountManager().default_account
+        try:
+            next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
+        except StopIteration:
+            session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)

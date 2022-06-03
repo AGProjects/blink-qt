@@ -204,6 +204,7 @@ class MainWindow(base_class, ui_class):
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
 
+        self.show_last_messages_action.triggered.connect(self._AH_ShowLastMessagesActionTriggered)  # This will load messages from 5 last contacts used in messages/chat
         # Window menu actions
         self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
         self.transfers_window_action.triggered.connect(self._AH_TransfersWindowActionTriggered)
@@ -429,6 +430,10 @@ class MainWindow(base_class, ui_class):
     def _AH_ChatWindowActionTriggered(self, checked):
         blink = QApplication.instance()
         blink.chat_window.show()
+
+    def _AH_ShowLastMessagesActionTriggered(self, checked):
+        blink = QApplication.instance()
+        blink.chat_window.show_with_messages()
 
     def _AH_TransfersWindowActionTriggered(self, checked):
         self.filetransfer_window.show()
