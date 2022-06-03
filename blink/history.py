@@ -111,7 +111,7 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_ChatStreamGotMessage(self, notification):
         message = notification.data.message
 
-        if notification.sender.blink_session.remote_focus and self.sip_prefix_re.sub('',str(message.sender.uri)) not in notification.sender.blink_session.server_conference.participants:
+        if notification.sender.blink_session.remote_focus and self.sip_prefix_re.sub('', str(message.sender.uri)) not in notification.sender.blink_session.server_conference.participants:
             return
 
         is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
@@ -186,6 +186,7 @@ class Message(SQLObject):
     id_idx          = DatabaseIndex('message_id')
     unq_idx         = DatabaseIndex(message_id, account_id, remote_uri, unique=True)
 
+
 class TableVersions(object, metaclass=Singleton):
     __version__ = 1
     __versions__ = {}
@@ -242,7 +243,7 @@ class MessageHistory(object, metaclass=Singleton):
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
-        db_file =  ApplicationData.get('message_history.db')
+        db_file = ApplicationData.get('message_history.db')
         db_uri = f'sqlite://{db_file}'
         self._initialize(db_uri)
 

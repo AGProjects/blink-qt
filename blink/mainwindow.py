@@ -231,7 +231,7 @@ class MainWindow(base_class, ui_class):
         search_box.initStyleOption(option)
         frame_width = search_box.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, search_box)
         if frame_width < 4:
-            search_box.setMinimumHeight(20 + 2*frame_width)
+            search_box.setMinimumHeight(20 + 2 * frame_width)
 
         # adjust the combo boxes for themes with too much padding (like the default theme on Ubuntu 10.04)
         option = QStyleOptionComboBox()
@@ -694,7 +694,7 @@ class MainWindow(base_class, ui_class):
     def _SH_SearchListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
         selected_items = self.search_list.selectionModel().selectedIndexes()
-        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)<=1)
+        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) <= 1)
 
     def _SH_ServerToolsAccountModelChanged(self, parent_index, start, end):
         server_tools_enabled = self.server_tools_account_model.rowCount() > 0
@@ -949,5 +949,5 @@ class MainWindow(base_class, ui_class):
     def _NH_BlinkFileTransferNewOutgoing(self, notification):
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
 
-del ui_class, base_class
 
+del ui_class, base_class

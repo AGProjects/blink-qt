@@ -33,8 +33,8 @@ class BlinkMessage(MSRPChatMessage):
 
 @implementer(IObserver)
 class OutgoingMessage(object):
-    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type} #Content types to ignore in notifications
-    __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key'}.union(__ignored_content_types__) #Content types to ignore in notifications
+    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
+    __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
     def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         self.lookup = None
@@ -249,7 +249,6 @@ class MessageManager(object, metaclass=Singleton):
                 notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
                 return
 
-
             message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition)
             notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
 
@@ -272,7 +271,7 @@ class MessageManager(object, metaclass=Singleton):
 
         content = IsComposingDocument.create(state=State(state),
                                              refresh=Refresh(refresh) if refresh is not None else None,
-                                             last_active=LastActive(last_active) if last_active is not None else None, 
+                                             last_active=LastActive(last_active) if last_active is not None else None,
                                              content_type=ContentType('text'))
 
         self.send_message(session.account, session.contact, content, IsComposingDocument.content_type)

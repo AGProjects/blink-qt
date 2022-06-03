@@ -227,7 +227,7 @@ class ChatContentStringAttribute(object):
 class ChatContent(object, metaclass=ABCMeta):
     __cssclasses__ = ()
 
-    continuation_interval = timedelta(0, 5*60)  # 5 minutes
+    continuation_interval = timedelta(0, 5 * 60)  # 5 minutes
 
     history = ChatContentBooleanOption('history')
     focus = ChatContentBooleanOption('focus')
@@ -741,7 +741,7 @@ class ChatWidget(base_class, ui_class):
         notification_center = NotificationCenter()
 
         timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
-        notification_center.post_notification('ChatStreamWillSendMessage', blink_session, data=BlinkMessage(content, content_type, blink_session.account , recipients, timestamp=timestamp, id=message_id))
+        notification_center.post_notification('ChatStreamWillSendMessage', blink_session, data=BlinkMessage(content, content_type, blink_session.account, recipients, timestamp=timestamp, id=message_id))
         return message_id
 
     def _align_chat(self, scroll=False):
@@ -751,7 +751,7 @@ class ChatWidget(base_class, ui_class):
         # print widget_height, frame_height, content_height
         if widget_height > content_height:
             self.chat_element.setStyleProperty('position', 'relative')
-            self.chat_element.setStyleProperty('top', '%dpx' % (widget_height-content_height))
+            self.chat_element.setStyleProperty('top', '%dpx' % (widget_height - content_height))
         else:
             self.chat_element.setStyleProperty('position', 'static')
             self.chat_element.setStyleProperty('top', None)
@@ -2048,7 +2048,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def closeEvent(self, event):
         QSettings().setValue("chat_window/geometry", self.saveGeometry())
         super(ChatWindow, self).closeEvent(event)
- 
+
     def eventFilter(self, watched, event):
         event_type = event.type()
         if watched is self.session_widget:
@@ -2620,8 +2620,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value)
             outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value)
         else:
-            incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value*8, bits_per_second=True)
-            outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value*8, bits_per_second=True)
+            incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value * 8, bits_per_second=True)
+            outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value * 8, bits_per_second=True)
         self.traffic_label.setText("""<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">\u2193</span> %s <span style="font-family: sans-serif; color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
 
     def _SH_MuteButtonClicked(self, checked):
