@@ -240,7 +240,7 @@
      </item>
      <item>
       <property name="text">
-       <string>Start chat sessions by default</string>
+       <string>Start MSRP chat sessions by default</string>
       </property>
      </item>
      <item>
@@ -250,7 +250,7 @@
      </item>
      <item>
       <property name="text">
-       <string>Start message sessions by default</string>
+       <string>Send messages by default</string>
       </property>
      </item>
     </widget>
