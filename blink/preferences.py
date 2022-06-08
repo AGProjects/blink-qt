@@ -744,7 +744,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         if settings.sip.tcp_port and settings.sip.tcp_port == settings.sip.tls_port:
             log.warning("the SIP TLS and TCP ports cannot be the same")
-            settings.sip.tls_port = settings.sip.tcp_port+1 if settings.sip.tcp_port < 65535 else 65534
+            settings.sip.tls_port = settings.sip.tcp_port + 1 if settings.sip.tcp_port < 65535 else 65534
             settings.save()
 
         with blocked_qt_signals(self.udp_port):
@@ -780,7 +780,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         self.account_enabled_mwi_button.setEnabled(account is not bonjour_account)
         self.account_enabled_mwi_button.setChecked(account.message_summary.enabled if account is not bonjour_account else False)
-        
+
         self.display_name_editor.setText(account.display_name or '')
 
         if account is not bonjour_account:
@@ -790,7 +790,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if not account.enabled:
                 selected_account_info.registration_state = None
                 selected_account_info.registrar = None
-                
+
             if selected_account_info.registration_state:
                 if selected_account_info.registration_state == 'succeeded' and selected_account_info.registrar is not None:
                     self.account_registration_label.setText('Registered at %s' % selected_account_info.registrar)
@@ -825,7 +825,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.rtp_encryption_button.setChecked(account.rtp.encryption.enabled)
         self.key_negotiation_button.setEnabled(account.rtp.encryption.enabled)
         self.key_negotiation_button.setCurrentIndex(self.key_negotiation_button.findData(account.rtp.encryption.key_negotiation))
-        
+
         self.account_auto_answer.setChecked(account.sip.auto_answer)
 
         # SMS settings tab, also relevant for bonjour
@@ -845,7 +845,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             else:
                 stun_server_list = ""
             self.stun_server_list_editor.setText(stun_server_list)
-            
+
             with blocked_qt_signals(self.outbound_proxy_port):
                 self.outbound_proxy_port.setValue(outbound_proxy.port)
             self.outbound_proxy_transport_button.setCurrentIndex(self.outbound_proxy_transport_button.findText(outbound_proxy.transport.upper()))
@@ -893,7 +893,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         else:
             self.account_auto_answer.setText('Auto answer from all neighbours')
 
-
     def update_chat_preview(self):
         blink_settings = BlinkSettings()
 
@@ -903,7 +902,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         font_size = blink_settings.chat_window.font_size or style.font_size
         user_icons = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
 
-        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path)+'/', style_url=style_variant+'.style', font_family=font_family, font_size=font_size))
+        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path) + '/', style_url=style_variant+'.style', font_family=font_family, font_size=font_size))
         chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
         chat_element.last_message = None
 
@@ -1000,12 +999,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         content_height = chat_element.geometry().height()
         if widget_height > content_height:
             chat_element.setStyleProperty('position', 'relative')
-            chat_element.setStyleProperty('top', '%dpx' % (widget_height-content_height))
+            chat_element.setStyleProperty('top', '%dpx' % (widget_height - content_height))
         else:
             chat_element.setStyleProperty('position', 'static')
             chat_element.setStyleProperty('top', None)
         frame = self.style_view.page().mainFrame()
-        if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height*0.2:
+        if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height * 0.2:
             frame = self.style_view.page().mainFrame()
             frame.setScrollBarValue(Qt.Vertical, frame.scrollBarMaximum(Qt.Vertical))
 
@@ -1028,9 +1027,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         selected_account = selected_index.data(Qt.UserRole).account
         if account.id != selected_account.id:
             return
-    
+
         self.load_account_settings(selected_account)
-    
+
     def _SH_AccountListSelectionChanged(self, selected, deselected):
         try:
             selected_index = self.account_list.selectionModel().selectedIndexes()[0]
@@ -1082,20 +1081,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         selected_account = selected_index.data(Qt.UserRole).account
 
         title, message = "Remove Account", "Permanently remove account %s?" % selected_account.id
-        if QMessageBox.question(self, title, message, QMessageBox.Ok|QMessageBox.Cancel) == QMessageBox.Cancel:
+        if QMessageBox.question(self, title, message, QMessageBox.Ok | QMessageBox.Cancel) == QMessageBox.Cancel:
             return
 
         account_manager = AccountManager()
         if account_manager.default_account is selected_account:
             active_accounts = [account_info.account for account_info in model.accounts if account_info.account.enabled]
             position = active_accounts.index(selected_account)
-            if position < len(active_accounts)-1:
-                account_manager.default_account = active_accounts[position+1]
+            if position < len(active_accounts) - 1:
+                account_manager.default_account = active_accounts[position + 1]
             elif position > 0:
-                account_manager.default_account = active_accounts[position-1]
+                account_manager.default_account = active_accounts[position - 1]
             else:
                 account_manager.default_account = None
-
 
         selected_account.delete()
 
@@ -1858,6 +1856,5 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if 'rtp.video_codec_list' in notification.data.modified:
                 self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_list is not None)
 
+
 del ui_class, base_class
-
-

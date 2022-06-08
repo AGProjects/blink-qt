@@ -56,6 +56,7 @@ __all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactLis
 
 translation_table = dict.fromkeys(map(ord, ' \t'), None)
 
+
 @implementer(IObserver)
 class VirtualGroupManager(object, metaclass=Singleton):
 
@@ -1635,6 +1636,7 @@ class ContactWidget(base_class, ui_class):
         self.icon_label.setPixmap(contact.pixmap)
         self.state_label.state = contact.state
 
+
 del ui_class, base_class
 
 
@@ -1783,6 +1785,7 @@ class GroupWidget(base_class, ui_class):
             self._start_editing()
         return super(GroupWidget, self).event(event)
 
+
 del ui_class, base_class
 
 
@@ -1819,7 +1822,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
     def _update_list_view(self, group, collapsed):
         list_view = self.parent()
         list_items = list_view.model().items
-        for position in range(list_items.index(group)+1, len(list_items)):
+        for position in range(list_items.index(group) + 1, len(list_items)):
             if isinstance(list_items[position], Group):
                 break
             list_view.setRowHidden(position, collapsed)
