@@ -7,6 +7,8 @@ from application.python.types import Singleton
 from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager
+from sipsimple.addressbook import AddressbookManager, Group, Contact, ContactURI
+from sipsimple.configuration import DuplicateIDError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPURI, FromHeader, ToHeader, Message, RouteHeader
 from sipsimple.lookup import DNSLookup
@@ -157,11 +159,43 @@ class OutgoingMessage(object):
 
 @implementer(IObserver)
 class MessageManager(object, metaclass=Singleton):
+    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key'}
+
     def __init__(self):
         self.sessions = []
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
+
+    def _add_contact_to_messages_group(self, session):  # Maybe this be places in Contacts? -- Tijmen
+        if not session.account.sms.add_unknown_contacts:
+            return
+
+        if session.contact.type not in ['dummy', 'unknown']:
+            return
+
+        print('Adding contact')
+        group_id = '_messages'
+        try:
+            group = next((group for group in AddressbookManager().get_groups() if group.id == group_id))
+        except StopIteration:
+            try:
+                group = Group(id=group_id)
+            except DuplicateIDError as e:
+                return
+            else:
+                group.name = 'Messages'
+                group.position = 0
+                group.expanded = True
+
+        contact = Contact()
+        contact.name = session.contact.name
+        contact.preferred_media = session.contact.preferred_media
+        contact.uris = [ContactURI(uri=uri.uri, type=uri.type) for uri in session.contact.uris]
+        contact.save()
+
+        group.contacts.add(contact)
+        group.save()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -256,6 +290,7 @@ class MessageManager(object, metaclass=Singleton):
                 # print("-- Should send delivered imdn")
                 self.send_imdn_message(blink_session, message_id, timestamp, 'delivered')
 
+            self._add_contact_to_messages_group(blink_session)
             notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
         else:
             # TODO handle replicated messages
@@ -300,6 +335,9 @@ class MessageManager(object, metaclass=Singleton):
 
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id)
         outgoing_message.send(blink_session)
+
+        if content_type.lower() not in self.__ignored_content_types__:
+            self._add_contact_to_messages_group(blink_session)
 
     def create_message_session(self, uri):
         from blink.contacts import URIUtils

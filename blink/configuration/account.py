@@ -65,6 +65,7 @@ class SMSSettings(SettingsGroup):
     use_cpim = Setting(type=bool, default=True)
     enable_iscomposing = Setting(type=bool, default=True)
     enable_imdn = Setting(type=bool, default=True)
+    add_unknown_contacts = Setting(type=bool, default=True)
 
 
 class SoundSettings(SettingsGroup):
