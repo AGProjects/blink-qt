@@ -3122,7 +3122,7 @@ class ContactListView(QListView):
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
-        self.actions.start_chat_session = QAction("Start MSRP Chat Session", self, triggered=self._AH_StartChatSession)
+        self.actions.start_chat_session = QAction("Start Real Time Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
@@ -3225,7 +3225,7 @@ class ContactListView(QListView):
                     call_item.triggered.connect(partial(self._AH_SendSMS, uri))
                     call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu('Start MSRP Chat Session')
+                call_submenu = menu.addMenu('Start Real Time Chat Session')
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -3659,7 +3659,7 @@ class ContactSearchListView(QListView):
         self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
-        self.actions.start_chat_session = QAction("Start MSRP Chat Session", self, triggered=self._AH_StartChatSession)
+        self.actions.start_chat_session = QAction("Start Real Time Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
@@ -4006,7 +4006,7 @@ class ContactDetailView(QListView):
         self.actions.make_uri_default = QAction("Set Address As Default", self, triggered=self._AH_MakeURIDefault)
         self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
-        self.actions.start_chat_session = QAction("Start MSRP Chat Session", self, triggered=self._AH_StartChatSession)
+        self.actions.start_chat_session = QAction("Start Real Time Chat Session", self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
