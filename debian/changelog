@@ -1,8 +1,24 @@
 blink (5.2.0) unstable; urgency=medium
 
   * Added SIP Message functionality
+  * Added history for chat and messages
+  * Solved issues with python 3.10
+  * Fixed wrong classes on chat messages
+  * Fixed background icon path
+  * Fixed encryption widget
+  * Fixed monkey patch warning
+  * Added status support for (chat) messages
+  * Use SIP message method as default for 'chat'
+  * Added IMDN support for messages
+  * Added menuitem to show last conversations
+  * Added setting to add unknown message contacts to contact list
+  * Fixed google contacts
+  * Reorganized 'Advanced' preferences
+  * Added option to show name and uri in call history menu
+  * Updated copyright years
+  * Cleaned up code/syntax
 
- -- Adrian Georgescu <ag@ag-projects.com>  Mon, 06 Jun 2022 10:59:18 -0300
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Thu, 09 Jun 2022 15:11:35 +0200
 
 blink (5.1.8) unstable; urgency=medium
 
