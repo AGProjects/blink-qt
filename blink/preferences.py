@@ -1200,11 +1200,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account = self.selected_account
         account.rtp.encryption.enabled = checked
         account.save()
- 
+
     def _SH_AutoAnswerIntervalChanged(self, interval):
-       settings = SIPSimpleSettings()
-       settings.sip.auto_answer_interval = interval
-       settings.save()
+        settings = SIPSimpleSettings()
+        settings.sip.auto_answer_interval = interval
+        settings.save()
 
     def _SH_AccountAutoAnswerChanged(self, auto_answer):
         account = self.selected_account
@@ -1285,12 +1285,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                          int(port)
                      except (TypeError, ValueError) as e:
                          port = STUNServerAddress.default_port
-                
+
                 try:
                     new_stun_server_list.append(STUNServerAddress(host, port))
                 except ValueError as e:
                     continue
-        
+
         new_stun_server_list = new_stun_server_list or None
 
         if account.nat_traversal.stun_server_list != new_stun_server_list:
@@ -1306,7 +1306,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if account.nat_traversal.msrp_relay != msrp_relay:
             account.nat_traversal.msrp_relay = msrp_relay
             account.save()
-            
 
     def _SH_MSRPRelayTransportButtonActivated(self, text):
         account = self.selected_account
