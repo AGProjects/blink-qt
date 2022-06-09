@@ -954,7 +954,10 @@ class GoogleContactsManager(object, metaclass=Singleton):
         settings.google_contacts.username = notification.data.email
         settings.save()
         try:
-            self._service = build('people', 'v1', credentials=notification.data.credentials, http=Http(timeout=10), cache_discovery=False)  # todo: what's the best fix for cache?
+            # self._service = build('people', 'v1', credentials=notification.data.credentials, http=Http(timeout=10), cache_discovery=False)  # todo: what's the best fix for cache?
+            # Http can't be used like this in this version, see https://github.com/googleapis/google-api-python-client/issues/851
+
+            self._service = build('people', 'v1', credentials=notification.data.credentials, cache_discovery=False)  # todo: what's the best fix for cache?
         except Exception as e:
             log.error('Error fetching Google contacts: %s' % str(e))
         else:
