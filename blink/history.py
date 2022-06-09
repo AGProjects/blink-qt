@@ -19,6 +19,7 @@ from sipsimple.addressbook import AddressbookManager
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
+from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.messages import BlinkMessage
 from blink.util import run_in_gui_thread
@@ -38,19 +39,11 @@ class HistoryManager(object, metaclass=Singleton):
     sip_prefix_re = re.compile('^sips?:')
 
     def __init__(self):
-        try:
-            data = pickle.load(open(ApplicationData.get('calls_history'), "rb"))
-            if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text and isinstance(item.call_time, ISOTimestamp) for item in data):
-                raise ValueError("invalid save data")
-        except Exception as e:
-            traceback.print_exc()
-            self.calls = []
-        else:
-            self.calls = data[-self.history_size:]
-
+        self.calls = []
         self.message_history = MessageHistory()
 
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='SIPSessionDidEnd')
         notification_center.add_observer(self, name='SIPSessionDidFail')
         notification_center.add_observer(self, name='ChatStreamGotMessage')
@@ -80,6 +73,16 @@ class HistoryManager(object, metaclass=Singleton):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        try:
+            data = pickle.load(open(ApplicationData.get('calls_history'), "rb"))
+            if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text and isinstance(item.call_time, ISOTimestamp) for item in data):
+                raise ValueError("invalid save data")
+        except Exception as e:
+            traceback.print_exc()
+        else:
+            self.calls = data[-self.history_size:]
 
     def _NH_SIPSessionDidEnd(self, notification):
         if notification.sender.account is BonjourAccount():
@@ -466,6 +469,10 @@ class HistoryEntry(object):
     @property
     def text(self):
         result = str(self.name or self.uri)
+        blink_settings = BlinkSettings()
+        if blink_settings.interface.show_history_name_and_uri:
+            result = f'{str(self.name)} ({str(self.uri)})'
+
         if self.call_time:
             call_time = self.call_time.astimezone(tzlocal())
             call_date = call_time.date()

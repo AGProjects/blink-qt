@@ -346,6 +346,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.auto_answer_interval.valueChanged[int].connect(self._SH_AutoAnswerIntervalChanged)
         self.account_auto_answer.clicked.connect(self._SH_AccountAutoAnswerChanged)
 
+        # Interface
+        self.history_name_and_uri_button.clicked.connect(self._SH_HistoryNameAndUriButtonClicked)
+
         # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
         self.account_tab_widget.setCurrentIndex(0)
@@ -766,6 +769,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.tls_ca_file_editor.setText(settings.tls.ca_list or '')
         self.tls_cert_file_editor.setText(settings.tls.certificate or '')
         self.tls_verify_server_button.setChecked(settings.tls.verify_server)
+
+        self.history_name_and_uri_button.setChecked(blink_settings.interface.show_history_name_and_uri)
 
     def load_account_settings(self, account):
         """Load the account settings from configuration into the UI controls"""
@@ -1791,6 +1796,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                     self.tls_ca_file_editor.setText(ca_path)
                     settings.tls.ca_list = ca_path
                     settings.save()
+
+    def _SH_HistoryNameAndUriButtonClicked(self, checked):
+        settings = BlinkSettings()
+        settings.interface.show_history_name_and_uri = checked
+        settings.save()
 
     @run_in_gui_thread
     def handle_notification(self, notification):

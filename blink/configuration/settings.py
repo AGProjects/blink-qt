@@ -123,12 +123,17 @@ class BlinkPresenceSettings(SettingsGroup):
     icon = Setting(type=IconDescriptor, nillable=True)
 
 
+class BlinkInterfaceSettings(SettingsGroup):
+    show_history_name_and_uri = Setting(type=bool, default=False)
+
+
 class BlinkSettings(SettingsObject):
     __id__ = 'BlinkSettings'
 
     chat_window = ChatWindowSettings
     presence = BlinkPresenceSettings
     screen_sharing = BlinkScreenSharingSettings
+    interface = BlinkInterfaceSettings
 
     screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
     transfers_directory = Setting(type=Path, default=Path('~/Downloads'))
