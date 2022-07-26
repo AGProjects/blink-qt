@@ -363,7 +363,7 @@ class MessageHistory(object, metaclass=Singleton):
         # print('-- Loading messages')
         notification_center = NotificationCenter()
         try:
-            result = Message.selectBy(remote_uri=uri)[:100]
+            result = Message.selectBy(remote_uri=uri)[-100:]
         except Exception as e:
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
