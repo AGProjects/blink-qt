@@ -296,7 +296,7 @@ class ColorHelperMixin(object):
 
     def color_with_alpha(self, color, alpha):
         color = QColor(color)
-        color.setAlpha(alpha)
+        color.setAlpha(int(alpha))
         return color
 
     def alpha_color(self, color, alpha):

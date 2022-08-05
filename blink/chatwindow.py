@@ -516,7 +516,7 @@ class ChatTextInput(QTextEdit):
             QTextEdit.keyPressEvent(self, event)
 
     def _SH_DocumentLayoutSizeChanged(self, new_size):
-        self.setFixedHeight(min(new_size.height()+self.contentsMargins().top()+self.contentsMargins().bottom(), self.parent().height()/2))
+        self.setFixedHeight(int(min(new_size.height() + self.contentsMargins().top() + self.contentsMargins().bottom(), self.parent().height()/2)))
 
     def _SH_LockWidgetConfirmButtonClicked(self):
         self.lockReleased.emit(self.lock_queue.popleft())
@@ -2068,7 +2068,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self._EH_ShowSessions()
         elif watched is self.state_label:
             if event_type == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
-                upper_half = QRect(0, 0, self.state_label.width(), self.state_label.height()/2)
+                upper_half = QRect(0, 0, int(self.state_label.width()), int(self.state_label.height()/2))
                 if upper_half.contains(event.pos()):
                     self._EH_CloseSession()
                 else:
@@ -2175,12 +2175,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         painter.translate(+1.5, +1)
         painter.translate(0, +1)
         painter.setPen(contrast_pen)
-        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
-        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.drawLine(-3, -3, 3, 3)
+        painter.drawLine(-3, 3, 3, -3)
         painter.translate(0, -1)
         painter.setPen(pen)
-        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
-        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.drawLine(-3, -3, 3, 3)
+        painter.drawLine(-3, 3, 3, -3)
         painter.restore()
 
     def send_pending_imdn_messages(self, session):
