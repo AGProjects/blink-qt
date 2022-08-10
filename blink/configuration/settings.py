@@ -42,6 +42,7 @@ class ChatSettingsExtension(ChatSettings):
     auto_accept = Setting(type=bool, default=False)
     sms_replication = Setting(type=bool, default=True)
     history_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('history'))
+    keys_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('keys'))
 
 
 class GoogleContactsSettings(SettingsGroup):

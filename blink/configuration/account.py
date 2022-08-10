@@ -66,6 +66,9 @@ class SMSSettings(SettingsGroup):
     enable_iscomposing = Setting(type=bool, default=True)
     enable_imdn = Setting(type=bool, default=True)
     add_unknown_contacts = Setting(type=bool, default=True)
+    enable_pgp = Setting(type=bool, default=True)
+    public_key = Setting(type=ApplicationDataPath, default=None, nillable=True)
+    private_key = Setting(type=ApplicationDataPath, default=None, nillable=True)
 
 
 class SoundSettings(SettingsGroup):

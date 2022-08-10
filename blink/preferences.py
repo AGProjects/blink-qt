@@ -261,6 +261,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_iscomposing_enabled_button.clicked.connect(self._SH_EnableMessageIsComposingButtonClicked)
         self.message_imdn_enabled_button.clicked.connect(self._SH_EnableMessageIMDNButtonClicked)
         self.message_add_unknown_contacts_button.clicked.connect(self._SH_AddUnknownContactsButtonClicked)
+        self.message_pgp_enabled_button.clicked.connect(self._SH_EnablePGPButtonClicked)
 
         # Audio devices
         self.audio_alert_device_button.activated[int].connect(self._SH_AudioAlertDeviceButtonActivated)
@@ -840,6 +841,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_imdn_enabled_button.setEnabled(account.sms.use_cpim)
         self.message_imdn_enabled_button.setChecked(account.sms.enable_imdn)
         self.message_add_unknown_contacts_button.setChecked(account.sms.add_unknown_contacts)
+        self.message_pgp_enabled_button.setChecked(account.sms.enable_pgp)
 
         if account is not bonjour_account:
             self.account_auto_answer.setText('Auto answer from allowed contacts')
@@ -1444,6 +1446,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_AddUnknownContactsButtonClicked(self, checked):
         account = self.selected_account
         account.sms.add_unknown_contacts = checked
+        account.save()
+
+    def _SH_EnablePGPButtonClicked(self, checked):
+        account = self.selected_account
+        account.sms.enable_pgp = checked
         account.save()
 
     # Audio devices signal handlers

@@ -1291,6 +1291,13 @@
                <property name="bottomMargin">
                 <number>0</number>
                </property>
+               <item row="11" column="1">
+                <widget class="QCheckBox" name="message_add_unknown_contacts_button">
+                 <property name="text">
+                  <string>Add unknown contacts to 'Messages' group in your contacts</string>
+                 </property>
+                </widget>
+               </item>
                <item row="10" column="1">
                 <widget class="QLabel" name="label_4">
                  <property name="enabled">
@@ -1301,17 +1308,26 @@
                  </property>
                 </widget>
                </item>
-               <item row="2" column="1">
-                <widget class="Line" name="line_2">
+               <item row="8" column="1">
+                <widget class="Line" name="line_4">
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
                  </property>
                 </widget>
                </item>
-               <item row="4" column="1">
-                <widget class="QCheckBox" name="message_cpim_enabled_button">
+               <item row="1" column="1">
+                <widget class="QLabel" name="message_label">
+                 <property name="font">
+                  <font>
+                   <weight>75</weight>
+                   <bold>true</bold>
+                  </font>
+                 </property>
                  <property name="text">
-                  <string>Use CPIM envelope</string>
+                  <string>When sending messages</string>
+                 </property>
+                 <property name="scaledContents">
+                  <bool>false</bool>
                  </property>
                 </widget>
                </item>
@@ -1319,6 +1335,13 @@
                 <widget class="QCheckBox" name="message_imdn_enabled_button">
                  <property name="text">
                   <string>Enable IMDN (Read receipts)</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="Line" name="line_2">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
                  </property>
                 </widget>
                </item>
@@ -1342,33 +1365,17 @@
                  </property>
                 </widget>
                </item>
-               <item row="1" column="1">
-                <widget class="QLabel" name="message_label">
-                 <property name="font">
-                  <font>
-                   <weight>75</weight>
-                   <bold>true</bold>
-                  </font>
-                 </property>
+               <item row="4" column="1">
+                <widget class="QCheckBox" name="message_cpim_enabled_button">
                  <property name="text">
-                  <string>When sending messages</string>
-                 </property>
-                 <property name="scaledContents">
-                  <bool>false</bool>
+                  <string>Use CPIM envelope</string>
                  </property>
                 </widget>
                </item>
-               <item row="11" column="1">
-                <widget class="QCheckBox" name="message_add_unknown_contacts_button">
+               <item row="12" column="1">
+                <widget class="QCheckBox" name="message_pgp_enabled_button">
                  <property name="text">
-                  <string>Add unknown contacts to 'Messages' group in your contacts</string>
-                 </property>
-                </widget>
-               </item>
-               <item row="8" column="1">
-                <widget class="Line" name="line_4">
-                 <property name="orientation">
-                  <enum>Qt::Horizontal</enum>
+                  <string>Enable message encryption with OpenPGP (if supported by receiver)</string>
                  </property>
                 </widget>
                </item>
