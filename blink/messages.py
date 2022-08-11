@@ -266,7 +266,7 @@ class MessageManager(object, metaclass=Singleton):
 
             notification_center = NotificationCenter()
             try:
-                blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
+                blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
             except StopIteration:
                 if content_type.lower() in [IsComposingDocument.content_type, IMDNDocument.content_type]:
                     return
@@ -351,7 +351,7 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def send_message(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
-        blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
+        blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
 
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id, blink_session)
         self._send_message(outgoing_message)
@@ -364,6 +364,6 @@ class MessageManager(object, metaclass=Singleton):
         account = AccountManager().default_account
 
         try:
-            next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
+            next(session for session in self.sessions if session.contact.settings is contact.settings)
         except StopIteration:
             session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
