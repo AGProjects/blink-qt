@@ -16,7 +16,7 @@ Install the runtime dependencies:
  * python3-googleapi
  * python3-lxml
  * python3-oauth2client
- * python3-pgpy 
+ * python3-pgpy
  * python3-pyqt5
  * python3-pyqt5.qtsvg
  * python3-pyqt5.qtwebkit
