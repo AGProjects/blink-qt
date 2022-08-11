@@ -171,8 +171,9 @@ class MessageManager(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
+        notification_center.add_observer(self, name='BlinkSessionWasDeleted')
 
-    def _add_contact_to_messages_group(self, session):  # Maybe this be places in Contacts? -- Tijmen
+    def _add_contact_to_messages_group(self, session):  # Maybe this needs to be placed in Contacts? -- Tijmen
         if not session.account.sms.add_unknown_contacts:
             return
 
@@ -311,8 +312,11 @@ class MessageManager(object, metaclass=Singleton):
             pass
 
     def _NH_BlinkSessionWasCreated(self, notification):
-        self.sessions.append(notification.sender)
-        notification.center.add_observer(self, sender=notification.sender)
+        session = notification.sender
+        self.sessions.append(session)
+
+    def _NH_BlinkSessionWasDeleted(self, notification):
+        self.sessions.remove(notification.sender)
 
     def send_composing_indication(self, session, state, refresh=None, last_active=None):
         if not session.account.sms.enable_iscomposing:
