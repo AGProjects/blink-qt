@@ -1,5 +1,6 @@
 import uuid
 
+from collections import deque
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
@@ -38,7 +39,7 @@ class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
     __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
-    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
+    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None):
         self.lookup = None
         self.account = account
         self.uri = contact.uri.uri
@@ -47,6 +48,7 @@ class OutgoingMessage(object):
         self.id = id if id is not None else str(uuid.uuid4())
         self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
         self.sip_uri = SIPURI.parse('sip:%s' % self.uri)
+        self.session = session
 
     @property
     def message(self):
@@ -107,8 +109,10 @@ class OutgoingMessage(object):
             pass
             # TODO
 
-    def send(self, session):
-        self.session = session
+    def send(self):
+        if self.session is None:
+            return
+
         if self.content_type.lower() not in self.__disabled_imdn_content_types__:
             notification_center = NotificationCenter()
             notification_center.post_notification('BlinkMessageIsPending', sender=self.session, data=NotificationData(message=self.message, id=self.id))
@@ -163,6 +167,7 @@ class MessageManager(object, metaclass=Singleton):
 
     def __init__(self):
         self.sessions = []
+        self._outgoing_message_queue = deque()
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
@@ -196,6 +201,15 @@ class MessageManager(object, metaclass=Singleton):
 
         group.contacts.add(contact)
         group.save()
+
+    def _send_message(self, outgoing_message):
+        self._outgoing_message_queue.append(outgoing_message)
+        self._send_outgoing_messages()
+
+    def _send_outgoing_messages(self):
+        while self._outgoing_message_queue:
+            message = self._outgoing_message_queue.popleft()
+            message.send()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -309,7 +323,8 @@ class MessageManager(object, metaclass=Singleton):
                                              last_active=LastActive(last_active) if last_active is not None else None,
                                              content_type=ContentType('text'))
 
-        self.send_message(session.account, session.contact, content, IsComposingDocument.content_type)
+        outgoing_message = OutgoingMessage(session.account, session.contact, content, IsComposingDocument.content_type, session=session)
+        self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state):
         if not session.account.sms.use_cpim and not session.account.sms.enable_imdn:
@@ -328,23 +343,22 @@ class MessageManager(object, metaclass=Singleton):
                                       recipient_uri=session.contact.uri.uri,
                                       notification=notification)
 
-        self.send_message(session.account, session.contact, content, IMDNDocument.content_type)
+        outgoing_message = OutgoingMessage(session.account, session.contact, content, IMDNDocument.content_type, session=session)
+        self._send_message(outgoing_message)
 
     def send_message(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         blink_session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
 
-        outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id)
-        outgoing_message.send(blink_session)
-
-        if content_type.lower() not in self.__ignored_content_types__:
-            self._add_contact_to_messages_group(blink_session)
+        outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id, blink_session)
+        self._send_message(outgoing_message)
+        self._add_contact_to_messages_group(blink_session)
 
     def create_message_session(self, uri):
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(uri)
         session_manager = SessionManager()
-
         account = AccountManager().default_account
+
         try:
             next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
         except StopIteration:
