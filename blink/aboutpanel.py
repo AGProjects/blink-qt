@@ -56,5 +56,5 @@ class AboutPanel(base_class, ui_class, metaclass=QSingleton):
         if self.credits_text.height() > max_credits_height:
             self.setFixedHeight(self.height() - (self.credits_text.height() - max_credits_height))
 
-del ui_class, base_class
 
+del ui_class, base_class
