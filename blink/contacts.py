@@ -46,6 +46,7 @@ from sipsimple.threading import run_in_thread
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
+from blink.messages import MessageManager
 from blink.util import call_in_gui_thread, run_in_gui_thread
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
@@ -3522,8 +3523,8 @@ class ContactListView(QListView):
 
     def _AH_SendSMS(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        session_manager = SessionManager()
-        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('messages')], connect=False)
+        session_manager = MessageManager()
+        session_manager.create_message_session(uri or contact.uri.uri)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
@@ -3914,8 +3915,8 @@ class ContactSearchListView(QListView):
 
     def _AH_SendSMS(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        session_manager = SessionManager()
-        session_manager.create_session(contact, uri or contact.uri, [StreamDescription('messages')], connect=False)
+        session_manager = MessageManager()
+        session_manager.create_message_session(uri or contact.uri.uri)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
@@ -4223,9 +4224,9 @@ class ContactDetailView(QListView):
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
-            selected_uri = uri or contact.uri
-        session_manager = SessionManager()
-        session_manager.create_session(contact, selected_uri, [StreamDescription('messages')], connect=False)
+            selected_uri = uri or contact.uri.uri
+        session_manager = MessageManager()
+        session_manager.create_message_session(selected_uri)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
