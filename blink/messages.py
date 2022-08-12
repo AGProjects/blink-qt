@@ -1,7 +1,16 @@
 import os
+import re
 import uuid
 
 from collections import deque
+
+from PyQt5 import uic
+from PyQt5.QtCore import Qt, QObject, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QDialogButtonBox, QStyle, QDialog
+
+from pgpy import PGPMessage
+from pgpy.errors import PGPEncryptionError, PGPDecryptionError
+
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
@@ -21,11 +30,107 @@ from sipsimple.streams.msrp.chat import CPIMPayload, CPIMParserError, CPIMNamesp
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
-from blink.sessions import SessionManager, StreamDescription
+from blink.resources import Resources
+from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.util import run_in_gui_thread
 
 
 __all__ = ['MessageManager', 'BlinkMessage']
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('import_private_key_dialog.ui'))
+
+
+class ImportDialog(IncomingDialogBase, ui_class):
+    def __init__(self, parent=None):
+        super(ImportDialog, self).__init__(parent)
+
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        with Resources.directory:
+            self.setupUi(self)
+
+        self.slot = None
+        self.import_button = self.dialog_button_box.addButton("Import", QDialogButtonBox.AcceptRole)
+        self.import_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
+        self.import_button.setEnabled(False)
+
+    def show(self, activate=True):
+        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        super(ImportDialog, self).show()
+
+
+class ImportPrivateKeyRequest(QObject):
+    finished = pyqtSignal(object)
+    accepted = pyqtSignal(object, str)
+    rejected = pyqtSignal(object)
+    sip_prefix_re = re.compile('^sips?:')
+    priority = 6
+
+    def __init__(self, dialog, body, account):
+        super(ImportPrivateKeyRequest, self).__init__()
+        self.account = account
+        self.dialog = dialog
+        self.dialog.pin_code_input.textChanged.connect(self._SH_ChatInputTextChanged)
+        self.stylesheet = self.dialog.pin_code_input.styleSheet()
+        self.reset = False
+        self.dialog.finished.connect(self._SH_DialogFinished)
+
+        uri = self.sip_prefix_re.sub('', str(account.uri))
+        self.dialog.account_value_label.setText(uri)
+        regex = "(?P<before>.*)(?P<pgp_message>-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----)(?P<after>.*)"
+        matches = re.search(regex, body, re.DOTALL)
+
+        pgp_message = matches.group('pgp_message')
+        self.before = matches.group('before')
+        self.after = matches.group('after')
+        self.pgp_message = PGPMessage.from_blob(pgp_message.encode())
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __gt__(self, other):
+        return self.priority > other.priority
+
+    def __ge__(self, other):
+        return self.priority >= other.priority
+
+    def _SH_ChatInputTextChanged(self, text):
+        if len(text) == 6:
+            try:
+                decrypted_pgp_key = self.pgp_message.decrypt(text.strip())
+                self.private_key = decrypted_pgp_key.message
+            except PGPDecryptionError as e:
+                log.warning(f'Decryption of public_key import failed: {e}')
+                new_stylesheet = f"color: #800000; background-color: #ffcfcf; {self.stylesheet}"
+                self.dialog.pin_code_input.setStyleSheet(new_stylesheet)
+                self.reset = True
+            else:
+                self.dialog.import_button.setEnabled(True)
+                self.dialog.pin_code_input.setEnabled(False)
+                new_stylesheet = f"color: #00a000; background-color: #d8ffd8; {self.stylesheet}"
+                self.dialog.pin_code_input.setStyleSheet(new_stylesheet)
+        else:
+            self.dialog.import_button.setEnabled(False)
+            if self.reset:
+                self.dialog.pin_code_input.setStyleSheet(self.stylesheet)
+                self.reset = False
+
+    def _SH_DialogFinished(self, result):
+        self.finished.emit(self)
+        if result == QDialog.Accepted:
+            self.accepted.emit(self, f'{self.before}{self.private_key}{self.after}')
+        elif result == QDialog.Rejected:
+            self.rejected.emit(self)
 
 
 class BlinkMessage(MSRPChatMessage):
