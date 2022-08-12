@@ -10,6 +10,10 @@
     height: 1.6em;
 }
 
+.inline-message-icon {
+    margin-top: -.4em;
+}
+
 .x-ltime.message-status {
     left: 0px;
     margin-left: -1.5em;
@@ -21,6 +25,19 @@
 }
 
 .message.consecutive:not(.x-message) {
+    clear: both;
+}
+
+.smooth {
+    float: right;
+}
+
+.smooth  > .status-icon {
+    height: 1.1em;
+    margin-left: 4px;
+}
+
+.x-rtime:not(.message-status) {
     clear: both;
 }
 
@@ -55,7 +72,7 @@
     filter: invert(38%) sepia(17%) saturate(0%) hue-rotate(177deg) brightness(94%) contrast(97%);
 }
 
-.delivered, .displayed {
+.delivered, .displayed, .is-secure {
     filter: invert(28%) sepia(98%) saturate(2550%) hue-rotate(107deg) brightness(102%) contrast(103%);
 }
 

@@ -1,6 +1,7 @@
 <div class="x-message {message.css_classes} {message.text_direction}">
-        <span id="status-{message.id}">{message.status}</span>
+    <span id="encryption-{message.id}" class="stockholm"></span>
+    <span id="status-{message.id}">{message.status}</span>
 	<div class="x-time" title="{message.date}">{message.time}</div>
-	<div class="x-text">{message.message}</div>
+        <div id="text-{message.id}" class="x-text">{message.message}</div>
 </div>
 <div id="insert"></div>

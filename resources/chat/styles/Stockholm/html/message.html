@@ -1,4 +1,4 @@
-<div class="x-container {message.css_classes} {user_icons} {message.text_direction}">
+<div id="{message.id}" class="x-container {message.css_classes} {user_icons} {message.text_direction}">
 	<img class="x-buddyicon" src="{message.sender.iconpath}" />
 	<div class="x-iconoverlay"></div>
 	<div class="x-mentionicon" title="Mentioned!"></div>
@@ -7,9 +7,10 @@
 		<div class="x-sender">{message.sender.name}</div>
 	</div>
 	<div class="x-message {message.text_direction}">
-                <span id="status-{message.id}">{message.status}</span>
+        <span id="encryption-{message.id}" class="stockholm"></span>
+        <span id="status-{message.id}">{message.status}</span>
 		<div class="x-time" title="{message.date}">{message.time}</div>
-		<div class="x-text">{message.message}</div>
+                <div id="text-{message.id}" class="x-text">{message.message}</div>
 	</div>
 	<div id="insert"></div>
 </div>

@@ -6,9 +6,10 @@
 		<span class="x-sender">{message.sender.name} </span>
 		<span class="x-rtime" title="{message.date}">{message.time} </span>
 		<span class="x-ltime" title="{message.date}">{message.time} </span>
-                <span id="status-{message.id}">{message.status}</span>
+		<span id="encryption-{message.id}" class="smooth"></span>
+        <span id="status-{message.id}">{message.status}</span>
 		<span class="x-mark"></span>
-		<span class="x-message" title="{message.time}">{message.message} </span>
+		<span id='text-{message.id}' class="x-message" title="{message.time}">{message.message} </span>
 	</span>
 	<span id="insert"></span>
 </div>
