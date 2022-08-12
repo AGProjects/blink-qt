@@ -1,9 +1,11 @@
+import os
 import uuid
 
 from collections import deque
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
+from application.system import makedirs
 from application.python.types import Singleton
 from zope.interface import implementer
 
@@ -16,6 +18,7 @@ from sipsimple.lookup import DNSLookup
 from sipsimple.payloads.iscomposing import IsComposingDocument, IsComposingMessage, State, LastActive, Refresh, ContentType
 from sipsimple.payloads.imdn import IMDNDocument, DeliveryNotification, DisplayNotification
 from sipsimple.streams.msrp.chat import CPIMPayload, CPIMParserError, CPIMNamespace, CPIMHeader, ChatIdentity, Message as MSRPChatMessage, SimplePayload
+from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.sessions import SessionManager, StreamDescription
@@ -203,6 +206,20 @@ class MessageManager(object, metaclass=Singleton):
         group.contacts.add(contact)
         group.save()
 
+    @run_in_thread('file-io')
+    def _save_pgp_key(self, data, uri):
+        print(f'-- Saving public key for {uri}')
+        settings = SIPSimpleSettings()
+
+        id = str(uri).replace('/', '_')
+        directory = settings.chat.keys_directory.normalized
+        filename = os.path.join(directory, id + '.pubkey')
+        makedirs(directory)
+
+        with open(filename, 'wb') as f:
+            data = data if isinstance(data, bytes) else data.encode()
+            f.write(data)
+
     def _send_message(self, outgoing_message):
         self._outgoing_message_queue.append(outgoing_message)
         self._send_outgoing_messages()
@@ -258,7 +275,8 @@ class MessageManager(object, metaclass=Singleton):
                 return
 
             if content_type.lower() == 'text/pgp-public-key':
-                return
+                # print('-- Received public key')
+                self.save_key(body, sender.uri)
 
             from blink.contacts import URIUtils
             contact, contact_uri = URIUtils.find_contact(sender.uri)
@@ -268,10 +286,14 @@ class MessageManager(object, metaclass=Singleton):
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
             except StopIteration:
-                if content_type.lower() in [IsComposingDocument.content_type, IMDNDocument.content_type]:
+                if content_type.lower() in self.__ignored_content_types__:
                     return
                 else:
                     blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+
+            if content_type.lower() in ['text/pgp-public-key', 'text/pgp-private-key']:
+                notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
+                return
 
             if content_type.lower() == IsComposingDocument.content_type:
                 try:
