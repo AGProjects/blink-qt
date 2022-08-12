@@ -346,7 +346,13 @@ class MessageHistory(object, metaclass=Singleton):
                     disposition=str(message.disposition),
                     **optional_fields)
         except dberrors.DuplicateEntryError:
-            pass
+            try:
+                dbmessage = Message.selectBy(message_id=message.id)[0]
+            except IndexError:
+                pass
+            else:
+                if message.content != dbmessage.content:
+                    dbmessage.content = message.content
 
     @run_in_thread('db')
     def update(self, id, state):
