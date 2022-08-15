@@ -326,6 +326,7 @@ class OutgoingMessage(object):
         self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
         self.sip_uri = SIPURI.parse('sip:%s' % self.uri)
         self.session = session
+        self.contact = contact
 
     @property
     def message(self):
@@ -381,7 +382,6 @@ class OutgoingMessage(object):
                                       payload,
                                       credentials=self.account.credentials,
                                       extra_headers=additional_sip_headers)
-            notification_center = NotificationCenter()
             notification_center.add_observer(self, sender=message_request)
             message_request.send()
         else:
@@ -418,6 +418,14 @@ class OutgoingMessage(object):
                 self._send(routes)
                 return
             self.session.routes = routes
+
+            # TODO: Figure out how now to send a public when required, not always on start of the first message in the session
+            if self.content_type != 'text/pgp-public-key':
+                stream = self.session.fake_streams.get('messages')
+                if self.account.sms.enable_pgp and stream.can_encrypt:
+                    public_key = stream.public_key
+                    public_key_message = OutgoingMessage(self.account, self.contact, str(public_key), 'text/pgp-public-key', session=self.session)
+                    public_key_message.send()
             self._send()
 
     def _NH_DNSLookupDidFail(self, notification):
