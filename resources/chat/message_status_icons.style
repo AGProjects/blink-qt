@@ -35,6 +35,7 @@
 .smooth  > .status-icon {
     height: 1.1em;
     margin-left: 4px;
+    padding-right: 4px;
 }
 
 .x-rtime:not(.message-status) {
