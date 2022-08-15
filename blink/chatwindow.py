@@ -696,6 +696,11 @@ class ChatWidget(base_class, ui_class):
             self.chat_element.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class))
         self.last_message = message
 
+    def update_message_text(self, id, text):
+        insertion_point = self.chat_element.findFirst(f'#text-{id}')
+        insertion_point.removeAllChildren()
+        insertion_point.appendInside(text)
+
     def update_message_status(self, id, status):
         if status == 'pending':
             return
