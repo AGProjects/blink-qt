@@ -784,6 +784,8 @@ class MessageManager(object, metaclass=Singleton):
                 imdn_datetime = document.datetime.__str__()
                 notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
                 return
+            elif content_type.lower() == IMDNDocument.content_type:
+                return
 
             message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition)
 
