@@ -52,7 +52,7 @@ from blink.widgets.labels import Status
 from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.zrtp import ZRTPWidget
-
+from blink.streams.message import MessageStream
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
@@ -214,15 +214,25 @@ class ScreenSharingStreamInfo(MSRPStreamInfo):
         if stream is not None:
             self.mode = stream.handler.type
 
+class MessageStreamInfo(object):
+    def __init__(self):
+        self.encryption = None
+        self.private_key = None
+
+    def update(self, stream):
+        if stream is not None:
+            self.encryption = 'OpenPGP' if stream.can_encrypt else None
+
 
 class StreamsInfo(object):
-    __slots__ = 'audio', 'video', 'chat', 'screen_sharing'
+    __slots__ = 'audio', 'video', 'chat', 'screen_sharing', 'messages'
 
     def __init__(self):
         self.audio = AudioStreamInfo()
         self.video = VideoStreamInfo()
         self.chat = ChatStreamInfo()
         self.screen_sharing = ScreenSharingStreamInfo()
+        self.messages = MessageStreamInfo()
 
     def __getitem__(self, key):
         key = key.replace('-', '_')
@@ -236,6 +246,7 @@ class StreamsInfo(object):
         self.video.update(streams.get('video'))
         self.chat.update(streams.get('chat'))
         self.screen_sharing.update(streams.get('screen-sharing'))
+        self.messages.update(streams.get('messages'))
 
 
 class SessionInfo(object):
@@ -449,6 +460,7 @@ class BlinkSession(BlinkSessionBase):
 
     streams = StreamListDescriptor()
     items = SessionItemsDescriptor()
+    fake_streams = StreamListDescriptor()
 
     def __init__(self):
         self._initialize()
@@ -684,6 +696,8 @@ class BlinkSession(BlinkSessionBase):
         for stream_description in self.stream_descriptions:
             if stream_description.type == 'chat':
                 self.chat_type = 'MSRP'
+            if stream_description.type == 'messages' and stream_description.type not in self.fake_streams:
+                self.fake_streams.extend([stream_description.create_stream()])
         self._sibling = sibling
         self.state = 'initialized'
         self.info.update(self)
@@ -1213,6 +1227,9 @@ class BlinkSession(BlinkSessionBase):
 
     def _NH_ChatStreamSMPVerificationDidEnd(self, notification):
         self._smp_handler.handle_notification(notification)
+
+    def _NH_MessageStreamPGPKeysDidLoad(self, notification):
+        self.info.streams.messages.update(notification.sender)
 
     def _NH_BlinkContactDidChange(self, notification):
         notification.center.post_notification('BlinkSessionContactDidChange', sender=self)
@@ -3217,6 +3234,8 @@ class ChatSessionItem(object):
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
 
     def _NH_BlinkSessionWillAddStream(self, notification):
+        if notification.data.stream.type == 'messages':
+            return
         icon_label = getattr(self.widget, "%s_icon" % notification.data.stream.type.replace('-', '_'))
         icon_label.setEnabled(False)
         self.widget.update_content(self)
@@ -5227,6 +5246,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
             else:
                 self.note_label.setText('')
         self._update_accept_button()
+
 
 del ui_class, base_class
 
