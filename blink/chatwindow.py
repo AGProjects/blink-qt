@@ -2302,6 +2302,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionWillAddStream(self, notification):
         if notification.data.stream.type in self.__streamtypes__:
             self.show()
+            history = HistoryManager()
+            history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         self._update_control_menu()
