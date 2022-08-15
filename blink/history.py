@@ -55,6 +55,8 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageIsPending')
         notification_center.add_observer(self, name='BlinkMessageDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageDidFail')
+        notification_center.add_observer(self, name='BlinkMessageDidEncrypt')
+        notification_center.add_observer(self, name='BlinkMessageDidDecrypt')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
 
@@ -156,6 +158,12 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_BlinkMessageDidFail(self, notification):
         data = notification.data
         self.message_history.update(data.id, 'failed')
+
+    def _NH_BlinkMessageDidDecrypt(self, notification):
+        self.message_history.update_encryption(notification)
+
+    def _NH_BlinkMessageDidEncrypt(self, notification):
+        self.message_history.update_encryption(notification)
 
     def _NH_BlinkGotDispositionNotification(self, notification):
         data = notification.data
@@ -333,6 +341,10 @@ class MessageHistory(object, metaclass=Singleton):
                 optional_fields['encryption_type'] = str(['{0.encryption} ({0.encryption_cipher}'.format(chat_info)])
             elif chat_info.transport == 'tls':
                 optional_fields['encryption_type'] = str(['TLS'])
+        else:
+            message_info = session.info.streams.messages
+            if message_info.encryption is not None and message.is_secure:
+                optional_fields['encryption_type'] = str([f'{message_info.encryption}'])
         try:
             Message(remote_uri=remote_uri,
                     display_name=display_name,
@@ -363,6 +375,23 @@ class MessageHistory(object, metaclass=Singleton):
         else:
             # print(f'-- Updating {id} {message.state} -> {state}')
             message.state = state
+
+    @run_in_thread('db')
+    def update_encryption(self, notification):
+        message = notification.data.message
+        session = notification.sender
+        message_info = session.info.streams.messages
+
+        if message_info.encryption is not None and message.is_secure:
+            try:
+                db_message = Message.selectBy(message_id=message.id)[0]
+            except IndexError:
+                pass
+            else:
+                encryption_type = str([f'{message_info.encryption}'])
+                if db_message.encryption_type != encryption_type:
+                    # print(f'-- Updating {message.id} encryption {db_message.encryption_type} -> {encryption_type}')
+                    db_message.encryption_type = encryption_type
 
     @run_in_thread('db')
     def load(self, uri, session):
