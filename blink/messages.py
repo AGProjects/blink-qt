@@ -39,6 +39,82 @@ from blink.util import run_in_gui_thread
 __all__ = ['MessageManager', 'BlinkMessage']
 
 
+ui_class, base_class = uic.loadUiType(Resources.get('generate_pgp_key_dialog.ui'))
+
+
+class GeneratePGPKeyDialog(IncomingDialogBase, ui_class):
+    def __init__(self, parent=None):
+        super(GeneratePGPKeyDialog, self).__init__(parent)
+
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        with Resources.directory:
+            self.setupUi(self)
+
+        self.slot = None
+        self.generate_button = self.dialog_button_box.addButton("Generate", QDialogButtonBox.AcceptRole)
+        self.generate_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
+
+    def show(self, activate=True):
+        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        super(GeneratePGPKeyDialog, self).show()
+
+
+class GeneratePGPKeyRequest(QObject):
+    finished = pyqtSignal(object)
+    accepted = pyqtSignal(object, str)
+    rejected = pyqtSignal(object)
+    sip_prefix_re = re.compile('^sips?:')
+    priority = 0
+
+    def __init__(self, dialog, account, scenario=0, session=None):
+        super(GeneratePGPKeyRequest, self).__init__()
+        self.account = account
+        self.dialog = dialog
+        self.session = session
+        self.dialog.finished.connect(self._SH_DialogFinished)
+
+        uri = self.sip_prefix_re.sub('', str(account.uri))
+        replaced1 = self.dialog.key_maybe_present_label.text().replace('ACCOUNT', uri)
+        replaced2 = self.dialog.key_present_label.text().replace('ACCOUNT', uri)
+
+        self.dialog.key_maybe_present_label.setText(replaced1)
+        self.dialog.key_present_label.setText(replaced2)
+
+        if scenario == 1:
+            self.dialog.key_maybe_present_label.show()
+            self.dialog.key_present_label.hide()
+        else:
+            self.dialog.key_maybe_present_label.hide()
+            self.dialog.key_present_label.show()
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __gt__(self, other):
+        return self.priority > other.priority
+
+    def __ge__(self, other):
+        return self.priority >= other.priority
+
+    def _SH_DialogFinished(self, result):
+        self.finished.emit(self)
+        if result == QDialog.Accepted:
+            self.accepted.emit(self)
+        elif result == QDialog.Rejected:
+            self.rejected.emit(self)
+
+
+del ui_class, base_class
 ui_class, base_class = uic.loadUiType(Resources.get('import_private_key_dialog.ui'))
 
 
