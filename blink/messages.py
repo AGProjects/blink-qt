@@ -521,6 +521,32 @@ class MessageManager(object, metaclass=Singleton):
             data = data if isinstance(data, bytes) else data.encode()
             f.write(data)
 
+    def check_encryption(self, content_type, body):
+        if (content_type.lower().startswith('text/') and '-----BEGIN PGP MESSAGE-----' in body and body.strip().endswith('-----END PGP MESSAGE-----') and content_type != 'text/pgp-private-key'):
+            return 'OpenPGP'
+        else:
+            return None
+
+    def _compare_public_key(self, account, public_key):
+        settings = SIPSimpleSettings()
+        id = account.id.replace('/', '_')
+        extension = 'pubkey'
+
+        directory = os.path.join(settings.chat.keys_directory.normalized, 'private')
+
+        filename = os.path.join(directory, f'{id}.{extension}')
+        if os.path.exists(filename):
+            try:
+                with open(filename) as f:
+                    content = f.read()
+            except Exception as e:
+                pass
+            else:
+                if content == public_key:
+                    print('Import skipped, public keys are the same')
+                    return True
+        return False
+
     def _send_message(self, outgoing_message):
         self._outgoing_message_queue.append(outgoing_message)
         self._send_outgoing_messages()
@@ -534,6 +560,40 @@ class MessageManager(object, metaclass=Singleton):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    @run_in_thread('file-io')
+    def _SH_ImportPGPKeys(self, request, decrypted_message):
+        public_key = None
+        private_key = None
+
+        regex = "(?P<public_key>-----BEGIN PGP PUBLIC KEY BLOCK-----.*-----END PGP PUBLIC KEY BLOCK-----).*(?P<private_key>-----BEGIN PGP PRIVATE KEY BLOCK-----.*-----END PGP PRIVATE KEY BLOCK-----)"
+        matches = re.search(regex, decrypted_message, re.DOTALL)
+        try:
+            public_key = matches.group('public_key')
+            private_key = matches.group('private_key')
+        except AttributeError:
+            return
+
+        if private_key is None or public_key is None:
+            return
+
+        if self._compare_public_key(request.account, public_key):
+            return
+
+        settings = SIPSimpleSettings()
+        directory = os.path.join(settings.chat.keys_directory.normalized, 'private')
+        filename = os.path.join(directory, request.account.id)
+        makedirs(directory)
+
+        with open(f'{filename}.privkey', 'wb') as f:
+            f.write(str(private_key).encode())
+
+        with open(f'{filename}.pubkey', 'wb') as f:
+            f.write(str(public_key).encode())
+
+        request.account.sms.private_key = f'{filename}.privkey'
+        request.account.sms.public_key = f'{filename}.pubkey'
+        request.account.save()
 
     def _SH_ExportPGPKeys(self, request, message):
         account = request.account
@@ -580,11 +640,31 @@ class MessageManager(object, metaclass=Singleton):
                 disposition = None
                 message_id = str(uuid.uuid4())
 
-            if (content_type.lower().startswith('text/') and
-                '-----BEGIN PGP MESSAGE-----' in body and
-                body.strip().endswith('-----END PGP MESSAGE-----') and
-                content_type != 'text/pgp-private-key'):
-                return
+            encryption = self.check_encryption(content_type, body)
+            if encryption == 'OpenPGP':
+                if not account.sms.enable_pgp:
+                    return
+
+            if content_type.lower() == 'text/pgp-private-key':
+                if not account.sms.enable_pgp:
+                    return
+                regex =  "(?P<public_key>-----BEGIN PGP PUBLIC KEY BLOCK-----.*-----END PGP PUBLIC KEY BLOCK-----)"
+                matches = re.search(regex, body, re.DOTALL)
+                public_key = matches.group('public_key')
+
+                if self._compare_public_key(account, public_key):
+                    return
+
+                for request in self.pgp_requests[account]:
+                    request.dialog.hide()
+                    self.pgp_requests.remove(request)
+
+                import_dialog = ImportDialog()
+                incoming_request = ImportPrivateKeyRequest(import_dialog, body, account)
+                incoming_request.accepted.connect(self._SH_ImportPGPKeys)
+                incoming_request.finished.connect(self._SH_PGPRequestFinished)
+                bisect.insort_right(self.pgp_requests, incoming_request)
+                incoming_request.dialog.show()
 
             if content_type.lower() == 'text/pgp-public-key':
                 # print('-- Received public key')
