@@ -645,6 +645,7 @@ class ChatWidget(base_class, ui_class):
     checkmark_icon = IconDescriptor(Resources.get('icons/checkmark.svg'))
     warning_icon = IconDescriptor(Resources.get('icons/warning.svg'))
     done_all_icon = IconDescriptor(Resources.get('icons/done-all.svg'))
+    encrypted_icon = IconDescriptor(Resources.get('icons/lock-grey-12.svg'))
 
     chat_template = open(Resources.get('chat/template.html')).read()
     loading_template = open(Resources.get('chat/loading.html')).read()
@@ -706,6 +707,11 @@ class ChatWidget(base_class, ui_class):
             icon = self.checkmark_icon
         insertion_point = self.chat_element.findFirst(f'span#status-{id}')
         insertion_point.replace(ChatMessageStatus(status, icon.filename, id).to_html(self.style))
+
+    def update_message_encryption(self, id, is_secure=False):
+        if is_secure is True:
+            insertion_point = self.chat_element.findFirst(f'span#encryption-{id}')
+            insertion_point.appendInside(f'<img src={self.encrypted_icon.filename} class="status-icon is-secure">')
 
     def show_loading_screen(self, visible):
         if visible:
