@@ -2738,13 +2738,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session.connect()
 
     def _AH_ConnectWithAudio(self):
-        stream_descriptions = [StreamDescription('audio'), StreamDescription('chat')]
+        stream_descriptions = [StreamDescription('audio')]
         blink_session = self.selected_session.blink_session
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=stream_descriptions, reinitialize=True)
         blink_session.connect()
 
     def _AH_ConnectWithVideo(self):
-        stream_descriptions = [StreamDescription('audio'), StreamDescription('video'), StreamDescription('chat')]
+        stream_descriptions = [StreamDescription('audio'), StreamDescription('video')]
         blink_session = self.selected_session.blink_session
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=stream_descriptions, reinitialize=True)
         blink_session.connect()
