@@ -214,6 +214,7 @@ class ScreenSharingStreamInfo(MSRPStreamInfo):
         if stream is not None:
             self.mode = stream.handler.type
 
+
 class MessageStreamInfo(object):
     def __init__(self):
         self.encryption = None
@@ -488,6 +489,7 @@ class BlinkSession(BlinkSessionBase):
         else:
             self.timer.stop()
 
+
         self.direction = None
         self.__dict__['active'] = False
 
@@ -685,6 +687,7 @@ class BlinkSession(BlinkSessionBase):
             self._initialize(reinitialize=True)
         else:
             self._delete_when_done = len(stream_descriptions) == 1 and stream_descriptions[0].type == 'audio'
+
         self.direction = 'outgoing'
         self.account = account
         self.contact = contact
@@ -3016,6 +3019,7 @@ class ChatSessionIconLabel(QLabel):
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
 
+
 class ChatSessionWidget(base_class, ui_class):
     class StandardDisplayMode(metaclass=MarkerType):  pass
     class AlternateDisplayMode(metaclass=MarkerType): pass
@@ -3105,6 +3109,7 @@ class ChatSessionWidget(base_class, ui_class):
         self.audio_icon.setVisible('audio' in session.blink_session.streams)
         self.video_icon.setVisible('video' in session.blink_session.streams)
         self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
+
 
 del ui_class, base_class
 
@@ -4762,7 +4767,7 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
 
     def editorEvent(self, event, model, option, index):
         if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
-            cross_rect = option.rect.adjusted(option.rect.width()-14, 0, 0, -option.rect.height()/2)  # top half of the rightmost 14 pixels
+            cross_rect = option.rect.adjusted(option.rect.width() - 14, 0, 0, -option.rect.height() / 2)  # top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
                 item = index.data(Qt.UserRole)
                 model.session.server_conference.remove_participant(item.participant)
@@ -4801,8 +4806,8 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
             gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
-            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3 * 255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
             foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
@@ -5129,13 +5134,13 @@ class IncomingDialogBase(QDialog):
             total_width = width + window_frame_size.width()
             total_height = height + window_frame_size.height()
 
-            x = int(limit(screen_geometry.center().x() - total_width/2, min=available_geometry.left(), max=available_geometry.right()-total_width))
+            x = int(limit(screen_geometry.center().x() - total_width / 2, min=available_geometry.left(), max=available_geometry.right() - total_width))
             if slot is None:
                 y = -1
             elif slot % 2 == 0:
-                y = int(screen_geometry.center().y() + (slot-1)*total_height/2)
+                y = int(screen_geometry.center().y() + (slot-1) * total_height / 2)
             else:
-                y = int(screen_geometry.center().y() - slot*total_height/2)
+                y = int(screen_geometry.center().y() - slot * total_height / 2)
 
             if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
                 self.setGeometry(x, y, width, height)
@@ -5181,7 +5186,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self.auto_answer_interval = None
         self._auto_answer_timer = None
         self.passed_time = 0
-        self.auto_answer_confirmed =  False
+        self.auto_answer_confirmed = False
 
     def show(self, activate=True):
         self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
@@ -5214,7 +5219,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self._auto_answer_timer.timeout.connect(self._update_auto_answer)
         self._auto_answer_timer.start()
         self.auto_answer_label.setText('Auto answer in %d seconds' % interval)
-            
+
     def _update_auto_answer(self):
         self.passed_time = self.passed_time + 1
         remaining_time = self.auto_answer_interval - self.passed_time
@@ -5222,7 +5227,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         if remaining_time == 0:
             self._auto_answer_timer.stop()
             self.hide()
-       
+
     def _update_streams_layout(self):
         if len([stream for stream in self.streams if stream.in_use]) > 1:
             self.audio_stream.active = True
