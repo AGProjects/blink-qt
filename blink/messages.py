@@ -303,12 +303,13 @@ del ui_class, base_class
 
 
 class BlinkMessage(MSRPChatMessage):
-    __slots__ = 'id', 'disposition'
+    __slots__ = 'id', 'disposition', 'is_secure'
 
-    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, disposition=None):
+    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, disposition=None, is_secure=False):
         super(BlinkMessage, self).__init__(content, content_type, sender, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
         self.id = id if id is not None else str(uuid.uuid4())
         self.disposition = disposition
+        self.is_secure = is_secure
 
 
 @implementer(IObserver)
@@ -327,10 +328,11 @@ class OutgoingMessage(object):
         self.sip_uri = SIPURI.parse('sip:%s' % self.uri)
         self.session = session
         self.contact = contact
+        self.is_secure = False
 
     @property
     def message(self):
-        return BlinkMessage(self.content, self.content_type, self.account, timestamp=self.timestamp, id=self.id)
+        return BlinkMessage(self.content, self.content_type, self.account, timestamp=self.timestamp, id=self.id, is_secure=self.is_secure)
 
     def _lookup(self):
         settings = SIPSimpleSettings()
@@ -355,7 +357,14 @@ class OutgoingMessage(object):
             notification_center = NotificationCenter()
             routes = routes if routes is not None else self.session.routes
             from_uri = self.account.uri
-            content = self.content if isinstance(self.content, bytes) else self.content.encode()
+            content = self.content
+            if self.session is not None:
+                stream = self.session.fake_streams.get('messages')
+                if self.content_type.lower() not in self.__disabled_imdn_content_types__:
+                    if self.account.sms.enable_pgp and stream.can_encrypt:
+                        content = stream.encrypt(self.content)
+                        self.is_secure = True
+            content = content if isinstance(content, bytes) else content.encode()
             additional_sip_headers = []
             if self.account.sms.use_cpim:
                 ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
@@ -383,6 +392,8 @@ class OutgoingMessage(object):
                                       credentials=self.account.credentials,
                                       extra_headers=additional_sip_headers)
             notification_center.add_observer(self, sender=message_request)
+            if self.is_secure:
+                notification_center.post_notification('BlinkMessageDidEncrypt', sender=self.session, data=NotificationData(message=self.message))
             message_request.send()
         else:
             pass

@@ -2403,6 +2403,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         session.chat_widget.update_message_status(id=notification.data.id, status='accepted')
+        if blink_session.fake_streams.get('messages').can_encrypt:
+            session.chat_widget.update_message_encryption(notification.data.id, True)
 
     def _NH_BlinkMessageDidFail(self, notification):
         blink_session = notification.sender
