@@ -498,6 +498,8 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
         notification_center.add_observer(self, name='BlinkSessionWasDeleted')
         notification_center.add_observer(self, name='PGPKeysDidGenerate')
+        notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
+        notification_center.add_observer(self, name='PGPMessageDidDecrypt')
 
     def _add_contact_to_messages_group(self, session):  # Maybe this needs to be placed in Contacts? -- Tijmen
         if not session.account.sms.add_unknown_contacts:
@@ -568,6 +570,17 @@ class MessageManager(object, metaclass=Singleton):
                     print('Import skipped, public keys are the same')
                     return True
         return False
+
+    def _handle_incoming_message(self, message, session):
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
+
+        if message is not None and 'positive-delivery' in message.disposition:
+            print("-- Should send delivered imdn")
+            self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
+
+        self._add_contact_to_messages_group(session)
+        notification_center.post_notification('BlinkGotMessage', sender=session, data=message)
 
     def _send_message(self, outgoing_message):
         self._outgoing_message_queue.append(outgoing_message)
@@ -720,6 +733,14 @@ class MessageManager(object, metaclass=Singleton):
                     return
                 else:
                     blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+            else:
+                if blink_session.fake_streams.get('messages') is None:
+                    stream = StreamDescription('messages')
+                    blink_session.fake_streams.extend([stream.create_stream()])
+                    blink_session._delete_when_done = False
+                    if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+                        blink_session.fake_streams.get('messages').enable_pgp()
+                    notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
 
             if content_type.lower() in ['text/pgp-public-key', 'text/pgp-private-key']:
                 notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
@@ -751,14 +772,13 @@ class MessageManager(object, metaclass=Singleton):
                 return
 
             message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition)
-            notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
 
-            if disposition is not None and 'positive-delivery' in disposition:
-                # print("-- Should send delivered imdn")
-                self.send_imdn_message(blink_session, message_id, timestamp, 'delivered')
+            if encryption == 'OpenPGP':
+                if blink_session.fake_streams.get('messages').can_decrypt:
+                    blink_session.fake_streams.get('messages').decrypt(message)
+                return
 
-            self._add_contact_to_messages_group(blink_session)
-            notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
+            self._handle_incoming_message(message, blink_session)
         else:
             # TODO handle replicated messages
             pass
@@ -801,6 +821,22 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(session.account, session.contact, str(notification.data.public_key), 'text/pgp-public-key', session=session)
         self._send_message(outgoing_message)
 
+    def _NH_PGPMessageDidDecrypt(self, notification):
+        if not isinstance(notification.data.message, BlinkMessage):
+            return
+
+        session = notification.sender
+        notification.data.message.is_secure = True
+
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkMessageDidDecrypt', sender=session, data=NotificationData(message=notification.data.message))
+        self._handle_incoming_message(notification.data.message, session)
+
+    def _NH_PGPMessageDidNotDecrypt(self, notification):
+        session = notification.sender
+        data = notification.data.message
+
+        self.send_imdn_message(session, data.message_id, data.timestamp, 'error')
 
     def export_private_key(self, account):
         if account is None:

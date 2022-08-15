@@ -1610,6 +1610,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
         notification_center.add_observer(self, name='BlinkMessageHistoryLastContactsDidSucceed')
+        notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -2367,6 +2368,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
         if session.chat_widget.history_loaded:
             session.chat_widget.add_message(ChatMessage(content, sender, 'incoming', id=message.id))
+            session.chat_widget.update_message_encryption(message.id, message.is_secure)
         else:
             self.render_after_load.append(ChatMessage(content, sender, 'incoming', id=message.id))
 
@@ -2413,6 +2415,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
         session.chat_widget.update_message_status(id=notification.data.id, status='failed')
+
+    def _NH_PGPMessageDidNotDecrypt(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+        if session is None:
+            return
+        session.chat_widget.add_message(ChatStatus(f'Decryption failed: {notification.data.data.error}'))
 
     def _NH_BlinkMessageHistoryLoadDidSucceed(self, notification):
         blink_session = notification.sender
@@ -2463,7 +2472,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed')
                 else:
                     self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp))
-
+            if 'OpenPGP' in message.encryption_type:
+                session.chat_widget.update_message_encryption(message.message_id, True)
         session.chat_widget.history_loaded = True
 
         while len(self.render_after_load) > 0:
