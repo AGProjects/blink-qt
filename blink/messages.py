@@ -495,7 +495,9 @@ class MessageManager(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
+        notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
         notification_center.add_observer(self, name='BlinkSessionWasDeleted')
+        notification_center.add_observer(self, name='PGPKeysDidGenerate')
 
     def _add_contact_to_messages_group(self, session):  # Maybe this needs to be placed in Contacts? -- Tijmen
         if not session.account.sms.add_unknown_contacts:
@@ -622,6 +624,11 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(account, contact, message, 'text/pgp-private-key')
         self._send_message(outgoing_message)
 
+    def _SH_GeneratePGPKeys(self, request):
+        session = request.session
+        stream = session.fake_streams.get('messages')
+        stream.generate_keys(session)
+
     def _SH_PGPRequestFinished(self, request):
         request.dialog.hide()
         self.pgp_requests.remove(request)
@@ -662,7 +669,18 @@ class MessageManager(object, metaclass=Singleton):
 
             encryption = self.check_encryption(content_type, body)
             if encryption == 'OpenPGP':
-                if not account.sms.enable_pgp:
+                if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
+                    for request in self.pgp_requests[account, GeneratePGPKeyRequest]:
+                        return
+
+                    generate_dialog = GeneratePGPKeyDialog()
+                    generate_request = GeneratePGPKeyRequest(generate_dialog, account, 0)
+                    generate_request.accepted.connect(self._SH_GeneratePGPKeys)
+                    generate_request.finished.connect(self._SH_PGPRequestFinished)
+                    bisect.insort_right(self.pgp_requests, generate_request)
+                    generate_request.dialog.show()
+
+                elif not account.sms.enable_pgp:
                     return
 
             if content_type.lower() == 'text/pgp-private-key':
@@ -750,7 +768,39 @@ class MessageManager(object, metaclass=Singleton):
         self.sessions.append(session)
 
     def _NH_BlinkSessionWasDeleted(self, notification):
-        self.sessions.remove(notification.sender)
+        session = notification.sender
+        self.sessions.remove(session)
+        for request in self.pgp_requests[session.account, GeneratePGPKeyRequest]:
+            request.dialog.hide()
+            self.pgp_requests.remove(request)
+
+    def _NH_BlinkSessionNewOutgoing(self, notification):
+        session = notification.sender
+        stream = session.fake_streams.get('messages')
+
+        if stream is None:
+            return
+
+        if session.account.sms.enable_pgp and (session.account.sms.private_key is None or not os.path.exists(session.account.sms.private_key.normalized)):
+            for request in self.pgp_requests[session.account, GeneratePGPKeyRequest]:
+                return
+
+            generate_dialog = GeneratePGPKeyDialog()
+            generate_request = GeneratePGPKeyRequest(generate_dialog, session.account, 1, session)
+            generate_request.accepted.connect(self._SH_GeneratePGPKeys)
+            generate_request.finished.connect(self._SH_PGPRequestFinished)
+            bisect.insort_right(self.pgp_requests, generate_request)
+            generate_request.dialog.show()
+
+        elif session.account.sms.enable_pgp:
+            stream.enable_pgp()
+
+    def _NH_PGPKeysDidGenerate(self, notification):
+        session = notification.sender
+
+        outgoing_message = OutgoingMessage(session.account, session.contact, str(notification.data.public_key), 'text/pgp-public-key', session=session)
+        self._send_message(outgoing_message)
+
 
     def export_private_key(self, account):
         if account is None:
