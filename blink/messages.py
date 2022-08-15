@@ -490,6 +490,7 @@ class MessageManager(object, metaclass=Singleton):
     def __init__(self):
         self.sessions = []
         self._outgoing_message_queue = deque()
+        self._incoming_encrypted_message_queue = deque()
         self.pgp_requests = RequestList()
 
         notification_center = NotificationCenter()
@@ -629,6 +630,19 @@ class MessageManager(object, metaclass=Singleton):
         request.account.sms.private_key = f'{filename}.privkey'
         request.account.sms.public_key = f'{filename}.pubkey'
         request.account.save()
+
+        while self._incoming_encrypted_message_queue:
+            message, account, contact = self._incoming_encrypted_message_queue.popleft()
+            try:
+                blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+            except StopIteration:
+                pass
+            else:
+                stream = blink_session.fake_streams.get('messages')
+                if not stream.can_encrypt:
+                    stream.enable_pgp()
+
+                stream.decrypt(message)
 
     def _SH_ExportPGPKeys(self, request, message):
         account = request.account
@@ -776,6 +790,11 @@ class MessageManager(object, metaclass=Singleton):
             if encryption == 'OpenPGP':
                 if blink_session.fake_streams.get('messages').can_decrypt:
                     blink_session.fake_streams.get('messages').decrypt(message)
+                else:
+                    self._incoming_encrypted_message_queue.append((message, account, contact))
+                    notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
+                    self._add_contact_to_messages_group(blink_session)
+                    notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
                 return
 
             self._handle_incoming_message(message, blink_session)

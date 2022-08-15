@@ -14,7 +14,7 @@ from PyQt5.QtWebKitWidgets import QWebPage, QWebView
 from PyQt5.QtWidgets import QApplication, QAction, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
 
 from abc import ABCMeta, abstractmethod
-from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy
+from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy, NotificationData
 from application.python import Null, limit
 from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType
@@ -1582,7 +1582,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.pending_displayed_notifications = {}
         self.render_after_load = []
-
+        self.pending_decryption = []
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
@@ -1610,6 +1610,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
         notification_center.add_observer(self, name='BlinkMessageHistoryLastContactsDidSucceed')
+        notification_center.add_observer(self, name='MessageStreamPGPKeysDidLoad')
+        notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
@@ -2347,11 +2349,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
 
+        encrypted = False
         if message.content_type.startswith('image/'):
             content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
         elif message.content_type.startswith('text/'):
-            content = message.content
-            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+            if MessageManager().check_encryption(message.content_type, message.content) == 'OpenPGP':
+                content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
+                content = HtmlProcessor.autolink(content)
+                encrypted = True
+                self.pending_decryption.append((message))
+                stream = blink_session.fake_streams.get('messages')
+                if stream and stream.can_decrypt:
+                    stream.decrypt(message)
+            else:
+                content = message.content
+                content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         else:
             return
 
@@ -2367,12 +2379,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
         if session.chat_widget.history_loaded:
-            session.chat_widget.add_message(ChatMessage(content, sender, 'incoming', id=message.id))
+            if message in self.pending_decryption:
+                self.pending_decryption.remove(message)
+                session.chat_widget.update_message_text(message.id, content)
+            else:
+                session.chat_widget.add_message(ChatMessage(content, sender, 'incoming', id=message.id))
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
         else:
             self.render_after_load.append(ChatMessage(content, sender, 'incoming', id=message.id))
 
-        if message.disposition is not None and 'display' in message.disposition:
+        if message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
                 MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed')
             else:
@@ -2416,12 +2432,50 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
         session.chat_widget.update_message_status(id=notification.data.id, status='failed')
 
+    def _NH_PGPMessageDidDecrypt(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+        message = notification.data.message
+
+        if session is None:
+            return
+
+        if isinstance(message, BlinkMessage):
+            return
+
+        if message in self.pending_decryption:
+            self.pending_decryption.remove(message)
+            content = message.content
+            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+            session.chat_widget.update_message_text(message.message_id, content)
+            notification_center = NotificationCenter()
+            blink_message = BlinkMessage(content, message.content_type, id=message.message_id, is_secure=True)
+            notification_center.post_notification('BlinkMessageDidDecrypt', sender=blink_session, data=NotificationData(message=blink_message))
+            if message.state != 'displayed' and 'display' in message.disposition:
+                if message.state != 'delivered' and 'positive-delivery' in message.disposition:
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered')
+
+                if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed')
+            session.chat_widget.update_message_encryption(message.message_id, True)
+
     def _NH_PGPMessageDidNotDecrypt(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
         if session is None:
             return
         session.chat_widget.add_message(ChatStatus(f'Decryption failed: {notification.data.data.error}'))
+
+    def _NH_MessageStreamPGPKeysDidLoad(self, notification):
+        stream = notification.sender
+        blink_session = stream.blink_session
+
+        stream = blink_session.fake_streams.get('messages')
+        for message in self.pending_decryption:
+            if isinstance(message, BlinkMessage):
+                continue
+            if stream and stream.can_decrypt:
+                stream.decrypt(message)
 
     def _NH_BlinkMessageHistoryLoadDidSucceed(self, notification):
         blink_session = notification.sender
@@ -2433,11 +2487,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
 
         for message in messages:
+            encrypted = False
             if message.content_type.startswith('image/'):
                 content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
             elif message.content_type.startswith('text/'):
-                content = message.content
-                content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+                if MessageManager().check_encryption(message.content_type, message.content) == 'OpenPGP':
+                    content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
+                    content = HtmlProcessor.autolink(content)
+                    encrypted = True
+                    self.pending_decryption.append((message))
+                    stream = blink_session.fake_streams.get('messages')
+                    if stream and stream.can_decrypt:
+                        stream.decrypt(message)
+                else:
+                    content = message.content
+                    content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
             else:
                 return
             # message.sender = SIPURI.parse(f'sip:{message.remote_uri}')
@@ -2464,7 +2528,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             if message.direction == "outgoing":
                 session.chat_widget.update_message_status(id=message.message_id, status=message.state)
-            elif message.state != 'displayed' and 'display' in message.disposition:
+            elif message.state != 'displayed' and 'display' in message.disposition and not encrypted:
                 if message.state != 'delivered' and 'positive-delivery' in message.disposition:
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered')
 
