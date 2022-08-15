@@ -516,7 +516,7 @@ class ChatTextInput(QTextEdit):
             QTextEdit.keyPressEvent(self, event)
 
     def _SH_DocumentLayoutSizeChanged(self, new_size):
-        self.setFixedHeight(int(min(new_size.height() + self.contentsMargins().top() + self.contentsMargins().bottom(), self.parent().height()/2)))
+        self.setFixedHeight(int(min(new_size.height() + self.contentsMargins().top() + self.contentsMargins().bottom(), self.parent().height() / 2)))
 
     def _SH_LockWidgetConfirmButtonClicked(self):
         self.lockReleased.emit(self.lock_queue.popleft())
@@ -589,7 +589,7 @@ class Thumbnail(object):
                     image_reader.setScaledSize(image_size * 720 / image_size.height())
                 image = QPixmap.fromImageReader(image_reader)
                 image_buffer = QBuffer()
-                image_format = 'png' if image.hasAlphaChannel() or (file_format in {'png', 'tiff', 'ico'} and file_size <= 100*1024) else 'jpeg'
+                image_format = 'png' if image.hasAlphaChannel() or (file_format in {'png', 'tiff', 'ico'} and file_size <= 100 * 1024) else 'jpeg'
                 image.save(image_buffer, image_format)
                 image_data = image_buffer.data()
             instance = super(Thumbnail, cls).__new__(cls)
@@ -661,7 +661,7 @@ class ChatWidget(base_class, ui_class):
         self.font_family = blink_settings.chat_window.font or self.style.font_family
         self.font_size = blink_settings.chat_window.font_size or self.style.font_size
         self.user_icons_css_class = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
-        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path)+'/', style_url=self.style_variant+'.style', font_family=self.font_family, font_size=self.font_size))
+        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path) + '/', style_url=self.style_variant + '.style', font_family=self.font_family, font_size=self.font_size))
         self.chat_element = self.chat_view.page().mainFrame().findFirstElement('#chat')
         self.loading_element = self.chat_view.page().mainFrame().findFirstElement('#loading')
         self.composing_timer = QTimer()
@@ -756,7 +756,7 @@ class ChatWidget(base_class, ui_class):
             self.chat_element.setStyleProperty('position', 'static')
             self.chat_element.setStyleProperty('top', None)
         frame = self.chat_view.page().mainFrame()
-        if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height*0.2:
+        if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height * 0.2:
             # print "scroll requested or scrollbar is closer than %dpx to the bottom" % (widget_height*0.2)
             # self._print_scrollbar_position()
             self._scroll_to_bottom()
@@ -769,7 +769,7 @@ class ChatWidget(base_class, ui_class):
     def _print_scrollbar_position(self):
         frame = self.chat_view.page().mainFrame()
         print("%d out of %d, %d+%d=%d (%d)" % (frame.scrollBarValue(Qt.Vertical), frame.scrollBarMaximum(Qt.Vertical), frame.scrollBarValue(Qt.Vertical), self.chat_view.size().height(),
-                                               frame.scrollBarValue(Qt.Vertical)+self.chat_view.size().height(), frame.contentsSize().height()))
+                                               frame.scrollBarValue(Qt.Vertical) + self.chat_view.size().height(), frame.contentsSize().height()))
 
     def dragEnterEvent(self, event):
         mime_data = event.mimeData()
@@ -1165,14 +1165,14 @@ class VideoWidget(VideoSurface, ui_class):
         new_height = limit((new_size.height() + 117) / 6 * self.camera_preview.scale_factor, min=self.camera_preview.minimumHeight(), max=self.camera_preview.maximumHeight())
         preview_geometry = QRect(0, 0, self.width_for_height(new_height), new_height)
 
-        quadrant = QRectF(QPointF(0, 0), new_size/3)
+        quadrant = QRectF(QPointF(0, 0), new_size / 3)
 
         if quadrant.translated(0, 0).contains(preview_center):                                      # top left gravity
             preview_geometry.moveTopLeft(ideal_geometry.topLeft())
         elif quadrant.translated(quadrant.width(), 0).contains(preview_center):                     # top gravity
             preview_geometry.moveCenter(ideal_geometry.center())
             preview_geometry.moveTop(ideal_geometry.top())
-        elif quadrant.translated(2*quadrant.width(), 0).contains(preview_center):                   # top right gravity
+        elif quadrant.translated(2 * quadrant.width(), 0).contains(preview_center):                   # top right gravity
             preview_geometry.moveTopRight(ideal_geometry.topRight())
 
         elif quadrant.translated(0, quadrant.height()).contains(preview_center):                    # left gravity
@@ -1180,16 +1180,16 @@ class VideoWidget(VideoSurface, ui_class):
             preview_geometry.moveLeft(ideal_geometry.left())
         elif quadrant.translated(quadrant.width(), quadrant.height()).contains(preview_center):     # center gravity
             preview_geometry.moveCenter(ideal_geometry.center())
-        elif quadrant.translated(2*quadrant.width(), quadrant.height()).contains(preview_center):   # right gravity
+        elif quadrant.translated(2 * quadrant.width(), quadrant.height()).contains(preview_center):   # right gravity
             preview_geometry.moveCenter(ideal_geometry.center())
             preview_geometry.moveRight(ideal_geometry.right())
 
-        elif quadrant.translated(0, 2*quadrant.height()).contains(preview_center):                  # bottom left gravity
+        elif quadrant.translated(0, 2 * quadrant.height()).contains(preview_center):                  # bottom left gravity
             preview_geometry.moveBottomLeft(ideal_geometry.bottomLeft())
-        elif quadrant.translated(quadrant.width(), 2*quadrant.height()).contains(preview_center):   # bottom gravity
+        elif quadrant.translated(quadrant.width(), 2 * quadrant.height()).contains(preview_center):   # bottom gravity
             preview_geometry.moveCenter(ideal_geometry.center())
             preview_geometry.moveBottom(ideal_geometry.bottom())
-        elif quadrant.translated(2*quadrant.width(), 2*quadrant.height()).contains(preview_center): # bottom right gravity
+        elif quadrant.translated(2 * quadrant.width(), 2 * quadrant.height()).contains(preview_center):  # bottom right gravity
             preview_geometry.moveBottomRight(ideal_geometry.bottomRight())
 
         self.camera_preview.setGeometry(preview_geometry)
@@ -1204,7 +1204,7 @@ class VideoWidget(VideoSurface, ui_class):
             self.setGeometry(self.geometryHint())
 
     def setVisible(self, visible):
-        if visible == False and self.isFullScreen():
+        if visible is False and self.isFullScreen():
             self.showNormal()
             if not self.detach_button.isChecked():
                 self.setParent(self.parent_widget)
@@ -1330,9 +1330,9 @@ class VideoWidget(VideoSurface, ui_class):
     def _NH_VideoStreamReceivedKeyFrame(self, notification):
         if notification.sender.blink_session is self.blink_session and self.preview_animation and self.preview_animation.state() != QPropertyAnimation.Running and self.camera_preview.size() == self.size():
             if self.preview_animation:
-	            self.preview_animation.setStartValue(self.rect())
-	            self.preview_animation.setEndValue(QRect(0, 0, self.camera_preview.width_for_height(81), 81))
-	            self.preview_animation.start()
+                self.preview_animation.setStartValue(self.rect())
+                self.preview_animation.setEndValue(QRect(0, 0, self.camera_preview.width_for_height(81), 81))
+                self.preview_animation.start()
 
     def _NH_VideoDeviceDidChangeCamera(self, notification):
         # self.camera_preview.producer = SIPApplication.video_device.producer
@@ -1466,7 +1466,7 @@ class VideoWidget(VideoSurface, ui_class):
             # self.repaint()
             self.setParent(self.parent_widget)
             self.setGeometry(self.geometryHint())
-            self.show() # solve the flicker -Dan
+            self.show()  # solve the flicker -Dan
             # self.repaint()
             # self.no_flicker_widget.lower()
             self.no_flicker_widget.hide()
@@ -1490,6 +1490,7 @@ class VideoWidget(VideoSurface, ui_class):
         self.fullscreen_button.active = True
         self.screenshot_button.active = True
         self.idle_timer.start()
+
 
 del ui_class, base_class
 
@@ -1784,7 +1785,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         menu.hide()
         blink_session = self.selected_session.blink_session
         state = blink_session.state
-        if state=='connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
+        if state == 'connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
             self.control_button.setMenu(None)
             self.control_button.setIcon(self.cancel_icon)
         elif state == 'connected/received_proposal':
@@ -2133,8 +2134,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
             gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
-            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3 * 255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
             background_color = palette.color(QPalette.Window)
@@ -2255,14 +2256,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionNewIncoming(self, notification):
         if notification.sender.streams.types.intersection(self.__streamtypes__):
             self.show()
-        history = HistoryManager()
-        history.load(notification.sender.contact.uri.uri, notification.sender)
+            history = HistoryManager()
+            history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             self.show()
-        history = HistoryManager()
-        history.load(notification.sender.contact.uri.uri, notification.sender)
+            history = HistoryManager()
+            history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         model = self.session_model
@@ -2672,7 +2673,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.no_sessions_label.hide()
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.ClearAndSelect)
-        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible) # or PositionAtCenter
+        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible)  # or PositionAtCenter
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.show()
         session.chat_widget.chat_input.setFocus(Qt.OtherFocusReason)
@@ -2832,6 +2833,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.zrtp_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 320))
                 self.zrtp_widget.show()
                 self.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
+
 
 del ui_class, base_class
 
