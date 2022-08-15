@@ -1,5 +1,6 @@
 import os
 import re
+import random
 import uuid
 
 from collections import deque
@@ -131,6 +132,96 @@ class ImportPrivateKeyRequest(QObject):
             self.accepted.emit(self, f'{self.before}{self.private_key}{self.after}')
         elif result == QDialog.Rejected:
             self.rejected.emit(self)
+
+
+del ui_class, base_class
+ui_class, base_class = uic.loadUiType(Resources.get('export_private_key_dialog.ui'))
+
+
+class ExportDialog(IncomingDialogBase, ui_class):
+    def __init__(self, parent=None):
+        super(ExportDialog, self).__init__(parent)
+
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        with Resources.directory:
+            self.setupUi(self)
+
+        self.slot = None
+        self.export_button = self.dialog_button_box.addButton("Export", QDialogButtonBox.AcceptRole)
+        self.export_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
+        self.export_button.setEnabled(False)
+
+    def show(self, activate=True):
+        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        super(ExportDialog, self).show()
+
+
+class ExportPrivateKeyRequest(QObject):
+    finished = pyqtSignal(object)
+    accepted = pyqtSignal(object, str)
+    rejected = pyqtSignal(object)
+    sip_prefix_re = re.compile('^sips?:')
+    priority = 5
+
+    def __init__(self, dialog, account):
+        super(ExportPrivateKeyRequest, self).__init__()
+        self.account = account
+        self.dialog = dialog
+        self.dialog.finished.connect(self._SH_DialogFinished)
+
+        uri = self.sip_prefix_re.sub('', str(account.uri))
+        self.dialog.account_value_label.setText(uri)
+        self.pincode = ''.join([str(random.randint(0, 99)).zfill(2) for _ in range(3)])
+        self.dialog.pincode_value_label.setText(self.pincode)
+
+        settings = SIPSimpleSettings()
+        id = account.id.replace('/', '_')
+
+        directory = os.path.join(settings.chat.keys_directory.normalized, 'private')
+        filename = os.path.join(directory, f'{id}')
+
+        with open(f'{filename}.privkey', 'rb') as f:
+            private_key = f.read().decode()
+
+        with open(f'{filename}.pubkey', 'rb') as f:
+            self.public_key = f.read().decode()
+
+        try:
+            pgp_message = PGPMessage.new(private_key)
+            self.enc_message = pgp_message.encrypt(self.pincode)
+        except PGPEncryptionError:
+            pass
+        else:
+            self.dialog.export_button.setEnabled(True)
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __gt__(self, other):
+        return self.priority > other.priority
+
+    def __ge__(self, other):
+        return self.priority >= other.priority
+
+    def _SH_DialogFinished(self, result):
+        self.finished.emit(self)
+        if result == QDialog.Accepted:
+            self.accepted.emit(self, f'{self.public_key}{str(self.enc_message)}')
+        elif result == QDialog.Rejected:
+            self.rejected.emit(self)
+
+
+del ui_class, base_class
 
 
 class BlinkMessage(MSRPChatMessage):
