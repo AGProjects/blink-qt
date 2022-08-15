@@ -1,3 +1,4 @@
+import bisect
 import os
 import re
 import random
@@ -347,8 +348,10 @@ class OutgoingMessage(object):
         notification_center.add_observer(self, sender=self.lookup)
         self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
-    def _send(self):
-        if self.session.routes:
+    def _send(self, routes=None):
+        if routes is not None or self.session.routes:
+            notification_center = NotificationCenter()
+            routes = routes if routes is not None else self.session.routes
             from_uri = self.account.uri
             content = self.content if isinstance(self.content, bytes) else self.content.encode()
             additional_sip_headers = []
@@ -369,7 +372,7 @@ class OutgoingMessage(object):
                 payload = content
                 content_type = self.content_type
 
-            route = self.session.routes[0]
+            route = routes[0]
             message_request = Message(FromHeader(from_uri, self.account.display_name),
                                       ToHeader(self.sip_uri),
                                       RouteHeader(route.uri),
@@ -385,12 +388,17 @@ class OutgoingMessage(object):
             # TODO
 
     def send(self):
+        if self.content_type.lower() == 'text/pgp-private-key':
+            self._lookup()
+            return
+
         if self.session is None:
             return
 
         if self.content_type.lower() not in self.__disabled_imdn_content_types__:
             notification_center = NotificationCenter()
             notification_center.post_notification('BlinkMessageIsPending', sender=self.session, data=NotificationData(message=self.message, id=self.id))
+
         if self.session.routes:
             self._send()
         else:
@@ -405,6 +413,9 @@ class OutgoingMessage(object):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
             routes = notification.data.result
+            if self.content_type.lower() == 'text/pgp-private-key':
+                self._send(routes)
+                return
             self.session.routes = routes
             self._send()
 
@@ -413,6 +424,8 @@ class OutgoingMessage(object):
         if self.content_type.lower() == IsComposingDocument.content_type:
             return
 
+        if self.session is None:
+            return
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=NotificationData(code=404, reason=notification.data.error), id=self.id))
 
@@ -426,14 +439,28 @@ class OutgoingMessage(object):
                 notification_center.post_notification('BlinkDidSendDispositionNotification', sender=self.session, data=NotificationData(id=imdn_message_id, status=imdn_status))
             return
 
-        notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
+        if self.session is not None:
+            notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
     def _NH_SIPMessageDidFail(self, notification):
         if self.content_type.lower() in self.__ignored_content_types__:
             return
 
+        if self.session is None:
+            return
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
+
+
+class RequestList(list):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return super(RequestList, self).__getitem__(key)
+        elif isinstance(key, tuple):
+            account, item_type = key
+            return [item for item in self if item.account is account and isinstance(item, item_type)]
+        else:
+            return [item for item in self if item.account is key]
 
 
 @implementer(IObserver)
@@ -443,6 +470,8 @@ class MessageManager(object, metaclass=Singleton):
     def __init__(self):
         self.sessions = []
         self._outgoing_message_queue = deque()
+        self.pgp_requests = RequestList()
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
@@ -505,6 +534,17 @@ class MessageManager(object, metaclass=Singleton):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    def _SH_ExportPGPKeys(self, request, message):
+        account = request.account
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(account.uri)
+        outgoing_message = OutgoingMessage(account, contact, message, 'text/pgp-private-key')
+        self._send_message(outgoing_message)
+
+    def _SH_PGPRequestFinished(self, request):
+        request.dialog.hide()
+        self.pgp_requests.remove(request)
 
     def _NH_SIPEngineGotMessage(self, notification):
         account_manager = AccountManager()
@@ -611,6 +651,21 @@ class MessageManager(object, metaclass=Singleton):
 
     def _NH_BlinkSessionWasDeleted(self, notification):
         self.sessions.remove(notification.sender)
+
+    def export_private_key(self, account):
+        if account is None:
+            return
+
+        for request in self.pgp_requests[account, ExportPrivateKeyRequest]:
+            request.dialog.hide()
+            self.pgp_requests.remove(request)
+
+        export_dialog = ExportDialog()
+        export_request = ExportPrivateKeyRequest(export_dialog, account)
+        export_request.accepted.connect(self._SH_ExportPGPKeys)
+        export_request.finished.connect(self._SH_PGPRequestFinished)
+        bisect.insort_right(self.pgp_requests, export_request)
+        export_request.dialog.show()
 
     def send_composing_indication(self, session, state, refresh=None, last_active=None):
         if not session.account.sms.enable_iscomposing:

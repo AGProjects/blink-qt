@@ -1132,6 +1132,7 @@ padding: 2px;</string>
     </property>
     <addaction name="join_conference_action"/>
     <addaction name="show_last_messages_action"/>
+    <addaction name="export_pgp_key_action"/>
     <addaction name="auto_accept_chat_action"/>
     <addaction name="received_messages_sound_action"/>
    </widget>
@@ -1454,6 +1455,11 @@ padding: 2px;</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="export_pgp_key_action">
+   <property name="text">
+    <string>&amp;Export PGP private key</string>
    </property>
   </action>
  </widget>

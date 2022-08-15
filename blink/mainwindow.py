@@ -205,6 +205,8 @@ class MainWindow(base_class, ui_class):
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
 
         self.show_last_messages_action.triggered.connect(self._AH_ShowLastMessagesActionTriggered)  # This will load messages from 5 last contacts used in messages/chat
+        self.export_pgp_key_action.triggered.connect(self._AH_ExportPGPkeyActionTriggered)
+
         # Window menu actions
         self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
         self.transfers_window_action.triggered.connect(self._AH_TransfersWindowActionTriggered)
@@ -435,6 +437,11 @@ class MainWindow(base_class, ui_class):
         blink = QApplication.instance()
         blink.chat_window.show_with_messages()
 
+    def _AH_ExportPGPkeyActionTriggered(self, checked):
+        account = self.identity.itemData(self.identity.currentIndex()).account
+        account = account if account is not BonjourAccount() else None
+        MessageManager().export_private_key(account)
+
     def _AH_TransfersWindowActionTriggered(self, checked):
         self.filetransfer_window.show()
 
@@ -647,6 +654,11 @@ class MainWindow(base_class, ui_class):
     def _SH_IdentityChanged(self, index):
         account_manager = AccountManager()
         account_manager.default_account = self.identity.itemData(index).account
+        account = account_manager.default_account
+        if account is BonjourAccount() or not account.sms.enable_pgp or account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized):
+            self.export_pgp_key_action.setEnabled(False)
+        else:
+            self.export_pgp_key_action.setEnabled(True)
 
     def _SH_IdentityCurrentIndexChanged(self, index):
         if index != -1:
