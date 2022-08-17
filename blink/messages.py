@@ -434,7 +434,11 @@ class OutgoingMessage(object):
             if self.content_type != 'text/pgp-public-key':
                 stream = self.session.fake_streams.get('messages')
                 if self.account.sms.enable_pgp and stream.can_encrypt:
-                    public_key = stream.public_key
+                    directory = os.path.join(SIPSimpleSettings().chat.keys_directory.normalized, 'private')
+                    filename = os.path.join(directory, f'{self.account.id}')
+
+                    with open(f'{filename}.pubkey', 'rb') as f:
+                        public_key = f.read().decode()
                     public_key_message = OutgoingMessage(self.account, self.contact, str(public_key), 'text/pgp-public-key', session=self.session)
                     public_key_message.send()
             self._send()
