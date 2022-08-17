@@ -701,16 +701,13 @@ class MessageManager(object, metaclass=Singleton):
             encryption = self.check_encryption(content_type, body)
             if encryption == 'OpenPGP':
                 if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
-                    for request in self.pgp_requests[account, GeneratePGPKeyRequest]:
-                        return
-
-                    generate_dialog = GeneratePGPKeyDialog()
-                    generate_request = GeneratePGPKeyRequest(generate_dialog, account, 0)
-                    generate_request.accepted.connect(self._SH_GeneratePGPKeys)
-                    generate_request.finished.connect(self._SH_PGPRequestFinished)
-                    bisect.insort_right(self.pgp_requests, generate_request)
-                    generate_request.dialog.show()
-
+                    if not self.pgp_requests[account, GeneratePGPKeyRequest]:
+                        generate_dialog = GeneratePGPKeyDialog()
+                        generate_request = GeneratePGPKeyRequest(generate_dialog, account, 0)
+                        generate_request.accepted.connect(self._SH_GeneratePGPKeys)
+                        generate_request.finished.connect(self._SH_PGPRequestFinished)
+                        bisect.insort_right(self.pgp_requests, generate_request)
+                        generate_request.dialog.show()
                 elif not account.sms.enable_pgp:
                     return
 

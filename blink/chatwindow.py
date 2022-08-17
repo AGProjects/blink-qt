@@ -2379,7 +2379,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
         if session.chat_widget.history_loaded:
-            if message in self.pending_decryption:
+            if message in self.pending_decryption and not encrypted:
                 self.pending_decryption.remove(message)
                 session.chat_widget.update_message_text(message.id, content)
             else:
