@@ -317,12 +317,15 @@ class MessageHistory(object, metaclass=Singleton):
         if match:
             remote_uri = match.group('number')
 
-        try:
-            contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri in (addr.uri for addr in contact.uris))
-        except StopIteration:
+        if direction == 'outgoing':
             display_name = message.sender.display_name
         else:
-            display_name = contact.name
+            try:
+                contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri in (addr.uri for addr in contact.uris))
+            except StopIteration:
+                display_name = message.sender.display_name
+            else:
+                display_name = contact.name
 
         timestamp_native = message.timestamp
         timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
