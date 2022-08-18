@@ -401,7 +401,7 @@ class MessageHistory(object, metaclass=Singleton):
         # print('-- Loading messages')
         notification_center = NotificationCenter()
         try:
-            result = Message.selectBy(remote_uri=uri)[-100:]
+            result = Message.selectBy(remote_uri=uri).orderBy('timestamp')[-100:]
         except Exception as e:
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
@@ -412,7 +412,7 @@ class MessageHistory(object, metaclass=Singleton):
     def get_last_contacts(self, number=5):
         # print(f'-- Getting last {number} contacts wtih messages')
 
-        query = f'select distinct(remote_uri) from messages order by id desc limit {Message.sqlrepr(number)}'
+        query = f'select remote_uri, max(timestamp) from messages group by remote_uri order by timestamp desc limit {Message.sqlrepr(number)}'
         notification_center = NotificationCenter()
         try:
             result = self.db.queryAll(query)
