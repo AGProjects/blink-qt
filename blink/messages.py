@@ -734,7 +734,7 @@ class MessageManager(object, metaclass=Singleton):
 
             if content_type.lower() == 'text/pgp-public-key':
                 # print('-- Received public key')
-                self.save_key(body, sender.uri)
+                self._save_pgp_key(body, sender.uri)
 
             from blink.contacts import URIUtils
             contact, contact_uri = URIUtils.find_contact(sender.uri)
