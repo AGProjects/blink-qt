@@ -687,6 +687,9 @@ class ChatWidget(base_class, ui_class):
         return IconManager().get('avatar') or self.default_user_icon
 
     def add_message(self, message):
+        exists = self.chat_element.findFirst(f'#text-{message.id}')
+        if not exists.isNull():
+            return
         insertion_point = self.chat_element.findFirst('#insert')
         if message.is_related_to(self.last_message):
             message.consecutive = True
