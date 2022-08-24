@@ -315,7 +315,7 @@ class ChatMessage(ChatContent):
         self.direction = direction
         self.id = str(uuid.uuid4()) if id is None else id
         self.status = ''
-        self.timestamp = timestamp if timestamp is not None else datetime.now()
+        self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
 
     def is_related_to(self, other):
         return super(ChatMessage, self).is_related_to(other) and self.sender == other.sender and self.direction == other.direction
