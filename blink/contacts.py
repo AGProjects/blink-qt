@@ -33,6 +33,7 @@ from oauth2client.client import OAuth2WebServerFlow, AccessTokenRefreshError
 from oauth2client.file import Storage
 from operator import attrgetter
 from threading import Event
+from urllib.parse import parse_qsl
 from zope.interface import implementer
 
 from sipsimple import addressbook
@@ -698,6 +699,7 @@ class GoogleAuthorizationView(QWebView):
         self.setWindowIcon(QIcon(Resources.get('icons/blink48.png')))
         self.selectionChanged.connect(self._SH_SelectionChanged)
         self.titleChanged.connect(self._SH_TitleChanged)
+        self.urlChanged.connect(self._SH_URLChanged)
         self.resize(500, 630)
 
     @run_in_gui_thread
@@ -713,6 +715,7 @@ class GoogleAuthorizationView(QWebView):
     def _SH_SelectionChanged(self):
         self.email = self.page().mainFrame().findFirstElement('input#Email').evaluateJavaScript('this.value') or self.email  # the input changes to None during submit
 
+    # TODO: Check if this is still needed -- Tijmen
     def _SH_TitleChanged(self, title):
         self.setWindowTitle(title)
         if title == self.failure_token:
@@ -725,6 +728,17 @@ class GoogleAuthorizationView(QWebView):
             self.finished.emit()
             self.accepted.emit(code, self.email)
 
+    def _SH_URLChanged(self, url):
+        if '127.0.0.1' in url.host():
+            params = dict(parse_qsl(url.query()))
+            if 'error' in params:
+                self.hide()
+                self.finished.emit()
+                self.rejected.emit()
+            elif 'code' in params:
+                self.hide()
+                self.finished.emit()
+                self.accepted.emit(params['code'], self.email)
 
 class GoogleAuthorizationStorage(Storage):
     def __init__(self, filename):
@@ -739,7 +753,7 @@ class GoogleAuthorizationStorage(Storage):
 class GoogleAuthorization(object):
     client_id = '28246556873-20215d5a5ttd0l3sa7cchsm7hklh2d3c.apps.googleusercontent.com'
     client_secret = '3L8FDV5LELGmMIwr3NhfaZsq'
-    redirect_uri = 'urn:ietf:wg:oauth:2.0:oob:auto'
+    redirect_uri = 'http://127.0.0.1'
     scope = 'https://www.googleapis.com/auth/contacts.readonly profile'
 
     def __init__(self):
