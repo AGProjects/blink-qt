@@ -2468,7 +2468,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.add_message(ChatStatus(f'Decryption failed: {notification.data.data.error}'))
+        session.chat_widget.add_message(ChatStatus(f'Decryption failed: {notification.data.error}'))
 
     def _NH_MessageStreamPGPKeysDidLoad(self, notification):
         stream = notification.sender
