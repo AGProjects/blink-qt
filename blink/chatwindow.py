@@ -2414,7 +2414,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkGotDispositionNotification(self, notification):
         blink_session = notification.sender
-        session = blink_session.items.chat
+        try:
+            session = blink_session.items.chat
+        except AttributeError:
+            return
+
         if session is None:
             return
         data = notification.data

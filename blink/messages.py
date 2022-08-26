@@ -744,8 +744,11 @@ class MessageManager(object, metaclass=Singleton):
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
             except StopIteration:
+                blink_session = None
                 if content_type.lower() in self.__ignored_content_types__:
-                    return
+                    print("Skipping session")
+                    if content_type.lower() != IMDNDocument.content_type:
+                        return
                 else:
                     blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
             else:
@@ -757,6 +760,15 @@ class MessageManager(object, metaclass=Singleton):
                         blink_session.fake_streams.get('messages').enable_pgp()
                     notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
 
+            if account.sms.use_cpim and account.sms.enable_imdn and content_type.lower() == IMDNDocument.content_type:
+                document = IMDNDocument.parse(body)
+                imdn_message_id = document.message_id.value
+                imdn_status = document.notification.status.__str__()
+                imdn_datetime = document.datetime.__str__()
+                notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
+                return
+            elif content_type.lower() == IMDNDocument.content_type:
+                return
             if content_type.lower() in ['text/pgp-public-key', 'text/pgp-private-key']:
                 notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
                 return
@@ -776,18 +788,7 @@ class MessageManager(object, metaclass=Singleton):
                 return
 
             timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
-
-            if account.sms.use_cpim and account.sms.enable_imdn and content_type.lower() == IMDNDocument.content_type:
-                # print("-- IMDN received")
-                document = IMDNDocument.parse(body)
-                imdn_message_id = document.message_id.value
-                imdn_status = document.notification.status.__str__()
-                imdn_datetime = document.datetime.__str__()
-                notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
                 return
-            elif content_type.lower() == IMDNDocument.content_type:
-                return
-
             message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition)
 
             if encryption == 'OpenPGP':
