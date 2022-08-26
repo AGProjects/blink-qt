@@ -428,8 +428,8 @@ class MessageHistory(object, metaclass=Singleton):
         Message.deleteBy(account=account)
 
     @run_in_thread('db')
-    def remove_contact_messages(self, contact):
-        Message.deleteBy(remote_uri=contact)
+    def remove_contact_messages(self, account, contact):
+        Message.deleteBy(remote_uri=contact, account_id=str(account.id))
 
     @run_in_thread('db')
     def remove_message(self, id):
