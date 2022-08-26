@@ -713,7 +713,7 @@ class MessageManager(object, metaclass=Singleton):
             if content_type.lower() == 'text/pgp-private-key':
                 if not account.sms.enable_pgp:
                     return
-                regex =  "(?P<public_key>-----BEGIN PGP PUBLIC KEY BLOCK-----.*-----END PGP PUBLIC KEY BLOCK-----)"
+                regex = "(?P<public_key>-----BEGIN PGP PUBLIC KEY BLOCK-----.*-----END PGP PUBLIC KEY BLOCK-----)"
                 matches = re.search(regex, body, re.DOTALL)
                 public_key = matches.group('public_key')
 
