@@ -740,6 +740,9 @@ class MessageManager(object, metaclass=Singleton):
             session_manager = SessionManager()
 
             notification_center = NotificationCenter()
+
+            timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
+            message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition, direction='incoming')
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
             except StopIteration:
@@ -786,9 +789,6 @@ class MessageManager(object, metaclass=Singleton):
                     notification_center.post_notification('BlinkGotComposingIndication', sender=blink_session, data=data)
                 return
 
-            timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
-                return
-            message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition)
 
             if encryption == 'OpenPGP':
                 if blink_session.fake_streams.get('messages').can_decrypt:
