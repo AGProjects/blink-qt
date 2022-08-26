@@ -720,6 +720,7 @@ class ChatWidget(base_class, ui_class):
     def update_message_encryption(self, id, is_secure=False):
         if is_secure is True:
             insertion_point = self.chat_element.findFirst(f'span#encryption-{id}')
+            insertion_point.removeAllChildren()
             insertion_point.appendInside(f'<img src={self.encrypted_icon.filename} class="status-icon is-secure">')
 
     def show_loading_screen(self, visible):
