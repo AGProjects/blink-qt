@@ -506,11 +506,10 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
 
-    def _add_contact_to_messages_group(self, session):  # Maybe this needs to be placed in Contacts? -- Tijmen
-        if not session.account.sms.add_unknown_contacts:
+    def _add_contact_to_messages_group(self, account, contact):  # Maybe this needs to be placed in Contacts? -- Tijmen
+        if not account.sms.add_unknown_contacts:
             return
-
-        if session.contact.type not in ['dummy', 'unknown']:
+        if contact.type not in ['dummy', 'unknown']:
             return
 
         print('Adding contact')
@@ -527,11 +526,11 @@ class MessageManager(object, metaclass=Singleton):
                 group.position = 0
                 group.expanded = True
 
-        contact = Contact()
-        contact.name = session.contact.name
-        contact.preferred_media = session.contact.preferred_media
-        contact.uris = [ContactURI(uri=uri.uri, type=uri.type) for uri in session.contact.uris]
-        contact.save()
+        new_contact = Contact()
+        new_contact.name = contact.name
+        new_contact.preferred_media = contact.preferred_media
+        new_contact.uris = [ContactURI(uri=uri.uri, type=uri.type) for uri in contact.uris]
+        new_contact.save()
 
         group.contacts.add(contact)
         group.save()
@@ -797,7 +796,7 @@ class MessageManager(object, metaclass=Singleton):
                 else:
                     self._incoming_encrypted_message_queue.append((message, account, contact))
                     notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
-                    self._add_contact_to_messages_group(blink_session)
+                    self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
                     notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
                 return
 
@@ -913,7 +912,7 @@ class MessageManager(object, metaclass=Singleton):
 
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id, blink_session)
         self._send_message(outgoing_message)
-        self._add_contact_to_messages_group(blink_session)
+        self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
 
     def create_message_session(self, uri):
         from blink.contacts import URIUtils
