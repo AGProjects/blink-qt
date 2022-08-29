@@ -1,6 +1,5 @@
 import os
 
-from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from application.system import makedirs
@@ -17,6 +16,7 @@ from pgpy import PGPKey, PGPUID, PGPMessage
 from pgpy.errors import PGPError, PGPDecryptionError
 from pgpy.constants import PubKeyAlgorithm, KeyFlags, HashAlgorithm, SymmetricKeyAlgorithm, CompressionAlgorithm
 
+from blink.logging import MessagingTrace as log
 from blink.util import run_in_gui_thread
 
 
