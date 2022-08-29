@@ -317,6 +317,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # File logging
         self.trace_sip_button.clicked.connect(self._SH_TraceSIPButtonClicked)
+        self.trace_messaging_button.clicked.connect(self._SH_TraceMessagingButtonClicked)
         self.trace_msrp_button.clicked.connect(self._SH_TraceMSRPButtonClicked)
         self.trace_xcap_button.clicked.connect(self._SH_TraceXCAPButtonClicked)
         self.trace_notifications_button.clicked.connect(self._SH_TraceNotificationsButtonClicked)
@@ -736,6 +737,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # File logging settings
         self.trace_sip_button.setChecked(settings.logs.trace_sip)
+        self.trace_messaging_button.setChecked(settings.logs.trace_messaging)
         self.trace_msrp_button.setChecked(settings.logs.trace_msrp)
         self.trace_xcap_button.setChecked(settings.logs.trace_xcap)
         self.trace_notifications_button.setChecked(settings.logs.trace_notifications)
@@ -1693,6 +1695,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_TraceSIPButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.logs.trace_sip = checked
+        settings.save()
+
+    def _SH_TraceMessagingButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.logs.trace_messaging = checked
         settings.save()
 
     def _SH_TraceMSRPButtonClicked(self, checked):

@@ -2980,68 +2980,42 @@
              </property>
             </widget>
            </item>
-           <item row="1" column="0" colspan="5">
+           <item row="1" column="0">
+            <widget class="QCheckBox" name="trace_messaging_button">
+             <property name="text">
+              <string>Trace SIP Messaging and PGP Encryption</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0" colspan="5">
             <widget class="QCheckBox" name="trace_msrp_button">
              <property name="text">
               <string>Trace MSRP (used for chat, file transfer and screen sharing)</string>
              </property>
             </widget>
            </item>
-           <item row="2" column="0" colspan="5">
+           <item row="3" column="0" colspan="5">
             <widget class="QCheckBox" name="trace_xcap_button">
              <property name="text">
               <string>Trace XCAP (used by presence and for storing contacts)</string>
              </property>
             </widget>
            </item>
-           <item row="3" column="0" colspan="5">
+           <item row="4" column="0">
             <widget class="QCheckBox" name="trace_notifications_button">
              <property name="text">
               <string>Trace Notifications</string>
              </property>
             </widget>
            </item>
-           <item row="9" column="0" colspan="5">
-            <spacer name="file_logging_spacer_2">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>40</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item row="4" column="4">
-            <spacer name="trace_library_spacer_2">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item row="4" column="3">
-            <widget class="QSpinBox" name="pjsip_trace_level">
-             <property name="maximum">
-              <number>5</number>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="2">
-            <widget class="QLabel" name="level_label">
+           <item row="5" column="0">
+            <widget class="QCheckBox" name="trace_pjsip_button">
              <property name="text">
-              <string>Level:</string>
+              <string>Trace Core Library</string>
              </property>
             </widget>
            </item>
-           <item row="4" column="1">
+           <item row="5" column="1">
             <spacer name="trace_library_spacer_1">
              <property name="orientation">
               <enum>Qt::Horizontal</enum>
@@ -3057,28 +3031,34 @@
              </property>
             </spacer>
            </item>
-           <item row="4" column="0">
-            <widget class="QCheckBox" name="trace_pjsip_button">
+           <item row="5" column="2">
+            <widget class="QLabel" name="level_label">
              <property name="text">
-              <string>Trace Core Library</string>
+              <string>Level:</string>
              </property>
             </widget>
+           </item>
+           <item row="5" column="3">
+            <widget class="QSpinBox" name="pjsip_trace_level">
+             <property name="maximum">
+              <number>5</number>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="4">
+            <spacer name="trace_library_spacer_2">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
            </item>
            <item row="6" column="0">
-            <widget class="QPushButton" name="clear_log_files_button">
-             <property name="text">
-              <string>Clear log files</string>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="2" colspan="3">
-            <widget class="QLabel" name="log_files_size_label">
-             <property name="text">
-              <string>There are currently 0Mb of log files</string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="0" colspan="5">
             <spacer name="file_logging_spacer_1">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -3094,7 +3074,14 @@
              </property>
             </spacer>
            </item>
-           <item row="6" column="1">
+           <item row="7" column="0">
+            <widget class="QPushButton" name="clear_log_files_button">
+             <property name="text">
+              <string>Clear log files</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
             <spacer name="clear_log_files_spacer">
              <property name="orientation">
               <enum>Qt::Horizontal</enum>
@@ -3106,6 +3093,26 @@
               <size>
                <width>10</width>
                <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item row="7" column="2" colspan="3">
+            <widget class="QLabel" name="log_files_size_label">
+             <property name="text">
+              <string>There are currently 0Mb of log files</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="0">
+            <spacer name="file_logging_spacer_2">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
               </size>
              </property>
             </spacer>
@@ -3961,10 +3968,7 @@
   <tabstop>trace_sip_button</tabstop>
   <tabstop>trace_msrp_button</tabstop>
   <tabstop>trace_xcap_button</tabstop>
-  <tabstop>trace_notifications_button</tabstop>
-  <tabstop>trace_pjsip_button</tabstop>
   <tabstop>pjsip_trace_level</tabstop>
-  <tabstop>clear_log_files_button</tabstop>
   <tabstop>enable_udp_button</tabstop>
   <tabstop>enable_tcp_button</tabstop>
   <tabstop>enable_tls_button</tabstop>

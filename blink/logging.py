@@ -7,7 +7,7 @@ from datetime import datetime
 from pprint import pformat
 
 from application import log
-from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy
+from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
 from application.python.queue import EventQueue
 from application.python import Null
 from application.python.types import Singleton
@@ -19,7 +19,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from blink.resources import ApplicationData
 
 
-__all__ = ['LogManager']
+__all__ = ['LogManager', 'MessagingTrace']
 
 
 @implementer(IObserver)
@@ -78,6 +78,7 @@ class LogManager(object, metaclass=Singleton):
         self.pid = os.getpid()
         self.msrp_level = log.level.INFO
         self.siptrace_file = Null
+        self.massagestrace_file = Null
         self.msrptrace_file = Null
         self.pjsiptrace_file = Null
         self.notifications_file = Null
@@ -93,6 +94,8 @@ class LogManager(object, metaclass=Singleton):
         notification_center.add_observer(self)
         if settings.logs.trace_sip:
             self.siptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'sip_trace.txt'))
+        if settings.logs.trace_messaging:
+            self.messagingtrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'messaging_trace.txt'))
         if settings.logs.trace_msrp:
             self.msrptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'msrp_trace.txt'))
         if settings.logs.trace_pjsip:
@@ -119,6 +122,7 @@ class LogManager(object, metaclass=Singleton):
         self.event_queue = Null
 
         self.siptrace_file = Null
+        self.massagestrace_file = Null
         self.msrptrace_file = Null
         self.pjsiptrace_file = Null
         self.notifications_file = Null
@@ -135,7 +139,7 @@ class LogManager(object, metaclass=Singleton):
         handler(notification)
 
         settings = SIPSimpleSettings()
-        if notification.name not in ('SIPEngineLog', 'SIPEngineSIPTrace') and settings.logs.trace_notifications:
+        if notification.name not in ('SIPEngineLog', 'SIPEngineSIPTrace', 'MessagingLog') and settings.logs.trace_notifications:
             message = 'Notification name=%s sender=%s data=%s' % (notification.name, notification.sender, pformat(notification.data))
             try:
                 self.notifications_file.write('%s [%s %d]: %s\n' % (datetime.now(), self.name, self.pid, message))
@@ -148,6 +152,8 @@ class LogManager(object, metaclass=Singleton):
         if notification.sender is settings:
             if 'logs.trace_sip' in notification.data.modified:
                 self.siptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'sip_trace.txt')) if settings.logs.trace_sip else Null
+            if 'logs.trace_messaging' in notification.data.modified:
+                self.messagingtrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'messaging_trace.txt')) if settings.logs.trace_messaging else Null
             if 'logs.trace_msrp' in notification.data.modified:
                 self.msrptrace_file = LogFile(os.path.join(ApplicationData.directory, 'logs', 'msrp_trace.txt')) if settings.logs.trace_msrp else Null
             if 'logs.trace_pjsip' in notification.data.modified:
@@ -212,6 +218,17 @@ class LogManager(object, metaclass=Singleton):
         try:
             self.siptrace_file.write('%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message))
             self.siptrace_file.flush()
+        except Exception:
+            pass
+
+    def _LH_MessagingTrace(self, notification):
+        settings = SIPSimpleSettings()
+        if not settings.logs.trace_messaging:
+            return
+        message = "(%(level)s) %(message)s" % notification.data.__dict__
+        try:
+            self.messagingtrace_file.write('%s [%s %d] %s\n' % (notification.datetime, self.name, self.pid, message))
+            self.messagingtrace_file.flush()
         except Exception:
             pass
 
@@ -411,4 +428,43 @@ class LogManager(object, metaclass=Singleton):
 
         message = ("%s XCAP manager client did not initialize: %s" % (notification.datetime, notification.data.error))
         self.log_xcap(notification, message)
-        
+
+
+class MessagingTrace(object, metaclass=Singleton):
+    @classmethod
+    def debug(cls, message, *args, **kw):
+        cls._log('DEBUG', message, *args, **kw)
+
+    @classmethod
+    def info(cls, message, *args, **kw):
+        cls._log('INFO', message, *args, **kw)
+
+    @classmethod
+    def warning(cls, message, *args, **kw):
+        cls._log('WARNING', message, *args, **kw)
+
+    warn = warning
+
+    @classmethod
+    def error(cls, message, *args, **kw):
+        cls._log('ERROR', message, *args, **kw)
+
+    @classmethod
+    def exception(cls, message='', *args, **kw):
+        cls._log('EXCEPTION', message, *args, **kw)
+
+    @classmethod
+    def critical(cls, message, *args, **kw):
+        cls._log('CRITICAL', message, *args, **kw)
+
+    fatal = critical
+
+    @classmethod
+    def _log(cls, level, message):
+        try:
+            level = getattr(log.level, level)
+        except AttributeError:
+            return
+        data = NotificationData(level=level, message=message)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('MessagingTrace', data=data)
