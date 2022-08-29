@@ -747,6 +747,14 @@ class ChatWidget(base_class, ui_class):
             insertion_point.removeAllChildren()
             insertion_point.appendInside(f'<img src={self.encrypted_icon.filename} class="status-icon is-secure">')
 
+    def remove_message(self, id):
+        exists = self.chat_element.findFirst(f'#message-{id}')
+
+        if exists.isNull():
+            return
+        else:
+            exists.removeFromDocument()
+
     def show_loading_screen(self, visible):
         if visible:
             self.loading_element.appendInside(self.loading_template)
