@@ -5,6 +5,7 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null
 from application.system import makedirs
 
+from sipsimple.account import AccountManager
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.streams import IMediaStream, MediaStreamType, UnknownStreamError
 from sipsimple.threading import run_in_thread
@@ -38,6 +39,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         self.private_key = None
         self.public_key = None
         self.remote_public_key = None
+        self.other_private_keys = []
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='PGPKeysShouldReload')
 
@@ -168,7 +170,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         session = self.blink_session
         notification_center = NotificationCenter()
 
-        if self.private_key is None:
+        if self.private_key is None and len(self.other_private_keys) == 0:
             notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message))
 
         try:
@@ -179,14 +181,27 @@ class MessageStream(object, metaclass=MediaStreamType):
         # print(f'-- Decrypting message {msg_id}')
         try:
             pgpMessage = PGPMessage.from_blob(message.content)
-            decrypted_message = self.private_key.decrypt(pgpMessage)
-        except (PGPDecryptionError, PGPError) as e:
-            log.warning(f'-- Decryption failed for {msg_id}, error: {e}')
-            notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=e))
-        else:
-            # print(f'-- PGP message {msg_id} decrypted')
-            message.content = decrypted_message.message
-            notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message))
+        except (ValueError) as e:
+            log.warning(f'Decryption failed for {msg_id}, this is not a PGPMessage, error: {e}')
+            return
+
+        key_list = [(session.account.id, self.private_key)] if self.private_key is not None else []
+        key_list.extend(self.other_private_keys)
+
+        error = None
+        for (account, key) in key_list:
+            try:
+                decrypted_message = key.decrypt(pgpMessage)
+            except (PGPDecryptionError, PGPError) as error:
+                log.debug(f'-- Decryption failed for {msg_id} with account key {account}, error: {error}')
+                continue
+            else:
+                message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message
+                notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
+                return
+
+        log.warning(f'-- Decryption failed for {msg_id}, error: {error}')
+        notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=error))
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -203,6 +218,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         self.remote_public_key = self._load_key(str(session.contact_uri.uri), True)
         self.public_key = self._load_key(str(session.account.id))
         self.private_key = self._load_key(str(session.account.id), public_key=False)
+        self._load_other_keys(session)
 
     def _load_key(self, id, remote=False, public_key=True):
         settings = SIPSimpleSettings()
@@ -243,3 +259,13 @@ class MessageStream(object, metaclass=MediaStreamType):
         if None not in [self.remote_public_key, self.public_key, self.private_key]:
             notification_center = NotificationCenter()
             notification_center.post_notification('MessageStreamPGPKeysDidLoad', sender=self)
+        self._load_other_keys(session)
+
+    def _load_other_keys(self, session):
+        account_manager = AccountManager()
+        for account in (account for account in account_manager.iter_accounts() if account is not session.account and account.enabled):
+            loaded_key = self._load_key(str(account.id), public_key=False)
+            if loaded_key is None:
+                continue
+            self.other_private_keys.append((account.id, loaded_key))
+
