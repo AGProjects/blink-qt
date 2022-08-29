@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import QApplication, QDialogButtonBox, QStyle, QDialog
 from pgpy import PGPMessage
 from pgpy.errors import PGPEncryptionError, PGPDecryptionError
 
-from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from application.system import makedirs
@@ -33,6 +32,7 @@ from sipsimple.streams.msrp.chat import CPIMPayload, CPIMParserError, CPIMNamesp
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
+from blink.logging import MessagingTrace as log
 from blink.resources import Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.util import run_in_gui_thread
@@ -669,6 +669,7 @@ class MessageManager(object, metaclass=Singleton):
 
         if account is None:
             return
+        log.info(f'Received a message for {account.id}')
 
         data = notification.data
         content_type = data.headers.get('Content-Type', Null).content_type
@@ -699,6 +700,8 @@ class MessageManager(object, metaclass=Singleton):
 
             encryption = self.check_encryption(content_type, body)
             if encryption == 'OpenPGP':
+                log.info('Message is Open PGP encrypted')
+
                 if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
                     if not self.pgp_requests[account, GeneratePGPKeyRequest]:
                         generate_dialog = GeneratePGPKeyDialog()
@@ -708,10 +711,13 @@ class MessageManager(object, metaclass=Singleton):
                         bisect.insort_right(self.pgp_requests, generate_request)
                         generate_request.dialog.show()
                 elif not account.sms.enable_pgp:
+                    log.info(f"-- Skipping PGP encrypted message, PGP is disabled for {account.id}")
                     return
 
             if content_type.lower() == 'text/pgp-private-key':
+                log.info('Message is a private key')
                 if not account.sms.enable_pgp:
+                    log.info(f"-- Skipping private key import, PGP is disabled for {account.id}")
                     return
                 regex = "(?P<public_key>-----BEGIN PGP PUBLIC KEY BLOCK-----.*-----END PGP PUBLIC KEY BLOCK-----)"
                 matches = re.search(regex, body, re.DOTALL)
@@ -732,7 +738,7 @@ class MessageManager(object, metaclass=Singleton):
                 incoming_request.dialog.show()
 
             if content_type.lower() == 'text/pgp-public-key':
-                # print('-- Received public key')
+                log.info('Message is a public key')
                 self._save_pgp_key(body, sender.uri)
 
             from blink.contacts import URIUtils
@@ -748,10 +754,11 @@ class MessageManager(object, metaclass=Singleton):
             except StopIteration:
                 blink_session = None
                 if content_type.lower() in self.__ignored_content_types__:
-                    print("Skipping session")
+                    log.debug(f"Not creating session for incoming message for content type {content.type.lower()}")
                     if content_type.lower() != IMDNDocument.content_type:
                         return
                 else:
+                    log.debug("Starting new message session for incoming message")
                     blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
             else:
                 if blink_session.fake_streams.get('messages') is None:
