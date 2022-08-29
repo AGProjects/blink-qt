@@ -303,13 +303,14 @@ del ui_class, base_class
 
 
 class BlinkMessage(MSRPChatMessage):
-    __slots__ = 'id', 'disposition', 'is_secure'
+    __slots__ = 'id', 'disposition', 'is_secure', 'direction'
 
-    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, disposition=None, is_secure=False):
+    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, disposition=None, is_secure=False, direction=None):
         super(BlinkMessage, self).__init__(content, content_type, sender, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
         self.id = id if id is not None else str(uuid.uuid4())
         self.disposition = disposition
         self.is_secure = is_secure
+        self.direction = direction
 
 
 @implementer(IObserver)
