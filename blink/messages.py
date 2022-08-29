@@ -755,7 +755,7 @@ class MessageManager(object, metaclass=Singleton):
             except StopIteration:
                 blink_session = None
                 if content_type.lower() in self.__ignored_content_types__:
-                    log.debug(f"Not creating session for incoming message for content type {content.type.lower()}")
+                    log.debug(f"Not creating session for incoming message for content type {content_type.lower()}")
                     if content_type.lower() != IMDNDocument.content_type:
                         return
                 else:
