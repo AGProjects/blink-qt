@@ -22,6 +22,7 @@ from application.system import makedirs
 from collections.abc import MutableSet
 from collections import deque
 from datetime import datetime, timedelta, timezone
+from dateutil.tz import tzlocal
 from itertools import count
 from lxml import etree, html
 from lxml.html.clean import autolink
@@ -669,6 +670,7 @@ class ChatWidget(base_class, ui_class):
         self.last_message = None
         self.session = session
         self.history_loaded = False
+        self.timestamp_rendered_messages = []
         if session is not None:
             notification_center = NotificationCenter()
             notification_center.add_observer(ObserverWeakrefProxy(self), sender=session.blink_session)
@@ -691,6 +693,25 @@ class ChatWidget(base_class, ui_class):
             exists = self.chat_element.findFirst(f'#text-{message.id}')
             if not exists.isNull():
                 return
+
+            if self.last_message is not None and not self.last_message.history and message.history:
+                message.history = False
+
+            for i, (timestamp, id) in enumerate(self.timestamp_rendered_messages):
+                if timestamp >= message.timestamp:
+                    insertion_point = self.chat_element.findFirst(f'#message-{id}')
+
+                    if message.is_related_to(self.last_message):
+                        message.consecutive = True
+                        sibling = insertion_point.previousSibling()
+                        sibling.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", ''))
+                    else:
+                        insertion_point.prependOutside(message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", ''))
+
+                    self.timestamp_rendered_messages.insert(i, (message.timestamp, message.id))
+                    self.last_message = message
+                    return
+
         insertion_point = self.chat_element.findFirst('#insert')
         if message.is_related_to(self.last_message):
             message.consecutive = True
@@ -698,6 +719,9 @@ class ChatWidget(base_class, ui_class):
         else:
             insertion_point.removeFromDocument()
             self.chat_element.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class))
+
+        if hasattr(message, 'id'):
+            self.timestamp_rendered_messages.append((message.timestamp, message.id))
         self.last_message = message
 
     def update_message_text(self, id, text):
@@ -2523,7 +2547,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 uri = message.remote_uri
 
-            timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+            timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
             # print(f"t: {timestamp}")
             account_manager = AccountManager()
             if account_manager.has_account(uri):
