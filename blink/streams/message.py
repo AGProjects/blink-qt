@@ -177,8 +177,8 @@ class MessageStream(object, metaclass=MediaStreamType):
             msg_id = message.message_id
         except AttributeError:
             msg_id = message.id
+        log.info(f'Trying to decrypt message {msg_id}')
 
-        # print(f'-- Decrypting message {msg_id}')
         try:
             pgpMessage = PGPMessage.from_blob(message.content)
         except (ValueError) as e:
@@ -197,6 +197,7 @@ class MessageStream(object, metaclass=MediaStreamType):
                 continue
             else:
                 message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message
+                log.info(f'Message decrypted: {msg_id}')
                 notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
                 return
 
