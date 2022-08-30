@@ -2238,8 +2238,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def send_pending_imdn_messages(self, session):
         if session and session.blink_session in self.pending_displayed_notifications:
             item = self.pending_displayed_notifications.pop(self.selected_session.blink_session)
-            for (id, timestamp) in item:
-                MessageManager().send_imdn_message(session.blink_session, id, timestamp, 'displayed')
+            for (id, timestamp, account) in item:
+                MessageManager().send_imdn_message(session.blink_session, id, timestamp, 'displayed', account)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -2414,6 +2414,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             account = account_manager.get_account(uri)
             sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
         else:
+            account = None
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
         if session.chat_widget.history_loaded:
             if message in self.pending_decryption and not encrypted:
@@ -2427,9 +2428,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
-                MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed')
+                MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed', account)
             else:
-                self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp))
+                self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp, account))
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
@@ -2492,12 +2493,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             notification_center = NotificationCenter()
             blink_message = BlinkMessage(content, message.content_type, id=message.message_id, is_secure=True)
             notification_center.post_notification('BlinkMessageDidDecrypt', sender=blink_session, data=NotificationData(message=blink_message))
+
+            account_manager = AccountManager()
+            account = account_manager.get_account(message.account_id) if account_manager.has_account(message.account_id) else None
             if message.state != 'displayed' and 'display' in message.disposition:
                 if message.state != 'delivered' and 'positive-delivery' in message.disposition:
-                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered')
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
 
                 if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
-                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed')
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
             session.chat_widget.update_message_encryption(message.message_id, True)
 
     def _NH_PGPMessageDidNotDecrypt(self, notification):
@@ -2562,6 +2566,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 account = account_manager.get_account(uri)
                 sender = ChatSender(message.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
             else:
+                account = None
                 sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
 
             session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True))
@@ -2571,12 +2576,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 session.chat_widget.update_message_status(id=message.message_id, status=message.state)
             elif message.state != 'displayed' and 'display' in message.disposition and not encrypted:
                 if message.state != 'delivered' and 'positive-delivery' in message.disposition:
-                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered')
-
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
                 if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
-                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed')
+                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
                 else:
-                    self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp))
+                    self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp, account))
             if 'OpenPGP' in message.encryption_type:
                 session.chat_widget.update_message_encryption(message.message_id, True)
         session.chat_widget.history_loaded = True

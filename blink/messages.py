@@ -576,9 +576,10 @@ class MessageManager(object, metaclass=Singleton):
                     return True
         return False
 
-    def _handle_incoming_message(self, message, session):
+    def _handle_incoming_message(self, message, session, account=None):
         notification_center = NotificationCenter()
-        notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
+        if account is session.account:
+            notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
 
         if message is not None and 'positive-delivery' in message.disposition:
             print("-- Should send delivered imdn")
@@ -797,18 +798,28 @@ class MessageManager(object, metaclass=Singleton):
                     notification_center.post_notification('BlinkGotComposingIndication', sender=blink_session, data=data)
                 return
 
+            if not content_type.lower().startswith('text'):
+                return
+
+            if account is not blink_session.account:
+                history_message_data = NotificationData(remote_uri=contact.uri.uri,
+                                                        message=message,
+                                                        encryption=encryption,
+                                                        state='accepted')
+                notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
 
             if encryption == 'OpenPGP':
                 if blink_session.fake_streams.get('messages').can_decrypt:
                     blink_session.fake_streams.get('messages').decrypt(message)
                 else:
                     self._incoming_encrypted_message_queue.append((message, account, contact))
-                    notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
+                    if account is blink_session.account:
+                        notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
                     self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
                     notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
                 return
 
-            self._handle_incoming_message(message, blink_session)
+            self._handle_incoming_message(message, blink_session, account)
         else:
             # TODO handle replicated messages
             pass
@@ -860,7 +871,7 @@ class MessageManager(object, metaclass=Singleton):
 
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidDecrypt', sender=session, data=NotificationData(message=notification.data.message))
-        self._handle_incoming_message(notification.data.message, session)
+        self._handle_incoming_message(notification.data.message, session, notification.data.account)
 
     def _NH_PGPMessageDidNotDecrypt(self, notification):
         session = notification.sender
@@ -895,11 +906,14 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(session.account, session.contact, content, IsComposingDocument.content_type, session=session)
         self._send_message(outgoing_message)
 
-    def send_imdn_message(self, session, id, timestamp, state):
-        if not session.account.sms.use_cpim and not session.account.sms.enable_imdn:
+    def send_imdn_message(self, session, id, timestamp, state, account=None):
+        if not session.account.sms.use_cpim and not session.account.sms.enable_imdn and account is None:
             return
 
-        # print(f"-- Will send imdn for {id} -> {state}")
+        if account is not None and not account.sms.use_cpim and not account.sms.enable_imdn:
+            return
+
+        log.debug(f"-- Attempt to send imdn for {id}: {state}")
         if state == 'delivered':
             notification = DeliveryNotification(state)
         elif state == 'displayed':
@@ -912,7 +926,7 @@ class MessageManager(object, metaclass=Singleton):
                                       recipient_uri=session.contact.uri.uri,
                                       notification=notification)
 
-        outgoing_message = OutgoingMessage(session.account, session.contact, content, IMDNDocument.content_type, session=session)
+        outgoing_message = OutgoingMessage(session.account if account is None else account, session.contact, content, IMDNDocument.content_type, session=session)
         self._send_message(outgoing_message)
 
     def send_message(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
