@@ -585,8 +585,8 @@ class MessageManager(object, metaclass=Singleton):
             print("-- Should send delivered imdn")
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
-        notification_center.post_notification('BlinkGotMessage', sender=session, data=message)
         self._add_contact_to_messages_group(session.account, session.contact)
+        notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message))
 
     def _send_message(self, outgoing_message):
         self._outgoing_message_queue.append(outgoing_message)
@@ -846,7 +846,7 @@ class MessageManager(object, metaclass=Singleton):
                 self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
                 notification_center.post_notification('BlinkGotMessage',
                                                       sender=blink_session,
-                                                      data=message)
+                                                      data=NotificationData(message=message))
             return
 
         self._handle_incoming_message(message, blink_session, account)
