@@ -59,6 +59,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageDidDecrypt')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
+        notification_center.add_observer(self, name='BlinkGotHistoryMessage')
 
     @run_in_thread('file-io')
     def save(self):
@@ -150,6 +151,10 @@ class HistoryManager(object, metaclass=Singleton):
         data = notification.data
 
         self.message_history.add_with_session(session, data.message, 'outgoing')
+
+    def _NH_BlinkGotHistoryMessage(self, notification):
+        account = notification.sender
+        self.message_history.add_from_history(account, **notification.data.__dict__)
 
     def _NH_BlinkMessageDidSucceed(self, notification):
         data = notification.data
@@ -298,6 +303,59 @@ class MessageHistory(object, metaclass=Singleton):
                         self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
                 else:
                     self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+
+    @classmethod
+    @run_in_thread('db')
+    def add_from_history(cls, account, remote_uri, message, state=None, encryption=None):
+        if message.content.startswith('?OTRv'):
+            return
+
+        print(f"-- Adding {message.direction} history message to storage: {message.id} {state} {remote_uri}")
+
+        match = cls.phone_number_re.match(remote_uri)
+        if match:
+            remote_uri = match.group('number')
+
+        if message.direction == 'outgoing':
+            display_name = message.sender.display_name
+        else:
+            try:
+                contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri in (addr.uri for addr in contact.uris))
+            except StopIteration:
+                display_name = ''
+            else:
+                display_name = contact.name
+
+        timestamp_native = message.timestamp
+        timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
+        message.timestamp = timestamp_utc - message.timestamp.utcoffset()
+        timestamp = parse(str(message.timestamp))
+
+        optional_fields = {}
+        if state is not None:
+            optional_fields['state'] = state
+
+        if encryption is not None:
+            optional_fields['encryption_type'] = str([f'{encryption}'])
+
+        uri = str(message.sender.uri)
+        if not uri.startswith(('sip:', 'sips:')):
+            uri = f'sip:{uri}'
+
+        try:
+            Message(remote_uri=remote_uri,
+                    display_name=display_name,
+                    uri=uri,
+                    content=message.content,
+                    content_type=message.content_type,
+                    message_id=message.id,
+                    account_id=str(account.id),
+                    direction=message.direction,
+                    timestamp=timestamp,
+                    disposition=str(message.disposition),
+                    **optional_fields)
+        except dberrors.DuplicateEntryError:
+            pass
 
     @classmethod
     @run_in_thread('db')
