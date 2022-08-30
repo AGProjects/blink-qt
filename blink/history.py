@@ -434,8 +434,12 @@ class MessageHistory(object, metaclass=Singleton):
         except IndexError:
             pass
         else:
-            # print(f'-- Updating {id} {message.state} -> {state}')
-            message.state = state
+            if message.direction == 'outgoing' and state == 'received':
+                return
+
+            if message.state != 'displayed' and message.state != state:
+                # print(f'-- Updating {message.direction} {id} {message.state} -> {state}')
+                message.state = state
 
     @run_in_thread('db')
     def update_encryption(self, notification):

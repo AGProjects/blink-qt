@@ -2426,7 +2426,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             self.render_after_load.append(ChatMessage(content, sender, direction, id=message.id))
 
-        if message.disposition is not None and 'display' in message.disposition and not encrypted:
+        if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
                 MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed', account)
             else:
@@ -2496,7 +2496,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             account_manager = AccountManager()
             account = account_manager.get_account(message.account_id) if account_manager.has_account(message.account_id) else None
-            if message.state != 'displayed' and 'display' in message.disposition:
+            if message.direction != 'outgoing' and message.state != 'displayed' and 'display' in message.disposition:
                 if message.state != 'delivered' and 'positive-delivery' in message.disposition:
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
 

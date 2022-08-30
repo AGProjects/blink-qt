@@ -333,7 +333,7 @@ class OutgoingMessage(object):
 
     @property
     def message(self):
-        return BlinkMessage(self.content, self.content_type, self.account, timestamp=self.timestamp, id=self.id, is_secure=self.is_secure)
+        return BlinkMessage(self.content, self.content_type, self.account, timestamp=self.timestamp, id=self.id, is_secure=self.is_secure, direction='outgoing')
 
     def _lookup(self):
         settings = SIPSimpleSettings()
@@ -581,7 +581,7 @@ class MessageManager(object, metaclass=Singleton):
         if account is session.account:
             notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
 
-        if message is not None and 'positive-delivery' in message.disposition:
+        if message is not None and message.direction != 'outgoing' and 'positive-delivery' in message.disposition:
             print("-- Should send delivered imdn")
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
@@ -902,9 +902,17 @@ class MessageManager(object, metaclass=Singleton):
 
     def _NH_PGPMessageDidNotDecrypt(self, notification):
         session = notification.sender
-        data = notification.data.message
+        message = notification.data.message
 
-        self.send_imdn_message(session, data.message_id, data.timestamp, 'error')
+        if message.direction == 'outgoing':
+            return
+
+        try:
+            msg_id = message.message_id
+        except AttributeError:
+            msg_id = message.id
+
+        self.send_imdn_message(session, msg_id, message.timestamp, 'error')
 
     def export_private_key(self, account):
         if account is None:
