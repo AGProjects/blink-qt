@@ -262,6 +262,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_imdn_enabled_button.clicked.connect(self._SH_EnableMessageIMDNButtonClicked)
         self.message_add_unknown_contacts_button.clicked.connect(self._SH_AddUnknownContactsButtonClicked)
         self.message_pgp_enabled_button.clicked.connect(self._SH_EnablePGPButtonClicked)
+        self.message_replication_button.clicked.connect(self._SH_MessageReplicationButtonClicked)
 
         # Audio devices
         self.audio_alert_device_button.activated[int].connect(self._SH_AudioAlertDeviceButtonActivated)
@@ -901,8 +902,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.prefix_button.addItem(item_text)
             self.prefix_button.setCurrentIndex(self.prefix_button.findText(item_text))
             self._update_pstn_example_label()
+
+            # Messages tab
+            self.message_replication_button.show()
+            self.message_replication_button.setChecked(account.sms.enable_message_replication)
         else:
             self.account_auto_answer.setText('Auto answer from all neighbours')
+
+            self.message_replication_button.hide()
 
     def update_chat_preview(self):
         blink_settings = BlinkSettings()
@@ -1453,6 +1460,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_EnablePGPButtonClicked(self, checked):
         account = self.selected_account
         account.sms.enable_pgp = checked
+        account.save()
+
+    def _SH_MessageReplicationButtonClicked(self, checked):
+        account = self.selected_account
+        account.sms.enable_message_replication = checked
         account.save()
 
     # Audio devices signal handlers

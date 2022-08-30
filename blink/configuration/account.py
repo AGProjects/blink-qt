@@ -71,6 +71,10 @@ class SMSSettings(SettingsGroup):
     private_key = Setting(type=ApplicationDataPath, default=None, nillable=True)
 
 
+class SMSSettingsExtension(SMSSettings):
+    enable_message_replication = Setting(type=bool, default=True)
+
+
 class SoundSettings(SettingsGroup):
     inbound_ringtone = Setting(type=SoundFile, default=None, nillable=True)
 
@@ -89,7 +93,7 @@ class AccountExtension(SettingsObjectExtension):
     rtp = RTPSettingsExtension
     server = ServerSettings
     sip = SIPSettingsExtension
-    sms = SMSSettings
+    sms = SMSSettingsExtension
     sounds = SoundSettings
     xcap = XCAPSettingsExtension
 

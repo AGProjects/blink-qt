@@ -671,6 +671,7 @@ class MessageManager(object, metaclass=Singleton):
 
         if account is None:
             return
+
         log.info(f'Received a message for {account.id}')
 
         data = notification.data
@@ -679,150 +680,176 @@ class MessageManager(object, metaclass=Singleton):
         x_replicated_message = data.headers.get('X-Replicated-Message', Null)
         to_header = data.headers.get('To', Null)
 
-        if x_replicated_message is Null:
-            cpim_message = None
-            if content_type == "message/cpim":
-                try:
-                    cpim_message = CPIMPayload.decode(data.body)
-                except CPIMParserError:
-                    log.warning('SIP message from %s to %s rejected: CPIM parse error' % (from_header.uri, '%s@%s' % (to_header.uri.user, to_header.uri.host)))
-                    return
-                body = cpim_message.content if isinstance(cpim_message.content, str) else cpim_message.content.decode()
-                content_type = cpim_message.content_type
-                sender = cpim_message.sender or from_header
-                disposition = next(([item.strip() for item in header.value.split(',')] for header in cpim_message.additional_headers if header.name == 'Disposition-Notification'), None)
-                message_id = next((header.value for header in cpim_message.additional_headers if header.name == 'Message-ID'), str(uuid.uuid4()))
-            else:
-                payload = SimplePayload.decode(data.body, data.content_type)
-                body = payload.content.decode()
-                content_type = payload.content_type
-                sender = from_header
-                disposition = None
-                message_id = str(uuid.uuid4())
+        if x_replicated_message is not Null:
+            log.info('Message is a replicated message')
+            if not account.sms.enable_message_replication:
+                log.info('Skipping message, replicated message handling is disabled')
+                return
 
-            encryption = self.check_encryption(content_type, body)
-            if encryption == 'OpenPGP':
-                log.info('Message is Open PGP encrypted')
-
-                if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
-                    if not self.pgp_requests[account, GeneratePGPKeyRequest]:
-                        generate_dialog = GeneratePGPKeyDialog()
-                        generate_request = GeneratePGPKeyRequest(generate_dialog, account, 0)
-                        generate_request.accepted.connect(self._SH_GeneratePGPKeys)
-                        generate_request.finished.connect(self._SH_PGPRequestFinished)
-                        bisect.insort_right(self.pgp_requests, generate_request)
-                        generate_request.dialog.show()
-                elif not account.sms.enable_pgp:
-                    log.info(f"-- Skipping PGP encrypted message, PGP is disabled for {account.id}")
-                    return
-
-            if content_type.lower() == 'text/pgp-private-key':
-                log.info('Message is a private key')
-                if not account.sms.enable_pgp:
-                    log.info(f"-- Skipping private key import, PGP is disabled for {account.id}")
-                    return
-                regex = "(?P<public_key>-----BEGIN PGP PUBLIC KEY BLOCK-----.*-----END PGP PUBLIC KEY BLOCK-----)"
-                matches = re.search(regex, body, re.DOTALL)
-                public_key = matches.group('public_key')
-
-                if self._compare_public_key(account, public_key):
-                    return
-
-                for request in self.pgp_requests[account]:
-                    request.dialog.hide()
-                    self.pgp_requests.remove(request)
-
-                import_dialog = ImportDialog()
-                incoming_request = ImportPrivateKeyRequest(import_dialog, body, account)
-                incoming_request.accepted.connect(self._SH_ImportPGPKeys)
-                incoming_request.finished.connect(self._SH_PGPRequestFinished)
-                bisect.insort_right(self.pgp_requests, incoming_request)
-                incoming_request.dialog.show()
-
-            if content_type.lower() == 'text/pgp-public-key':
-                log.info('Message is a public key')
-                self._save_pgp_key(body, sender.uri)
-
-            from blink.contacts import URIUtils
-            contact, contact_uri = URIUtils.find_contact(sender.uri)
-            session_manager = SessionManager()
-
-            notification_center = NotificationCenter()
-
-            timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
-            message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition, direction='incoming')
+        cpim_message = None
+        if content_type == "message/cpim":
             try:
-                blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
-            except StopIteration:
-                blink_session = None
-                if content_type.lower() in self.__ignored_content_types__:
-                    log.debug(f"Not creating session for incoming message for content type {content_type.lower()}")
-                    if content_type.lower() != IMDNDocument.content_type:
-                        return
-                else:
-                    log.debug("Starting new message session for incoming message")
-                    blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
-            else:
-                if blink_session.fake_streams.get('messages') is None:
-                    stream = StreamDescription('messages')
-                    blink_session.fake_streams.extend([stream.create_stream()])
-                    blink_session._delete_when_done = False
-                    if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
-                        blink_session.fake_streams.get('messages').enable_pgp()
-                    notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
-
-            if account.sms.use_cpim and account.sms.enable_imdn and content_type.lower() == IMDNDocument.content_type:
-                document = IMDNDocument.parse(body)
-                imdn_message_id = document.message_id.value
-                imdn_status = document.notification.status.__str__()
-                imdn_datetime = document.datetime.__str__()
-                notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
+                cpim_message = CPIMPayload.decode(data.body)
+            except CPIMParserError:
+                log.warning('SIP message from %s to %s rejected: CPIM parse error' % (from_header.uri, '%s@%s' % (to_header.uri.user, to_header.uri.host)))
                 return
-            elif content_type.lower() == IMDNDocument.content_type:
-                return
-            if content_type.lower() in ['text/pgp-public-key', 'text/pgp-private-key']:
-                notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
-                return
-
-            if content_type.lower() == IsComposingDocument.content_type:
-                try:
-                    document = IsComposingMessage.parse(body)
-                except ParserError as e:
-                    log.warning('Failed to parse Is-Composing payload: %s' % str(e))
-                else:
-                    data = NotificationData(state=document.state.value,
-                                            refresh=document.refresh.value if document.refresh is not None else 120,
-                                            content_type=document.content_type.value if document.content_type is not None else None,
-                                            last_active=document.last_active.value if document.last_active is not None else None,
-                                            sender=sender)
-                    notification_center.post_notification('BlinkGotComposingIndication', sender=blink_session, data=data)
-                return
-
-            if not content_type.lower().startswith('text'):
-                return
-
-            if account is not blink_session.account:
-                history_message_data = NotificationData(remote_uri=contact.uri.uri,
-                                                        message=message,
-                                                        encryption=encryption,
-                                                        state='accepted')
-                notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
-
-            if encryption == 'OpenPGP':
-                if blink_session.fake_streams.get('messages').can_decrypt:
-                    blink_session.fake_streams.get('messages').decrypt(message)
-                else:
-                    self._incoming_encrypted_message_queue.append((message, account, contact))
-                    if account is blink_session.account:
-                        notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
-                    self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
-                    notification_center.post_notification('BlinkGotMessage', sender=blink_session, data=message)
-                return
-
-            self._handle_incoming_message(message, blink_session, account)
+            body = cpim_message.content if isinstance(cpim_message.content, str) else cpim_message.content.decode()
+            content_type = cpim_message.content_type
+            sender = cpim_message.sender or from_header
+            disposition = next(([item.strip() for item in header.value.split(',')] for header in cpim_message.additional_headers if header.name == 'Disposition-Notification'), None)
+            message_id = next((header.value for header in cpim_message.additional_headers if header.name == 'Message-ID'), str(uuid.uuid4()))
         else:
-            # TODO handle replicated messages
-            pass
+            payload = SimplePayload.decode(data.body, data.content_type)
+            body = payload.content.decode()
+            content_type = payload.content_type
+            sender = from_header
+            disposition = None
+            message_id = str(uuid.uuid4())
+
+        encryption = self.check_encryption(content_type, body)
+        if encryption == 'OpenPGP':
+            log.info('Message is Open PGP encrypted')
+
+            if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
+                if not self.pgp_requests[account, GeneratePGPKeyRequest]:
+                    generate_dialog = GeneratePGPKeyDialog()
+                    generate_request = GeneratePGPKeyRequest(generate_dialog, account, 0)
+                    generate_request.accepted.connect(self._SH_GeneratePGPKeys)
+                    generate_request.finished.connect(self._SH_PGPRequestFinished)
+                    bisect.insort_right(self.pgp_requests, generate_request)
+                    generate_request.dialog.show()
+            elif not account.sms.enable_pgp:
+                log.info(f"-- Skipping PGP encrypted message, PGP is disabled for {account.id}")
+                return
+                return
+
+
+        if content_type.lower() == 'text/pgp-private-key':
+            log.info('Message is a private key')
+            if not account.sms.enable_pgp:
+                log.info(f"-- Skipping private key import, PGP is disabled for {account.id}")
+                return
+            regex = "(?P<public_key>-----BEGIN PGP PUBLIC KEY BLOCK-----.*-----END PGP PUBLIC KEY BLOCK-----)"
+            matches = re.search(regex, body, re.DOTALL)
+            public_key = matches.group('public_key')
+
+            if self._compare_public_key(account, public_key):
+                return
+
+            for request in self.pgp_requests[account]:
+                request.dialog.hide()
+                self.pgp_requests.remove(request)
+
+            import_dialog = ImportDialog()
+            incoming_request = ImportPrivateKeyRequest(import_dialog, body, account)
+            incoming_request.accepted.connect(self._SH_ImportPGPKeys)
+            incoming_request.finished.connect(self._SH_PGPRequestFinished)
+            bisect.insort_right(self.pgp_requests, incoming_request)
+            incoming_request.dialog.show()
+
+        if content_type.lower() == 'text/pgp-public-key':
+            log.info('Message is a public key')
+            self._save_pgp_key(body, sender.uri)
+
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(sender.uri)
+
+        if x_replicated_message is not Null:
+            contact, contact_uri = URIUtils.find_contact(to_header.uri)
+
+        session_manager = SessionManager()
+        notification_center = NotificationCenter()
+
+        timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
+        message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition, direction='incoming')
+
+        if x_replicated_message is not Null:
+            message.sender = account
+            message.direction = "outgoing"
+
+        try:
+            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+        except StopIteration:
+            blink_session = None
+            if content_type.lower() in self.__ignored_content_types__:
+                log.debug(f"Not creating session for incoming message for content type {content_type.lower()}")
+                if content_type.lower() != IMDNDocument.content_type:
+                    return
+            elif x_replicated_message is not Null:
+                log.debug("Not creating session for incoming message, message is replicated")
+                notification_center.post_notification('BlinkGotHistoryMessage',
+                                                      sender=account,
+                                                      data=NotificationData(remote_uri=contact.uri.uri,
+                                                                            message=message,
+                                                                            encryption=encryption,
+                                                                            state='accepted'))
+                return
+            else:
+                log.debug("Starting new message session for incoming message")
+                blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+        else:
+            if blink_session.fake_streams.get('messages') is None:
+                stream = StreamDescription('messages')
+                blink_session.fake_streams.extend([stream.create_stream()])
+                blink_session._delete_when_done = False
+                if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+                    blink_session.fake_streams.get('messages').enable_pgp()
+                notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
+
+        if account.sms.use_cpim and account.sms.enable_imdn and content_type.lower() == IMDNDocument.content_type:
+            # print("-- IMDN received")
+            document = IMDNDocument.parse(body)
+            imdn_message_id = document.message_id.value
+            imdn_status = document.notification.status.__str__()
+            imdn_datetime = document.datetime.__str__()
+            notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
+            return
+        elif content_type.lower() == IMDNDocument.content_type:
+            # print("-- IMDN received, ignored")
+            return
+
+        if content_type.lower() in ['text/pgp-public-key', 'text/pgp-private-key']:
+            notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
+            return
+
+        if content_type.lower() == IsComposingDocument.content_type:
+            try:
+                document = IsComposingMessage.parse(body)
+            except ParserError as e:
+                log.warning('Failed to parse Is-Composing payload: %s' % str(e))
+            else:
+                data = NotificationData(state=document.state.value,
+                                        refresh=document.refresh.value if document.refresh is not None else 120,
+                                        content_type=document.content_type.value if document.content_type is not None else None,
+                                        last_active=document.last_active.value if document.last_active is not None else None,
+                                        sender=sender)
+                notification_center.post_notification('BlinkGotComposingIndication', sender=blink_session, data=data)
+            return
+
+        if not content_type.lower().startswith('text'):
+            return
+
+        if x_replicated_message or account is not blink_session.account:
+            history_message_data = NotificationData(remote_uri=contact.uri.uri,
+                                                    message=message,
+                                                    encryption=encryption,
+                                                    state='accepted')
+            notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
+
+        if encryption == 'OpenPGP':
+            if blink_session.fake_streams.get('messages').can_decrypt:
+                blink_session.fake_streams.get('messages').decrypt(message)
+            else:
+                self._incoming_encrypted_message_queue.append((message, account, contact))
+                if account is blink_session.account:
+                    notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
+                self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
+                notification_center.post_notification('BlinkGotMessage',
+                                                      sender=blink_session,
+                                                      data=message)
+            return
+
+        self._handle_incoming_message(message, blink_session, account)
 
     def _NH_BlinkSessionWasCreated(self, notification):
         session = notification.sender
