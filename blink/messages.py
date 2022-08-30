@@ -513,7 +513,7 @@ class MessageManager(object, metaclass=Singleton):
         if contact.type not in ['dummy', 'unknown']:
             return
 
-        print('Adding contact')
+        log.debug(f'-- Adding contact {contact.uri.uri} to message list')
         group_id = '_messages'
         try:
             group = next((group for group in AddressbookManager().get_groups() if group.id == group_id))
@@ -585,8 +585,8 @@ class MessageManager(object, metaclass=Singleton):
             print("-- Should send delivered imdn")
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
-        self._add_contact_to_messages_group(session)
         notification_center.post_notification('BlinkGotMessage', sender=session, data=message)
+        self._add_contact_to_messages_group(session.account, session.contact)
 
     def _send_message(self, outgoing_message):
         self._outgoing_message_queue.append(outgoing_message)
