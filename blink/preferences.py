@@ -263,6 +263,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_add_unknown_contacts_button.clicked.connect(self._SH_AddUnknownContactsButtonClicked)
         self.message_pgp_enabled_button.clicked.connect(self._SH_EnablePGPButtonClicked)
         self.message_replication_button.clicked.connect(self._SH_MessageReplicationButtonClicked)
+        self.message_synchronization_button.clicked.connect(self._SH_MessageSynchronizationButtonClicked)
+        self.history_url_editor.editingFinished.connect(self._SH_HistoryUrlEditorEditingFinshed)
+        self.last_id_editor.editingFinished.connect(self._SH_LastIdEditorEditingFinished)
 
         # Audio devices
         self.audio_alert_device_button.activated[int].connect(self._SH_AudioAlertDeviceButtonActivated)
@@ -490,6 +493,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.audio_output_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.audio_sample_rate_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.unavailable_message_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
+
+        self.history_url_editor.setValidator(WebURLValidator(self))
 
     def eventFilter(self, watched, event):
         if watched is self.camera_preview:
@@ -905,11 +910,30 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
             # Messages tab
             self.message_replication_button.show()
+            self.message_synchronization_button.show()
+            self.history_url_editor.show()
+            self.history_url_label.show()
+            self.last_id_editor.show()
+            self.last_id_label.show()
+            self.history_label.show()
+            self.history_line.show()
             self.message_replication_button.setChecked(account.sms.enable_message_replication)
+            self.message_synchronization_button.setChecked(account.sms.enable_history_synchronization)
+            self.history_url_editor.setEnabled(account.sms.enable_history_synchronization)
+            self.history_url_editor.setText(account.sms.history_synchronization_url)
+            self.last_id_editor.setEnabled(account.sms.enable_history_synchronization)
+            self.last_id_editor.setText(account.sms.history_synchronization_id)
         else:
             self.account_auto_answer.setText('Auto answer from all neighbours')
 
             self.message_replication_button.hide()
+            self.message_synchronization_button.hide()
+            self.history_url_editor.hide()
+            self.history_url_label.hide()
+            self.last_id_editor.hide()
+            self.last_id_label.hide()
+            self.history_label.hide()
+            self.history_line.hide()
 
     def update_chat_preview(self):
         blink_settings = BlinkSettings()
@@ -1467,6 +1491,25 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account.sms.enable_message_replication = checked
         account.save()
 
+    def _SH_MessageSynchronizationButtonClicked(self, checked):
+        account = self.selected_account
+        account.sms.enable_history_synchronization = checked
+        account.save()
+
+    def _SH_HistoryUrlEditorEditingFinshed(self):
+        account = self.selected_account
+        history_url = self.history_url_editor.text() or None
+        if account.sms.history_synchronization_url != history_url:
+            account.sms.history_synchronization_url = history_url
+            account.save()
+
+    def _SH_LastIdEditorEditingFinished(self):
+        account = self.selected_account
+        last_id = self.last_id_editor.text() or None
+        if account.sms.history_synchronization_id != last_id:
+            account.sms.history_synchronization_id = last_id
+            account.save()
+
     # Audio devices signal handlers
     def _SH_AudioAlertDeviceButtonActivated(self, index):
         device = self.audio_alert_device_button.itemData(index)
@@ -1897,6 +1940,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_list is not None)
             if 'rtp.video_codec_list' in notification.data.modified:
                 self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_list is not None)
+            if 'sms.history_synchronization_url' in notification.data.modified:
+                if not account.sms.history_synchronization_url:
+                    account.sms.history_synchronization_token = None
+                    account.sms.enable_history_synchronization = False
+                    account.save()
 
 
 del ui_class, base_class

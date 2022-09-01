@@ -72,7 +72,11 @@ class SMSSettings(SettingsGroup):
 
 
 class SMSSettingsExtension(SMSSettings):
+    enable_history_synchronization = Setting(type=bool, default=True)
     enable_message_replication = Setting(type=bool, default=True)
+    history_synchronization_url = Setting(type=HTTPURL, default=None, nillable=True)
+    history_synchronization_token = Setting(type=str, default=None, nillable=True)
+    history_synchronization_id = Setting(type=str, default=None, nillable=True)
 
 
 class SoundSettings(SettingsGroup):

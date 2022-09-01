@@ -1242,34 +1242,6 @@
             <string>Messages</string>
            </attribute>
            <layout class="QGridLayout" name="gridLayout_3">
-            <property name="leftMargin">
-             <number>10</number>
-            </property>
-            <property name="topMargin">
-             <number>10</number>
-            </property>
-            <property name="rightMargin">
-             <number>10</number>
-            </property>
-            <property name="bottomMargin">
-             <number>10</number>
-            </property>
-            <property name="spacing">
-             <number>5</number>
-            </property>
-            <item row="5" column="0">
-             <spacer name="verticalSpacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
             <item row="0" column="0">
              <widget class="QWidget" name="message_widget" native="true">
               <property name="minimumSize">
@@ -1283,6 +1255,13 @@
                 <widget class="QCheckBox" name="message_iscomposing_enabled_button">
                  <property name="text">
                   <string>Enable Is-Composing</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="1">
+                <widget class="QLineEdit" name="last_id_editor">
+                 <property name="enabled">
+                  <bool>false</bool>
                  </property>
                 </widget>
                </item>
@@ -1316,6 +1295,16 @@
                  </property>
                 </widget>
                </item>
+               <item row="14" column="1">
+                <widget class="QLineEdit" name="history_url_editor">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                 <property name="readOnly">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
                <item row="8" column="0" colspan="2">
                 <widget class="QCheckBox" name="message_add_unknown_contacts_button">
                  <property name="text">
@@ -1333,6 +1322,13 @@
                  </property>
                  <property name="text">
                   <string>History and synchronization</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="14" column="0" alignment="Qt::AlignRight">
+                <widget class="QLabel" name="history_url_label">
+                 <property name="text">
+                  <string>History URL</string>
                  </property>
                 </widget>
                </item>
@@ -1391,6 +1387,20 @@
                 <widget class="Line" name="history_line">
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="15" column="0" alignment="Qt::AlignRight">
+                <widget class="QLabel" name="last_id_label">
+                 <property name="text">
+                  <string>Last fetched ID</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="13" column="0" colspan="2">
+                <widget class="QCheckBox" name="message_synchronization_button">
+                 <property name="text">
+                  <string>Enable history synchronization  (Requires Sylkserver and server support)</string>
                  </property>
                 </widget>
                </item>
