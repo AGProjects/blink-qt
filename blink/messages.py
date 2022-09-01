@@ -429,10 +429,9 @@ class OutgoingMessage(object):
             if self.content_type.lower() == 'text/pgp-private-key':
                 self._send(routes)
                 return
-            self.session.routes = routes
 
             # TODO: Figure out how now to send a public when required, not always on start of the first message in the session
-            if self.content_type != 'text/pgp-public-key':
+            if self.content_type != 'text/pgp-public-key' and not self.session.routes:
                 stream = self.session.fake_streams.get('messages')
                 if self.session.account.sms.enable_pgp and stream.can_decrypt:
                     directory = os.path.join(SIPSimpleSettings().chat.keys_directory.normalized, 'private')
@@ -441,7 +440,8 @@ class OutgoingMessage(object):
                     with open(f'{filename}.pubkey', 'rb') as f:
                         public_key = f.read().decode()
                     public_key_message = OutgoingMessage(self.session.account, self.contact, str(public_key), 'text/pgp-public-key', session=self.session)
-                    public_key_message.send()
+                    MessageManager()._send_message(public_key_message)
+            self.session.routes = routes
             self._send()
 
     def _NH_DNSLookupDidFail(self, notification):
