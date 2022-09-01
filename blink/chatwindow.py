@@ -2418,10 +2418,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.pending_decryption.remove(message)
                 session.chat_widget.update_message_text(message.id, content)
             else:
-                session.chat_widget.add_message(ChatMessage(content, sender, direction, id=message.id))
+                session.chat_widget.add_message(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp))
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
         else:
-            self.render_after_load.append(ChatMessage(content, sender, direction, id=message.id))
+            self.render_after_load.append(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp))
 
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
