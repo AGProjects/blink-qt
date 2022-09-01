@@ -434,13 +434,13 @@ class OutgoingMessage(object):
             # TODO: Figure out how now to send a public when required, not always on start of the first message in the session
             if self.content_type != 'text/pgp-public-key':
                 stream = self.session.fake_streams.get('messages')
-                if self.account.sms.enable_pgp and stream.can_encrypt:
+                if self.session.account.sms.enable_pgp and stream.can_decrypt:
                     directory = os.path.join(SIPSimpleSettings().chat.keys_directory.normalized, 'private')
-                    filename = os.path.join(directory, f'{self.account.id}')
+                    filename = os.path.join(directory, f'{self.session.account.id}')
 
                     with open(f'{filename}.pubkey', 'rb') as f:
                         public_key = f.read().decode()
-                    public_key_message = OutgoingMessage(self.account, self.contact, str(public_key), 'text/pgp-public-key', session=self.session)
+                    public_key_message = OutgoingMessage(self.session.account, self.contact, str(public_key), 'text/pgp-public-key', session=self.session)
                     public_key_message.send()
             self._send()
 
@@ -846,7 +846,7 @@ class MessageManager(object, metaclass=Singleton):
                 self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
                 notification_center.post_notification('BlinkGotMessage',
                                                       sender=blink_session,
-                                                      data=NotificationData(message=message))
+                                                      data=NotificationData(message=message, account=account))
             return
 
         self._handle_incoming_message(message, blink_session, account)

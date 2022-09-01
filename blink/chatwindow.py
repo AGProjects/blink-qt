@@ -2386,6 +2386,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         message = notification.data.message
         direction = notification.data.message.direction
 
+        try:
+            received_account = notification.data.account
+        except AttributeError:
+            received_account = None
+
         encrypted = False
         if message.content_type.startswith('image/'):
             content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
@@ -2425,9 +2430,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
-                MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed', account)
+                MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed', received_account)
             else:
-                self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp, account))
+                self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp, received_account))
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
@@ -2572,6 +2577,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if message.direction == "outgoing":
                 session.chat_widget.update_message_status(id=message.message_id, status=message.state)
             elif message.state != 'displayed' and 'display' in message.disposition and not encrypted:
+                if account_manager.has_account(message.account_id):
+                    account = account_manager.get_account(message.account_id)
+
                 if message.state != 'delivered' and 'positive-delivery' in message.disposition:
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
                 if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
