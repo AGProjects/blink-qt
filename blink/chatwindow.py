@@ -2395,9 +2395,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 content = HtmlProcessor.autolink(content)
                 encrypted = True
                 self.pending_decryption.append((message))
-                stream = blink_session.fake_streams.get('messages')
-                if stream and stream.can_decrypt:
-                    stream.decrypt(message)
             else:
                 content = message.content
                 content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
