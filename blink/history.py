@@ -61,6 +61,8 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
         notification_center.add_observer(self, name='BlinkGotHistoryMessage')
+        notification_center.add_observer(self, name='BlinkGotHistoryMessageRemove')
+        notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
 
     @run_in_thread('file-io')
     def save(self):
@@ -156,6 +158,12 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_BlinkGotHistoryMessage(self, notification):
         account = notification.sender
         self.message_history.add_from_history(account, **notification.data.__dict__)
+
+    def _NH_BlinkGotHistoryMessageRemove(self, notification):
+        self.message_history.remove_message(notification.data)
+
+    def _NH_BlinkGotHistoryConversationRemove(self, notification):
+        self.message_history.remove_contact_messages(notification.sender, notification.data)
 
     def _NH_BlinkMessageDidSucceed(self, notification):
         data = notification.data

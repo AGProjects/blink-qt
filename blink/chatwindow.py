@@ -1644,6 +1644,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkMessageDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageDidFail')
+        notification_center.add_observer(self, name='BlinkMessageWillRemove')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
         notification_center.add_observer(self, name='BlinkMessageHistoryLastContactsDidSucceed')
@@ -2387,6 +2388,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         direction = notification.data.message.direction
 
         try:
+            history = notification.data.history
+        except AttributeError:
+            history = False
+
+        try:
             received_account = notification.data.account
         except AttributeError:
             received_account = None
@@ -2423,10 +2429,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.pending_decryption.remove(message)
                 session.chat_widget.update_message_text(message.id, content)
             else:
-                session.chat_widget.add_message(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp))
+                session.chat_widget.add_message(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history))
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
         else:
-            self.render_after_load.append(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp))
+            self.render_after_load.append(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history))
 
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
@@ -2475,6 +2481,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
         session.chat_widget.update_message_status(id=notification.data.id, status='failed')
+
+    def _NH_BlinkMessageWillRemove(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+
+        if session is None:
+            return
+
+        session.chat_widget.remove_message(notification.data)
 
     def _NH_PGPMessageDidDecrypt(self, notification):
         blink_session = notification.sender
@@ -2573,7 +2588,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True))
             # session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.id, timestamp=timestamp))
-
             if message.direction == "outgoing":
                 session.chat_widget.update_message_status(id=message.message_id, status=message.state)
             elif message.state != 'displayed' and 'display' in message.disposition and not encrypted:

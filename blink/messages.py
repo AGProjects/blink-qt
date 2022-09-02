@@ -1,7 +1,10 @@
 import bisect
+import json
 import os
 import re
+import requests
 import random
+import urllib
 import uuid
 
 from collections import deque
@@ -17,9 +20,12 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null
 from application.system import makedirs
 from application.python.types import Singleton
+from datetime import timezone
+from dateutil.tz import tzlocal
+from urllib.parse import urlsplit, urlunsplit, quote
 from zope.interface import implementer
 
-from sipsimple.account import Account, AccountManager
+from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import AddressbookManager, Group, Contact, ContactURI
 from sipsimple.configuration import DuplicateIDError
 from sipsimple.configuration.settings import SIPSimpleSettings
@@ -401,7 +407,7 @@ class OutgoingMessage(object):
             # TODO
 
     def send(self):
-        if self.content_type.lower() == 'text/pgp-private-key':
+        if self.content_type.lower() in ['text/pgp-private-key', 'application/sylk-api-token']:
             self._lookup()
             return
 
@@ -426,7 +432,7 @@ class OutgoingMessage(object):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
             routes = notification.data.result
-            if self.content_type.lower() == 'text/pgp-private-key':
+            if self.content_type.lower() in ['text/pgp-private-key', 'application/sylk-api-token']:
                 self._send(routes)
                 return
 
@@ -441,6 +447,9 @@ class OutgoingMessage(object):
                         public_key = f.read().decode()
                     public_key_message = OutgoingMessage(self.session.account, self.contact, str(public_key), 'text/pgp-public-key', session=self.session)
                     MessageManager()._send_message(public_key_message)
+                if self.account.sms.enable_pgp and not stream.can_encrypt:
+                    lookup_message = OutgoingMessage(self.account, self.contact, 'Public key request', 'application/sylk-api-pgp-key-lookup', session=self.session)
+                    lookup_message.send()
             self.session.routes = routes
             self._send()
 
@@ -496,6 +505,7 @@ class MessageManager(object, metaclass=Singleton):
         self.sessions = []
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
+        self._sync_queue = deque()
         self.pgp_requests = RequestList()
 
         notification_center = NotificationCenter()
@@ -506,6 +516,8 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='PGPKeysDidGenerate')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
+        notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
+        notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
 
     def _add_contact_to_messages_group(self, account, contact):  # Maybe this needs to be placed in Contacts? -- Tijmen
         if not account.sms.add_unknown_contacts:
@@ -586,7 +598,13 @@ class MessageManager(object, metaclass=Singleton):
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
         self._add_contact_to_messages_group(session.account, session.contact)
-        notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message))
+        notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message, account=account))
+
+    def _request_history_synchronization_token(self, account):
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(account.uri)
+        outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token')
+        self._send_message(outgoing_message)
 
     def _send_message(self, outgoing_message):
         self._outgoing_message_queue.append(outgoing_message)
@@ -596,6 +614,151 @@ class MessageManager(object, metaclass=Singleton):
         while self._outgoing_message_queue:
             message = self._outgoing_message_queue.popleft()
             message.send()
+
+    @run_in_thread('sync')
+    def _sync_messages(self, account):
+        if not account.sms.enable_history_synchronization:
+            return
+
+        if not account.sms.history_synchronization_token:
+            self._request_history_synchronization_token(account)
+            return
+
+        if not account.sms.history_synchronization_url:
+            return
+
+        if account.sms.history_synchronization_id is not None:
+            url = urllib.parse.urljoin(f'{account.sms.history_synchronization_url}/', account.sms.history_synchronization_id)
+        else:
+            url = account.sms.history_synchronization_url
+
+        scheme, netloc, path, query, fragment = urlsplit(url)
+        path = quote(path)
+        url = urlunsplit((scheme, netloc, path, query, fragment))
+        headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
+
+        log.info(f'History synchronization enabled for {account.id}, fetching from: {url}')
+
+        try:
+            r = requests.get(url, headers=headers, timeout=10)
+            r.raise_for_status()
+        except (requests.ConnectionError, requests.Timeout) as e:
+            log.warning(f'SylkServer API connection error: {e}')
+        except requests.HTTPError as e:
+            code = e.response.status_code
+            if code == 401:
+                self._request_history_synchronization_token(account)
+                return
+            log.warning(f'SylkServer API error {e}')
+        except requests.RequestException as e:
+            log.warning(f'SylkServer API error {e}')
+        else:
+            try:
+                data = r.json()
+            except json.JSONDecodeError:
+                pass
+            else:
+                notification_center = NotificationCenter()
+                notification_center.post_notification('BlinkServerHistoryWasFetched', sender=account, data=data)
+
+    @run_in_thread('sync')
+    def _process_server_history_messages(self, account, messages):
+        notification_center = NotificationCenter()
+        last_id = None
+
+        log.debug(f'-- Number of messages fetched for {account.id}: {len(messages)}')
+        while messages:
+            message = messages.pop(0)
+
+            last_id = message['message_id']
+            content_type = message['content_type'].lower()
+
+            if content_type == 'message/imdn':
+                payload = json.loads(message['content'])
+                data = NotificationData(id=payload['message_id'], status=message['state'])
+                kwargs = {'data': data}
+
+                from blink.contacts import URIUtils
+                contact, contact_uri = URIUtils.find_contact(message['contact'])
+                try:
+                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+                except StopIteration:
+                    pass
+                else:
+                    kwargs['sender'] = blink_session
+
+                notification_center.post_notification('BlinkGotDispositionNotification', **kwargs)
+            elif content_type == 'application/sylk-conversation-remove':
+                notification_center.post_notification('BlinkGotHistoryConversationRemove', sender=account, data=message['content'])
+            elif content_type == 'application/sylk-message-remove':
+                payload = json.loads(message['content'])
+                notification_center.post_notification('BlinkGotHistoryMessageRemove', data=payload['message_id'])
+
+                from blink.contacts import URIUtils
+                contact, contact_uri = URIUtils.find_contact(message['contact'])
+                try:
+                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+                except StopIteration:
+                    pass
+                else:
+                    notification_center.post_notification('BlinkMessageWillRemove', sender=blink_session, data=payload['message_id'])
+            elif content_type == 'application/sylk-conversation-read':
+                pass
+            elif content_type == 'text/pgp-public-key':
+                if message.contact != account.id:
+                    self._save_pgp_key(message['content'], message['contact'])
+            elif content_type.startswith('text/'):
+                from blink.contacts import URIUtils
+                contact, contact_uri = URIUtils.find_contact(message['contact'])
+
+                sender = account
+                if message['direction'] == 'incoming':
+                    sender = ChatIdentity(SIPURI.parse(f'sip:{contact.uri.uri}'), contact.name)
+
+                timestamp = ISOTimestamp(message['timestamp']).replace(tzinfo=timezone.utc).astimezone(tzlocal())
+
+                history_message = BlinkMessage(message['content'],
+                                               message['content_type'],
+                                               sender,
+                                               timestamp=timestamp,
+                                               id=message['message_id'],
+                                               disposition=message['disposition'],
+                                               direction=message['direction'])
+
+                encryption = self.check_encryption(history_message.content_type, history_message.content)
+                notification_center.post_notification('BlinkGotHistoryMessage',
+                                                      sender=account,
+                                                      data=NotificationData(
+                                                          remote_uri=message['contact'],
+                                                          message=history_message,
+                                                          encryption=encryption,
+                                                          state=message['state']))
+                self._add_contact_to_messages_group(account, contact)
+
+                try:
+                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+                except StopIteration:
+                    pass
+                else:
+                    if ['direction'] == 'incoming' and 'positive-delivery' in history_message.disposition:
+                        log.debug("-- Should send delivered imdn for history message")
+                        self.send_imdn_message(blink_session, history_message.id, history_message.timestamp, 'delivered')
+
+                    notification_center.post_notification('BlinkGotMessage',
+                                                          sender=blink_session,
+                                                          data=NotificationData(
+                                                              message=history_message,
+                                                              history=True,
+                                                              account=account))
+                    if encryption == 'OpenPGP':
+                        if blink_session.fake_streams.get('messages').can_decrypt:
+                            blink_session.fake_streams.get('messages').decrypt(history_message)
+                        else:
+                            self._incoming_encrypted_message_queue.append((history_message, account, contact))
+
+        if last_id is not None:
+            account.sms.history_synchronization_id = last_id
+            account.save()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -665,6 +828,13 @@ class MessageManager(object, metaclass=Singleton):
         request.dialog.hide()
         self.pgp_requests.remove(request)
 
+    def _NH_SIPAccountRegistrationDidSucceed(self, notification):
+        if notification.sender is not BonjourAccount():
+            self._sync_queue.append(notification.sender)
+            while self._sync_queue:
+                sender = self._sync_queue.popleft()
+                self._sync_messages(sender)
+
     def _NH_SIPEngineGotMessage(self, notification):
         account_manager = AccountManager()
         account = account_manager.find_account(notification.data.request_uri)
@@ -721,8 +891,25 @@ class MessageManager(object, metaclass=Singleton):
             elif not account.sms.enable_pgp:
                 log.info(f"-- Skipping PGP encrypted message, PGP is disabled for {account.id}")
                 return
+
+        if content_type.lower() == 'application/sylk-api-token':
+            log.info('Message is a Sylk API token')
+            try:
+                data = json.loads(body)
+            except json.decoder.JSONDecodeError:
                 return
 
+            try:
+                token = data['token']
+                url = data['url']
+            except KeyError:
+                return
+
+            account.sms.history_synchronization_token = token
+            account.sms.history_synchronization_url = url
+            account.save()
+            self._sync_messages(account)
+            return
 
         if content_type.lower() == 'text/pgp-private-key':
             log.info('Message is a private key')
@@ -850,6 +1037,11 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         self._handle_incoming_message(message, blink_session, account)
+
+    def _NH_BlinkServerHistoryWasFetched(self, notification):
+        account = notification.sender
+        messages = notification.data['messages']
+        self._process_server_history_messages(account, messages)
 
     def _NH_BlinkSessionWasCreated(self, notification):
         session = notification.sender
