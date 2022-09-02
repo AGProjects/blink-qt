@@ -491,7 +491,7 @@ class MessageHistory(object, metaclass=Singleton):
             return
 
         log.debug(f"== Contacts fetched: {len(list(result))}")
-        result = [' '.join(item) for item in result]
+        result = [''.join(uri) for (uri, timestamp) in result]
         notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=list(result)))
 
     @run_in_thread('db')
