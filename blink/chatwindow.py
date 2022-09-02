@@ -2565,7 +2565,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     content = message.content
                     content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
             else:
-                return
+                continue
             # message.sender = SIPURI.parse(f'sip:{message.remote_uri}')
             if message.direction == 'outgoing':
                 message.sender = blink_session.account
