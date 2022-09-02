@@ -3538,7 +3538,7 @@ class ContactListView(QListView):
     def _AH_SendSMS(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
         session_manager = MessageManager()
-        session_manager.create_message_session(uri or contact.uri.uri)
+        session_manager.create_message_session(uri.uri or str(contact.uri.uri))
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
