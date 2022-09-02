@@ -1,9 +1,9 @@
 
-Blink
------
+Blink Qt
+--------
 
-This is the Qt version of Blink, a fully featured, easy to use SIP client
-for Linux and Microsoft Windows.
+This is Blink Qt, a state of the art, easy to use SIP client for Linux and
+other operating systems that support Python 3 and Qt 5.
 
 Homepage: http://icanblink.com
 

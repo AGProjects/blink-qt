@@ -31,7 +31,7 @@ Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python3-zope.interface,
          x11vnc
 Description: Fully featured, easy to use SIP client with a Qt based UI
- Blink is a fully featured SIP client written in Python and built on top of
- SIP SIMPLE client SDK with a Qt based user interface. Blink provides real
+ Blink is a fully featured SIP client written in Python 3 and built on top of
+ SIP SIMPLE client SDK with a Qt 5 based user interface. Blink provides real
  time applications based on SIP and related protocols for Audio, Video,
- Instant Messaging, File Transfers, Desktop Sharing and Presence.
+ Instant Messaging, MSRP Chat and File Transfers, Desktop Sharing and Presence.

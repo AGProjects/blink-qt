@@ -43,7 +43,7 @@ setup(
 
     platforms=["Platform Independent"],
     classifiers=[
-        "Development Status :: 4 - Beta",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: End Users/Desktop",
         "License :: GNU General Public License 3 (GPLv3)",
         "Operating System :: OS Independent",
