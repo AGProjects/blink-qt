@@ -2096,8 +2096,8 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         palette = option.palette
         rect = widget.style().subElementRect(QStyle.SE_ItemViewItemCheckIndicator, option, widget)
 
-        x = rect.center().x() - 3.5
-        y = rect.center().y() - 2.5
+        x = int(rect.center().x() - 3.5)
+        y = int(rect.center().y() - 2.5)
 
         pen_thickness = 2.0
         color = palette.color(QPalette.WindowText)
