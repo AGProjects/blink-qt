@@ -20,8 +20,9 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.settings import BlinkSettings
-from blink.resources import ApplicationData, Resources
+from blink.logging import MessagingTrace as log
 from blink.messages import BlinkMessage
+from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread
 import traceback
 
@@ -310,7 +311,7 @@ class MessageHistory(object, metaclass=Singleton):
         if message.content.startswith('?OTRv'):
             return
 
-        print(f"-- Adding {message.direction} history message to storage: {message.id} {state} {remote_uri}")
+        log.info(f"== Adding {message.direction} history message to storage: {message.id} {state} {remote_uri}")
 
         match = cls.phone_number_re.match(remote_uri)
         if match:
@@ -363,7 +364,7 @@ class MessageHistory(object, metaclass=Singleton):
         if message.content.startswith('?OTRv'):
             return
 
-        # print(f"-- Adding message to storage: {message.id}")
+        log.info(f"== Adding message to storage: {message.id}")
         user = session.uri.user
         domain = session.uri.host
 
@@ -438,7 +439,7 @@ class MessageHistory(object, metaclass=Singleton):
                 return
 
             if message.state != 'displayed' and message.state != state:
-                # print(f'-- Updating {message.direction} {id} {message.state} -> {state}')
+                log.info(f'== Updating {message.direction} {id} {message.state} -> {state}')
                 message.state = state
 
     @run_in_thread('db')
@@ -455,24 +456,24 @@ class MessageHistory(object, metaclass=Singleton):
             else:
                 encryption_type = str([f'{message_info.encryption}'])
                 if db_message.encryption_type != encryption_type:
-                    # print(f'-- Updating {message.id} encryption {db_message.encryption_type} -> {encryption_type}')
+                    log.debug(f'== Updating {message.id} encryption {db_message.encryption_type} -> {encryption_type}')
                     db_message.encryption_type = encryption_type
 
     @run_in_thread('db')
     def load(self, uri, session):
-        # print('-- Loading messages')
+        log.debug(f'== Loading messages for {uri}')
         notification_center = NotificationCenter()
         try:
             result = Message.selectBy(remote_uri=uri).orderBy('timestamp')[-100:]
         except Exception as e:
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
-        # print(f"-- Messages loaded: {len(list(result))}")
+        log.debug(f"== Messages loaded for {uri}: {len(list(result))}")
         notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
 
     @run_in_thread('db')
     def get_last_contacts(self, number=5):
-        # print(f'-- Getting last {number} contacts wtih messages')
+        log.debug(f'== Getting last {number} contacts wtih messages')
 
         query = f'select remote_uri, max(timestamp) from messages group by remote_uri order by timestamp desc limit {Message.sqlrepr(number)}'
         notification_center = NotificationCenter()
@@ -481,7 +482,7 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             return
 
-        # print(f"-- Contacts fetched: {len(list(result))}")
+        log.debug(f"== Contacts fetched: {len(list(result))}")
         result = [' '.join(item) for item in result]
         notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=list(result)))
 
@@ -491,14 +492,17 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def remove_contact_messages(self, account, contact):
+        log.info(f'== Removing conversation between {account.id} <-> {contact}')
         Message.deleteBy(remote_uri=contact, account_id=str(account.id))
 
     @run_in_thread('db')
     def remove_message(self, id):
+        log.debug(f'== Trying to removing message: {id}')
         try:
             result = Message.selectBy(message_id=id)[0]
         except IndexError:
             return
+        log.info(f'== Removing message: {id}')
         result.destroySelf()
 
 
