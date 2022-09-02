@@ -1316,15 +1316,15 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if stun_server_list:
             for server in stun_server_list.split(","):
                 try:
-                    (host, port) = server.strip().split(':') 
+                    (host, port) = server.strip().split(':')
                 except ValueError:
-                     host = server
-                     port = STUNServerAddress.default_port
+                    host = server
+                    port = STUNServerAddress.default_port
                 else:
-                     try:
-                         int(port)
-                     except (TypeError, ValueError) as e:
-                         port = STUNServerAddress.default_port
+                    try:
+                        int(port)
+                    except (TypeError, ValueError) as e:
+                        port = STUNServerAddress.default_port
 
                 try:
                     new_stun_server_list.append(STUNServerAddress(host, port))
