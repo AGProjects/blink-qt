@@ -2384,6 +2384,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
 
+        if not self.isVisible():
+            self.show()
+
         message = notification.data.message
         direction = notification.data.message.direction
 
