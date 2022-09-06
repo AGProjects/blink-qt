@@ -209,7 +209,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def PGPKeysShouldReload(self, notification):
+    def _NH_PGPKeysShouldReload(self, notification):
         if notification.sender is not self.blink_session:
             return
 

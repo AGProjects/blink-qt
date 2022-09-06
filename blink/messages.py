@@ -561,6 +561,16 @@ class MessageManager(object, metaclass=Singleton):
         with open(filename, 'wb') as f:
             data = data if isinstance(data, bytes) else data.encode()
             f.write(data)
+            try:
+                from blink.contacts import URIUtils
+                contact, contact_uri = URIUtils.find_contact(uri)
+                blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+            except StopIteration:
+                pass
+            else:
+                notification_center = NotificationCenter()
+                notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
+
 
     def check_encryption(self, content_type, body):
         if (content_type.lower().startswith('text/') and '-----BEGIN PGP MESSAGE-----' in body and body.strip().endswith('-----END PGP MESSAGE-----') and content_type != 'text/pgp-private-key'):
@@ -802,6 +812,10 @@ class MessageManager(object, metaclass=Singleton):
         request.account.sms.public_key = f'{filename}.pubkey'
         request.account.save()
 
+        for session in [session for session in self.sessions if session.account is request.account]:
+            notification_center = NotificationCenter()
+            notification_center.post_notification('PGPKeysShouldReload', sender=session)
+
         while self._incoming_encrypted_message_queue:
             message, account, contact = self._incoming_encrypted_message_queue.popleft()
             try:
@@ -940,6 +954,7 @@ class MessageManager(object, metaclass=Singleton):
         if content_type.lower() == 'text/pgp-public-key':
             log.info('Message is a public key')
             self._save_pgp_key(body, sender.uri)
+            return
 
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(sender.uri)
@@ -999,10 +1014,6 @@ class MessageManager(object, metaclass=Singleton):
             return
         elif content_type.lower() == IMDNDocument.content_type:
             # print("-- IMDN received, ignored")
-            return
-
-        if content_type.lower() in ['text/pgp-public-key', 'text/pgp-private-key']:
-            notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
             return
 
         if content_type.lower() == IsComposingDocument.content_type:
