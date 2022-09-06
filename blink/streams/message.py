@@ -185,7 +185,7 @@ class MessageStream(object, metaclass=MediaStreamType):
             log.warning(f'Decryption failed for {msg_id}, this is not a PGPMessage, error: {e}')
             return
 
-        key_list = [(session.account.id, self.private_key)] if self.private_key is not None else []
+        key_list = [(session.account, self.private_key)] if self.private_key is not None else []
         key_list.extend(self.other_private_keys)
 
         error = None
@@ -193,7 +193,7 @@ class MessageStream(object, metaclass=MediaStreamType):
             try:
                 decrypted_message = key.decrypt(pgpMessage)
             except (PGPDecryptionError, PGPError) as error:
-                log.debug(f'-- Decryption failed for {msg_id} with account key {account}, error: {error}')
+                log.debug(f'-- Decryption failed for {msg_id} with account key {account.id}, error: {error}')
                 continue
             else:
                 message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message
@@ -268,5 +268,4 @@ class MessageStream(object, metaclass=MediaStreamType):
             loaded_key = self._load_key(str(account.id), public_key=False)
             if loaded_key is None:
                 continue
-            self.other_private_keys.append((account.id, loaded_key))
-
+            self.other_private_keys.append((account, loaded_key))

@@ -1140,11 +1140,11 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
-        if not session.account.sms.use_cpim and not session.account.sms.enable_imdn and account is None:
+        if account is None and not session.account.sms.use_cpim or not session.account.sms.enable_imdn:
             return
-
-        if account is not None and not account.sms.use_cpim and not account.sms.enable_imdn:
-            return
+        if account is not None:
+            if not account.sms.use_cpim or not account.sms.enable_imdn:
+                return
 
         log.debug(f"-- Attempt to send imdn for {id}: {state}")
         if state == 'delivered':
