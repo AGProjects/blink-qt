@@ -708,6 +708,9 @@ class MessageManager(object, metaclass=Singleton):
                 if message.contact != account.id:
                     self._save_pgp_key(message['content'], message['contact'])
             elif content_type.startswith('text/'):
+                if message['contact'] is None:
+                    continue
+
                 from blink.contacts import URIUtils
                 contact, contact_uri = URIUtils.find_contact(message['contact'])
 
