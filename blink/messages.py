@@ -553,7 +553,7 @@ class MessageManager(object, metaclass=Singleton):
         print(f'-- Saving public key for {uri}')
         settings = SIPSimpleSettings()
 
-        id = str(uri).replace('/', '_')
+        id = str(uri).replace('/', '_').replace('sip:', '')
         directory = settings.chat.keys_directory.normalized
         filename = os.path.join(directory, id + '.pubkey')
         makedirs(directory)
