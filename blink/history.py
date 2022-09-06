@@ -481,7 +481,7 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def get_last_contacts(self, number=5):
-        log.debug(f'== Getting last {number} contacts wtih messages')
+        log.debug(f'== Getting last {number} contacts with messages')
 
         query = f'select remote_uri, max(timestamp) from messages group by remote_uri order by timestamp desc limit {Message.sqlrepr(number)}'
         notification_center = NotificationCenter()
