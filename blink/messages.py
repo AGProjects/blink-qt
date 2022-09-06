@@ -21,7 +21,7 @@ from application.python import Null
 from application.system import makedirs
 from application.python.types import Singleton
 from datetime import timezone
-from dateutil.tz import tzlocal
+from dateutil.tz import tzlocal, tzutc
 from urllib.parse import urlsplit, urlunsplit, quote
 from zope.interface import implementer
 
@@ -947,7 +947,10 @@ class MessageManager(object, metaclass=Singleton):
         session_manager = SessionManager()
         notification_center = NotificationCenter()
 
-        timestamp = str(cpim_message.timestamp) if cpim_message is not None and cpim_message.timestamp is not None else str(ISOTimestamp.now())
+        timestamp = cpim_message.timestamp if cpim_message is not None and cpim_message.timestamp is not None else ISOTimestamp.now()
+        if timestamp.tzinfo is tzutc():
+            timestamp = timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
+        timestamp = str(timestamp)
         message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition, direction='incoming')
 
         if x_replicated_message is not Null:

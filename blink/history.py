@@ -337,8 +337,8 @@ class MessageHistory(object, metaclass=Singleton):
 
         timestamp_native = message.timestamp
         timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
-        message.timestamp = timestamp_utc - message.timestamp.utcoffset()
-        timestamp = parse(str(message.timestamp))
+        timestamp_fixed = timestamp_utc - message.timestamp.utcoffset()
+        timestamp = parse(str(timestamp_fixed))
 
         optional_fields = {}
         if state is not None:
@@ -396,8 +396,8 @@ class MessageHistory(object, metaclass=Singleton):
 
         timestamp_native = message.timestamp
         timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
-        message.timestamp = timestamp_utc - message.timestamp.utcoffset()
-        timestamp = parse(str(message.timestamp))
+        timestamp_fixed = timestamp_utc - message.timestamp.utcoffset()
+        timestamp = parse(str(timestamp_fixed))
 
         optional_fields = {}
         if state is not None:
