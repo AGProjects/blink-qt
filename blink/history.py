@@ -438,13 +438,10 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def update(self, id, state):
-        try:
-            message = Message.selectBy(message_id=id)[0]
-        except IndexError:
-            pass
-        else:
+        messages = Message.selectBy(message_id=id)
+        for message in messages:
             if message.direction == 'outgoing' and state == 'received':
-                return
+                continue
 
             if message.state != 'displayed' and message.state != state:
                 log.info(f'== Updating {message.direction} {id} {message.state} -> {state}')
@@ -457,11 +454,8 @@ class MessageHistory(object, metaclass=Singleton):
         message_info = session.info.streams.messages
 
         if message_info.encryption is not None and message.is_secure:
-            try:
-                db_message = Message.selectBy(message_id=message.id)[0]
-            except IndexError:
-                pass
-            else:
+            db_messages = Message.selectBy(message_id=message.id)
+            for db_message in db_messages:
                 encryption_type = str([f'{message_info.encryption}'])
                 if db_message.encryption_type != encryption_type:
                     log.debug(f'== Updating {message.id} encryption {db_message.encryption_type} -> {encryption_type}')
@@ -506,12 +500,10 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def remove_message(self, id):
         log.debug(f'== Trying to removing message: {id}')
-        try:
-            result = Message.selectBy(message_id=id)[0]
-        except IndexError:
-            return
-        log.info(f'== Removing message: {id}')
-        result.destroySelf()
+        result = Message.selectBy(message_id=id)
+        for message in result:
+            log.info(f'== Removing message: {id}')
+            message.destroySelf()
 
 
 class IconDescriptor(object):
