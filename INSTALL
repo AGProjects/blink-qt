@@ -20,6 +20,7 @@ Install the runtime dependencies:
  * python3-pyqt5
  * python3-pyqt5.qtsvg
  * python3-pyqt5.qtwebkit
+ * python3-requests
  * python3-sipsimple
  * python3-twisted
  * python3-sqlobject
