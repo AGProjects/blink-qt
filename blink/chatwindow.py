@@ -2435,7 +2435,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 session.chat_widget.add_message(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history))
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
         else:
-            self.render_after_load.append(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history))
+            self.render_after_load.append((session, ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)))
 
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
@@ -2612,7 +2612,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.history_loaded = True
 
         while len(self.render_after_load) > 0:
-            session.chat_widget.add_message(self.render_after_load.pop())
+            (found_session, message) = self.render_after_load.pop()
+            if found_session is session:
+                session.chat_widget.add_message(message)
+            else:
+                self.render_after_load.append((found_session, message))
         session.chat_widget.show_loading_screen(False)
 
     def _NH_BlinkMessageHistoryLoadDidFail(self, notification):
