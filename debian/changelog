@@ -5,8 +5,11 @@ blink (5.3.0) unstable; urgency=medium
   * Added multiple device synchronization for SIP messages
   * Added message trace/logging
   * Added advanced messaging options in account preferences
+  * Improved python 3.10 compatibilty
+  * Fixed Google contacts to not use deprecated OOB flow
+  * Several fixes for IMDN and history storage
 
- -- Adrian Georgescu <ag@ag-projects.com>  Tue, 06 Sep 2022 12:18:28 +0200
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Wed, 07 Sep 2022 14:41:17 +0200
 
 blink (5.2.0) unstable; urgency=medium
 
