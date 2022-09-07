@@ -8,6 +8,7 @@ from PyQt5.QtGui import QIcon
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from application.python.types import Singleton
+from application.system import makedirs
 
 from datetime import date, timezone
 from dateutil.parser import parse
@@ -220,7 +221,7 @@ class TableVersions(object, metaclass=Singleton):
     __versions__ = {}
 
     def __init__(self):
-        db_file =  ApplicationData.get('message_history.db')
+        db_file = ApplicationData.get('message_history.db')
         db_uri = f'sqlite://{db_file}'
         self._initialize(db_uri)
 
@@ -273,6 +274,7 @@ class MessageHistory(object, metaclass=Singleton):
     def __init__(self):
         db_file = ApplicationData.get('message_history.db')
         db_uri = f'sqlite://{db_file}'
+        makedirs(ApplicationData.directory)
         self._initialize(db_uri)
 
     @run_in_thread('db')
