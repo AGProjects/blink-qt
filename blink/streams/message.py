@@ -257,7 +257,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         if self.private_key is None:
             self.private_key = self._load_key(str(session.account.id), public_key=False)
 
-        if None not in [self.remote_public_key, self.public_key, self.private_key]:
+        if None not in [self.public_key, self.private_key]:
             notification_center = NotificationCenter()
             notification_center.post_notification('MessageStreamPGPKeysDidLoad', sender=self)
         self._load_other_keys(session)

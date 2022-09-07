@@ -813,8 +813,9 @@ class MessageManager(object, metaclass=Singleton):
         request.account.save()
 
         for session in [session for session in self.sessions if session.account is request.account]:
-            notification_center = NotificationCenter()
-            notification_center.post_notification('PGPKeysShouldReload', sender=session)
+            stream = session.fake_streams.get('messages')
+            if not stream.can_encrypt:
+                stream.enable_pgp()
 
         while self._incoming_encrypted_message_queue:
             message, account, contact = self._incoming_encrypted_message_queue.popleft()
