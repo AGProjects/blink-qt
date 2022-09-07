@@ -951,6 +951,7 @@ class MessageManager(object, metaclass=Singleton):
             incoming_request.finished.connect(self._SH_PGPRequestFinished)
             bisect.insort_right(self.pgp_requests, incoming_request)
             incoming_request.dialog.show()
+            return
 
         if content_type.lower() == 'text/pgp-public-key':
             log.info('Message is a public key')
