@@ -86,6 +86,8 @@ class HistoryManager(object, metaclass=Singleton):
             data = pickle.load(open(ApplicationData.get('calls_history'), "rb"))
             if not isinstance(data, list) or not all(isinstance(item, HistoryEntry) and item.text and isinstance(item.call_time, ISOTimestamp) for item in data):
                 raise ValueError("invalid save data")
+        except FileNotFoundError:
+            pass
         except Exception as e:
             traceback.print_exc()
         else:
