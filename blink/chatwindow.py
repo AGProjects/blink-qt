@@ -671,6 +671,7 @@ class ChatWidget(base_class, ui_class):
         self.session = session
         self.history_loaded = False
         self.timestamp_rendered_messages = []
+        self.pending_decryption = []
         if session is not None:
             notification_center = NotificationCenter()
             notification_center.add_observer(ObserverWeakrefProxy(self), sender=session.blink_session)
@@ -1619,7 +1620,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.pending_displayed_notifications = {}
         self.render_after_load = []
-        self.pending_decryption = []
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
@@ -2408,7 +2408,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
                 content = HtmlProcessor.autolink(content)
                 encrypted = True
-                self.pending_decryption.append((message))
+                session.chat_widget.pending_decryption.append((message))
             else:
                 content = message.content
                 content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
@@ -2428,8 +2428,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             account = None
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
         if session.chat_widget.history_loaded:
-            if message in self.pending_decryption and not encrypted:
-                self.pending_decryption.remove(message)
+            if message in session.chat_widget.pending_decryption and not encrypted:
+                session.chat_widget.pending_decryption.remove(message)
                 session.chat_widget.update_message_text(message.id, content)
             else:
                 session.chat_widget.add_message(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history))
@@ -2505,8 +2505,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if isinstance(message, BlinkMessage):
             return
 
-        if message in self.pending_decryption:
-            self.pending_decryption.remove(message)
+        if message in session.chat_widget.pending_decryption:
+            session.chat_widget.pending_decryption.remove(message)
             content = message.content
             content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
             session.chat_widget.update_message_text(message.message_id, content)
@@ -2534,9 +2534,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_MessageStreamPGPKeysDidLoad(self, notification):
         stream = notification.sender
         blink_session = stream.blink_session
+        session = blink_session.items.chat
+
+        if session is None:
+            return
 
         stream = blink_session.fake_streams.get('messages')
-        for message in self.pending_decryption:
+        for message in session.chat_widget.pending_decryption:
             if isinstance(message, BlinkMessage):
                 continue
             if stream and stream.can_decrypt:
@@ -2560,7 +2564,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
                     content = HtmlProcessor.autolink(content)
                     encrypted = True
-                    self.pending_decryption.append((message))
+                    session.chat_widget.pending_decryption.append((message))
                     stream = blink_session.fake_streams.get('messages')
                     if stream and stream.can_decrypt:
                         stream.decrypt(message)
