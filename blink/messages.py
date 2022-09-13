@@ -715,7 +715,7 @@ class MessageManager(object, metaclass=Singleton):
             elif content_type == 'application/sylk-conversation-read':
                 pass
             elif content_type == 'text/pgp-public-key':
-                if message.contact != account.id:
+                if message['contact'] != account.id:
                     self._save_pgp_key(message['content'], message['contact'])
             elif content_type.startswith('text/'):
                 if message['contact'] is None:
