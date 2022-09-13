@@ -241,7 +241,7 @@
 }
 
 [role=&quot;selectable-value&quot;] {
-	background-color: rbga(0, 0, 0, 20);
+	background-color: rgba(0, 0, 0, 20);
 	border: 1px solid #202020;
 	border-radius: 2px;
 	margin-bottom: 5px;
