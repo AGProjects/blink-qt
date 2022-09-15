@@ -151,17 +151,14 @@ class MessageStream(object, metaclass=MediaStreamType):
     def enable_pgp(self):
         self._load_pgp_keys()
 
-    def encrypt(self, content):
-        session = self.blink_session
+    def encrypt(self, content, content_type=None):
         # print('-- Encrypting message')
-
-        stream = session.fake_streams.get('messages')
         pgp_message = PGPMessage.new(content, compression=CompressionAlgorithm.Uncompressed)
         cipher = SymmetricKeyAlgorithm.AES256
 
         sessionkey = cipher.gen_key()
-        encrypted_content = stream.public_key.encrypt(pgp_message, cipher=cipher, sessionkey=sessionkey)
-        encrypted_content = stream.remote_public_key.encrypt(encrypted_content, cipher=cipher, sessionkey=sessionkey)
+        encrypted_content = self.public_key.encrypt(pgp_message, cipher=cipher, sessionkey=sessionkey)
+        encrypted_content = self.remote_public_key.encrypt(encrypted_content, cipher=cipher, sessionkey=sessionkey)
         del sessionkey
         return str(encrypted_content)
 
