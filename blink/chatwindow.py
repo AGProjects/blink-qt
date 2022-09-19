@@ -1723,6 +1723,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.remove_audio = QAction("Remove audio", self, triggered=self._AH_RemoveAudio)
         self.control_button.actions.add_video = QAction("Add video", self, triggered=self._AH_AddVideo)
         self.control_button.actions.remove_video = QAction("Remove video", self, triggered=self._AH_RemoveVideo)
+        self.control_button.actions.add_chat = QAction("Add real time chat", self, triggered=self._AH_AddChat)
+        self.control_button.actions.remove_chat = QAction("Remove real time chat", self, triggered=self._AH_RemoveChat)
         self.control_button.actions.share_my_screen = QAction("Share my screen", self, triggered=self._AH_ShareMyScreen)
         self.control_button.actions.request_screen = QAction("Request screen", self, triggered=self._AH_RequestScreen)
         self.control_button.actions.end_screen_sharing = QAction("End screen sharing", self, triggered=self._AH_EndScreenSharing)
@@ -1858,6 +1860,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.add_audio)
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
                         menu.addAction(self.control_button.actions.remove_audio)
+                    if 'chat' not in stream_types:
+                        menu.addAction(self.control_button.actions.add_chat)
+                    elif stream_types != {'chat'}:
+                        menu.addAction(self.control_button.actions.remove_chat)
                     if 'video' not in stream_types:
                         menu.addAction(self.control_button.actions.add_video)
                     elif stream_types != {'video'}:
