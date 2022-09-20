@@ -219,10 +219,29 @@ class MessageStreamInfo(object):
     def __init__(self):
         self.encryption = None
         self.private_key = None
+        self.encryption_cipher = None
+        self.otr_key_fingerprint = None
+        self.otr_peer_fingerprint = None
+        self.otr_peer_name = ''
+        self.otr_verified = False
+        self.smp_status = SMPVerification.Unavailable
 
     def update(self, stream):
         if stream is not None:
-            self.encryption = 'OpenPGP' if stream.can_encrypt else None
+            self.encryption = 'OTR' if stream.encryption.active else None
+            self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
+            if self.encryption is None:
+                self.encryption = 'OpenPGP' if stream.can_encrypt else None
+
+            if self.encryption == 'OTR':
+                self.otr_key_fingerprint = stream.encryption.key_fingerprint.upper()
+                self.otr_peer_fingerprint = stream.encryption.peer_fingerprint.upper()
+                self.otr_peer_name = stream.encryption.peer_name
+                self.otr_verified = stream.encryption.verified
+
+    def reset(self):
+        pass
+
 
 
 class StreamsInfo(object):
@@ -242,12 +261,12 @@ class StreamsInfo(object):
         except AttributeError:
             raise KeyError(key)
 
-    def update(self, streams):
+    def update(self, streams, fake_streams):
         self.audio.update(streams.get('audio'))
         self.video.update(streams.get('video'))
         self.chat.update(streams.get('chat'))
         self.screen_sharing.update(streams.get('screen-sharing'))
-        self.messages.update(streams.get('messages'))
+        self.messages.update(fake_streams.get('messages'))
 
 
 class SessionInfo(object):
@@ -266,7 +285,7 @@ class SessionInfo(object):
             self.local_address = session.account.contact[self.transport].host
             self.remote_address = sip_session.peer_address  # consider reading from sip_session.route if peer_address is None (route can also be None) -Dan
             self.remote_user_agent = sip_session.remote_user_agent
-        self.streams.update(session.streams)
+        self.streams.update(session.streams, session.fake_streams)
 
 
 class StreamDescription(object):
@@ -1065,7 +1084,7 @@ class BlinkSession(BlinkSessionBase):
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
         if accepted_streams:
-            self.info.streams.update(self.streams)
+            self.info.streams.update(self.streams, self.fake_streams)
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_SIPSessionProposalRejected(self, notification):
@@ -1205,6 +1224,8 @@ class BlinkSession(BlinkSessionBase):
 
     def _NH_ChatStreamOTREncryptionStateChanged(self, notification):
         self.info.streams.chat.update(notification.sender)
+        if self.chat_type is None:
+            self.info.streams.messages.update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
         if notification.data.new_state is OTRState.Encrypted:
             self._smp_handler = SMPVerificationHandler(self)
@@ -1216,10 +1237,14 @@ class BlinkSession(BlinkSessionBase):
 
     def _NH_ChatStreamOTRVerifiedStateChanged(self, notification):
         self.info.streams.chat.update(notification.sender)
+        if self.chat_type is None:
+            self.info.streams.messages.update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_ChatStreamOTRPeerNameChanged(self, notification):
         self.info.streams.chat.update(notification.sender)
+        if self.chat_type is None:
+            self.info.streams.messages.update(notification.sender)
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_ChatStreamSMPVerificationDidNotStart(self, notification):
