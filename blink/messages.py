@@ -70,7 +70,7 @@ class GeneratePGPKeyDialog(IncomingDialogBase, ui_class):
 
 class GeneratePGPKeyRequest(QObject):
     finished = pyqtSignal(object)
-    accepted = pyqtSignal(object, str)
+    accepted = pyqtSignal(object)
     rejected = pyqtSignal(object)
     sip_prefix_re = re.compile('^sips?:')
     priority = 0
