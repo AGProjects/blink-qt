@@ -1272,6 +1272,10 @@ class MessageManager(object, metaclass=Singleton):
         account = AccountManager().default_account
 
         try:
-            next(session for session in self.sessions if session.contact.settings is contact.settings)
+            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
         except StopIteration:
             session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+        else:
+            blink_session.add_stream(StreamDescription('messages'))
+            if blink_session.account.sms.enable_pgp:
+                blink_session.fake_streams.get('messages').enable_pgp()
