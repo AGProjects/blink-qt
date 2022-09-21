@@ -4,9 +4,12 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null
 from application.system import makedirs
 
+from otr import OTRTransport
+from otr.exceptions import IgnoreMessage, UnencryptedMessage, EncryptedMessageError, OTRError, OTRFinishedError
 from sipsimple.account import AccountManager
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.streams import IMediaStream, MediaStreamType, UnknownStreamError
+from sipsimple.streams.msrp.chat import OTREncryption
 from sipsimple.threading import run_in_thread
 from sipsimple.threading.green import run_in_green_thread
 
@@ -40,6 +43,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         self.public_key = None
         self.remote_public_key = None
         self.other_private_keys = []
+        self.encryption = OTREncryption(self)
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='PGPKeysShouldReload')
 
@@ -74,6 +78,14 @@ class MessageStream(object, metaclass=MediaStreamType):
 
     def end(self):
         pass
+
+    @property
+    def local_uri(self):
+        return None
+
+    @property
+    def msrp(self):
+        return None
 
     @property
     def can_encrypt(self):
@@ -148,11 +160,72 @@ class MessageStream(object, metaclass=MediaStreamType):
         notification_center = NotificationCenter()
         notification_center.post_notification('PGPKeysDidGenerate', sender=session, data=NotificationData(private_key=private_key, public_key=private_key.pubkey))
 
+    def inject_otr_message(self, data):
+        from blink.messages import MessageManager
+        MessageManager().send_otr_message(self.blink_session, data)
+
     def enable_pgp(self):
         self._load_pgp_keys()
 
+    def enable_otr(self):
+        self.encryption.start()
+
+    def disable_otr(self):
+        self.encryption.stop()
+
+    def check_otr(self, message):
+        content = None
+        notification_center = NotificationCenter()
+        try:
+            content = self.encryption.otr_session.handle_input(message.content.encode(), message.content_type)
+        except IgnoreMessage:
+            return None
+        except UnencryptedMessage:
+            return message
+        except EncryptedMessageError as e:
+            log.warning(f'OTR encrypted message error: {e}')
+            return None
+        except OTRFinishedError:
+            log.info('OTR has finished')
+            return None
+        except OTRError as e:
+            log.warning(f'OTR message error: {e}')
+            return None
+        else:
+            content = content.decode() if isinstance(content, bytes) else content
+
+            if content.startswith('?OTR:'):
+                notification_center.post_notification('ChatStreamOTRError', sender=self, data=NotificationData(error='OTR message could not be decoded'))
+                log.warning('OTR message could not be decoded')
+                if self.encryption.active:
+                    self.encryption.stop()
+                return None
+
+            log.info("Message uses OTR encryption, message is decoded")
+            message.is_secure = self.encryption.active
+            message.content = content.decode() if isinstance(content, bytes) else content
+            return message
+
     def encrypt(self, content, content_type=None):
         # print('-- Encrypting message')
+        if self.encryption.active:
+            try:
+                encrypted_content = self.encryption.otr_session.handle_output(content.encode(), content_type)
+            except OTRError as e:
+                log.info("Encryption failed OTR encryption has been disabled by remote party")
+                self.encryption.stop()
+                raise Exception(f"OTR encryption has been disabled by remote party {e}")
+            except OTRFinishedError:
+                log.info("OTR encryption has been disabled by remote party")
+                self.encryption.stop()
+                raise Exception("OTR encryption has been disabled by remote party")
+            else:
+                if not encrypted_content.startswith(b'?OTR:'):
+                    self.encryption.stop()
+                    log.info("OTR encryption has been stopped")
+                    raise Exception("OTR encryption has been stopped")
+                return str(encrypted_content.decode())
+
         pgp_message = PGPMessage.new(content, compression=CompressionAlgorithm.Uncompressed)
         cipher = SymmetricKeyAlgorithm.AES256
 
@@ -266,3 +339,6 @@ class MessageStream(object, metaclass=MediaStreamType):
             if loaded_key is None:
                 continue
             self.other_private_keys.append((account, loaded_key))
+
+
+OTRTransport.register(MessageStream)

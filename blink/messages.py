@@ -317,6 +317,12 @@ class BlinkMessage(MSRPChatMessage):
         self.disposition = disposition
         self.is_secure = is_secure
         self.direction = direction
+        print(f"MSG: {self.timestamp}")
+
+
+class OTRInternalMessage(BlinkMessage):
+    def __init__(self, content):
+        super(OTRInternalMessage, self).__init__(content, 'text/plain')
 
 
 @implementer(IObserver)
@@ -484,6 +490,76 @@ class OutgoingMessage(object):
             return
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
+
+
+@implementer(IObserver)
+class InternalOTROutgoingMessage(OutgoingMessage):
+    @property
+    def message(self):
+        return OTRInternalMessage(self.content, self.content_type)
+
+    def _send(self, routes=None):
+        if routes is not None or self.session.routes:
+            notification_center = NotificationCenter()
+            routes = routes if routes is not None else self.session.routes
+            from_uri = self.account.uri
+            content = self.content
+            content = content if isinstance(content, bytes) else content.encode()
+            additional_sip_headers = []
+            if self.account.sms.use_cpim:
+                ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
+                additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
+                payload = CPIMPayload(content,
+                                      self.content_type,
+                                      charset='utf-8',
+                                      sender=ChatIdentity(from_uri, self.account.display_name),
+                                      recipients=[ChatIdentity(self.sip_uri, None)],
+                                      timestamp=str(self.timestamp),
+                                      additional_headers=additional_headers)
+                payload, content_type = payload.encode()
+            else:
+                payload = content
+                content_type = self.content_type
+
+            route = routes[0]
+            message_request = Message(FromHeader(from_uri, self.account.display_name),
+                                      ToHeader(self.sip_uri),
+                                      RouteHeader(route.uri),
+                                      content_type,
+                                      payload,
+                                      credentials=self.account.credentials,
+                                      extra_headers=additional_sip_headers)
+            notification_center.add_observer(self, sender=message_request)
+            message_request.send()
+        else:
+            pass
+            # TODO
+
+    def send(self):
+        if self.session is None:
+            return
+
+        if self.session.routes:
+            self._send()
+        else:
+            self._lookup()
+
+    def _NH_DNSLookupDidSucceed(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        if notification.sender is self.lookup:
+            routes = notification.data.result
+            self.session.routes = routes
+            self._send()
+
+    def _NH_DNSLookupDidFail(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        return
+
+    def _NH_SIPMessageDidSucceed(self, notification):
+        return
+
+    def _NH_SIPMessageDidFail(self, notification):
+        return
 
 
 class RequestList(list):
@@ -1142,6 +1218,10 @@ class MessageManager(object, metaclass=Singleton):
         export_request.finished.connect(self._SH_PGPRequestFinished)
         bisect.insort_right(self.pgp_requests, export_request)
         export_request.dialog.show()
+
+    def send_otr_message(self, session, data):
+        outgoing_message = InternalOTROutgoingMessage(session.account, session.contact, data, 'text/plain', session=session)
+        self._send_message(outgoing_message)
 
     def send_composing_indication(self, session, state, refresh=None, last_active=None):
         if not session.account.sms.enable_iscomposing:
