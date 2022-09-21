@@ -797,7 +797,7 @@ class MessageManager(object, metaclass=Singleton):
                 if message['contact'] is None:
                     continue
 
-                if message['content'].startswith("?OTR:") or message['content'].startswith('?OTR:v3'):
+                if message['content'].startswith("?OTR:") or message['content'].startswith('?OTRv3?'):
                     continue
 
                 from blink.contacts import URIUtils
