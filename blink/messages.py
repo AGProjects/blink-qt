@@ -919,7 +919,7 @@ class MessageManager(object, metaclass=Singleton):
     def _SH_GeneratePGPKeys(self, request):
         session = request.session
         stream = session.fake_streams.get('messages')
-        stream.generate_keys(session)
+        stream.generate_keys()
 
     def _SH_PGPRequestFinished(self, request):
         request.dialog.hide()
