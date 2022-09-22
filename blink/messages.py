@@ -625,7 +625,7 @@ class MessageManager(object, metaclass=Singleton):
 
     @run_in_thread('file-io')
     def _save_pgp_key(self, data, uri):
-        print(f'-- Saving public key for {uri}')
+        log.info(f'-- Saving public key for {uri}')
         settings = SIPSimpleSettings()
 
         id = str(uri).replace('/', '_').replace('sip:', '')
@@ -679,7 +679,7 @@ class MessageManager(object, metaclass=Singleton):
             notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
 
         if message is not None and message.direction != 'outgoing' and 'positive-delivery' in message.disposition:
-            print("-- Should send delivered imdn")
+            log.debug("-- Should send delivered imdn for incoming message")
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
         self._add_contact_to_messages_group(session.account, session.contact)
