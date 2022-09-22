@@ -374,7 +374,16 @@ class OutgoingMessage(object):
                 stream = self.session.fake_streams.get('messages')
                 if self.content_type.lower() not in self.__disabled_imdn_content_types__:
                     if self.account.sms.enable_pgp and stream.can_encrypt:
-                        content = stream.encrypt(self.content)
+                        try:
+                            content = stream.encrypt(self.content, self.content_type)
+                        except Exception as e:
+                            notification_center.post_notification('BlinkMessageDidFail',
+                                                                  sender=self.session,
+                                                                  data=NotificationData(
+                                                                      data=NotificationData(
+                                                                          code='',
+                                                                          reason=f"Encryption error {e}"), id=self.id))
+                            return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
             additional_sip_headers = []
@@ -1111,6 +1120,20 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if not content_type.lower().startswith('text'):
+            return
+
+        if encryption is None and not x_replicated_message:
+            otr = blink_session.fake_streams.get('messages').check_otr(message)
+            if otr is not None:
+                message = otr
+            else:
+                return
+
+        if message.content.startswith("?OTR:") and x_replicated_message:
+            log.warning('Incoming message skipped, OTR encrypted, it should be handled [BUG]')
+            return
+
+        if message.content.startswith("?OTRv3?") and x_replicated_message:
             return
 
         if x_replicated_message or account is not blink_session.account:

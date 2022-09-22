@@ -1279,6 +1279,8 @@ class SMPVerificationHandler(object):
         """@type blink_session: BlinkSession"""
         self.blink_session = blink_session
         self.chat_stream = self.blink_session.streams.get('chat')
+        if self.chat_stream is None:
+            self.chat_stream = self.blink_session.fake_streams.get('messages')
         self.delay = 0 if self.chat_stream.encryption.key_fingerprint > self.chat_stream.encryption.peer_fingerprint else 1
         self.tries = 5
 
@@ -1297,11 +1299,17 @@ class SMPVerificationHandler(object):
         self.chat_stream = Null
 
     def _do_smp(self):
-        if self.blink_session.info.streams.chat.smp_status in (SMPVerification.InProgress, SMPVerification.Succeeded, SMPVerification.Failed):
-            return
+        if isinstance(self.chat_stream, MessageStream):
+            if self.blink_session.info.streams.messages.smp_status in (SMPVerification.InProgress, SMPVerification.Succeeded, SMPVerification.Failed):
+                return
+            # Set SMP succeeded for message streams until it is implemented in all other clients
+            self.blink_session.info.streams.messages.smp_status = SMPVerification.Succeeded
+        else:
+            if self.blink_session.info.streams.chat.smp_status in (SMPVerification.InProgress, SMPVerification.Succeeded, SMPVerification.Failed):
+                return
         audio_stream = self.audio_stream
         if audio_stream.encryption.active and audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.verified:
-            self.chat_stream.encryption.smp_verify(audio_stream.encryption.zrtp.sas.encode(), question=self.question)
+            self.chat_stream.encryption.smp_verify(audio_stream.encryption.zrtp.sas, question=self.question)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -1314,8 +1322,13 @@ class SMPVerificationHandler(object):
             call_later(0, self._do_smp)
 
     def _NH_ChatStreamSMPVerificationDidStart(self, notification):
+        if isinstance(self.chat_stream, MessageStream):
+            stream_info = self.blink_session.info.streams.messages
+        else:
+            stream_info = self.blink_session.info.streams.chat
+
         if notification.data.originator == 'local':
-            self.blink_session.info.streams.chat.smp_status = SMPVerification.InProgress
+            stream_info.smp_status = SMPVerification.InProgress
             notification.center.post_notification('BlinkSessionInfoUpdated', sender=self.blink_session, data=NotificationData(elements={'media'}))
             return
         if self.blink_session.info.streams.chat.smp_status is SMPVerification.Failed or notification.data.question != self.question:
@@ -1324,22 +1337,27 @@ class SMPVerificationHandler(object):
         audio_stream = self.audio_stream
         if audio_stream.encryption.active and audio_stream.encryption.type == 'ZRTP' and audio_stream.encryption.zrtp.sas is not None:
             self.chat_stream.encryption.smp_answer(audio_stream.encryption.zrtp.sas)
-            if self.blink_session.info.streams.chat.smp_status not in (SMPVerification.Succeeded, SMPVerification.Failed):
-                self.blink_session.info.streams.chat.smp_status = SMPVerification.InProgress
+            if stream_info.smp_status not in (SMPVerification.Succeeded, SMPVerification.Failed):
+                stream_info.smp_status = SMPVerification.InProgress
                 notification.center.post_notification('BlinkSessionInfoUpdated', sender=self.blink_session, data=NotificationData(elements={'media'}))
         else:
             self.chat_stream.encryption.smp_abort()
 
     def _NH_ChatStreamSMPVerificationDidEnd(self, notification):
-        if self.blink_session.info.streams.chat.smp_status in (SMPVerification.Succeeded, SMPVerification.Failed):
+        if isinstance(self.chat_stream, MessageStream):
+            stream_info = self.blink_session.info.streams.messages
+        else:
+            stream_info = self.blink_session.info.streams.chat
+
+        if stream_info.chat.smp_status in (SMPVerification.Succeeded, SMPVerification.Failed):
             return
         if notification.data.status == SMPStatus.Success:
             if notification.data.same_secrets:
-                self.blink_session.info.streams.chat.smp_status = SMPVerification.Succeeded if self.blink_session.info.streams.audio.zrtp_verified else SMPVerification.Unavailable
+                stream_info.smp_status = SMPVerification.Succeeded if self.blink_session.info.streams.audio.zrtp_verified else SMPVerification.Unavailable
             else:
-                self.blink_session.info.streams.chat.smp_status = SMPVerification.Failed
+                stream_info.smp_status = SMPVerification.Failed
         else:
-            self.blink_session.info.streams.chat.smp_status = SMPVerification.Unavailable
+            stream_info.smp_status = SMPVerification.Unavailable
         if notification.data.status is SMPStatus.ProtocolError and notification.data.reason == 'startup collision':
             self.tries -= 1
             self.delay *= 2

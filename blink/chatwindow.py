@@ -964,8 +964,12 @@ class ChatWidget(base_class, ui_class):
             self.add_message(ChatMessage(content, sender, 'outgoing', id=id))
 
     def _SH_ChatInputLockReleased(self, lock_type):
+        blink_session = self.session.blink_session
         if lock_type is EncryptionLock:
-            self.session.chat_stream.encryption.stop()
+            if blink_session.chat_type is not None:
+                self.session.chat_stream.encryption.stop()
+            else:
+                blink_session.fake_streams.get('messages').encryption.stop()
 
     def _SH_ComposingTimerTimeout(self):
         self.composing_timer.stop()
