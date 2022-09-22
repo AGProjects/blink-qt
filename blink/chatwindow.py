@@ -2937,6 +2937,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _AH_RemoveVideo(self):
         self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('video'))
 
+    def _AH_AddChat(self):
+        self.selected_session.blink_session.add_stream(StreamDescription('chat'))
+
+    def _AH_RemoveChat(self):
+        self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('chat'))
+
     def _AH_RequestScreen(self):
         if 'audio' in self.selected_session.blink_session.streams:
             self.selected_session.blink_session.add_stream(StreamDescription('screen-sharing', mode='viewer'))
