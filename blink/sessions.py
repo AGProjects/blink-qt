@@ -3204,6 +3204,10 @@ class ChatSessionItem(object):
         return self.blink_session.streams.get('chat')
 
     @property
+    def messages_stream(self):
+        return self.blink_session.fake_streams.get('messages')
+
+    @property
     def audio_stream(self):
         return self.blink_session.streams.get('audio')
 

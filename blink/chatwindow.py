@@ -1901,6 +1901,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         audio_info = blink_session.info.streams.audio
         video_info = blink_session.info.streams.video
         chat_info = blink_session.info.streams.chat
+        messages_info = blink_session.info.streams.messages
         screen_info = blink_session.info.streams.screen_sharing
         state = "%s" % blink_session.state
 
@@ -1918,8 +1919,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
                 self.chat_value_widget.setEnabled(True)
                 self.chat_value_label.setText('Using SIP Message')
-                self.chat_encryption_label.setVisible(False)
-                self.chat_connection_label.setVisible(False)
+                if blink_session.chat_type is not None:
+                    self.chat_encryption_label.setVisible(False)
+                    self.chat_connection_label.setVisible(False)
             elif state in state_map:
                 self.status_value_label.setForegroundRole(QPalette.WindowText)
                 self.status_value_label.setText(state_map[state])
@@ -2035,14 +2037,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.chat_encryption_label.setToolTip('Media is encrypted using TLS')
             else:
                 self.chat_encryption_label.setToolTip('Media is not encrypted')
+            if messages_info.encryption is not None:
+                if messages_info.encryption == 'OpenPGP':
+                    self.chat_encryption_label.setToolTip('Media is encrypted using {0.encryption}'.format(messages_info))
+                else:
+                    self.chat_encryption_label.setToolTip('Media is encrypted using {0.encryption} ({0.encryption_cipher})'.format(messages_info))
+
             self._update_chat_encryption_icon()
 
             self.chat_connection_label.setVisible(chat_info.remote_address is not None)
-            self.chat_encryption_label.setVisible(chat_info.remote_address is not None and (chat_info.encryption is not None or chat_info.transport == 'tls'))
+            self.chat_encryption_label.setVisible((chat_info.remote_address is not None and (chat_info.encryption is not None or chat_info.transport == 'tls')) or messages_info.encryption is not None)
 
             if self.otr_widget.isVisibleTo(self.info_panel):
                 # refresh the OTR widget (we need to hide/change/show because in certain configurations it flickers when changed while visible)
-                stream_info = blink_session.info.streams.chat
+                stream_info = blink_session.info.streams.chat or blink_session.info.streams.messages
                 self.otr_widget.hide()
                 self.otr_widget.peer_name = stream_info.otr_peer_name
                 self.otr_widget.peer_verified = stream_info.otr_verified
@@ -2893,11 +2901,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.control_button.setEnabled(False)
 
     def _SH_OTRWidgetNameChanged(self):
-        stream = self.selected_session.chat_stream or Null
+        stream = self.selected_session.chat_stream or self.selected_session.messages_stream or Null
         stream.encryption.peer_name = self.otr_widget.peer_name
 
     def _SH_OTRWidgetStatusChanged(self):
-        stream = self.selected_session.chat_stream or Null
+        stream = self.selected_session.chat_stream or self.selected_session.messages_stream or Null
         stream.encryption.verified = self.otr_widget.peer_verified
 
     def _SH_ZRTPWidgetNameChanged(self):
@@ -2983,6 +2991,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _EH_ChatEncryptionLabelClicked(self):
         stream = self.selected_session.chat_stream
         stream_info = self.selected_session.blink_session.info.streams.chat
+        if self.selected_session.blink_session.chat_type is None:
+            stream = self.selected_session.messages_stream
+            stream_info = self.selected_session.blink_session.info.streams.messages
+
         if stream is not None and not stream._done and stream_info.encryption == 'OTR':
             if self.otr_widget.isVisible():
                 self.otr_widget.hide()
