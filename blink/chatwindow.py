@@ -2619,6 +2619,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp, account))
             if 'OpenPGP' in message.encryption_type:
                 session.chat_widget.update_message_encryption(message.message_id, True)
+            elif 'OTR' in message.encryption_type:
+                session.chat_widget.update_message_encryption(message.message_id, True)
         session.chat_widget.history_loaded = True
 
         while len(self.render_after_load) > 0:
