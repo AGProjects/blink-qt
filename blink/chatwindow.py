@@ -44,7 +44,7 @@ from blink.history import HistoryManager
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
-from blink.util import run_in_gui_thread
+from blink.util import run_in_gui_thread, call_later
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
 from blink.widgets.otr import OTRWidget
@@ -2489,7 +2489,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
-        session.chat_widget.update_message_status(id=notification.data.id, status='failed')
+        call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status='failed')
 
     def _NH_BlinkMessageWillRemove(self, notification):
         blink_session = notification.sender
