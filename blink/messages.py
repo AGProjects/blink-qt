@@ -317,7 +317,6 @@ class BlinkMessage(MSRPChatMessage):
         self.disposition = disposition
         self.is_secure = is_secure
         self.direction = direction
-        print(f"MSG: {self.timestamp}")
 
 
 class OTRInternalMessage(BlinkMessage):
