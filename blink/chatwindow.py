@@ -667,6 +667,9 @@ class ChatWidget(base_class, ui_class):
         self.chat_element = self.chat_view.page().mainFrame().findFirstElement('#chat')
         self.loading_element = self.chat_view.page().mainFrame().findFirstElement('#loading')
         self.composing_timer = QTimer()
+        self.otr_timer = QTimer()
+        self.otr_timer.setSingleShot(True)
+        self.otr_timer.setInterval(15000)
         self.last_message = None
         self.session = session
         self.history_loaded = False
@@ -684,6 +687,7 @@ class ChatWidget(base_class, ui_class):
         self.chat_view.sizeChanged.connect(self._SH_ChatViewSizeChanged)
         self.chat_view.page().mainFrame().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
         self.composing_timer.timeout.connect(self._SH_ComposingTimerTimeout)
+        self.otr_timer.timeout.connect(self._SH_OTRTimerTimeout)
 
     @property
     def user_icon(self):
@@ -792,6 +796,12 @@ class ChatWidget(base_class, ui_class):
         timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
         notification_center.post_notification('ChatStreamWillSendMessage', blink_session, data=BlinkMessage(content, content_type, blink_session.account, recipients, timestamp=timestamp, id=message_id))
         return message_id
+
+    def start_otr_timer(self):
+        self.otr_timer.start()
+
+    def stop_otr_timer(self):
+        self.otr_timer.stop()
 
     def _align_chat(self, scroll=False):
         # frame_height = self.chat_view.page().mainFrame().contentsSize().height()
@@ -983,6 +993,11 @@ class ChatWidget(base_class, ui_class):
             chat_stream.send_composing_indication('idle')
         except Exception:
             pass
+
+    def _SH_OTRTimerTimeout(self):
+        self.otr_timer.stop()
+        self.add_message(ChatStatus('Timeout in enabling OTR, recipient did not answer to OTR encryption request'))  # decide what type to use here. -Dan
+        NotificationCenter().post_notification('ChatStreamOTRTimeout', self.session.blink_session)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -1637,6 +1652,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='ChatStreamDidNotDeliverMessage')
         notification_center.add_observer(self, name='ChatStreamOTREncryptionStateChanged')
         notification_center.add_observer(self, name='ChatStreamOTRError')
+        notification_center.add_observer(self, name='ChatStreamOTRTimeout')
         notification_center.add_observer(self, name='MediaStreamDidInitialize')
         notification_center.add_observer(self, name='MediaStreamDidNotInitialize')
         notification_center.add_observer(self, name='MediaStreamDidStart')
@@ -1732,6 +1748,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.share_my_screen = QAction("Share my screen", self, triggered=self._AH_ShareMyScreen)
         self.control_button.actions.request_screen = QAction("Request screen", self, triggered=self._AH_RequestScreen)
         self.control_button.actions.end_screen_sharing = QAction("End screen sharing", self, triggered=self._AH_EndScreenSharing)
+        self.control_button.actions.enable_otr = QAction("Enable OTR for messaging", self, triggered=self._AH_EnableOTR)
+        self.control_button.actions.enable_otr_progress = QAction("Enabling OTR for messaging", self, enabled=False)
+        self.control_button.actions.disable_otr = QAction("Disable OTR for messaging", self, triggered=self._AH_DisableOTR)
         self.control_button.actions.main_window = QAction("Main Window", self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
 
         self.addAction(self.control_button.actions.main_window)  # make this active even when it's not in the control_button's menu
@@ -1843,6 +1862,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         menu.hide()
         blink_session = self.selected_session.blink_session
         state = blink_session.state
+        messages_info = blink_session.info.streams.messages
         if state == 'connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
             self.control_button.setMenu(None)
             self.control_button.setIcon(self.cancel_icon)
@@ -1853,6 +1873,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.control_button.setIcon(self.control_icon)
             menu.clear()
             if state not in ('connecting/*', 'connected/*'):
+                if messages_info.encryption != 'OTR':
+                    if self.selected_session.chat_widget.otr_timer.isActive():
+                        menu.addAction(self.control_button.actions.enable_otr_progress)
+                    else:
+                        menu.addAction(self.control_button.actions.enable_otr)
+                else:
+                    menu.addAction(self.control_button.actions.disable_otr)
                 menu.addAction(self.control_button.actions.connect)
                 menu.addAction(self.control_button.actions.connect_with_audio)
                 menu.addAction(self.control_button.actions.connect_with_video)
@@ -1860,6 +1887,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 menu.addAction(self.control_button.actions.disconnect)
                 if state == 'connected':
                     stream_types = blink_session.streams.types
+                    if 'chat' not in stream_types:
+                        if messages_info.encryption != 'OTR':
+                            if self.selected_session.chat_widget.otr_timer.isActive():
+                                menu.addAction(self.control_button.actions.enable_otr_progress)
+                            else:
+                                menu.addAction(self.control_button.actions.enable_otr)
+                        else:
+                            menu.addAction(self.control_button.actions.disable_otr)
                     if 'audio' not in stream_types:
                         menu.addAction(self.control_button.actions.add_audio)
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
@@ -2725,6 +2760,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         if notification.data.new_state is OTRState.Encrypted:
+            session.chat_widget.stop_otr_timer()
             session.chat_widget.add_message(ChatStatus('Encryption enabled'))
         elif notification.data.old_state is OTRState.Encrypted:
             session.chat_widget.add_message(ChatStatus('Encryption disabled'))
@@ -2732,12 +2768,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if notification.data.new_state is OTRState.Finished:
             session.chat_widget.chat_input.lock(EncryptionLock)
             # todo: play sound here?
+        call_later(.1, self._update_control_menu)
 
     def _NH_ChatStreamOTRError(self, notification):
         session = notification.sender.blink_session.items.chat
         if session is not None:
             message = "OTR Error: {.error}".format(notification.data)
             session.chat_widget.add_message(ChatStatus(message))
+
+    def _NH_ChatStreamOTRTimeout(self, notification):
+        self._update_control_menu()
 
     def _NH_MediaStreamDidInitialize(self, notification):
         if notification.sender.type != 'chat':
@@ -2971,6 +3011,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _AH_EndScreenSharing(self):
         self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('screen-sharing'))
+
+    def _AH_EnableOTR(self, action):
+        self.selected_session.chat_widget.start_otr_timer()
+        self.selected_session.messages_stream.enable_otr()
+        self._update_control_menu()
+
+    def _AH_DisableOTR(self):
+        self.selected_session.chat_widget.stop_otr_timer()
+        self.selected_session.messages_stream.disable_otr()
 
     def _AH_MainWindow(self):
         blink = QApplication.instance()
