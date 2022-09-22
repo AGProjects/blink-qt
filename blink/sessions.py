@@ -793,6 +793,8 @@ class BlinkSession(BlinkSessionBase):
         self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
     def add_stream(self, stream_description):
+        if stream_description.type == 'messages' and stream_description.type not in self.fake_streams:
+            self.fake_streams.extend([stream_description.create_stream()])
         self.add_streams([stream_description])
 
     def add_streams(self, stream_descriptions):
@@ -3296,6 +3298,8 @@ class ChatSessionItem(object):
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
 
     def _NH_BlinkSessionDidNotAddStream(self, notification):
+        if notification.data.stream.type == 'messages':
+            return
         icon_label = getattr(self.widget, "%s_icon" % notification.data.stream.type.replace('-', '_'))
         icon_label.setEnabled(True)
         self.widget.update_content(self)
