@@ -1,3 +1,11 @@
+blink (5.4.0) unstable; urgency=medium
+
+  * Added OTR encryption to SIP Message sessions
+  * Add option to add/remove realtime chat during audio/video calls
+  * PGP encryption fixes
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Mon, 26 Sep 2022 13:47:42 +0200
+
 blink (5.3.0) unstable; urgency=medium
 
   * Added OpenPGP encryption for SIP Messages
