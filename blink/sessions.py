@@ -4276,7 +4276,7 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
             painter.setPen(QPen(inner_pen_color, inner_pen_width, style=Qt.SolidLine, cap=Qt.FlatCap, join=Qt.RoundJoin))
             painter.drawEllipse(inner_rect)
             painter.setPen(QPen(outer_pen_color, outer_pen_width, style=Qt.SolidLine, cap=Qt.FlatCap, join=Qt.RoundJoin))
-            painter.drawArc(outer_rect, 90*16, -self.progress*3.6*16)
+            painter.drawArc(outer_rect, 90 * 16, int(-self.progress * 3.6 * 16))
             if self.show_cancel_button:
                 foreground_color = palette.color(self.foregroundRole())
                 background_color = palette.color(self.backgroundRole())
