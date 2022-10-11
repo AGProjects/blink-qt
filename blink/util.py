@@ -1,5 +1,5 @@
 
-from PyQt5.QtCore import QObject, QThread, QTimer
+from PyQt5.QtCore import QObject, QThread, QTimer, QCoreApplication
 from PyQt5.QtWidgets import QApplication
 from application.python.decorator import decorator, preserve_signature
 from application.python.descriptor import classproperty
@@ -11,8 +11,9 @@ from sys import exc_info
 from blink.event import CallFunctionEvent
 
 
-__all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread']
+__all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread', 'translate']
 
+translate = QCoreApplication.translate
 
 class QSingleton(Singleton, type(QObject)):
     """A metaclass for making Qt objects singletons"""
