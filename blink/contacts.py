@@ -487,7 +487,7 @@ class GoogleContactIconRetriever(object):
         http = self.credentials.authorize(Http(timeout=5))
         try:
             if icon.url is not None:
-                response, content = http.request(icon.url+'?size={}'.format(IconManager.max_size))
+                response, content = http.request(icon.url + '?size={}'.format(IconManager.max_size))
             else:
                 response = content = None
         except (HttpLib2Error, socket.error) as e:
@@ -739,6 +739,7 @@ class GoogleAuthorizationView(QWebView):
                 self.hide()
                 self.finished.emit()
                 self.accepted.emit(params['code'], self.email)
+
 
 class GoogleAuthorizationStorage(Storage):
     def __init__(self, filename):
@@ -1200,7 +1201,7 @@ class Group(object):
 
     def _name_changed(self):
         if self.settings.save is Null:
-            del self.settings.save # re-enable saving after the name was provided
+            del self.settings.save  # re-enable saving after the name was provided
         self.settings.name = self.widget.name_editor.text()
         self.settings.save()
 
@@ -1767,14 +1768,14 @@ class GroupWidget(base_class, ui_class):
 
         painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
         if self.drop_indicator is ContactListView.AboveItem:
-            line_rect = QRectF(rect.adjusted(18, 0, 0, 5-rect.height()))
+            line_rect = QRectF(rect.adjusted(18, 0, 0, 5 - rect.height()))
             arc_rect = line_rect.adjusted(-5, -3, -line_rect.width(), -3)
             path = QPainterPath(line_rect.topRight())
             path.lineTo(line_rect.topLeft())
             path.arcTo(arc_rect, 0, -180)
             painter.drawPath(path)
         elif self.drop_indicator is ContactListView.BelowItem:
-            line_rect = QRectF(rect.adjusted(18, rect.height()-5, 0, 0))
+            line_rect = QRectF(rect.adjusted(18, rect.height() - 5, 0, 0))
             arc_rect = line_rect.adjusted(-5, 2, -line_rect.width(), 2)
             path = QPainterPath(line_rect.bottomRight())
             path.lineTo(line_rect.bottomLeft())
@@ -1910,8 +1911,8 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
             gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
-            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3 * 255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
             # foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
@@ -2036,7 +2037,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
             text_color = option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text)
             text_width = text_rect.width()
             if option.fontMetrics.width(contact_uri.uri.uri) > text_width:
-                fade_start = 1 - 50.0/text_width if text_width > 50 else 0.0
+                fade_start = 1 - 50.0 / text_width if text_width > 50 else 0.0
                 gradient = QLinearGradient(text_rect.x(), 0, text_rect.right(), 0)
                 gradient.setColorAt(fade_start, text_color)
                 gradient.setColorAt(1.0, Qt.transparent)
@@ -2057,8 +2058,8 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
             gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
-            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
+            gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3 * 255))
+            gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
             foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
@@ -2120,12 +2121,12 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(contrast_pen)
         painter.translate(0, offset)
-        painter.drawLine(x+9, y, x+3, y+7)
-        painter.drawLine(x, y+4, x+3, y+7)
+        painter.drawLine(x + 9, y, x + 3, y + 7)
+        painter.drawLine(x, y + 4, x + 3, y + 7)
         painter.setPen(pen)
         painter.translate(0, -offset)
-        painter.drawLine(x+9, y, x+3, y+7)
-        painter.drawLine(x, y+4, x+3, y+7)
+        painter.drawLine(x + 9, y, x + 3, y + 7)
+        painter.drawLine(x, y + 4, x + 3, y + 7)
         painter.restore()
 
     def paint(self, painter, option, index):
@@ -2414,15 +2415,15 @@ class ContactModel(QAbstractListModel):
         if drop_position is self.contact_list.AboveItem:
             position = self.items.index(drop_group)
         else:
-            position = len(self.items) if drop_group is groups[-1] else self.items.index(groups[groups.index(drop_group)+1])
-        self.beginInsertRows(QModelIndex(), position, position+len(items)-1)
+            position = len(self.items) if drop_group is groups[-1] else self.items.index(groups[groups.index(drop_group) + 1])
+        self.beginInsertRows(QModelIndex(), position, position + len(items) - 1)
         self.items[position:position] = items
         self.endInsertRows()
         for index, item in enumerate(items):
             if isinstance(item, Group):
-                self.contact_list.openPersistentEditor(self.index(position+index))
+                self.contact_list.openPersistentEditor(self.index(position + index))
             else:
-                self.contact_list.setRowHidden(position+index, item.group.collapsed)
+                self.contact_list.setRowHidden(position + index, item.group.collapsed)
         bonjour_group = self.bonjour_group
         if bonjour_group in moved_groups:
             bonjour_group.relocation_info = None
@@ -2589,7 +2590,7 @@ class ContactModel(QAbstractListModel):
             groups = self.items[GroupList]
             bonjour_group = self.bonjour_group
             try:
-                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group)+1])
+                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group) + 1])
             except IndexError:
                 bonjour_group.relocation_info = RelocationInfo(successor=None)
             if bonjour_group is not groups[0]:
@@ -2603,7 +2604,7 @@ class ContactModel(QAbstractListModel):
             groups = self.items[GroupList]
             bonjour_group = self.bonjour_group
             try:
-                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group)+1])
+                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group) + 1])
             except IndexError:
                 bonjour_group.relocation_info = RelocationInfo(successor=None)
             if bonjour_group is not groups[0]:
@@ -2633,7 +2634,7 @@ class ContactModel(QAbstractListModel):
         for index in sorted(indexes):
             if start is None:
                 start = index
-            elif index-last>1:
+            elif index - last > 1:
                 yield (start, last)
                 start = index
             last = index
@@ -2648,7 +2649,7 @@ class ContactModel(QAbstractListModel):
         for index in reversed(sorted(indexes)):
             if end is None:
                 end = index
-            elif last-index>1:
+            elif last - index > 1:
                 yield (last, end)
                 end = index
             last = index
@@ -2697,13 +2698,13 @@ class ContactModel(QAbstractListModel):
 
     def _find_contact_move_point(self, contact):
         position = self.items.index(contact)
-        prev_item = self.items[position-1] if position>0 else None
-        next_item = self.items[position+1] if position+1<len(self.items) else None
+        prev_item = self.items[position - 1] if position > 0 else None
+        next_item = self.items[position + 1] if position + 1 < len(self.items) else None
         prev_ok = prev_item is None or isinstance(prev_item, Group) or prev_item <= contact
         next_ok = next_item is None or isinstance(next_item, Group) or next_item >= contact
         if prev_ok and next_ok:
             return None
-        for position in range(self.items.index(contact.group)+1, len(self.items)):
+        for position in range(self.items.index(contact.group) + 1, len(self.items)):
             item = self.items[position]
             if isinstance(item, Group) or item > contact:
                 break
@@ -2712,7 +2713,7 @@ class ContactModel(QAbstractListModel):
         return position
 
     def _find_contact_insertion_point(self, contact):
-        for position in range(self.items.index(contact.group)+1, len(self.items)):
+        for position in range(self.items.index(contact.group) + 1, len(self.items)):
             item = self.items[position]
             if isinstance(item, Group) or item > contact:
                 break
@@ -2758,8 +2759,8 @@ class ContactModel(QAbstractListModel):
         start = self.items.index(group)
         end = start + len(self.items[GroupContacts, group])
         self.beginRemoveRows(QModelIndex(), start, end)
-        items = self.items[start:end+1]
-        del self.items[start:end+1]
+        items = self.items[start:end + 1]
+        del self.items[start:end + 1]
         self.endRemoveRows()
         return items
 
@@ -2770,8 +2771,8 @@ class ContactModel(QAbstractListModel):
         rows.update(row for row, item in enumerate(self.items) if isinstance(item, Contact) and item.group in removed_groups)
         for start, end in self.reversed_range_iterator(rows):
             self.beginRemoveRows(QModelIndex(), start, end)
-            items[0:0] = self.items[start:end+1]
-            del self.items[start:end+1]
+            items[0:0] = self.items[start:end + 1]
+            del self.items[start:end + 1]
             self.endRemoveRows()
         return items
 
@@ -2819,11 +2820,11 @@ class ContactModel(QAbstractListModel):
 
     def moveGroup(self, group, successor):
         groups = self.items[GroupList]
-        if group not in groups or groups.index(group)+1 == (groups.index(successor) if successor in groups else len(groups)):
+        if group not in groups or groups.index(group) + 1 == (groups.index(successor) if successor in groups else len(groups)):
             return
         items = self._pop_group(group)
         position = self.items.index(successor) if successor in groups else len(self.items)
-        self.beginInsertRows(QModelIndex(), position, position+len(items)-1)
+        self.beginInsertRows(QModelIndex(), position, position + len(items) - 1)
         self.items[position:position] = items
         self.endInsertRows()
         self.contact_list.openPersistentEditor(self.index(position))
@@ -3077,13 +3078,13 @@ class ContactDetailModel(QAbstractListModel):
     def _NH_AddressbookContactDidChange(self, notification):
         if notification.sender is self.contact and 'uris' in notification.data.modified:
             modified_uris = notification.data.modified['uris']
-            for row in sorted((row for row, item in enumerate(self.items) if row>0 and item.uri in modified_uris.removed), reverse=True):
+            for row in sorted((row for row, item in enumerate(self.items) if row > 0 and item.uri in modified_uris.removed), reverse=True):
                 self.beginRemoveRows(QModelIndex(), row, row)
                 del self.items[row]
                 self.endRemoveRows()
             if modified_uris.added:
                 position = len(self.items)
-                self.beginInsertRows(QModelIndex(), position, position+len(modified_uris.added)-1)
+                self.beginInsertRows(QModelIndex(), position, position + len(modified_uris.added) - 1)
                 self.items += [ContactURI(notification.sender, uri) for uri in modified_uris.added]
                 self.endInsertRows()
 
@@ -3093,16 +3094,16 @@ class ContactDetailModel(QAbstractListModel):
             added_uris = [uri for uri in self.contact.uris if uri not in old_uris]
             removed_uris = old_uris.difference(self.contact.uris)
             modified_uris = old_uris.difference(removed_uris)
-            for row in sorted((row for row, item in enumerate(self.items) if row>0 and item.uri in removed_uris), reverse=True):
+            for row in sorted((row for row, item in enumerate(self.items) if row > 0 and item.uri in removed_uris), reverse=True):
                 self.beginRemoveRows(QModelIndex(), row, row)
                 del self.items[row]
                 self.endRemoveRows()
             if added_uris:
                 position = len(self.items)
-                self.beginInsertRows(QModelIndex(), position, position+len(added_uris)-1)
+                self.beginInsertRows(QModelIndex(), position, position + len(added_uris) - 1)
                 self.items += [ContactURI(self.contact, uri) for uri in added_uris]
                 self.endInsertRows()
-            for row in (row for row, item in enumerate(self.items) if row>0 and item.uri in modified_uris):
+            for row in (row for row, item in enumerate(self.items) if row > 0 and item.uri in modified_uris):
                 index = self.index(row)
                 self.dataChanged.emit(index, index)
 
@@ -3388,11 +3389,11 @@ class ContactListView(QListView):
         has_blink_contacts = 'application/x-blink-contact-list' in provided_mime_types
         has_blink_groups = 'application/x-blink-group-list' in provided_mime_types
         if not acceptable_mime_types:
-            event.ignore() # no acceptable mime types found
+            event.ignore()  # no acceptable mime types found
         elif has_blink_contacts and has_blink_groups:
-            event.ignore() # we can't handle drops for both groups and contacts at the same time
+            event.ignore()  # we can't handle drops for both groups and contacts at the same time
         elif event_source is not self and (has_blink_contacts or has_blink_groups):
-            event.ignore() # we don't handle drops for blink contacts or groups from other sources
+            event.ignore()  # we don't handle drops for blink contacts or groups from other sources
         else:
             if event_source is self:
                 event.setDropAction(Qt.MoveAction)
@@ -3577,17 +3578,17 @@ class ContactListView(QListView):
             rect.setTop(self.visualRect(model.index(model.items.index(groups[-1]))).bottom())
         elif isinstance(item, Group):
             index = groups.index(item)
-            rect.setHeight(rect.height()/2)
+            rect.setHeight(rect.height() / 2)
             if rect.contains(event.pos()):
-                drop_groups = (groups[index-1], groups[index]) if index>0 else (Null, groups[index])
+                drop_groups = (groups[index - 1], groups[index]) if index > 0 else (Null, groups[index])
             else:
-                drop_groups = (groups[index], groups[index+1]) if index<len(groups)-1 else (groups[index], Null)
+                drop_groups = (groups[index], groups[index + 1]) if index < len(groups) - 1 else (groups[index], Null)
                 rect.translate(0, rect.height())
         selected_rows = sorted(index.row() for index in self.selectionModel().selectedIndexes() if model.items[index.row()].movable)
         if selected_rows:
             first = groups.index(model.items[selected_rows[0]])
             last = groups.index(model.items[selected_rows[-1]])
-            contiguous_selection = len(selected_rows) == last-first+1
+            contiguous_selection = len(selected_rows) == last - first + 1
         else:
             contiguous_selection = False
         selected_groups = set(model.items[row] for row in selected_rows)
@@ -3623,7 +3624,7 @@ class ContactListView(QListView):
         model = self.model()
         if not index.isValid():
             rect = self.viewport().rect()
-            rect.setTop(self.visualRect(model.index(len(model.items)-1)).bottom())
+            rect.setTop(self.visualRect(model.index(len(model.items) - 1)).bottom())
         if isinstance(item, Contact):
             event.accept(rect)
             self.drop_indicator_index = index
@@ -3965,7 +3966,7 @@ class ContactSearchListView(QListView):
         else:
             model = self.model()
             rect = self.viewport().rect()
-            rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
+            rect.setTop(self.visualRect(model.index(model.rowCount() - 1, 0)).bottom())
             event.ignore(rect)
 
     def _SH_DoubleClicked(self, index):
@@ -4302,7 +4303,7 @@ class ContactDetailView(QListView):
         else:
             model = self.model()
             rect = self.viewport().rect()
-            rect.setTop(self.visualRect(model.index(model.rowCount()-1, 0)).bottom())
+            rect.setTop(self.visualRect(model.index(model.rowCount() - 1, 0)).bottom())
             event.accept(rect)
 
     def _SH_AnimationFinished(self):
@@ -4456,7 +4457,7 @@ class ContactURIDelegate(QItemDelegate):
             text_margin = option.widget.style().pixelMetric(QStyle.PM_FocusFrameHMargin, None, option.widget) + 1
             text_rect = rect.adjusted(text_margin, 0, -text_margin, 0)  # remove width padding
             width = text_rect.width()
-            fade_start = 1 - 50.0/width if width > 50 else 0.0
+            fade_start = 1 - 50.0 / width if width > 50 else 0.0
             gradient = QLinearGradient(0, 0, width, 0)
             gradient.setColorAt(fade_start, option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text))
             gradient.setColorAt(1.0, Qt.transparent)
@@ -4849,7 +4850,7 @@ class URIUtils(object):
                         if contact_user.endswith(number):
                             ratio = len(number) * 100 / len(contact_user)
                             if ratio >= 50:
-                                heappush(matched_numbers, (100-ratio, next(counter), contact, contact_uri))
+                                heappush(matched_numbers, (100 - ratio, next(counter), contact, contact_uri))
             if matched_numbers:
                 return matched_numbers[0][2:]  # ratio, index, contact, uri
 
