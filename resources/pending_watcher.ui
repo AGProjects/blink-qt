@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>dialog</class>
- <widget class="QDialog" name="dialog">
+ <class>pending_watcher_dialog</class>
+ <widget class="QDialog" name="pending_watcher_dialog">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -346,7 +346,7 @@
   <connection>
    <sender>accept_button</sender>
    <signal>clicked()</signal>
-   <receiver>dialog</receiver>
+   <receiver>pending_watcher_dialog</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -362,7 +362,7 @@
   <connection>
    <sender>block_button</sender>
    <signal>clicked()</signal>
-   <receiver>dialog</receiver>
+   <receiver>pending_watcher_dialog</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">
