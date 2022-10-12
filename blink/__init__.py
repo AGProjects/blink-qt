@@ -2,7 +2,7 @@
 import os
 import sys
 
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtCore import Qt, QEvent, QLocale, QTranslator
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from application import log
@@ -16,6 +16,7 @@ from sipsimple.application import SIPApplication
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.configuration.backend.file import FileBackend
 from sipsimple.payloads import XMLDocument
 from sipsimple.storage import FileStorage
 from sipsimple.threading import run_in_twisted_thread
@@ -97,6 +98,20 @@ class Blink(QApplication, metaclass=QSingleton):
         self.sip_application = SIPApplication()
         self.first_run = False
         self.reinit = False
+
+        translator = QTranslator(self)
+        system_language = QLocale.system().name().split('_')[0]
+        language = system_language
+        if os.path.exists(ApplicationData.get('config')):
+            pre_loaded_settings = FileBackend(ApplicationData.get('config')).load()
+            try:
+                language = pre_loaded_settings['BlinkSettings']['interface']['language']
+            except KeyError:
+                pass
+            if language == 'default':
+                language = system_language
+            if translator.load(Resources.get(f'i18n/blink_{language}')):
+                self.installTranslator(translator)
 
         self.setOrganizationDomain("ag-projects.com")
         self.setOrganizationName("AG Projects")
