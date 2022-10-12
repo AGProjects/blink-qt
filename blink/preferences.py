@@ -1,11 +1,12 @@
 
 import os
+import re
 import urllib.parse
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QEvent, QRegExp
 from PyQt5.QtGui import QFont, QRegExpValidator, QValidator
-from PyQt5.QtWidgets import QActionGroup, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
+from PyQt5.QtWidgets import QActionGroup, QApplication, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -31,6 +32,35 @@ from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
 
 
 __all__ = ['PreferencesWindow', 'AccountListView', 'SIPPortEditor']
+
+
+class LanguageError(Exception): pass
+
+
+class Language(object):
+    filename_regex = re.compile(r'(\w+)_(\w+).*\.(\w+$)')
+    mapping = {"default": "System default",
+               "en": "English",
+               "nl": "Nederlands",
+               "ro": "Română"}
+
+    def __init__(self, file):
+        print(file)
+        if file in ['default', 'en']:
+            self.name = self.mapping[file]
+            self.language_code = file
+            return
+
+        match = self.filename_regex.match(file)
+        if match[3] != 'qm':
+            raise LanguageError('Unsupported file')
+
+        try:
+            self.name = self.mapping[match[2]]
+        except KeyError:
+            raise LanguageError('Unsupported file')
+
+        self.language_code = match[2]
 
 
 # LineEdit and ComboBox validators
@@ -354,6 +384,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # Interface
         self.history_name_and_uri_button.clicked.connect(self._SH_HistoryNameAndUriButtonClicked)
+        self.language_button.activated[int].connect(self._SH_LanguageButtonActivated)
 
         # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
@@ -438,6 +469,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.conference_server_editor.setValidator(HostnameValidator(self))
         self.idd_prefix_button.setValidator(IDDPrefixValidator(self))
         self.prefix_button.setValidator(PrefixValidator(self))
+
+        # Languages
+        self.language_button.clear()
+        languages_path = Resources.get('i18n')
+        self.language_button.addItem('System Default', Language('default'))
+        self.language_button.addItem('English', Language('en'))
+        for language_file in os.listdir(languages_path):
+            try:
+                language = Language(language_file)
+            except LanguageError:
+                pass
+            else:
+                self.language_button.addItem(language.name, language)
 
         # Adding the button group in designer has issues on Ubuntu 10.04
         self.sip_transports_button_group = QButtonGroup(self)
@@ -780,6 +824,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.tls_verify_server_button.setChecked(settings.tls.verify_server)
 
         self.history_name_and_uri_button.setChecked(blink_settings.interface.show_history_name_and_uri)
+
+        language_index = self.language_button.findText(Language.mapping[blink_settings.interface.language])
+        if language_index == -1:
+            language_index = 0
+            blink_settings.interface.language = self.language_button.itemData(language_index).language_code
+            blink_settings.save()
+        self.language_button.setCurrentIndex(language_index)
 
     def load_account_settings(self, account):
         """Load the account settings from configuration into the UI controls"""
@@ -1870,6 +1921,20 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings = BlinkSettings()
         settings.interface.show_history_name_and_uri = checked
         settings.save()
+
+    def _SH_LanguageButtonActivated(self, index):
+        data = self.language_button.itemData(index)
+        settings = BlinkSettings()
+        if data.language_code != settings.interface.language:
+            settings.interface.language = data.language_code
+            settings.save()
+            title = "Restart required"
+            question = "The application language was changed. A restart is required to apply the change. Would you like to restart now?"
+            if QMessageBox.question(self, title, question) == QMessageBox.No:
+                return
+
+            blink = QApplication.instance()
+            blink.restart()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
