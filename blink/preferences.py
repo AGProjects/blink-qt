@@ -106,15 +106,15 @@ class SIPPortEditor(QSpinBox):
     def stepBy(self, steps):
         value = self.value()
         sibling_value = self.sibling.value()
-        if value+steps == sibling_value != 0:
+        if value + steps == sibling_value != 0:
             steps += steps/abs(steps)  # add one more unit in the right direction
-        if 0 < value+steps < 1024:
+        if 0 < value + steps < 1024:
             if steps < 0:
                 steps = -value
             else:
                 steps = 1024 - value
         if value+steps == sibling_value != 0:
-            steps += steps/abs(steps)  # add one more unit in the right direction
+            steps += steps / abs(steps)  # add one more unit in the right direction
         return super(SIPPortEditor, self).stepBy(steps)
 
     def validate(self, input, pos):
