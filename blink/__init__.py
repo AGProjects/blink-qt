@@ -96,6 +96,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self.setAttribute(Qt.AA_DontShowIconsInMenus, False)
         self.sip_application = SIPApplication()
         self.first_run = False
+        self.reinit = False
 
         self.setOrganizationDomain("ag-projects.com")
         self.setOrganizationName("AG Projects")
@@ -157,11 +158,17 @@ class Blink(QApplication, metaclass=QSingleton):
         self.sip_application.stop()
         self.sip_application.thread.join()
         self.log_manager.stop()
+        if self.reinit:
+            os.execl(sys.executable, sys.executable, *sys.argv)
 
     def quit(self):
         self.chat_window.close()
         self.main_window.close()
         super(Blink, self).quit()
+
+    def restart(self):
+        self.reinit = True
+        self.quit()
 
     def eventFilter(self, watched, event):
         if watched in (self.main_window, self.chat_window):
