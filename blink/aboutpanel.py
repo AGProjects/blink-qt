@@ -3,7 +3,7 @@ from PyQt5 import uic
 
 from blink import __date__, __version__
 from blink.resources import Resources
-from blink.util import QSingleton
+from blink.util import QSingleton, translate
 
 
 __all__ = ['AboutPanel']
@@ -41,7 +41,7 @@ class AboutPanel(base_class, ui_class, metaclass=QSingleton):
         with Resources.directory:
             self.setupUi(self)
 
-        self.version.setText('Version %s\n%s' % (__version__, __date__))
+        self.version.setText(translate('about_panel', 'Version %s\n%s') % (__version__, __date__))
 
         credits_width = self.credits_text.fontMetrics().width("NLnet Foundation" + "http://sipsimpleclient.org") + 40
         self.credits_text.setFixedWidth(credits_width)

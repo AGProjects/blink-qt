@@ -46,7 +46,7 @@ from sipsimple.threading import run_in_thread, run_in_twisted_thread
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
-from blink.util import call_later, run_in_gui_thread
+from blink.util import call_later, run_in_gui_thread, translate
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
 from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key
@@ -1275,7 +1275,7 @@ class SMPVerification(Enum):
 @implementer(IObserver)
 class SMPVerificationHandler(object):
 
-    question = 'What is the ZRTP authentication string?'.encode('utf-8')
+    question = translate('zrtp_widget', 'What is the ZRTP authentication string?').encode('utf-8')
 
     def __init__(self, blink_session):
         """@type blink_session: BlinkSession"""
@@ -1874,9 +1874,9 @@ class DraggedAudioSessionWidget(base_class, ui_class):
 
         self.address_label.setText(session_widget.address_label.text())
         if self.in_conference:
-            self.note_label.setText('Drop outside the conference to detach')
+            self.note_label.setText(translate('sessions', 'Drop outside the conference to detach'))
         else:
-            self.note_label.setText('<p><b>Drop</b>:&nbsp;Conference&nbsp; <b>Alt+Drop</b>:&nbsp;Transfer</p>')
+            self.note_label.setText(translate('sessions', '<p><b>Drop</b>:&nbsp;Conference&nbsp; <b>Alt+Drop</b>:&nbsp;Transfer</p>'))
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1949,11 +1949,11 @@ class AudioSessionItem(object):
 
     def __unicode__(self):
         if self.status is not None:
-            return '{0.type} call with {0.name} ({0.status})'.format(self)
+            return translate('sessions', '{0.type} call with {0.name} ({0.status})').format(self)
         elif self.codec_info:
-            return '{0.type} call with {0.name} using {0.codec_info} ({0.duration!s})'.format(self)
+            return translate('sessions', '{0.type} call with {0.name} using {0.codec_info} ({0.duration!s})').format(self)
         else:
-            return '{0.type} call with {0.name}'.format(self)
+            return translate('sessions', '{0.type} call with {0.name}').format(self)
 
     @property
     def audio_stream(self):
@@ -2172,30 +2172,30 @@ class AudioSessionItem(object):
     def _NH_BlinkSessionConnectionProgress(self, notification):
         stage = notification.data.stage
         if stage == 'initializing':
-            self.status = Status('Initializing...')
+            self.status = Status(translate('sessions', 'Initializing...'))
         elif stage == 'connecting/dns_lookup':
-            self.status = Status('Looking up destination...')
+            self.status = Status(translate('sessions', 'Looking up destination...'))
         elif stage == 'connecting' and self.blink_session.routes:
             self.tls = self.blink_session.transport == 'tls'
             uri = self.blink_session.routes[0].uri
             destination = '%s:%s' % (self.blink_session.transport, uri.host.decode())
-            self.status = Status('Trying %s' % destination)
+            self.status = Status(translate('sessions', 'Trying %s') % destination)
         elif stage == 'ringing':
-            self.status = Status('Ringing...')
+            self.status = Status(translate('sessions', 'Ringing...'))
         elif stage == 'starting':
-            self.status = Status('Starting media...')
+            self.status = Status(translate('sessions', 'Starting media...'))
         else:
             self.status = None
 
     def _NH_BlinkSessionInfoUpdated(self, notification):
         if 'media' in notification.data.elements:
             audio_info = self.blink_session.info.streams.audio
-            self.type = 'HD Audio' if audio_info.sample_rate and audio_info.sample_rate >= 16000 else 'Audio'
+            self.type = translate('sessions', 'HD Audio') if audio_info.sample_rate and audio_info.sample_rate >= 16000 else translate('sessions', 'Audio')
             self.codec_info = audio_info.codec
             if audio_info.encryption is not None:
-                self.widget.srtp_label.setToolTip('Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
+                self.widget.srtp_label.setToolTip(translate('sessions', 'Media is encrypted using %s (%s)') % (audio_info.encryption, audio_info.encryption_cipher))
             else:
-                self.widget.srtp_label.setToolTip('Media is not encrypted')
+                self.widget.srtp_label.setToolTip(translate('sessions', 'Media is not encrypted'))
             self.widget.update_rtp_encryption_icon()
             self.srtp = audio_info.encryption is not None
         if 'statistics' in notification.data.elements:
@@ -2206,9 +2206,9 @@ class AudioSessionItem(object):
         self.widget.hold_button.setChecked(notification.data.local_hold)
         if self.blink_session.state == 'connected':
             if notification.data.local_hold:
-                self.status = Status('On hold', color='#000090')
+                self.status = Status(translate('sessions', 'On hold'), color='#000090')
             elif notification.data.remote_hold:
-                self.status = Status('Hold by remote', color='#000090')
+                self.status = Status(translate('sessions', 'Hold by remote'), color='#000090')
             else:
                 self.status = None
 
@@ -2226,7 +2226,7 @@ class AudioSessionItem(object):
             self.status = Status('Connected')
             call_later(3, self._reset_status, self.status)  # reset status 3 seconds later if it hasn't changed until then
         else:
-            self.status = Status('Audio refused', color='#900000')
+            self.status = Status(translate('sessions', 'Audio refused'), color='#900000')
             self._cleanup()
 
     def _NH_BlinkSessionDidAddStream(self, notification):
@@ -2240,7 +2240,7 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionDidNotAddStream(self, notification):
         if notification.data.stream.type == 'audio':
-            self.status = Status('Audio refused', color='#900000')  # where can we get the reason from? (rejected, cancelled, failed, ...) -Dan
+            self.status = Status(translate('sessions', 'Audio refused'), color='#900000')  # where can we get the reason from? (rejected, cancelled, failed, ...) -Dan
             self._cleanup()
 
     def _NH_BlinkSessionWillRemoveStream(self, notification):
@@ -2273,24 +2273,25 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionTransferNewOutgoing(self, notification):
         self.status_context = 'transfer'
-        self.status = Status('Transfer: Trying', context='transfer')
+        self.status = Status(translate('sessions', 'Transfer: Trying'), context='transfer')
 
     def _NH_BlinkSessionTransferDidEnd(self, notification):
         if self.blink_session.transfer_direction == 'outgoing':
-            self.status = Status('Transfer: Succeeded', context='transfer')
+            self.status = Status(translate('sessions', 'Transfer: Succeeded'), context='transfer')
 
     def _NH_BlinkSessionTransferDidFail(self, notification):
         if self.blink_session.transfer_direction == 'outgoing':
+            # TODO: maybe translate? -Tijmen
             reason_map = {403: 'Forbidden', 404: 'Not Found', 408: 'Timeout', 480: 'Unavailable', 486: 'Busy',
                           487: 'Cancelled', 488: 'Not Acceptable', 600: 'Busy', 603: 'Declined'}
-            reason = reason_map.get(notification.data.code, 'Failed')
-            self.status = Status("Transfer: {}".format(reason), context='transfer')
+            reason = reason_map.get(notification.data.code, translate('sessions', 'Failed'))
+            self.status = Status(translate('sessions', "Transfer: {}").format(reason), context='transfer')
             call_later(3, self._reset_status, self.status)
             self.status_context = None
 
     def _NH_BlinkSessionTransferGotProgress(self, notification):
         if notification.data.code < 200:  # final answers are handled in DidEnd and DiDFail
-            self.status = Status("Transfer: {}".format(notification.data.reason), context='transfer')
+            self.status = Status(translate('sessions', "Transfer: {}").format(notification.data.reason), context='transfer')
 
     def _NH_MediaStreamWillEnd(self, notification):
         stream = notification.sender
@@ -4121,7 +4122,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         if failure_reason is not None:
             end_reason = failure_reason
         else:
-            end_reason = 'Completed (%s)' % FileSizeFormatter.format(self.file_selector.size)
+            end_reason = translate('sessions', 'Completed (%s)') % FileSizeFormatter.format(self.file_selector.size)
         state = SessionState('ended')
         state.reason = end_reason
         state.error = failure_reason is not None
@@ -4142,7 +4143,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.state = 'connecting'
         routes = notification.data.result
         if not routes:
-            self._terminate(failure_reason='Destination not found')
+            self._terminate(failure_reason=translate('sessions', 'Destination not found'))
             self.routes = None
             return
         self.routes = routes
@@ -4155,7 +4156,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         notification.center.remove_observer(self, sender=notification.sender)
         if self.state in ('ending', 'ended'):
             return
-        self._terminate(failure_reason='DNS Lookup failed')
+        self._terminate(failure_reason=translate('sessions', 'DNS Lookup failed'))
 
     def _NH_SIPSessionNewOutgoing(self, notification):
         self.state = 'initializing'
@@ -4479,17 +4480,17 @@ class FileTransferItem(object):
     def _NH_BlinkFileTransferDidChangeState(self, notification):
         state = notification.data.new_state
         if state == 'connecting/dns_lookup':
-            self.status = 'Looking up destination...'
+            self.status = translate('sessions', 'Looking up destination...')
         elif state == 'connecting':
-            self.status = 'Connecting...'
+            self.status = translate('sessions', 'Connecting...')
         elif state == 'connecting/ringing':
-            self.status = 'Ringing...'
+            self.status = translate('sessions', 'Ringing...')
         elif state == 'connecting/starting':
-            self.status = 'Starting...'
+            self.status = translate('sessions', 'Starting...')
         elif state == 'connected':
-            self.status = 'Connected'
+            self.status = translate('sessions', 'Connected')
         elif state == 'ending':
-            self.status = 'Ending...'
+            self.status = translate('sessions', 'Ending...')
         else:
             self.status = None
         self.progress = None
@@ -4498,7 +4499,7 @@ class FileTransferItem(object):
 
     def _NH_BlinkFileTransferDidInitialize(self, notification):
         self.progress = None
-        self.status = 'Connecting...'
+        self.status = translate('sessions', 'Connecting...')
         self.widget.update_content(self)
         notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
@@ -4506,7 +4507,7 @@ class FileTransferItem(object):
         progress = notification.data.progress
         if self.progress is None or progress > self.progress:
             self.progress = progress
-            self.status = 'Computing hash (%s%%)' % notification.data.progress
+            self.status = translate('sessions', 'Computing hash (%s%%)') % notification.data.progress
             self.widget.update_content(self)
             notification.center.post_notification('FileTransferItemDidChange', sender=self)
 
@@ -4514,7 +4515,7 @@ class FileTransferItem(object):
         self.bytes = notification.data.bytes
         self.total_bytes = notification.data.total_bytes
         progress = int(self.bytes * 100 / self.total_bytes)
-        status = 'Transferring: %s/%s (%s%%)' % (FileSizeFormatter.format(self.bytes), FileSizeFormatter.format(self.total_bytes), progress)
+        status = translate('sessions', 'Transferring: %s/%s (%s%%)') % (FileSizeFormatter.format(self.bytes), FileSizeFormatter.format(self.total_bytes), progress)
         if self.progress is None or progress > self.progress or status != self.status:
             self.progress = progress
             self.status = status
@@ -5233,7 +5234,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self.reject_button.released.connect(self._set_reject_mode)
         self.screensharing_stream.hidden.connect(self.screensharing_label.hide)
         self.screensharing_stream.shown.connect(self.screensharing_label.show)
-        self.auto_answer_label.setText('Auto-answer is inactive')
+        self.auto_answer_label.setText(translate('incoming_dialog', 'Auto-answer is inactive'))
         self.auto_answer_interval = None
         self._auto_answer_timer = None
         self.passed_time = 0
@@ -5269,12 +5270,12 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self._auto_answer_timer.setInterval(1000)
         self._auto_answer_timer.timeout.connect(self._update_auto_answer)
         self._auto_answer_timer.start()
-        self.auto_answer_label.setText('Auto answer in %d seconds' % interval)
+        self.auto_answer_label.setText(translate('incoming_dialog', 'Auto answer in %d seconds') % interval)
 
     def _update_auto_answer(self):
         self.passed_time = self.passed_time + 1
         remaining_time = self.auto_answer_interval - self.passed_time
-        self.auto_answer_label.setText('Auto answer in %d seconds' % remaining_time) 
+        self.auto_answer_label.setText(translate('incoming_dialog', 'Auto answer in %d seconds') % remaining_time) 
         if remaining_time == 0:
             self._auto_answer_timer.stop()
             self.hide()
@@ -5285,20 +5286,20 @@ class IncomingDialog(IncomingDialogBase, ui_class):
             self.chat_stream.active = True
             self.screensharing_stream.active = True
             self.video_stream.active = True
-            self.note_label.setText('To refuse a media type click its icon')
+            self.note_label.setText(translate('incoming_dialog', 'To refuse a media type click its icon'))
         else:
             self.audio_stream.active = False
             self.chat_stream.active = False
             self.screensharing_stream.active = False
             self.video_stream.active = False
             if self.audio_stream.in_use:
-                self.note_label.setText('Audio call')
+                self.note_label.setText(translate('incoming_dialog', 'Audio call'))
             elif self.chat_stream.in_use:
-                self.note_label.setText('Chat session')
+                self.note_label.setText(translate('incoming_dialog', 'Chat session'))
             elif self.video_stream.in_use:
-                self.note_label.setText('Video call')
+                self.note_label.setText(translate('incoming_dialog', 'Video call'))
             elif self.screensharing_stream.in_use:
-                self.note_label.setText('Screen sharing request')
+                self.note_label.setText(translate('incoming_dialog', 'Screen sharing request'))
             else:
                 self.note_label.setText('')
         self._update_accept_button()
@@ -5326,10 +5327,10 @@ class IncomingRequest(QObject):
         self._auto_answer_timer = None
 
         if proposal:
-            self.dialog.setWindowTitle('Incoming Session Update')
+            self.dialog.setWindowTitle(translate('incoming_dialog', 'Incoming Session Update'))
             self.dialog.busy_button.hide()
         else:
-            self.dialog.setWindowTitle('Incoming Session Request')
+            self.dialog.setWindowTitle(translate('incoming_dialog', 'Incoming Session Request'))
         address = '%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
@@ -5360,14 +5361,14 @@ class IncomingRequest(QObject):
         self.dialog.screensharing_stream.setVisible(self.screensharing_stream is not None)
         if self.screensharing_stream is not None:
             if self.screensharing_stream.handler.type == 'active':
-                self.dialog.screensharing_label.setText('is offering screen sharing')
+                self.dialog.screensharing_label.setText(translate('incoming_dialog', 'is offering screen sharing'))
             else:
-                self.dialog.screensharing_label.setText('is asking to share your screen')
+                self.dialog.screensharing_label.setText(translate('incoming_dialog', 'is asking to share your screen'))
                 # self.dialog.screensharing_stream.accepted = bool(proposal)
 
 
         self.dialog.finished.connect(self._SH_DialogFinished)
-        
+
     def __eq__(self, other):
         return self is other
 
@@ -5472,6 +5473,7 @@ class IncomingFileTransferDialog(IncomingDialogBase, ui_class):
     def _set_reject_mode(self):
         self.reject_mode = 'reject'
 
+
 del ui_class, base_class
 
 
@@ -5497,9 +5499,9 @@ class IncomingFileTransferRequest(QObject):
         filename = os.path.basename(self.stream.file_selector.name)
         size = self.stream.file_selector.size
         if size:
-            self.dialog.file_label.setText('File: %s (%s)' % (filename, FileSizeFormatter.format(size)))
+            self.dialog.file_label.setText(translate('incoming_filetransfer_dialog', 'File: %s (%s)') % (filename, FileSizeFormatter.format(size)))
         else:
-            self.dialog.file_label.setText('File: %s' % filename)
+            self.dialog.file_label.setText(translate('incoming_filetransfer_dialog', 'File: %s') % filename)
 
         self.dialog.finished.connect(self._SH_DialogFinished)
 
@@ -5572,7 +5574,7 @@ class IncomingCallTransferRequest(QObject):
         self.dialog.uri_label.setText(contact_uri.uri)
         self.dialog.username_label.setText(contact.name)
         self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
-        self.dialog.transfer_label.setText('transfer requested by {}'.format(blink_session.contact.name or blink_session.contact_uri.uri))
+        self.dialog.transfer_label.setText(translate('incoming_calltransfer_dialog', 'transfer requested by {}').format(blink_session.contact.name or blink_session.contact_uri.uri))
 
         self.dialog.finished.connect(self._SH_DialogFinished)
 
@@ -5651,6 +5653,7 @@ class ConferenceDialog(base_class, ui_class):
         if self.chat_button.isChecked():
             streams.append(StreamDescription('chat'))
         session_manager.create_session(contact, contact_uri, streams, account=account)
+
 
 del ui_class, base_class
 

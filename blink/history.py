@@ -24,7 +24,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.logging import MessagingTrace as log
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
-from blink.util import run_in_gui_thread
+from blink.util import run_in_gui_thread, translate
 import traceback
 
 from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex
@@ -587,15 +587,15 @@ class HistoryEntry(object):
             today = date.today()
             days = (today - call_date).days
             if call_date == today:
-                result += call_time.strftime(" at %H:%M")
+                result += call_time.strftime(translate("history", " at %H:%M"))
             elif days == 1:
-                result += call_time.strftime(" Yesterday at %H:%M")
+                result += call_time.strftime(translate("history", " Yesterday at %H:%M"))
             elif days < 7:
-                result += call_time.strftime(" on %A")
+                result += call_time.strftime(translate("history", " on %A"))
             elif call_date.year == today.year:
-                result += call_time.strftime(" on %B %d")
+                result += call_time.strftime(translate("history", " on %B %d"))
             else:
-                result += call_time.strftime(" on %Y-%m-%d")
+                result += call_time.strftime(translate("history", " on %Y-%m-%d"))
         if self.duration:
             seconds = int(self.duration.total_seconds())
             if seconds >= 3600:

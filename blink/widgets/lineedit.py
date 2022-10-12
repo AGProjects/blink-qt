@@ -6,6 +6,7 @@ from PyQt5.QtGui import QPainter, QPalette, QPixmap
 from PyQt5.QtWidgets import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
 
 from blink.resources import Resources
+from blink.util import translate
 from blink.widgets.util import QtDynamicProperty
 
 
@@ -274,7 +275,7 @@ class SearchBox(LineEdit):
         self.clear_button.hide()
         self.clear_button.clicked.connect(self.clear)
         self.textChanged.connect(self._SH_TextChanged)
-        self.inactiveText = "Search"
+        self.inactiveText = translate('search_box', "Search")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:

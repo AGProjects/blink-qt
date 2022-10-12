@@ -23,6 +23,7 @@ from sipsimple.threading import run_in_thread
 from blink.configuration.settings import BlinkSettings
 from blink.resources import Resources
 from blink.screensharing.vncclient import ServerDefault, TrueColor, HighColor, LowColor
+from blink.util import translate
 
 
 __all__ = ['ScreensharingWindow', 'VNCViewer']
@@ -401,7 +402,7 @@ class ScreensharingDialog(base_class, ui_class):
         return False
 
     def get_credentials(self):
-        self.message_label.setText('Screen sharing requires authentication')
+        self.message_label.setText(translate('vnc_viewer', 'Screen sharing requires authentication'))
         self.username_label.show()
         self.username_editor.show()
         self.username_editor.clear()
@@ -413,7 +414,7 @@ class ScreensharingDialog(base_class, ui_class):
         return (self.username_editor.text(), self.password_editor.text()) if result == self.Accepted else (None, None)
 
     def get_password(self):
-        self.message_label.setText('Screen sharing requires a password')
+        self.message_label.setText(translate('vnc_viewer', 'Screen sharing requires a password'))
         self.username_label.hide()
         self.username_editor.hide()
         self.username_editor.clear()
@@ -493,7 +494,7 @@ class ScreensharingToolbox(base_class, ui_class):
         self.close_button.setDefaultAction(self.close_action)
 
         self.color_depth_button.clear()
-        self.color_depth_button.addItem('Default Color Depth', ServerDefault)
+        self.color_depth_button.addItem(translate('vnc_viewer', 'Default Color Depth'), ServerDefault)
         self.color_depth_button.addItem('TrueColor (24 bits)', TrueColor)
         self.color_depth_button.addItem('HighColor (16 bits)', HighColor)
         self.color_depth_button.addItem('LowColor (8 bits)', LowColor)
@@ -593,13 +594,13 @@ class ScreensharingWindow(base_class, ui_class):
         self.fullscreen_button.setDefaultAction(self.fullscreen_action)
 
         self.color_depth_button.clear()
-        self.color_depth_button.addItem('Default Color Depth', ServerDefault)
+        self.color_depth_button.addItem(translate('vnc_viewer', 'Default Color Depth'), ServerDefault)
         self.color_depth_button.addItem('TrueColor (24 bits)', TrueColor)
         self.color_depth_button.addItem('HighColor (16 bits)', HighColor)
         self.color_depth_button.addItem('LowColor (8 bits)', LowColor)
 
         self.screenshot_button_menu = QMenu(self)
-        self.screenshot_button_menu.addAction('Open screenshots folder', self._SH_ScreenshotsFolderActionTriggered)
+        self.screenshot_button_menu.addAction(translate('vnc_viewer', 'Open screenshots folder'), self._SH_ScreenshotsFolderActionTriggered)
 
     def closeEvent(self, event):
         super(ScreensharingWindow, self).closeEvent(event)

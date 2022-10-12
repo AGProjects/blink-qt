@@ -1,5 +1,5 @@
 
-from PyQt5.QtCore import Qt, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QCoreApplication, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt5.QtGui import QBrush, QColor, QLinearGradient, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt5.QtWidgets import QAction, QCommonStyle, QMenu, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
 
@@ -9,6 +9,8 @@ from blink.widgets.color import ColorScheme, ColorUtils, ColorHelperMixin
 
 __all__ = ['ToolButton', 'ConferenceButton', 'StreamButton', 'SegmentButton', 'SingleSegment', 'LeftSegment', 'MiddleSegment', 'RightSegment',
            'RecordButton', 'SwitchViewButton', 'StateButton', 'AccountState']
+
+translate = QCoreApplication.translate
 
 
 class ToolButton(QToolButton):
@@ -28,8 +30,8 @@ class ConferenceButton(ToolButton):
 
     def __init__(self, parent=None):
         super(ConferenceButton, self).__init__(parent)
-        self.make_conference_action = QAction('Conference all single sessions', self, triggered=self.makeConference.emit)
-        self.break_conference_action = QAction('Break selected conference', self, triggered=self.breakConference.emit)
+        self.make_conference_action = QAction(translate('conference_button', 'Conference all single sessions'), self, triggered=self.makeConference.emit)
+        self.break_conference_action = QAction(translate('conference_button', 'Break selected conference'), self, triggered=self.breakConference.emit)
         self.toggled.connect(self._SH_Toggled)
         self.addAction(self.make_conference_action)
 
@@ -259,8 +261,8 @@ class SwitchViewButton(QPushButton):
 
     viewChanged = pyqtSignal(int)
 
-    button_text = {ContactView: 'Switch to Calls', SessionView: 'Switch to Contacts'}
-    button_dnd_text = {ContactView: 'Drag here to add to a conference', SessionView: 'Drag here to go back to contacts'}
+    button_text = {ContactView: QT_TRANSLATE_NOOP('switch_view_button', 'Switch to Calls'), SessionView: QT_TRANSLATE_NOOP('switch_view_button', 'Switch to Contacts')}
+    button_dnd_text = {ContactView: QT_TRANSLATE_NOOP('switch_view_button', 'Drag here to add to a conference'), SessionView: QT_TRANSLATE_NOOP('switch_view_button', 'Drag here to go back to contacts')}
 
     dnd_style_sheet1 = """
                           QPushButton {
@@ -307,7 +309,7 @@ class SwitchViewButton(QPushButton):
             text = self.button_dnd_text[value]
         else:
             text = self.button_text[value]
-        self.setText(text)
+        self.setText(translate('switch_view_button', text))
         self.viewChanged.emit(value)
 
     view = property(_get_view, _set_view)
@@ -324,11 +326,11 @@ class SwitchViewButton(QPushButton):
             self.dnd_timer.phase = 0
             self.original_height = self.height()
             self.setStyleSheet(self.dnd_style_sheet1)
-            self.setText(self.button_dnd_text[self.view])
+            self.setText(translate('switch_view_button', self.button_dnd_text[self.view]))
             self.setFixedHeight(40)
         else:
             self.setStyleSheet('')
-            self.setText(self.button_text[self.view])
+            self.setText(translate('switch_view_button', self.button_text[self.view]))
             self.setFixedHeight(self.original_height)
 
     dnd_active = property(_get_dnd_active, _set_dnd_active)
@@ -662,10 +664,10 @@ class PresenceState(object):
 
 
 class AccountState(StateButton):
-    Invisible = PresenceState('Invisible', '#efedeb', Resources.get('icons/state-invisible.svg'))
-    Available = PresenceState('Available', '#00ff00', Resources.get('icons/state-available.svg'))
-    Away = PresenceState('Away', '#ffff00', Resources.get('icons/state-away.svg'))
-    Busy = PresenceState('Busy', '#ff0000', Resources.get('icons/state-busy.svg'))
+    Invisible = PresenceState(QT_TRANSLATE_NOOP('presence_state', 'Invisible'), '#efedeb', Resources.get('icons/state-invisible.svg'))
+    Available = PresenceState(QT_TRANSLATE_NOOP('presence_state', 'Available'), '#00ff00', Resources.get('icons/state-available.svg'))
+    Away = PresenceState(QT_TRANSLATE_NOOP('presence_state', 'Away'), '#ffff00', Resources.get('icons/state-away.svg'))
+    Busy = PresenceState(QT_TRANSLATE_NOOP('presence_state', 'Busy'), '#ff0000', Resources.get('icons/state-busy.svg'))
 
     stateChanged = pyqtSignal()
 
@@ -675,7 +677,7 @@ class AccountState(StateButton):
         super(AccountState, self).__init__(parent)
         menu = QMenu(self)
         for state in (self.Available, self.Away, self.Busy, self.Invisible):
-            action = menu.addAction(QIcon(state.icon), state.name)
+            action = menu.addAction(QIcon(state.icon), translate('presence_state', state.name))
             action.state = state
             action.note = None
         menu.addSeparator()

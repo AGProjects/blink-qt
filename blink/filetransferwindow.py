@@ -14,6 +14,7 @@ from zope.interface import implementer
 from blink.configuration.settings import BlinkSettings
 from blink.resources import Resources
 from blink.sessions import FileTransferDelegate, FileTransferModel
+from blink.util import translate
 from blink.widgets.util import ContextMenuActions
 
 
@@ -38,13 +39,13 @@ class FileTransferWindow(base_class, ui_class):
 
         self.context_menu = QMenu(self.listview)
         self.actions = ContextMenuActions()
-        self.actions.open_file = QAction("Open", self, triggered=self._AH_OpenFile)
-        self.actions.open_file_folder = QAction("Open File Folder", self, triggered=self._AH_OpenFileFolder)
-        self.actions.cancel_transfer = QAction("Cancel", self, triggered=self._AH_CancelTransfer)
-        self.actions.retry_transfer = QAction("Retry", self, triggered=self._AH_RetryTransfer)
-        self.actions.remove_entry = QAction("Remove From List", self, triggered=self._AH_RemoveEntry)
-        self.actions.open_downloads_folder = QAction("Open Transfers Folder", self, triggered=self._AH_OpenTransfersFolder)
-        self.actions.clear_list = QAction("Clear List", self, triggered=self._AH_ClearList)
+        self.actions.open_file = QAction(translate('filetransfer_window', "Open"), self, triggered=self._AH_OpenFile)
+        self.actions.open_file_folder = QAction(translate('filetransfer_window', "Open File Folder"), self, triggered=self._AH_OpenFileFolder)
+        self.actions.cancel_transfer = QAction(translate('filetransfer_window', "Cancel"), self, triggered=self._AH_CancelTransfer)
+        self.actions.retry_transfer = QAction(translate('filetransfer_window', "Retry"), self, triggered=self._AH_RetryTransfer)
+        self.actions.remove_entry = QAction(translate('filetransfer_window', "Remove From List"), self, triggered=self._AH_RemoveEntry)
+        self.actions.open_downloads_folder = QAction(translate('filetransfer_window', "Open Transfers Folder"), self, triggered=self._AH_OpenTransfersFolder)
+        self.actions.clear_list = QAction(translate('filetransfer_window', "Clear List"), self, triggered=self._AH_ClearList)
 
         self.model.itemAdded.connect(self.update_status)
         self.model.itemRemoved.connect(self.update_status)
@@ -66,9 +67,9 @@ class FileTransferWindow(base_class, ui_class):
     def update_status(self):
         total = len(self.model.items)
         active = len([item for item in self.model.items if not item.ended])
-        text = '%d %s' % (total, 'transfer' if total == 1 else 'transfers')
+        text = '%d %s' % (total, translate('filetransfer_window', 'transfer') if total == 1 else translate('filetransfer_window', 'transfers'))
         if active > 0:
-            text += ' (%d active)' % active
+            text += translate('filetransfer_window', ' (%d active)') % active
         self.status_label.setText(text)
 
     def handle_notification(self, notification):

@@ -44,7 +44,7 @@ from blink.history import HistoryManager
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
-from blink.util import run_in_gui_thread, call_later
+from blink.util import run_in_gui_thread, call_later, translate
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
 from blink.widgets.otr import OTRWidget
@@ -894,7 +894,7 @@ class ChatWidget(base_class, ui_class):
                 image_data = base64.b64encode(data).decode()
                 self.send_message(image_data, content_type=match.group('type'))
             except Exception as e:
-                self.add_message(ChatStatus('Error sending image: %s' % str(e)))
+                self.add_message(ChatStatus(translate('chat_window', 'Error sending image: %s') % str(e)))
             else:
                 account = self.session.blink_session.account
                 content = '''<img src="{}" class="scaled-to-fit" />'''.format(text)
@@ -964,7 +964,7 @@ class ChatWidget(base_class, ui_class):
         try:
             msg_id = self.send_message(text, content_type='text/html', id=id)
         except Exception as e:
-            self.add_message(ChatStatus('Error sending message: %s' % e))  # decide what type to use here. -Dan
+            self.add_message(ChatStatus(translate('chat_window', 'Error sending message: %s') % e))  # decide what type to use here. -Dan
         else:
             if msg_id is not None:
                 id = msg_id
@@ -996,7 +996,7 @@ class ChatWidget(base_class, ui_class):
 
     def _SH_OTRTimerTimeout(self):
         self.otr_timer.stop()
-        self.add_message(ChatStatus('Timeout in enabling OTR, recipient did not answer to OTR encryption request'))  # decide what type to use here. -Dan
+        self.add_message(ChatStatus(translate('chat_window', 'Timeout in enabling OTR, recipient did not answer to OTR encryption request')))  # decide what type to use here. -Dan
         NotificationCenter().post_notification('ChatStreamOTRTimeout', self.session.blink_session)
 
     @run_in_gui_thread
@@ -1146,7 +1146,7 @@ class VideoWidget(VideoSurface, ui_class):
         self.close_button.setIcon(close_icon)
 
         self.screenshot_button_menu = QMenu(self)
-        self.screenshot_button_menu.addAction('Open screenshots folder', self._SH_ScreenshotsFolderActionTriggered)
+        self.screenshot_button_menu.addAction(translate('chat_window', 'Open screenshots folder'), self._SH_ScreenshotsFolderActionTriggered)
 
     @property
     def interactive(self):
@@ -1572,7 +1572,7 @@ class NoSessionsLabel(QLabel):
         self.setFont(font)
         self.setAlignment(Qt.AlignCenter)
         self.setStyleSheet("""QLabel { border: 1px inset palette(dark); border-radius: 3px; background-color: white; color: #545454; }""")
-        self.setText("No Sessions")
+        self.setText(translate('chat_window', "No Sessions"))
         chat_window.session_panel.installEventFilter(self)
 
     def eventFilter(self, watched, event):
@@ -1735,23 +1735,23 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_menu = QMenu(self.control_button)
         self.control_button.setMenu(self.control_menu)
         self.control_button.actions = ContextMenuActions()
-        self.control_button.actions.connect = QAction("Start real time chat session", self, triggered=self._AH_Connect)
-        self.control_button.actions.connect_with_audio = QAction("Start audio call", self, triggered=self._AH_ConnectWithAudio)
-        self.control_button.actions.connect_with_video = QAction("Start video call", self, triggered=self._AH_ConnectWithVideo)
-        self.control_button.actions.disconnect = QAction("Disconnect", self, triggered=self._AH_Disconnect)
-        self.control_button.actions.add_audio = QAction("Add audio", self, triggered=self._AH_AddAudio)
-        self.control_button.actions.remove_audio = QAction("Remove audio", self, triggered=self._AH_RemoveAudio)
-        self.control_button.actions.add_video = QAction("Add video", self, triggered=self._AH_AddVideo)
-        self.control_button.actions.remove_video = QAction("Remove video", self, triggered=self._AH_RemoveVideo)
-        self.control_button.actions.add_chat = QAction("Add real time chat", self, triggered=self._AH_AddChat)
-        self.control_button.actions.remove_chat = QAction("Remove real time chat", self, triggered=self._AH_RemoveChat)
-        self.control_button.actions.share_my_screen = QAction("Share my screen", self, triggered=self._AH_ShareMyScreen)
-        self.control_button.actions.request_screen = QAction("Request screen", self, triggered=self._AH_RequestScreen)
-        self.control_button.actions.end_screen_sharing = QAction("End screen sharing", self, triggered=self._AH_EndScreenSharing)
-        self.control_button.actions.enable_otr = QAction("Enable OTR for messaging", self, triggered=self._AH_EnableOTR)
-        self.control_button.actions.enable_otr_progress = QAction("Enabling OTR for messaging", self, enabled=False)
-        self.control_button.actions.disable_otr = QAction("Disable OTR for messaging", self, triggered=self._AH_DisableOTR)
-        self.control_button.actions.main_window = QAction("Main Window", self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
+        self.control_button.actions.connect = QAction(translate('chat_window', "Start real time chat session"), self, triggered=self._AH_Connect)
+        self.control_button.actions.connect_with_audio = QAction(translate('chat_window', "Start audio call"), self, triggered=self._AH_ConnectWithAudio)
+        self.control_button.actions.connect_with_video = QAction(translate('chat_window', "Start video call"), self, triggered=self._AH_ConnectWithVideo)
+        self.control_button.actions.disconnect = QAction(translate('chat_window', "Disconnect"), self, triggered=self._AH_Disconnect)
+        self.control_button.actions.add_audio = QAction(translate('chat_window', "Add audio"), self, triggered=self._AH_AddAudio)
+        self.control_button.actions.remove_audio = QAction(translate('chat_window', "Remove audio"), self, triggered=self._AH_RemoveAudio)
+        self.control_button.actions.add_video = QAction(translate('chat_window', "Add video"), self, triggered=self._AH_AddVideo)
+        self.control_button.actions.remove_video = QAction(translate('chat_window', "Remove video"), self, triggered=self._AH_RemoveVideo)
+        self.control_button.actions.add_chat = QAction(translate('chat_window', "Add real time chat"), self, triggered=self._AH_AddChat)
+        self.control_button.actions.remove_chat = QAction(translate('chat_window', "Remove real time chat"), self, triggered=self._AH_RemoveChat)
+        self.control_button.actions.share_my_screen = QAction(translate('chat_window', "Share my screen"), self, triggered=self._AH_ShareMyScreen)
+        self.control_button.actions.request_screen = QAction(translate('chat_window', "Request screen"), self, triggered=self._AH_RequestScreen)
+        self.control_button.actions.end_screen_sharing = QAction(translate('chat_window', "End screen sharing"), self, triggered=self._AH_EndScreenSharing)
+        self.control_button.actions.enable_otr = QAction(translate('chat_window', "Enable OTR for messaging"), self, triggered=self._AH_EnableOTR)
+        self.control_button.actions.enable_otr_progress = QAction(translate('chat_window', "Enabling OTR for messaging"), self, enabled=False)
+        self.control_button.actions.disable_otr = QAction(translate('chat_window', "Disable OTR for messaging"), self, triggered=self._AH_DisableOTR)
+        self.control_button.actions.main_window = QAction(translate('chat_window', "Main Window"), self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
 
         self.addAction(self.control_button.actions.main_window)  # make this active even when it's not in the control_button's menu
 
@@ -1941,19 +1941,19 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         state = "%s" % blink_session.state
 
         if 'status' in elements and blink_session.state in ('initialized', 'connecting/*', 'connected/*', 'ended'):
-            state_map = {'initialized': 'Disconnected',
-                         'connecting/dns_lookup': 'Finding destination...',
-                         'connecting': 'Connecting...',
-                         'connecting/ringing': 'Ringing',
-                         'connecting/starting': 'Starting media...',
-                         'connected': 'Connected'}
+            state_map = {'initialized': translate('chat_window', 'Disconnected'),
+                         'connecting/dns_lookup': translate('chat_window', "Finding destination..."),
+                         'connecting': translate('chat_window', "Connecting..."),
+                         'connecting/ringing': translate('chat_window', "Ringing"),
+                         'connecting/starting': translate('chat_window', "Starting media..."),
+                         'connected': translate('chat_window', "Connected")}
 
             if blink_session.state == 'ended':
                 self.status_value_label.setForegroundRole(QPalette.AlternateBase if blink_session.state.error else QPalette.WindowText)
                 self.status_value_label.setText(blink_session.state.reason)
 
                 self.chat_value_widget.setEnabled(True)
-                self.chat_value_label.setText('Using SIP Message')
+                self.chat_value_label.setText(translate('chat_window', "Using SIP Message"))
                 if blink_session.chat_type is not None:
                     self.chat_encryption_label.setVisible(False)
                     self.chat_connection_label.setVisible(False)
@@ -1976,31 +1976,31 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if audio_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (audio_info.local_rtp_candidate, audio_info.remote_rtp_candidate)}:
                     self.audio_connection_label.setPixmap(self.pixmaps.relay_connection)
-                    self.audio_connection_label.setToolTip('Using relay')
+                    self.audio_connection_label.setToolTip(translate('chat_window', "Using relay"))
                 else:
                     self.audio_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.audio_connection_label.setToolTip('Peer to peer')
+                    self.audio_connection_label.setToolTip(translate('chat_window', "Peer to peer"))
             elif audio_info.ice_status == 'failed':
                 self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.audio_connection_label.setToolTip("Couldn't negotiate ICE")
+                self.audio_connection_label.setToolTip(translate('chat_window', "Couldn't negotiate ICE"))
             elif audio_info.ice_status == 'disabled':
                 if blink_session.contact.type == 'bonjour':
                     self.audio_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.audio_connection_label.setToolTip('Peer to peer')
+                    self.audio_connection_label.setToolTip(translate('chat_window', "Peer to peer"))
                 else:
                     self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                    self.audio_connection_label.setToolTip('ICE is disabled')
+                    self.audio_connection_label.setToolTip(translate('chat_window', "ICE is disabled"))
             elif audio_info.ice_status is None:
                 self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.audio_connection_label.setToolTip('ICE is unavailable')
+                self.audio_connection_label.setToolTip(translate('chat_window', "ICE is unavailable"))
             else:
                 self.audio_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.audio_connection_label.setToolTip('Negotiating ICE')
+                self.audio_connection_label.setToolTip(translate('chat_window', "Negotiating ICE"))
 
             if audio_info.encryption is not None:
-                self.audio_encryption_label.setToolTip('Media is encrypted using %s (%s)' % (audio_info.encryption, audio_info.encryption_cipher))
+                self.audio_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using %s (%s)") % (audio_info.encryption, audio_info.encryption_cipher))
             else:
-                self.audio_encryption_label.setToolTip('Media is not encrypted')
+                self.audio_encryption_label.setToolTip(translate('chat_window', "Media is not encrypted"))
             self._update_rtp_encryption_icon(self.audio_encryption_label)
 
             self.audio_connection_label.setVisible(audio_info.remote_address is not None)
@@ -2010,31 +2010,31 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if video_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (video_info.local_rtp_candidate, video_info.remote_rtp_candidate)}:
                     self.video_connection_label.setPixmap(self.pixmaps.relay_connection)
-                    self.video_connection_label.setToolTip('Using relay')
+                    self.video_connection_label.setToolTip(translate('chat_window', "Using relay"))
                 else:
                     self.video_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.video_connection_label.setToolTip('Peer to peer')
+                    self.video_connection_label.setToolTip(translate('chat_window', "Peer to peer"))
             elif video_info.ice_status == 'failed':
                 self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
                 self.video_connection_label.setToolTip("Couldn't negotiate ICE")
             elif video_info.ice_status == 'disabled':
                 if blink_session.contact.type == 'bonjour':
                     self.video_connection_label.setPixmap(self.pixmaps.direct_connection)
-                    self.video_connection_label.setToolTip('Peer to peer')
+                    self.video_connection_label.setToolTip(translate('chat_window', "Peer to peer"))
                 else:
                     self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                    self.video_connection_label.setToolTip('ICE is disabled')
+                    self.video_connection_label.setToolTip(translate('chat_window', "ICE is disabled"))
             elif video_info.ice_status is None:
                 self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.video_connection_label.setToolTip('ICE is unavailable')
+                self.video_connection_label.setToolTip(translate('chat_window', "ICE is unavailable"))
             else:
                 self.video_connection_label.setPixmap(self.pixmaps.unknown_connection)
-                self.video_connection_label.setToolTip('Negotiating ICE')
+                self.video_connection_label.setToolTip(translate('chat_window', "Negotiating ICE"))
 
             if video_info.encryption is not None:
-                self.video_encryption_label.setToolTip('Media is encrypted using %s (%s)' % (video_info.encryption, video_info.encryption_cipher))
+                self.video_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using %s (%s)") % (video_info.encryption, video_info.encryption_cipher))
             else:
-                self.video_encryption_label.setToolTip('Media is not encrypted')
+                self.video_encryption_label.setToolTip(translate('chat_window', "Media is not encrypted"))
             self._update_rtp_encryption_icon(self.video_encryption_label)
 
             self.video_connection_label.setVisible(video_info.remote_address is not None)
@@ -2050,33 +2050,33 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.zrtp_widget.show()
 
             if any(len(path) > 1 for path in (chat_info.full_local_path, chat_info.full_remote_path)):
-                self.chat_value_label.setText('Using relay')
+                self.chat_value_label.setText(translate('chat_window', "Using relay"))
                 self.chat_connection_label.setPixmap(self.pixmaps.relay_connection)
-                self.chat_connection_label.setToolTip('Using relay')
+                self.chat_connection_label.setToolTip(translate('chat_window', "Using relay"))
             elif chat_info.full_local_path and chat_info.full_remote_path:
-                self.chat_value_label.setText('Peer to peer')
+                self.chat_value_label.setText(translate('chat_window', "Peer to peer"))
                 self.chat_connection_label.setPixmap(self.pixmaps.direct_connection)
-                self.chat_connection_label.setToolTip('Peer to peer')
+                self.chat_connection_label.setToolTip(translate('chat_window', "Peer to peer"))
             elif blink_session.chat_type is None:
                 self.chat_value_widget.setEnabled(True)
-                self.chat_value_label.setText('Using SIP Message')
-                self.chat_connection_label.setToolTip('Using SIP Message')
+                self.chat_value_label.setText(translate('chat_window', "Using SIP Message"))
+                self.chat_connection_label.setToolTip(translate('chat_window', "Using SIP Message"))
             else:
-                self.chat_value_label.setText('N/A')
+                self.chat_value_label.setText(translate('chat_window', "N/A"))
 
             if chat_info.encryption is not None and chat_info.transport == 'tls':
-                self.chat_encryption_label.setToolTip('Media is encrypted using TLS and {0.encryption} ({0.encryption_cipher})'.format(chat_info))
+                self.chat_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using TLS and {0.encryption} ({0.encryption_cipher})").format(chat_info))
             elif chat_info.encryption is not None:
-                self.chat_encryption_label.setToolTip('Media is encrypted using {0.encryption} ({0.encryption_cipher})'.format(chat_info))
+                self.chat_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using {0.encryption} ({0.encryption_cipher})").format(chat_info))
             elif chat_info.transport == 'tls':
-                self.chat_encryption_label.setToolTip('Media is encrypted using TLS')
+                self.chat_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using TLS"))
             else:
-                self.chat_encryption_label.setToolTip('Media is not encrypted')
+                self.chat_encryption_label.setToolTip(translate('chat_window', "Media is not encrypted"))
             if messages_info.encryption is not None:
                 if messages_info.encryption == 'OpenPGP':
-                    self.chat_encryption_label.setToolTip('Media is encrypted using {0.encryption}'.format(messages_info))
+                    self.chat_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using {0.encryption}").format(messages_info))
                 else:
-                    self.chat_encryption_label.setToolTip('Media is encrypted using {0.encryption} ({0.encryption_cipher})'.format(messages_info))
+                    self.chat_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using {0.encryption} ({0.encryption_cipher})").format(messages_info))
 
             self._update_chat_encryption_icon()
 
@@ -2095,20 +2095,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.otr_widget.show()
 
             if screen_info.remote_address is not None and screen_info.mode == 'active':
-                self.screen_value_label.setText('Viewing remote')
+                self.screen_value_label.setText(translate('chat_window', "Viewing remote"))
             elif screen_info.remote_address is not None and screen_info.mode == 'passive':
-                self.screen_value_label.setText('Sharing local')
+                self.screen_value_label.setText(translate('chat_window', "Sharing local"))
             else:
-                self.screen_value_label.setText('N/A')
+                self.screen_value_label.setText(translate('chat_window', "N/A"))
 
             if any(len(path) > 1 for path in (screen_info.full_local_path, screen_info.full_remote_path)):
                 self.screen_connection_label.setPixmap(self.pixmaps.relay_connection)
-                self.screen_connection_label.setToolTip('Using relay')
+                self.screen_connection_label.setToolTip(translate('chat_window', "Using relay"))
             elif screen_info.full_local_path and screen_info.full_remote_path:
                 self.screen_connection_label.setPixmap(self.pixmaps.direct_connection)
-                self.screen_connection_label.setToolTip('Peer to peer')
+                self.screen_connection_label.setToolTip(translate('chat_window', "Peer to peer"))
 
-            self.screen_encryption_label.setToolTip('Media is encrypted using TLS')
+            self.screen_encryption_label.setToolTip(translate('chat_window', "Media is encrypted using TLS"))
 
             self.screen_connection_label.setVisible(screen_info.remote_address is not None)
             self.screen_encryption_label.setVisible(screen_info.remote_address is not None and screen_info.transport == 'tls')
@@ -2535,7 +2535,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.add_message(ChatStatus(f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}'))
+        session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}')))
         call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status='failed')
 
     def _NH_BlinkMessageWillRemove(self, notification):
@@ -2582,7 +2582,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.add_message(ChatStatus(f'Decryption failed: {notification.data.error}'))
+        session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Decryption failed: {notification.data.error}')))
 
     def _NH_MessageStreamPGPKeysDidLoad(self, notification):
         stream = notification.sender
@@ -2761,9 +2761,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         if notification.data.new_state is OTRState.Encrypted:
             session.chat_widget.stop_otr_timer()
-            session.chat_widget.add_message(ChatStatus('Encryption enabled'))
+            session.chat_widget.add_message(ChatStatus(translate('chat_window','Encryption enabled')))
         elif notification.data.old_state is OTRState.Encrypted:
-            session.chat_widget.add_message(ChatStatus('Encryption disabled'))
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Encryption disabled')))
             self.otr_widget.hide()
         if notification.data.new_state is OTRState.Finished:
             session.chat_widget.chat_input.lock(EncryptionLock)
@@ -2793,7 +2793,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.add_message(ChatStatus('Failed to initialize chat: %s' % notification.data.reason))
+        session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Failed to initialize chat: %s') % notification.data.reason))
 
     def _NH_MediaStreamDidStart(self, notification):
         if notification.sender.type != 'chat':
@@ -2810,9 +2810,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         if notification.data.error is not None:
-            session.chat_widget.add_message(ChatStatus('Disconnected: %s' % notification.data.error))
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Disconnected: %s') % notification.data.error))
         else:
-            session.chat_widget.add_message(ChatStatus('Disconnected'))
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Disconnected')))
             # Set type back for message as the stream ended cleanly -- Tijmen
             notification.sender.blink_session.chat_type = None
 
@@ -2848,10 +2848,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.selected_session.active_panel = self.participants_panel
 
     def _SH_LatencyGraphUpdated(self):
-        self.latency_label.setText('Network Latency: %dms, max=%dms' % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
+        self.latency_label.setText(translate('chat_window', 'Network Latency: %dms, max=%dms') % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
 
     def _SH_PacketLossGraphUpdated(self):
-        self.packet_loss_label.setText('Packet Loss: %.1f%%, max=%.1f%%' % (max(self.audio_packet_loss_graph.last_value, self.video_packet_loss_graph.last_value), self.packet_loss_graph.max_value))
+        self.packet_loss_label.setText(translate('chat_window', 'Packet Loss: %.1f%%, max=%.1f%%') % (max(self.audio_packet_loss_graph.last_value, self.video_packet_loss_graph.last_value), self.packet_loss_graph.max_value))
 
     def _SH_TrafficGraphUpdated(self):
         blink_settings = BlinkSettings()
@@ -2861,7 +2861,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value * 8, bits_per_second=True)
             outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value * 8, bits_per_second=True)
-        self.traffic_label.setText("""<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">\u2193</span> %s <span style="font-family: sans-serif; color: #0064d7;">\u2191</span> %s</p>""" % (incoming_traffic, outgoing_traffic))
+        self.traffic_label.setText(translate('chat_window', """<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">\u2193</span> %s <span style="font-family: sans-serif; color: #0064d7;">\u2191</span> %s</p>""") % (incoming_traffic, outgoing_traffic))
 
     def _SH_MuteButtonClicked(self, checked):
         settings = SIPSimpleSettings()

@@ -31,7 +31,7 @@ from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
 from blink.resources import ApplicationData, IconManager, Resources
-from blink.util import run_in_gui_thread
+from blink.util import run_in_gui_thread, translate
 from blink.widgets.buttons import AccountState, SwitchViewButton
 
 
@@ -97,8 +97,8 @@ class MainWindow(base_class, ui_class):
             self.system_tray_icon = QSystemTrayIcon(QIcon(Resources.get('icons/blink.png')), self)
             self.system_tray_icon.activated.connect(self._SH_SystemTrayIconActivated)
             menu = QMenu(self)
-            menu.addAction("Show", self._AH_SystemTrayShowWindow)
-            menu.addAction(QIcon(Resources.get('icons/application-exit.png')), "Quit", self._AH_QuitActionTriggered)
+            menu.addAction(translate("main_window", "Show"), self._AH_SystemTrayShowWindow)
+            menu.addAction(QIcon(Resources.get('icons/application-exit.png')), translate("main_window", "Quit"), self._AH_QuitActionTriggered)
             self.system_tray_icon.setContextMenu(menu)
             self.system_tray_icon.show()
         else:
@@ -225,8 +225,8 @@ class MainWindow(base_class, ui_class):
         self.alert_devices_group = QActionGroup(self)
         self.video_devices_group = QActionGroup(self)
 
-        self.screen_sharing_button.addAction(QAction('Request screen', self.screen_sharing_button, triggered=self._AH_RequestScreenActionTriggered))
-        self.screen_sharing_button.addAction(QAction('Share my screen', self.screen_sharing_button, triggered=self._AH_ShareMyScreenActionTriggered))
+        self.screen_sharing_button.addAction(QAction(translate('main_window', 'Request screen'), self.screen_sharing_button, triggered=self._AH_RequestScreenActionTriggered))
+        self.screen_sharing_button.addAction(QAction(translate('main_window', 'Share my screen'), self.screen_sharing_button, triggered=self._AH_ShareMyScreenActionTriggered))
 
         # adjust search box height depending on theme as the value set in designer isn't suited for all themes
         search_box = self.search_box
@@ -270,7 +270,7 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map['system_default'] = self.output_device_menu.addAction('System default')
+        action = action_map['system_default'] = self.output_device_menu.addAction(translate('main_window', 'System default'))
         action.setData('system_default')
         action.setCheckable(True)
         self.output_devices_group.addAction(action)
@@ -283,7 +283,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.output_devices_group.addAction(action)
 
-        action = action_map[None] = self.output_device_menu.addAction('None')
+        action = action_map[None] = self.output_device_menu.addAction(translate('main_window', 'None'))
         action.setData(None)
         action.setCheckable(True)
         self.output_devices_group.addAction(action)
@@ -293,7 +293,7 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map['system_default'] = self.input_device_menu.addAction('System default')
+        action = action_map['system_default'] = self.input_device_menu.addAction(translate('main_window', 'System default'))
         action.setData('system_default')
         action.setCheckable(True)
         self.input_devices_group.addAction(action)
@@ -306,7 +306,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.input_devices_group.addAction(action)
 
-        action = action_map[None] = self.input_device_menu.addAction('None')
+        action = action_map[None] = self.input_device_menu.addAction(translate('main_window', 'None'))
         action.setData(None)
         action.setCheckable(True)
         self.input_devices_group.addAction(action)
@@ -316,7 +316,7 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map['system_default'] = self.alert_device_menu.addAction('System default')
+        action = action_map['system_default'] = self.alert_device_menu.addAction(translate('main_window', 'System default'))
         action.setData('system_default')
         action.setCheckable(True)
         self.alert_devices_group.addAction(action)
@@ -329,7 +329,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.alert_devices_group.addAction(action)
 
-        action = action_map[None] = self.alert_device_menu.addAction('None')
+        action = action_map[None] = self.alert_device_menu.addAction(translate('main_window', 'None'))
         action.setData(None)
         action.setCheckable(True)
         self.alert_devices_group.addAction(action)
@@ -342,7 +342,7 @@ class MainWindow(base_class, ui_class):
 
         action_map = {}
 
-        action = action_map['system_default'] = self.video_camera_menu.addAction('System default')
+        action = action_map['system_default'] = self.video_camera_menu.addAction(translate('main_window', 'System default'))
         action.setData('system_default')
         action.setCheckable(True)
         self.video_devices_group.addAction(action)
@@ -355,7 +355,7 @@ class MainWindow(base_class, ui_class):
             action.setCheckable(True)
             self.video_devices_group.addAction(action)
 
-        action = action_map[None] = self.video_camera_menu.addAction('None')
+        action = action_map[None] = self.video_camera_menu.addAction(translate('main_window', 'None'))
         action.setData(None)
         action.setCheckable(True)
         self.video_devices_group.addAction(action)
@@ -476,7 +476,7 @@ class MainWindow(base_class, ui_class):
                 action.entry = entry
                 action.setToolTip(entry.uri)
         else:
-            action = self.history_menu.addAction("Call history is empty")
+            action = self.history_menu.addAction(translate("main_window", "Call history is empty"))
             action.setEnabled(False)
 
     def _AH_HistoryMenuTriggered(self, action):
@@ -502,11 +502,11 @@ class MainWindow(base_class, ui_class):
     def _SH_AccountStateChanged(self):
         self.activity_note.setText(self.account_state.note)
         if self.account_state.state is AccountState.Invisible:
-            self.activity_note.inactiveText = '(invisible)'
+            self.activity_note.inactiveText = translate('main_window', '(invisible)')
             self.activity_note.setEnabled(False)
         else:
             if not self.activity_note.isEnabled():
-                self.activity_note.inactiveText = 'Add an activity note here'
+                self.activity_note.inactiveText = translate('main_window', 'Add an activity note here')
                 self.activity_note.setEnabled(True)
         if not self.account_state.state.internal:
             self.saved_account_state = None
@@ -516,7 +516,7 @@ class MainWindow(base_class, ui_class):
         blink_settings.save()
 
     def _SH_AccountStateClicked(self, checked):
-        filename = QFileDialog.getOpenFileName(self, 'Select Icon', self.last_icon_directory, "Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
+        filename = QFileDialog.getOpenFileName(self, translate('main_window', 'Select Icon'), self.last_icon_directory, "Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
         if filename:
             self.last_icon_directory = os.path.dirname(filename)
             filename = filename if os.path.realpath(filename) != os.path.realpath(self.default_icon_path) else None
@@ -700,7 +700,7 @@ class MainWindow(base_class, ui_class):
             self.contacts_view.setCurrentWidget(self.search_panel)
             self.search_view.setCurrentWidget(self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel)
             selected_items = self.search_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items)<=1)
+            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) <= 1)
         else:
             self.contacts_view.setCurrentWidget(self.contact_list_panel)
             selected_items = self.contact_list.selectionModel().selectedIndexes()
@@ -739,7 +739,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AudioSessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
-        self.active_sessions_label.setText('There is 1 active call' if len(active_sessions) == 1 else 'There are %d active calls' % len(active_sessions))
+        self.active_sessions_label.setText(translate('main_window', 'There is 1 active call') if len(active_sessions) == 1 else translate('main_window', 'There are %d active calls') % len(active_sessions))
         self.active_sessions_label.setVisible(any(active_sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
@@ -754,7 +754,7 @@ class MainWindow(base_class, ui_class):
             if self.account_state.state is not AccountState.Invisible:
                 if self.saved_account_state is None:
                     self.saved_account_state = self.account_state.state, self.activity_note.text()
-                self.account_state.setState(AccountState.Busy.Internal, note='On the phone')
+                self.account_state.setState(AccountState.Busy.Internal, note=translate('main_window', 'On the phone'))
         elif self.saved_account_state is not None:
             state, note = self.saved_account_state
             self.saved_account_state = None
@@ -797,9 +797,9 @@ class MainWindow(base_class, ui_class):
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
         if settings.google_contacts.enabled:
-            self.google_contacts_action.setText('Disable &Google Contacts')
+            self.google_contacts_action.setText(translate('main_window', 'Disable &Google Contacts'))
         else:
-            self.google_contacts_action.setText('Enable &Google Contacts...')
+            self.google_contacts_action.setText(translate('main_window', 'Enable &Google Contacts...'))
         if not any(account.enabled for account in account_manager.iter_accounts()):
             self.display_name.setEnabled(False)
             self.activity_note.setEnabled(False)
@@ -874,9 +874,9 @@ class MainWindow(base_class, ui_class):
                 self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
             if 'google_contacts.enabled' in notification.data.modified:
                 if notification.sender.google_contacts.enabled:
-                    self.google_contacts_action.setText('Disable &Google Contacts')
+                    self.google_contacts_action.setText(translate('main_window', 'Disable &Google Contacts'))
                 else:
-                    self.google_contacts_action.setText('Enable &Google Contacts...')
+                    self.google_contacts_action.setText(translate('main_window', 'Enable &Google Contacts...'))
         elif notification.sender is blink_settings:
             if 'presence.current_state' in notification.data.modified:
                 state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)

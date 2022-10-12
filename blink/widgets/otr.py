@@ -6,6 +6,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QStyle, QStyleOption, QStylePainter
 
 from blink.resources import Resources
+from blink.util import translate
 from blink.sessions import SMPVerification
 
 
@@ -56,7 +57,7 @@ class OTRWidget(base_class, ui_class):
     @peer_verified.setter
     def peer_verified(self, verified):
         self.__dict__['peer_verified'] = verified
-        self.validate_button.setText('Invalidate' if verified else 'Validate')
+        self.validate_button.setText(translate('otr_widget', 'Invalidate') if verified else translate('otr_widget', 'Validate'))
         self.validate_button.setChecked(verified)
         self.validate_button.setEnabled(verified or self.verification_stack.currentWidget() is not self.smp_panel or self.smp_status is SMPVerification.Succeeded)
         self.peer_fingerprint_value.setStyleSheet('QLabel {{ color: {}; }}'.format(self.color_table['green'] if verified else self.color_table['orange']))
@@ -93,11 +94,11 @@ class OTRWidget(base_class, ui_class):
     @property
     def smp_status_text(self):
         if self.peer_verified:
-            return '<span style="color: {[green]};">Verified</span>'.format(self.color_table)
+            return translate('otr_widget', '<span style="color: {[green]};">Verified</span>').format(self.color_table)
         elif self.smp_status is SMPVerification.Succeeded:
-            return '<span style="color: {[green]};">Succeeded</span>'.format(self.color_table)
+            return translate('otr_widget', '<span style="color: {[green]};">Succeeded</span>').format(self.color_table)
         elif self.smp_status is SMPVerification.Failed:
-            return '<span style="color: {[orange]};">Failed</span>'.format(self.color_table)
+            return translate('otr_widget', '<span style="color: {[orange]};">Failed</span>').format(self.color_table)
         else:
             return '{}'.format(self.smp_status.value)
 

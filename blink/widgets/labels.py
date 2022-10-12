@@ -11,6 +11,7 @@ from application.python.types import MarkerType
 from sipsimple.configuration.datatypes import Path
 
 from blink.resources import IconManager
+from blink.util import translate
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import QtDynamicProperty, ContextMenuActions
 
@@ -27,8 +28,8 @@ class IconSelector(QLabel):
     def __init__(self, parent=None):
         super(IconSelector, self).__init__(parent)
         self.actions = ContextMenuActions()
-        self.actions.select_icon = QAction('Select icon...', self, triggered=self._SH_ChangeIconActionTriggered)
-        self.actions.remove_icon = QAction('Use contact provided icon', self, triggered=self._SH_RemoveIconActionTriggered)
+        self.actions.select_icon = QAction(translate('icon_selector', 'Select icon...'), self, triggered=self._SH_ChangeIconActionTriggered)
+        self.actions.remove_icon = QAction(translate('icon_selector', 'Use contact provided icon'), self, triggered=self._SH_RemoveIconActionTriggered)
         self.icon_size = 48
         self.default_icon = None
         self.contact_icon = None
@@ -107,7 +108,7 @@ class IconSelector(QLabel):
         super(IconSelector, self).mouseReleaseEvent(event)
 
     def _SH_ChangeIconActionTriggered(self):
-        filename = QFileDialog.getOpenFileName(self, 'Select Icon', self.last_icon_directory, "Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
+        filename = QFileDialog.getOpenFileName(self, translate('icon_selector', 'Select Icon'), self.last_icon_directory, "Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
         if filename:
             self.filename = filename
 

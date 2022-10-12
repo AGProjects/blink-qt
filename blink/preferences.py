@@ -28,7 +28,7 @@ from blink.configuration.datatypes import FileURL
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
-from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
+from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, translate
 
 
 __all__ = ['PreferencesWindow', 'AccountListView', 'SIPPortEditor']
@@ -217,7 +217,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         with Resources.directory:
             self.setupUi()
 
-        self.setWindowTitle('Blink Preferences')
+        self.setWindowTitle(translate('preferences_window', 'Blink Preferences'))
 
         self.account_list.setModel(account_model)
         self.delete_account_button.setEnabled(False)
@@ -395,10 +395,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # Accounts
         self.key_negotiation_button.clear()
-        self.key_negotiation_button.addItem('Opportunistic', 'opportunistic')
-        self.key_negotiation_button.addItem('ZRTP', 'zrtp')
-        self.key_negotiation_button.addItem('SDES optional', 'sdes_optional')
-        self.key_negotiation_button.addItem('SDES mandatory', 'sdes_mandatory')
+        self.key_negotiation_button.addItem(translate('preferences_window', 'Opportunistic'), 'opportunistic')
+        self.key_negotiation_button.addItem(translate('preferences_window', 'ZRTP'), 'zrtp')
+        self.key_negotiation_button.addItem(translate('preferences_window', 'SDES optional'), 'sdes_optional')
+        self.key_negotiation_button.addItem(translate('preferences_window', 'SDES mandatory'), 'sdes_mandatory')
 
         # Audio
 
@@ -427,7 +427,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.video_framerate_button.addItem('%d fps' % rate, rate)
 
         self.video_codec_bitrate_button.clear()
-        self.video_codec_bitrate_button.addItem('automatic', None)
+        self.video_codec_bitrate_button.addItem(translate('preferences_window', 'automatic'), None)
         for bitrate in (1.0, 2.0, 4.0):
             self.video_codec_bitrate_button.addItem('%g Mbps' % bitrate, bitrate)
 
@@ -473,7 +473,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Languages
         self.language_button.clear()
         languages_path = Resources.get('i18n')
-        self.language_button.addItem('System Default', Language('default'))
+        self.language_button.addItem(translate('preferences_window', 'System Default'), Language('default'))
         self.language_button.addItem('English', Language('en'))
         for language_file in os.listdir(languages_path):
             try:
@@ -660,30 +660,30 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         class Separator: pass
 
         self.audio_input_device_button.clear()
-        self.audio_input_device_button.addItem('System Default', 'system_default')
+        self.audio_input_device_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.audio_input_device_button.insertSeparator(1)
         self.audio_input_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.input_devices:
             self.audio_input_device_button.addItem(device, device)
-        self.audio_input_device_button.addItem('None', None)
+        self.audio_input_device_button.addItem(translate('preferences_window', 'None'), None)
         self.audio_input_device_button.setCurrentIndex(self.audio_input_device_button.findData(settings.audio.input_device))
 
         self.audio_output_device_button.clear()
-        self.audio_output_device_button.addItem('System Default', 'system_default')
+        self.audio_output_device_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.audio_output_device_button.insertSeparator(1)
         self.audio_output_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_output_device_button.addItem(device, device)
-        self.audio_output_device_button.addItem('None', None)
+        self.audio_output_device_button.addItem(translate('preferences_window', 'None'), None)
         self.audio_output_device_button.setCurrentIndex(self.audio_output_device_button.findData(settings.audio.output_device))
 
         self.audio_alert_device_button.clear()
-        self.audio_alert_device_button.addItem('System Default', 'system_default')
+        self.audio_alert_device_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.audio_alert_device_button.insertSeparator(1)
         self.audio_alert_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.output_devices:
             self.audio_alert_device_button.addItem(device, device)
-        self.audio_alert_device_button.addItem('None', None)
+        self.audio_alert_device_button.addItem(translate('preferences_window', 'None'), None)
         self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
 
     def load_video_devices(self):
@@ -692,12 +692,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         class Separator: pass
 
         self.video_camera_button.clear()
-        self.video_camera_button.addItem('System Default', 'system_default')
+        self.video_camera_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.video_camera_button.insertSeparator(1)
         self.video_camera_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.video_devices:
             self.video_camera_button.addItem(device, device)
-        self.video_camera_button.addItem('None', None)
+        self.video_camera_button.addItem(translate('preferences_window', 'None'), None)
         self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
 
     def load_settings(self):
@@ -859,11 +859,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
             if selected_account_info.registration_state:
                 if selected_account_info.registration_state == 'succeeded' and selected_account_info.registrar is not None:
-                    self.account_registration_label.setText('Registered at %s' % selected_account_info.registrar)
+                    self.account_registration_label.setText(translate('preferences_window', 'Registered at %s') % selected_account_info.registrar)
                 else:
-                    self.account_registration_label.setText('Registration %s' % selected_account_info.registration_state.title())
+                    self.account_registration_label.setText(translate('preferences_window', 'Registration %s') % selected_account_info.registration_state.title())
             else:
-                self.account_registration_label.setText('Not Registered')
+                self.account_registration_label.setText(translate('preferences_window', 'Not Registered'))
         else:
             self.account_registration_label.setText('')
 
@@ -903,7 +903,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_pgp_enabled_button.setChecked(account.sms.enable_pgp)
 
         if account is not bonjour_account:
-            self.account_auto_answer.setText('Auto answer from allowed contacts')
+            self.account_auto_answer.setText(translate('preferences_window', 'Auto answer from allowed contacts'))
             # Server settings tab
             self.always_use_my_proxy_button.setChecked(account.sip.always_use_my_proxy)
             outbound_proxy = account.sip.outbound_proxy or UnspecifiedOutboundProxy
@@ -952,7 +952,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.idd_prefix_button.addItem(item_text)
             self.idd_prefix_button.setCurrentIndex(self.idd_prefix_button.findText(item_text))
 
-            item_text = account.pstn.prefix or 'None'
+            item_text = account.pstn.prefix or translate('preferences_window', 'None')
             index = self.prefix_button.findText(item_text)
             if index == -1:
                 self.prefix_button.addItem(item_text)
@@ -975,7 +975,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.last_id_editor.setEnabled(account.sms.enable_history_synchronization)
             self.last_id_editor.setText(account.sms.history_synchronization_id)
         else:
-            self.account_auto_answer.setText('Auto answer from all neighbours')
+            self.account_auto_answer.setText(translate('preferences_window', 'Auto answer from all neighbours'))
 
             self.message_replication_button.hide()
             self.message_synchronization_button.hide()
@@ -1079,7 +1079,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                     logs_size += os.stat(os.path.join(path, name)).st_size
                 except (OSError, IOError):
                     pass
-        self.log_files_size_label.setText("There are currently %s of log files" % self._normalize_binary_size(logs_size))
+        self.log_files_size_label.setText(translate('preferences_window', "There are currently %s of log files") % self._normalize_binary_size(logs_size))
 
     def _update_pstn_example_label(self):
         prefix = self.prefix_button.currentText()
@@ -1142,15 +1142,15 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.password_editor.hide()
             else:
                 if tab_widget.indexOf(self.server_settings_tab) == -1:
-                    tab_widget.addTab(self.server_settings_tab, "Server Settings")
+                    tab_widget.addTab(self.server_settings_tab, translate('preferences_window', "Server Settings"))
                 if tab_widget.indexOf(self.network_tab) == -1:
-                    tab_widget.addTab(self.network_tab, "NAT Traversal")
+                    tab_widget.addTab(self.network_tab, translate('preferences_window', "NAT Traversal"))
                 if tab_widget.indexOf(self.advanced_tab) == -1:
-                    tab_widget.addTab(self.advanced_tab, "Advanced")
+                    tab_widget.addTab(self.advanced_tab, translate('preferences_window', "Advanced"))
                 self.password_label.show()
                 self.password_editor.show()
-                self.voicemail_uri_editor.inactiveText = "Discovered by subscribing to %s" % selected_account.id
-                self.xcap_root_editor.inactiveText = "Taken from the DNS TXT record for xcap.%s" % selected_account.id.domain
+                self.voicemail_uri_editor.inactiveText = translate('preferences_window', "Discovered by subscribing to %s") % selected_account.id
+                self.xcap_root_editor.inactiveText = translate('preferences_window', "Taken from the DNS TXT record for xcap.%s") % selected_account.id.domain
             self.load_account_settings(selected_account)
 
     def _SH_AccountListDataChanged(self, topLeft, bottomRight):
@@ -1163,9 +1163,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
             if selected_account_info is account_info:
                 if account_info.registration_state:
-                    self.account_registration_label.setText('Registration %s' % account_info.registration_state.title())
+                    self.account_registration_label.setText(translate('preferences_window', 'Registration %s') % account_info.registration_state.title())
                 else:
-                    self.account_registration_label.setText('Not Registered')
+                    self.account_registration_label.setText(translate('preferences_window', 'Not Registered'))
 
     def _SH_DeleteAccountButtonClicked(self):
         model = self.account_list.model()
@@ -1173,7 +1173,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         selected_index = self.account_list.selectionModel().selectedIndexes()[0]
         selected_account = selected_index.data(Qt.UserRole).account
 
-        title, message = "Remove Account", "Permanently remove account %s?" % selected_account.id
+        title, message = translate('preferences_window', "Remove Account"), translate('preferences_window', "Permanently remove account %s?") % selected_account.id
         if QMessageBox.question(self, title, message, QMessageBox.Ok | QMessageBox.Cancel) == QMessageBox.Cancel:
             return
 
@@ -1498,9 +1498,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                     X509Certificate(contents)
                     X509PrivateKey(contents)
                 except (OSError, IOError) as e:
-                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate file could not be opened: %s" % e.strerror)
+                    QMessageBox.critical(self, translate('preferences_window', "TLS Certificate Error"), translate('preferences_window', "The certificate file could not be opened: %s") % e.strerror)
                 except GNUTLSError as e:
-                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate file is invalid: %s" % e)
+                    QMessageBox.critical(self, translate('preferences_window', "TLS Certificate Error"), translate('preferences_window', "The certificate file is invalid: %s") % e)
                 else:
                     self.tls_cert_file_editor.setText(cert_path)
                     settings.tls.certificate = cert_path
@@ -1619,16 +1619,16 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if value == 0:
             self.answer_delay_seconds_label.setText('')
         elif value == 1:
-            self.answer_delay_seconds_label.setText('second')
+            self.answer_delay_seconds_label.setText(translate('preferences_window', 'second'))
         else:
-            self.answer_delay_seconds_label.setText('seconds')
+            self.answer_delay_seconds_label.setText(translate('preferences_window', 'seconds'))
         settings = SIPSimpleSettings()
         if settings.answering_machine.answer_delay != value:
             settings.answering_machine.answer_delay = value
             settings.save()
 
     def _SH_MaxRecordingValueChanged(self, value):
-        self.max_recording_minutes_label.setText('minute' if value == 1 else 'minutes')
+        self.max_recording_minutes_label.setText(translate('preferences_window', 'minute') if value == 1 else translate('preferences_window', 'minutes'))
         settings = SIPSimpleSettings()
         if settings.answering_machine.max_recording != value:
             settings.answering_machine.max_recording = value
@@ -1762,7 +1762,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_ScreenshotsDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = BlinkSettings()
-        directory = QFileDialog.getExistingDirectory(self, 'Select Screenshots Directory', settings.screenshots_directory.normalized) or None
+        directory = QFileDialog.getExistingDirectory(self, translate('preferences_window', 'Select Screenshots Directory'), settings.screenshots_directory.normalized) or None
         if directory is not None:
             directory = os.path.normpath(directory)
             if directory != settings.screenshots_directory:
@@ -1789,7 +1789,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_TransfersDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = BlinkSettings()
-        directory = QFileDialog.getExistingDirectory(self, 'Select Transfers Directory', settings.transfers_directory.normalized) or None
+        directory = QFileDialog.getExistingDirectory(self, translate('preferences_window', 'Select Transfers Directory'), settings.transfers_directory.normalized) or None
         if directory is not None:
             directory = os.path.normpath(directory)
             if directory != settings.transfers_directory:
@@ -1909,9 +1909,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 try:
                     X509Certificate(open(ca_path).read())
                 except (OSError, IOError) as e:
-                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate authority file could not be opened: %s" % e.strerror)
+                    QMessageBox.critical(self, translate('preferences_window', "TLS Certificate Error"), translate('preferences_window', "The certificate authority file could not be opened: %s") % e.strerror)
                 except GNUTLSError as e:
-                    QMessageBox.critical(self, "TLS Certificate Error", "The certificate authority file is invalid: %s" % e)
+                    QMessageBox.critical(self, translate('preferences_window', "TLS Certificate Error"), translate('preferences_window', "The certificate authority file is invalid: %s") % e)
                 else:
                     self.tls_ca_file_editor.setText(ca_path)
                     settings.tls.ca_list = ca_path
@@ -1928,8 +1928,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if data.language_code != settings.interface.language:
             settings.interface.language = data.language_code
             settings.save()
-            title = "Restart required"
-            question = "The application language was changed. A restart is required to apply the change. Would you like to restart now?"
+            title = translate('preferences_window', "Restart required")
+            question = translate('preferences_window', "The application language was changed. A restart is required to apply the change. Would you like to restart now?")
             if QMessageBox.question(self, title, question) == QMessageBox.No:
                 return
 
@@ -1983,13 +1983,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if 'sounds.play_message_alerts' in notification.data.modified:
                 self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
             if 'sip.auto_answer_interval' in notification.data.modified:
-                self.auto_answer_interval.setValue(settings.sip.auto_answer_interval)                
+                self.auto_answer_interval.setValue(settings.sip.auto_answer_interval)
             if 'video.device' in notification.data.modified:
                 self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
         elif notification.sender is self.selected_account is not None:
             account = notification.sender
             if 'sip.auto_answer' in notification.data.modified:
-                self.account_auto_answer.setChecked(account.sip.auto_answer)                
+                self.account_auto_answer.setChecked(account.sip.auto_answer)
             if 'enabled' in notification.data.modified:
                 self.account_enabled_button.setChecked(account.enabled)
                 if not account.enabled:

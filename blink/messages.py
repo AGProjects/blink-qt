@@ -41,7 +41,7 @@ from sipsimple.util import ISOTimestamp
 from blink.logging import MessagingTrace as log
 from blink.resources import Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
-from blink.util import run_in_gui_thread
+from blink.util import run_in_gui_thread, translate
 
 
 __all__ = ['MessageManager', 'BlinkMessage']
@@ -60,7 +60,7 @@ class GeneratePGPKeyDialog(IncomingDialogBase, ui_class):
             self.setupUi(self)
 
         self.slot = None
-        self.generate_button = self.dialog_button_box.addButton("Generate", QDialogButtonBox.AcceptRole)
+        self.generate_button = self.dialog_button_box.addButton(translate("generate_pgp_key_dialog", "Generate"), QDialogButtonBox.AcceptRole)
         self.generate_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
 
     def show(self, activate=True):
@@ -136,7 +136,7 @@ class ImportDialog(IncomingDialogBase, ui_class):
             self.setupUi(self)
 
         self.slot = None
-        self.import_button = self.dialog_button_box.addButton("Import", QDialogButtonBox.AcceptRole)
+        self.import_button = self.dialog_button_box.addButton(translate("import_key_dialog", "Import"), QDialogButtonBox.AcceptRole)
         self.import_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
         self.import_button.setEnabled(False)
 
@@ -232,7 +232,7 @@ class ExportDialog(IncomingDialogBase, ui_class):
             self.setupUi(self)
 
         self.slot = None
-        self.export_button = self.dialog_button_box.addButton("Export", QDialogButtonBox.AcceptRole)
+        self.export_button = self.dialog_button_box.addButton(translate("export_key_dialog", "Export"), QDialogButtonBox.AcceptRole)
         self.export_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
         self.export_button.setEnabled(False)
 

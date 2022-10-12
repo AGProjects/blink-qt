@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QStyle, QStyleOption, QStylePainter
 
 from blink.resources import Resources
+from blink.util import translate
 
 
 __all__ = ['ZRTPWidget']
@@ -44,10 +45,10 @@ class ZRTPWidget(base_class, ui_class):
         self.__dict__['peer_verified'] = verified
         if verified:
             self.validate_button.setText('Invalidate')
-            self.status_value.setText('<span style="color: hsv(100, 85%, 100%);">Verified</span>')
+            self.status_value.setText(translate('zrtp_widget', '<span style="color: hsv(100, 85%, 100%);">Verified</span>'))
         else:
             self.validate_button.setText('Validate')
-            self.status_value.setText('<span style="color: hsv(20, 85%, 100%);">Not verified</span>')
+            self.status_value.setText(translate('zrtp_widget', '<span style="color: hsv(20, 85%, 100%);">Not verified</span>'))
         self.validate_button.setChecked(verified)
 
     peer_verified = property(_get_peer_verified, _set_peer_verified)

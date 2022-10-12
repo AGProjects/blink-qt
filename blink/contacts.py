@@ -8,7 +8,7 @@ import sys
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
-from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal
+from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt5.QtGui import QBrush, QColor, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt5.QtWebKitWidgets import QWebView
 from PyQt5.QtWidgets import QAction, QApplication, QItemDelegate, QStyledItemDelegate, QStyle
@@ -48,7 +48,7 @@ from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
 from blink.messages import MessageManager
-from blink.util import call_in_gui_thread, run_in_gui_thread
+from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import ContextMenuActions
@@ -643,7 +643,7 @@ class GoogleContact(object):
         organization = next((entry.get('name') for entry in contact_data.get('organizations', Null)), None)
         icon_url, icon_metadata = next(((entry['url'], entry['metadata']) for entry in contact_data.get('photos', Null)), (None, None))
 
-        name = name.strip() if name is not None else 'Unknown'
+        name = name.strip() if name is not None else translate('contact_list', 'Unknown')
         organization = organization.strip() if organization is not None else organization
 
         uris = [GoogleContactURI.from_number(number) for number in contact_data.get('phoneNumbers', Null)]
@@ -2288,7 +2288,7 @@ class ContactModel(QAbstractListModel):
 
     # The MIME types we accept in drop operations, in the order they should be handled
     accepted_mime_types = ['application/x-blink-group-list', 'application/x-blink-contact-list', 'text/uri-list']
-
+    # TODO: Maybe translate? -Tijmen
     test_contacts = (dict(id='test_call',       name='Test Call',       preferred_media='audio+chat', uri='echo@conference.sip2sip.info', icon=Resources.get('icons/test-call.png')),
                      dict(id='test_conference', name='Test Conference', preferred_media='audio+chat', uri='test@conference.sip2sip.info', icon=Resources.get('icons/test-conference.png')))
 
@@ -3136,20 +3136,20 @@ class ContactListView(QListView):
         self.detail_view.hide()
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
-        self.actions.add_group = QAction("Add Group", self, triggered=self._AH_AddGroup)
-        self.actions.add_contact = QAction("Add Contact", self, triggered=self._AH_AddContact)
-        self.actions.edit_item = QAction("Edit", self, triggered=self._AH_EditItem)
-        self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
-        self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
-        self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
-        self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
-        self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
-        self.actions.start_chat_session = QAction("Start Real Time Chat Session", self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
-        self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
-        self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
-        self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
-        self.actions.transfer_call = QAction("Transfer Active Call", self, triggered=self._AH_TransferCall)
+        self.actions.add_group = QAction(translate("contact_list", "Add Group"), self, triggered=self._AH_AddGroup)
+        self.actions.add_contact = QAction(translate("contact_list", "Add Contact"), self, triggered=self._AH_AddContact)
+        self.actions.edit_item = QAction(translate("contact_list", "Edit"), self, triggered=self._AH_EditItem)
+        self.actions.delete_item = QAction(translate("contact_list", "Delete"), self, triggered=self._AH_DeleteSelection)
+        self.actions.delete_selection = QAction(translate("contact_list", "Delete Selection"), self, triggered=self._AH_DeleteSelection)
+        self.actions.undo_last_delete = QAction(translate("contact_list", "Undo Last Delete"), self, triggered=self._AH_UndoLastDelete)
+        self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
+        self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
+        self.actions.start_chat_session = QAction(translate("contact_list", "Start Real Time Chat Session"), self, triggered=self._AH_StartChatSession)
+        self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction(translate("contact_list", "Send File(s)..."), self, triggered=self._AH_SendFiles)
+        self.actions.request_screen = QAction(translate("contact_list", "Request Screen"), self, triggered=self._AH_RequestScreen)
+        self.actions.share_my_screen = QAction(translate("contact_list", "Share My Screen"), self, triggered=self._AH_ShareMyScreen)
+        self.actions.transfer_call = QAction(translate("contact_list", "Transfer Active Call"), self, triggered=self._AH_TransferCall)
         self.drop_indicator_index = QModelIndex()
         self.needs_restore = False
         self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
@@ -3171,7 +3171,7 @@ class ContactListView(QListView):
         model = self.model()
         selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
         if not model.deleted_items:
-            undo_delete_text = "Undo Delete"
+            undo_delete_text = translate("contact_list", "Undo Delete")
         elif len(model.deleted_items[-1]) == 1:
             operation = model.deleted_items[-1][0]
             if type(operation) is AddContactOperation:
@@ -3185,12 +3185,12 @@ class ContactListView(QListView):
                 try:
                     contact = addressbook_manager.get_contact(operation.contact_id)
                 except KeyError:
-                    name = 'Contact'
+                    name = translate('contact_list', 'Contact')
                 else:
-                    name = contact.name or 'Contact'
-            undo_delete_text = 'Undo Delete "%s"' % name
+                    name = contact.name or translate('contact_list', 'Contact')
+            undo_delete_text = translate('contact_list', 'Undo Delete "%s"') % name
         else:
-            undo_delete_text = "Undo Delete (%d items)" % len(model.deleted_items[-1])
+            undo_delete_text = translate('contact_list', "Undo Delete (%d items)") % len(model.deleted_items[-1])
         menu = self.context_menu
         menu.clear()
         if not selected_items:
@@ -3225,50 +3225,49 @@ class ContactListView(QListView):
             can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
 
             if len(contact.uris) > 1 and can_call:
-                call_submenu = menu.addMenu('Start Audio Call')
+                call_submenu = menu.addMenu(translate('contact_list', 'Start Audio Call'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_StartAudioCall, uri))
                     call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu('Start Video Call')
+                call_submenu = menu.addMenu(translate('contact_list', 'Start Video Call'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_StartVideoCall, uri))
                     call_submenu.addAction(call_item)
 
-
-                call_submenu = menu.addMenu('Send Messages')
+                call_submenu = menu.addMenu(translate('contact_list', 'Send Messages'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_SendSMS, uri))
                     call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu('Start Real Time Chat Session')
+                call_submenu = menu.addMenu(translate('contact_list', 'Start Real Time Chat Session'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_StartChatSession, uri))
                     call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu('Send File(s)...')
+                call_submenu = menu.addMenu(translate('contact_list', 'Send File(s)...'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_SendFiles, uri))
                     call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu('Request Screen')
+                call_submenu = menu.addMenu(translate('contact_list', 'Request Screen'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_RequestScreen, uri))
                     call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu('Share My Screen')
+                call_submenu = menu.addMenu(translate('contact_list', 'Share My Screen'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -3293,7 +3292,7 @@ class ContactListView(QListView):
                 self.actions.share_my_screen.setEnabled(can_call)
 
             if len(contact.uris) > 1 and can_transfer:
-                call_submenu = menu.addMenu('Transfer Call')
+                call_submenu = menu.addMenu(translate('contact_list', 'Transfer Call'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -3680,18 +3679,18 @@ class ContactSearchListView(QListView):
         self.detail_view.hide()
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
-        self.actions.edit_item = QAction("Edit", self, triggered=self._AH_EditItem)
-        self.actions.delete_item = QAction("Delete", self, triggered=self._AH_DeleteSelection)
-        self.actions.delete_selection = QAction("Delete Selection", self, triggered=self._AH_DeleteSelection)
-        self.actions.undo_last_delete = QAction("Undo Last Delete", self, triggered=self._AH_UndoLastDelete)
-        self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
-        self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
-        self.actions.start_chat_session = QAction("Start Real Time Chat Session", self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
-        self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
-        self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
-        self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
-        self.actions.transfer_call = QAction("Transfer Active Call", self, triggered=self._AH_TransferCall)
+        self.actions.edit_item = QAction(translate("contact_list", "Edit"), self, triggered=self._AH_EditItem)
+        self.actions.delete_item = QAction(translate("contact_list", "Delete"), self, triggered=self._AH_DeleteSelection)
+        self.actions.delete_selection = QAction(translate("contact_list", "Delete Selection"), self, triggered=self._AH_DeleteSelection)
+        self.actions.undo_last_delete = QAction(translate("contact_list", "Undo Last Delete"), self, triggered=self._AH_UndoLastDelete)
+        self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
+        self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
+        self.actions.start_chat_session = QAction(translate("contact_list", "Start Real Time Chat Session"), self, triggered=self._AH_StartChatSession)
+        self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction(translate("contact_list", "Send File(s)..."), self, triggered=self._AH_SendFiles)
+        self.actions.request_screen = QAction(translate("contact_list", "Request Screen"), self, triggered=self._AH_RequestScreen)
+        self.actions.share_my_screen = QAction(translate("contact_list", "Share My Screen"), self, triggered=self._AH_ShareMyScreen)
+        self.actions.transfer_call = QAction(translate("contact_list", "Transfer Active Call"), self, triggered=self._AH_TransferCall)
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
         notification_center = NotificationCenter()
@@ -3727,12 +3726,12 @@ class ContactSearchListView(QListView):
                 try:
                     contact = addressbook_manager.get_contact(operation.contact_id)
                 except KeyError:
-                    name = 'Contact'
+                    name = translate('contact_list', 'Contact')
                 else:
-                    name = contact.name or 'Contact'
-            undo_delete_text = 'Undo Delete "%s"' % name
+                    name = contact.name or translate('contact_list', 'Contact')
+            undo_delete_text = translate('contact_list', 'Undo Delete "%s"') % name
         else:
-            undo_delete_text = "Undo Delete (%d items)" % len(source_model.deleted_items[-1])
+            undo_delete_text = translate('contact_list', "Undo Delete (%d items)") % len(source_model.deleted_items[-1])
         menu = self.context_menu
         menu.clear()
         if not selected_items:
@@ -3941,7 +3940,7 @@ class ContactSearchListView(QListView):
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
+        for filename in QFileDialog.getOpenFileNames(self, translate('contact_list', 'Select File(s)'), session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, uri or contact.uri, filename)
 
     def _AH_RequestScreen(self, uri=None):
@@ -4028,17 +4027,17 @@ class ContactDetailView(QListView):
         self.animation.finished.connect(self._SH_AnimationFinished)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
-        self.actions.delete_contact = QAction("Delete Contact", self, triggered=self._AH_DeleteContact)
-        self.actions.edit_contact = QAction("Edit Contact", self, triggered=self._AH_EditContact)
-        self.actions.make_uri_default = QAction("Set Address As Default", self, triggered=self._AH_MakeURIDefault)
-        self.actions.start_audio_call = QAction("Start Audio Call", self, triggered=self._AH_StartAudioCall)
-        self.actions.start_video_call = QAction("Start Video Call", self, triggered=self._AH_StartVideoCall)
-        self.actions.start_chat_session = QAction("Start Real Time Chat Session", self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction("Send Messages", self, triggered=self._AH_SendSMS)
-        self.actions.send_files = QAction("Send File(s)...", self, triggered=self._AH_SendFiles)
-        self.actions.request_screen = QAction("Request Screen", self, triggered=self._AH_RequestScreen)
-        self.actions.share_my_screen = QAction("Share My Screen", self, triggered=self._AH_ShareMyScreen)
-        self.actions.transfer_call = QAction("Transfer Active Call", self, triggered=self._AH_TransferCall)
+        self.actions.delete_contact = QAction(translate("contact_list", "Delete Contact"), self, triggered=self._AH_DeleteContact)
+        self.actions.edit_contact = QAction(translate("contact_list", "Edit Contact"), self, triggered=self._AH_EditContact)
+        self.actions.make_uri_default = QAction(translate("contact_list", "Set Address As Default"), self, triggered=self._AH_MakeURIDefault)
+        self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
+        self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
+        self.actions.start_chat_session = QAction(translate("contact_list", "Start Real Time Chat Session"), self, triggered=self._AH_StartChatSession)
+        self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction(translate("contact_list", "Send File(s)..."), self, triggered=self._AH_SendFiles)
+        self.actions.request_screen = QAction(translate("contact_list", "Request Screen"), self, triggered=self._AH_RequestScreen)
+        self.actions.share_my_screen = QAction(translate("contact_list", "Share My Screen"), self, triggered=self._AH_ShareMyScreen)
+        self.actions.transfer_call = QAction(translate("contact_list", "Transfer Active Call"), self, triggered=self._AH_TransferCall)
         self.drop_indicator_index = QModelIndex()
         self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
         contact_list.installEventFilter(self)
@@ -4257,7 +4256,7 @@ class ContactDetailView(QListView):
             selected_uri = item.uri
         else:
             selected_uri = uri or contact.uri
-        for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
+        for filename in QFileDialog.getOpenFileNames(self, translate('contact_list', 'Select File(s)'), session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, selected_uri, filename)
 
     def _AH_RequestScreen(self, uri=None):
@@ -4373,12 +4372,18 @@ class ContactURIItem(object):
 
 
 class URITypeComboBox(QComboBox):
-    builtin_types = (None, "Mobile", "Home", "Work", "SIP", "XMPP", "Other")
+    builtin_types = (None,
+                     QT_TRANSLATE_NOOP('contact_editor', "Mobile"),
+                     QT_TRANSLATE_NOOP('contact_editor', "Home"),
+                     QT_TRANSLATE_NOOP('contact_editor', "Work"),
+                     QT_TRANSLATE_NOOP('contact_editor', "SIP"),
+                     QT_TRANSLATE_NOOP('contact_editor', "XMPP"),
+                     QT_TRANSLATE_NOOP('contact_editor', "Other"))
 
     def __init__(self, parent=None, types=()):
         super(URITypeComboBox, self).__init__(parent)
         self.setEditable(True)
-        self.addItems(self.builtin_types)
+        self.addItems((translate('contact_editor', item) for item in self.builtin_types))
         self.addItems(sorted(set(types) - set(self.builtin_types)))
 
 
@@ -4471,7 +4476,9 @@ class ContactURIDelegate(QItemDelegate):
 
 
 class ContactURIModel(QAbstractTableModel):
-    columns = ('Address', 'Type', 'Default')
+    columns = (QT_TRANSLATE_NOOP('contact_editor', 'Address'),
+               QT_TRANSLATE_NOOP('contact_editor', 'Type'),
+               QT_TRANSLATE_NOOP('contact_editor', 'Default'))
 
     AddressColumn = 0
     TypeColumn    = 1
@@ -4507,7 +4514,7 @@ class ContactURIModel(QAbstractTableModel):
             return item
         elif role == Qt.DisplayRole:
             if column == ContactURIModel.AddressColumn:
-                return 'Edit to add address' if item.ghost else str(item.uri or '')
+                return translate('contact_list', 'Edit to add address') if item.ghost else str(item.uri or '')
         elif role == Qt.EditRole:
             if column == ContactURIModel.AddressColumn:
                 return str(item.uri or '')
@@ -4544,7 +4551,7 @@ class ContactURIModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
-            return self.columns[section]
+            return translate('contact_editor', self.columns[section])
         return super(ContactURIModel, self).headerData(section, orientation, role)
 
     def init_with_address(self, address=None):
@@ -4622,7 +4629,7 @@ class ContactURITableView(QTableView):
         super(ContactURITableView, self).__init__(parent)
         self.setItemDelegate(ContactURIDelegate(self))
         self.context_menu = QMenu(self)
-        self.context_menu.addAction("Delete", self._AH_DeleteSelection)
+        self.context_menu.addAction(translate('contact_editor', "Delete"), self._AH_DeleteSelection)
         self.horizontalHeader().setSectionResizeMode(self.horizontalHeader().ResizeToContents)
 
     def selectionChanged(self, selected, deselected):
@@ -4673,11 +4680,11 @@ class ContactEditorDialog(base_class, ui_class):
 
     def setupUi(self, contact_editor):
         super(ContactEditorDialog, self).setupUi(contact_editor)
-        self.preferred_media.setItemData(0, 'audio')
-        self.preferred_media.setItemData(1, 'video')
-        self.preferred_media.setItemData(2, 'chat')
-        self.preferred_media.setItemData(3, 'audio+chat')
-        self.preferred_media.setItemData(4, 'messages')
+        self.preferred_media.setItemData(0, translate('contact_editor', 'audio'))
+        self.preferred_media.setItemData(1, translate('contact_editor', 'video'))
+        self.preferred_media.setItemData(2, translate('contact_editor', 'chat'))
+        self.preferred_media.setItemData(3, translate('contact_editor', 'audio+chat'))
+        self.preferred_media.setItemData(4, translate('contact_editor', 'messages'))
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
     def open_for_add(self, sip_address='', target_group=None):
@@ -4688,7 +4695,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.icon_selector.init_with_contact(None)
         self.presence.setChecked(True)
         self.preferred_media.setCurrentIndex(0)
-        self.accept_button.setText('Add')
+        self.accept_button.setText(translate('contact_editor', 'Add'))
         self.accept_button.setEnabled(False)
         self.show()
 
@@ -4702,7 +4709,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.presence.setChecked(contact.presence.subscribe)
         self.auto_answer.setChecked(contact.auto_answer)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
-        self.accept_button.setText('Ok')
+        self.accept_button.setText(translate('contact_editor', 'Ok'))
         self.accept_button.setEnabled(True)
         self.show()
 

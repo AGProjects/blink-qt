@@ -32,7 +32,7 @@ from blink.contacts import URIUtils
 from blink.resources import ApplicationData, IconManager, Resources
 from blink.sessions import SessionManager, StreamDescription
 from blink.widgets.labels import Status
-from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread
+from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, translate
 
 
 __all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountDialog', 'ServerToolsAccountModel', 'ServerToolsWindow']
@@ -379,7 +379,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
             self.accept()
         else:
             self.setEnabled(False)
-            self.create_status_label.value = Status('Creating account on server...')
+            self.create_status_label.value = Status(translate('add_account_dialog', 'Creating account on server...'))
             self._create_sip_account(self.username, self.password, self.email_address, self.display_name)
 
     def _SH_PanelChangeRequest(self, index):
@@ -397,28 +397,28 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         red = '#cc0000'
         # validate the add panel
         if not self.display_name_editor.text_valid:
-            self.add_status_label.value = Status("Display name cannot be empty", color=red)
+            self.add_status_label.value = Status(translate('add_account_dialog', "Display name cannot be empty"), color=red)
         elif not self.sip_address_editor.text_correct:
-            self.add_status_label.value = Status("SIP address should be specified as user@domain", color=red)
+            self.add_status_label.value = Status(translate('add_account_dialog', "SIP address should be specified as user@domain"), color=red)
         elif not self.sip_address_editor.text_allowed:
-            self.add_status_label.value = Status("An account with this SIP address was already added", color=red)
+            self.add_status_label.value = Status(translate('add_account_dialog', "An account with this SIP address was already added"), color=red)
         elif not self.password_editor.text_valid:
-            self.add_status_label.value = Status("Password cannot be empty", color=red)
+            self.add_status_label.value = Status(translate('add_account_dialog', "Password cannot be empty"), color=red)
         else:
             self.add_status_label.value = None
         # validate the create panel
         if not self.name_editor.text_valid:
-            self.create_status_label.value = Status("Name cannot be empty", color=red)
+            self.create_status_label.value = Status(translate('add_account_dialog', "Name cannot be empty"), color=red)
         elif not self.username_editor.text_correct:
-            self.create_status_label.value = Status("Username should have 5 to 32 characters, start with a letter or non-zero digit, contain only letters, digits or .-_ and end with a letter or digit", color=red)
+            self.create_status_label.value = Status(translate('add_account_dialog', "Username should have 5 to 32 characters, start with a letter or non-zero digit, contain only letters, digits or .-_ and end with a letter or digit"), color=red)
         elif not self.username_editor.text_allowed:
-            self.create_status_label.value = Status("The username you requested is already taken. Please choose another one and try again.", color=red)
+            self.create_status_label.value = Status(translate('add_account_dialog', "The username you requested is already taken. Please choose another one and try again."), color=red)
         elif not self.new_password_editor.text_valid:
-            self.create_status_label.value = Status("Password should contain at least 8 characters", color=red)
+            self.create_status_label.value = Status(translate('add_account_dialog', "Password should contain at least 8 characters"), color=red)
         elif not self.verify_password_editor.text_valid:
-            self.create_status_label.value = Status("Passwords do not match", color=red)
+            self.create_status_label.value = Status(translate('add_account_dialog', "Passwords do not match"), color=red)
         elif not self.email_address_editor.text_valid:
-            self.create_status_label.value = Status("E-mail address should be specified as user@domain", color=red)
+            self.create_status_label.value = Status(translate('add_account_dialog', "E-mail address should be specified as user@domain"), color=red)
         else:
             self.create_status_label.value = None
         # enable the accept button if everything is valid in the current panel
@@ -488,9 +488,9 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
             else:
                 call_in_gui_thread(setattr, self.create_status_label, 'value', Status(response_data['error_message'], color=red))
         except (json.decoder.JSONDecodeError, KeyError):
-            call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Illegal server response', color=red))
+            call_in_gui_thread(setattr, self.create_status_label, 'value', Status(translate('add_account_dialog', 'Illegal server response'), color=red))
         except urllib.error.URLError as e:
-            call_in_gui_thread(setattr, self.create_status_label, 'value', Status('Failed to contact server: %s' % e.reason, color=red))
+            call_in_gui_thread(setattr, self.create_status_label, 'value', Status(translate('add_account_dialog', 'Failed to contact server: %s') % e.reason, color=red))
         finally:
             call_in_gui_thread(self.setEnabled, True)
 
@@ -783,7 +783,7 @@ class ServerToolsWindow(base_class, ui_class, metaclass=QSingleton):
         self._update_navigation_buttons()
 
     def _SH_WebViewTitleChanged(self, title):
-        self.window().setWindowTitle('Blink Server Tools: {}'.format(title))
+        self.window().setWindowTitle(translate('server_window', 'Blink Server Tools: {}').format(title))
 
     def _SH_ModelChanged(self, parent_index, start, end):
         menu = self.account_button.menu()
