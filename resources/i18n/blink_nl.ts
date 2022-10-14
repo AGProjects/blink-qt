@@ -3288,6 +3288,11 @@ Audio with verified ZRTP is needed for the SMP verification to be available.</so
         <source>The application language was changed. A restart is required to apply the change. Would you like to restart now?</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../../blink/preferences.py" line="475"/>
+        <source>Automatic (Default)</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>presence_state</name>
@@ -3811,7 +3816,7 @@ QToolButton:pressed {
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../zrtp_widget.ui" line="513"/>
+        <location filename="../../blink/widgets/zrtp.py" line="49"/>
         <source>Validate</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3823,6 +3828,11 @@ QToolButton:pressed {
     <message>
         <location filename="../../blink/widgets/zrtp.py" line="47"/>
         <source>&lt;span style=&quot;color: hsv(100, 85%, 100%);&quot;&gt;Verified&lt;/span&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/widgets/zrtp.py" line="46"/>
+        <source>Invalidate</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
