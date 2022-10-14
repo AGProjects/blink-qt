@@ -981,7 +981,7 @@ All rights reserved.</source>
     </message>
     <message>
         <location filename="../export_private_key_dialog.ui" line="90"/>
-        <source>Blink uses end-to-end encryption for messaging to contacts that support this. To replicate messages on multiple devices you need the same prive key on all of them.  </source>
+        <source>Blink uses end-to-end encryption for messaging to contacts that support this. To replicate messages on multiple devices you need the same prive key on all of them.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1170,7 +1170,7 @@ All rights reserved.</source>
     </message>
 </context>
 <context>
-    <name>generate_pgp_dialog</name>
+    <name>generate_pgp_key_dialog</name>
     <message>
         <location filename="../generate_pgp_key_dialog.ui" line="26"/>
         <source>Generate/Import PGP keys</source>
@@ -1196,9 +1196,6 @@ All rights reserved.</source>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If you &lt;span style=&quot; font-weight:600;&quot;&gt;lost access&lt;/span&gt; to this device/browser, please continue with &apos;Generate&apos;.  &apos;Cancel&apos; will &lt;span style=&quot; font-weight:600;&quot;&gt;disable&lt;/span&gt; end-to-end encrypted messaging &lt;span style=&quot; font-weight:600;&quot;&gt;for this session&lt;/span&gt;.&lt;/p&gt;&lt;p&gt;If you generate a new key, your previous messages &lt;span style=&quot; font-weight:600;&quot;&gt;cannot&lt;/span&gt; be read on newer devices.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation type="unfinished"></translation>
     </message>
-</context>
-<context>
-    <name>generate_pgp_key_dialog</name>
     <message>
         <location filename="../../blink/messages.py" line="63"/>
         <source>Generate</source>
