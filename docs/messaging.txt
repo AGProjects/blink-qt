@@ -1,0 +1,35 @@
+Messaging notes
+===============
+
+To replicate messages between multiple SIP devices, discover PGP keys and
+receive messages while offline, one must install SylkServer and configure it
+with Cassandra storage backend, see https://sylkserver.com
+
+These features are compatible with other SIP clients that implement the same
+API, currently Blink for Mac and Sylk Mobile are known to support the same
+API as Blink Qt.
+
+The SIP Proxy for the account must fork a copy of all SIP messages to
+SylkServer.  When properly configured, SylkServer will respond to SIP
+messages sent by Blink with the following content types:
+
+  * application/sylk-api-token (will auto discover the URL and index for offline storage)
+  * application/sylk-api-pgp-key-lookup (will return the OpenPGP key if exists)
+
+All settings are subsequently auto-discovered by Blink.
+
+To replicate messages from multiple devices they all must use the same
+private PGP key.  The import PGP panel is presented at start of messaging
+sessions for each account.  The key can be exported from another device that
+implement the same API (see Chat menu item Export PGP private key) or can be
+copied manually to ~/.blink/keys/private configuration folder with the
+following convention:
+
+ * user@domain.privkey
+ * user@domain.pubkey
+
+The public keys of the recipients are looked up in SylkServer at the start
+of a messaging session.  If a key is found, it will be returned as SIP
+message with a special content type recognized by Blink and saved in a file
+e.g. ~/.blink/keys/user@domain.pubkey
+
