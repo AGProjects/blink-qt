@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-lrelease ./resources/i18n/blink_*.
+lrelease ./resources/i18n/blink_*.ts
