@@ -87,7 +87,7 @@
      <item>
       <widget class="QLabel" name="label_3">
        <property name="text">
-        <string>Blink uses end-to-end encryption for messaging to contacts that support this. To replicate messages on multiple devices you need the same prive key on all of them.  </string>
+        <string>Blink uses end-to-end encryption for messaging to contacts that support this. To replicate messages on multiple devices you need the same prive key on all of them.</string>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
