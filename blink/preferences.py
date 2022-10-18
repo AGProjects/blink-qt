@@ -39,7 +39,7 @@ class LanguageError(Exception): pass
 
 class Language(object):
     filename_regex = re.compile(r'(\w+)_(\w+).*\.(\w+$)')
-    mapping = {"default": "System default",
+    mapping = {"default": "Automatic (Default)",
                "en": "English",
                "nl": "Nederlands",
                "ro": "Română"}
@@ -473,7 +473,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Languages
         self.language_button.clear()
         languages_path = Resources.get('i18n')
-        self.language_button.addItem(translate('preferences_window', 'System Default'), Language('default'))
+        self.language_button.addItem(translate('preferences_window', 'Automatic (Default)'), Language('default'))
         self.language_button.addItem('English', Language('en'))
         for language_file in os.listdir(languages_path):
             try:
