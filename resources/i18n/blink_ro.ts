@@ -1297,13 +1297,13 @@ border-color: #3278c8;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../import_private_key_dialog.ui" line="176"/>
-        <source> A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</source>
+        <location filename="../../blink/messages.py" line="139"/>
+        <source>Import</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/messages.py" line="139"/>
-        <source>Import</source>
+        <location filename="../import_private_key_dialog.ui" line="176"/>
+        <source>A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

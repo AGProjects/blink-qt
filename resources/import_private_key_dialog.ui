@@ -173,7 +173,7 @@
         </font>
        </property>
        <property name="text">
-        <string> A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</string>
+        <string>A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</string>
        </property>
        <property name="scaledContents">
         <bool>false</bool>

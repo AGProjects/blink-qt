@@ -1298,7 +1298,7 @@ border-color: #3278c8;
     </message>
     <message>
         <location filename="../import_private_key_dialog.ui" line="176"/>
-        <source> A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</source>
+        <source>A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -3189,6 +3189,11 @@ Audio with verified ZRTP is needed for the SMP verification to be available.</so
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../../blink/preferences.py" line="475"/>
+        <source>Automatic (Default)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../../blink/preferences.py" line="863"/>
         <source>Registered at %s</source>
         <translation type="unfinished"></translation>
@@ -3286,11 +3291,6 @@ Audio with verified ZRTP is needed for the SMP verification to be available.</so
     <message>
         <location filename="../../blink/preferences.py" line="1933"/>
         <source>The application language was changed. A restart is required to apply the change. Would you like to restart now?</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../blink/preferences.py" line="475"/>
-        <source>Automatic (Default)</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -3826,13 +3826,13 @@ QToolButton:pressed {
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/zrtp.py" line="47"/>
-        <source>&lt;span style=&quot;color: hsv(100, 85%, 100%);&quot;&gt;Verified&lt;/span&gt;</source>
+        <location filename="../../blink/widgets/zrtp.py" line="46"/>
+        <source>Invalidate</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/zrtp.py" line="46"/>
-        <source>Invalidate</source>
+        <location filename="../../blink/widgets/zrtp.py" line="47"/>
+        <source>&lt;span style=&quot;color: hsv(100, 85%, 100%);&quot;&gt;Verified&lt;/span&gt;</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
