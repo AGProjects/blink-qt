@@ -3718,6 +3718,16 @@ QToolButton:pressed {
         <source>Transferring: %s/%s (%s%%)</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="1108"/>
+        <source>Call ended</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="1108"/>
+        <source>Call ended by remote</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>switch_view_button</name>

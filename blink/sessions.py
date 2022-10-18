@@ -1056,7 +1056,7 @@ class BlinkSession(BlinkSessionBase):
         self._terminate(reason=reason, error=True)
 
     def _NH_SIPSessionDidEnd(self, notification):
-        self._terminate('Call ended' if notification.data.originator == 'local' else 'Call ended by remote')
+        self._terminate(translate('sessions', 'Call ended') if notification.data.originator == 'local' else translate('sessions', 'Call ended by remote'))
 
     def _NH_SIPSessionDidChangeHoldState(self, notification):
         if notification.data.originator == 'remote':

@@ -3569,6 +3569,16 @@ QToolButton:pressed {
 <context>
     <name>sessions</name>
     <message>
+        <location filename="../../blink/sessions.py" line="1108"/>
+        <source>Call ended</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="1108"/>
+        <source>Call ended by remote</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../../blink/sessions.py" line="1928"/>
         <source>Drop outside the conference to detach</source>
         <translation type="unfinished"></translation>
