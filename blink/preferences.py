@@ -45,7 +45,6 @@ class Language(object):
                "ro": "Română"}
 
     def __init__(self, file):
-        print(file)
         if file in ['default', 'en']:
             self.name = self.mapping[file]
             self.language_code = file
