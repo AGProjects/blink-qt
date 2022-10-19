@@ -1,3 +1,12 @@
+blink (5.5.0) unstable; urgency=medium
+
+  * Added multi-language support
+  * Added Dutch translation
+  * Added documentation folder doc/
+  * Added messaging notes
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Wed, 19 Oct 2022 09:57:57 -0300
+
 blink (5.4.0) unstable; urgency=medium
 
   * Added OTR encryption to SIP Message sessions
