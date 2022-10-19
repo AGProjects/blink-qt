@@ -1969,10 +1969,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if 'session' in elements:
             self.account_value_label.setText(blink_session.account.id)
-            self.remote_agent_value_label.setText(session_info.remote_user_agent or 'N/A')
+            self.remote_agent_value_label.setText(session_info.remote_user_agent or translate('chat_window', 'N/A'))
 
         if 'media' in elements:
-            self.audio_value_label.setText(audio_info.codec or 'N/A')
+            self.audio_value_label.setText(audio_info.codec or translate('chat_window', 'N/A'))
             if audio_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (audio_info.local_rtp_candidate, audio_info.remote_rtp_candidate)}:
                     self.audio_connection_label.setPixmap(self.pixmaps.relay_connection)
@@ -2006,7 +2006,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.audio_connection_label.setVisible(audio_info.remote_address is not None)
             self.audio_encryption_label.setVisible(audio_info.encryption is not None)
 
-            self.video_value_label.setText(video_info.codec or 'N/A')
+            self.video_value_label.setText(video_info.codec or translate('chat_window', 'N/A'))
             if video_info.ice_status == 'succeeded':
                 if 'relay' in {candidate.type.lower() for candidate in (video_info.local_rtp_candidate, video_info.remote_rtp_candidate)}:
                     self.video_connection_label.setPixmap(self.pixmaps.relay_connection)
@@ -2861,7 +2861,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value * 8, bits_per_second=True)
             outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value * 8, bits_per_second=True)
-        self.traffic_label.setText(translate('chat_window', """<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">\u2193</span> %s <span style="font-family: sans-serif; color: #0064d7;">\u2191</span> %s</p>""") % (incoming_traffic, outgoing_traffic))
+        self.traffic_label.setText(translate('chat_window', """<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">%s</span> %s <span style="font-family: sans-serif; color: #0064d7;">%s</span> %s</p>""") % ("\u2193", incoming_traffic, "\u2191", outgoing_traffic))
 
     def _SH_MuteButtonClicked(self, checked):
         settings = SIPSimpleSettings()

@@ -527,6 +527,11 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../../blink/chatwindow.py" line="2141"/>
+        <source>N/A</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../../blink/chatwindow.py" line="2148"/>
         <source>Peer to peer</source>
         <translation type="unfinished"></translation>
@@ -559,11 +564,6 @@ All rights reserved.</source>
     <message>
         <location filename="../../blink/chatwindow.py" line="2113"/>
         <source>Media is not encrypted</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../blink/chatwindow.py" line="2141"/>
-        <source>N/A</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -633,7 +633,7 @@ All rights reserved.</source>
     </message>
     <message>
         <location filename="../../blink/chatwindow.py" line="2965"/>
-        <source>&lt;p&gt;Traffic: &lt;span style=&quot;font-family: sans-serif; color: #d70000;&quot;&gt;u2193&lt;/span&gt; %s &lt;span style=&quot;font-family: sans-serif; color: #0064d7;&quot;&gt;u2191&lt;/span&gt; %s&lt;/p&gt;</source>
+        <source>&lt;p&gt;Traffic: &lt;span style=&quot;font-family: sans-serif; color: #d70000;&quot;&gt;%s&lt;/span&gt; %s &lt;span style=&quot;font-family: sans-serif; color: #0064d7;&quot;&gt;%s&lt;/span&gt; %s&lt;/p&gt;</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -3100,7 +3100,7 @@ Audio with verified ZRTP is needed for the SMP verification to be available.</so
     </message>
     <message>
         <location filename="../preferences.ui" line="3625"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Clicke to enable verification of peer certificate. Yoiu can set the name to be verified in Advanced SIP account settings&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Click to enable verification of peer certificate. You can set the name to be verified in Advanced SIP account settings&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
