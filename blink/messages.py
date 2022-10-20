@@ -751,7 +751,7 @@ class MessageManager(object, metaclass=Singleton):
         else:
             try:
                 data = r.json()
-            except json.JSONDecodeError:
+            except ValueError:
                 pass
             else:
                 notification_center = NotificationCenter()
