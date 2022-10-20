@@ -17,7 +17,7 @@ Supported features between the different clients
 | **PGP encryption/decryption** |          ✓          |         ✓        |       ✓      |          ✓          |        ✓       |       ✓       |       ✓       |
 |            **PGP key lookup** |          ✓          |         ✓        |       ✓      |          ✓          |        ✓       |       ✓       |       ✓       |
 |     **PGP key import/export** |          ✓          |         ✓        |       ✓      |          ✓          |        ✓       |       ✓       |       ✓       |
-|                           OTR |          ✓          |         ✓        |       ✕      |          ✕          |        ✕       |       ✕       |       ✕       |
+|                       **OTR** |          ✓          |         ✓        |       ✕      |          ✕          |        ✕       |       ✕       |       ✕       |
 |                   **History** |          ✓          |         ✓        |       ✓      |          ✓          |        ✓       |       ✓       |       ✓       |
 |       **History replication** |          ✓          |         ✓        |       ✓      |          ✓          |        ✓       |       ✓       |       ✓       |
 |                      **IMDN** |          ✓          |         ✓        |       ✓      |          ✓          |        ✓       |       ✓       |       ✓       |
