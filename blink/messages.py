@@ -695,6 +695,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message, account=account))
 
     def _request_history_synchronization_token(self, account):
+        log.debug('Requesting SylkServer API token')
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(account.uri)
         outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token')
@@ -741,6 +742,7 @@ class MessageManager(object, metaclass=Singleton):
         except requests.HTTPError as e:
             code = e.response.status_code
             if code == 401:
+                log.debug('SylkServer API token expired')
                 self._request_history_synchronization_token(account)
                 return
             log.warning(f'SylkServer API error {e}')
