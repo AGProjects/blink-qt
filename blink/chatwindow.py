@@ -1230,10 +1230,10 @@ class VideoWidget(VideoSurface, ui_class):
         if ideal_geometry.bottom() > self.rect().bottom():
             ideal_geometry.moveBottom(self.rect().bottom())
 
-        new_height = limit((new_size.height() + 117) / 6 * self.camera_preview.scale_factor, min=self.camera_preview.minimumHeight(), max=self.camera_preview.maximumHeight())
+        new_height = int(limit((new_size.height() + 117) / 6 * self.camera_preview.scale_factor, min=self.camera_preview.minimumHeight(), max=self.camera_preview.maximumHeight()))
         preview_geometry = QRect(0, 0, self.width_for_height(new_height), new_height)
 
-        quadrant = QRectF(QPointF(0, 0), new_size / 3)
+        quadrant = QRectF(QPointF(0, 0), int(new_size / 3))
 
         if quadrant.translated(0, 0).contains(preview_center):                                      # top left gravity
             preview_geometry.moveTopLeft(ideal_geometry.topLeft())
