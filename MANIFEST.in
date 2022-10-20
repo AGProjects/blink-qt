@@ -6,6 +6,8 @@ include MANIFEST.in
 include build_inplace
 include bin/blink
 include run
+include generate_translations
+include release_translations
 
 include debian/blink.1
 include debian/blink.desktop
@@ -19,6 +21,8 @@ include debian/control
 include debian/copyright
 include debian/rules
 include debian/source/format
+
+graft docs
 
 recursive-include blink *.pyx
 recursive-exclude blink *.c
