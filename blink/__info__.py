@@ -7,7 +7,7 @@ __webpage__ = "https://icanblink.com/"
 
 __version__ = "5.5.0"
 
-__date__ = "October 19th, 2022"
+__date__ = "October 21th, 2022"
 
 __author__ = "AG Projects"
 __email__ = "support@ag-projects.com"

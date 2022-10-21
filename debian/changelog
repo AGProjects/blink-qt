@@ -4,8 +4,11 @@ blink (5.5.0) unstable; urgency=medium
   * Added Dutch translation
   * Added documentation folder doc/
   * Added messaging notes
+  * Improved python 3.10 compatibility
+  * Added more logging
+  * Fixed opening last coversations multiple times
 
- -- Adrian Georgescu <ag@ag-projects.com>  Wed, 19 Oct 2022 09:57:57 -0300
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Fri, 21 Oct 2022 13:49:39 +0200
 
 blink (5.4.0) unstable; urgency=medium
 
