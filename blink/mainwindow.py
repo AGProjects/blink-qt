@@ -177,12 +177,12 @@ class MainWindow(base_class, ui_class):
         self.about_action.triggered.connect(self.about_panel.show)
         self.add_account_action.triggered.connect(self.preferences_window.show_add_account_dialog)
         self.manage_accounts_action.triggered.connect(self.preferences_window.show_for_accounts)
-        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('http://icanblink.com/help/')))
+        self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('https://icanblink.com/help/manual-qt/')))
         self.preferences_action.triggered.connect(self.preferences_window.show)
         self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatActionTriggered)
         self.received_messages_sound_action.triggered.connect(self._AH_ReceivedMessagesSoundActionTriggered)
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineActionTriggered)
-        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('http://icanblink.com/changelog/')))
+        self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('https://icanblink.com/changelog-linux/')))
         self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
 
         # Call menu actions
