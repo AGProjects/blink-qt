@@ -4819,7 +4819,7 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
 
     def editorEvent(self, event, model, option, index):
         if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
-            cross_rect = option.rect.adjusted(option.rect.width() - 14, 0, 0, -option.rect.height() / 2)  # top half of the rightmost 14 pixels
+            cross_rect = option.rect.adjusted(int(option.rect.width()) - 14, 0, 0, int(-option.rect.height() / 2))  # top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
                 item = index.data(Qt.UserRole)
                 model.session.server_conference.remove_participant(item.participant)
@@ -4882,12 +4882,12 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.translate(+1.5, +1)
         painter.translate(0, +1)
         painter.setPen(contrast_pen)
-        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
-        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.drawLine(-3, -3, 3, 3)
+        painter.drawLine(-3, 3, 3, -3)
         painter.translate(0, -1)
         painter.setPen(pen)
-        painter.drawLine(-3.5, -3.5, 3.5, 3.5)
-        painter.drawLine(-3.5, 3.5, 3.5, -3.5)
+        painter.drawLine(-3, -3, 3, 3)
+        painter.drawLine(-3, 3, 3, -3)
         painter.restore()
 
     def sizeHint(self, option, index):

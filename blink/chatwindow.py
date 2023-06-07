@@ -2174,7 +2174,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self._EH_ShowSessions()
         elif watched is self.state_label:
             if event_type == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
-                upper_half = QRect(0, 0, int(self.state_label.width()), int(self.state_label.height()/2))
+                upper_half = QRect(0, 0, int(self.state_label.width()), int(self.state_label.height() / 2))
                 if upper_half.contains(event.pos()):
                     self._EH_CloseSession()
                 else:
