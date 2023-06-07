@@ -687,7 +687,7 @@ class MessageManager(object, metaclass=Singleton):
         if account is session.account:
             notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
 
-        if message is not None and message.direction != 'outgoing' and 'positive-delivery' in message.disposition:
+        if message is not None and message.direction != 'outgoing' and message.disposition is not None and 'positive-delivery' in message.disposition:
             log.debug("-- Should send delivered imdn for incoming message")
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
