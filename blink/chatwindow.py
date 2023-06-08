@@ -2455,7 +2455,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         encrypted = False
         if message.content_type.startswith('image/'):
-            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
+            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.rstrip())
         elif message.content_type.startswith('text/'):
             if MessageManager().check_encryption(message.content_type, message.content) == 'OpenPGP':
                 content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
@@ -2614,7 +2614,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         for message in messages:
             encrypted = False
             if message.content_type.startswith('image/'):
-                content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
+                content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.rstrip())
             elif message.content_type.startswith('text/'):
                 if MessageManager().check_encryption(message.content_type, message.content) == 'OpenPGP':
                     content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
@@ -2700,7 +2700,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         message = notification.data.message
 
         if message.content_type.startswith('image/'):
-            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.decode('base64').rstrip())
+            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, img_content.decode().rstrip())
         elif message.content_type.startswith('text/'):
             content = message.content
             content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
