@@ -2587,7 +2587,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_MessageStreamPGPKeysDidLoad(self, notification):
         stream = notification.sender
         blink_session = stream.blink_session
-        session = blink_session.items.chat
+        try:
+            session = blink_session.items.chat
+        except AttributeError:
+            return
 
         if session is None:
             return
