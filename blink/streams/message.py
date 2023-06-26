@@ -2,7 +2,7 @@ import os
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
-from application.system import makedirs
+from application.system import makedirs, unlink, openfile, FileExistsError
 
 from otr import OTRTransport
 from otr.exceptions import IgnoreMessage, UnencryptedMessage, EncryptedMessageError, OTRError, OTRFinishedError
@@ -20,7 +20,7 @@ from pgpy.errors import PGPError, PGPDecryptionError
 from pgpy.constants import PubKeyAlgorithm, KeyFlags, HashAlgorithm, SymmetricKeyAlgorithm, CompressionAlgorithm
 
 from blink.logging import MessagingTrace as log
-from blink.util import run_in_gui_thread
+from blink.util import run_in_gui_thread, UniqueFilenameGenerator
 
 
 __all__ = ['MessageStream']
@@ -273,6 +273,73 @@ class MessageStream(object, metaclass=MediaStreamType):
 
         log.warning(f'-- Decryption failed for {msg_id}, error: {error}')
         notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=error))
+
+    @run_in_thread('pgp')
+    def encrypt_file(self, filename, transfer_session):
+        session = self.blink_session
+        notification_center = NotificationCenter()
+        pgp_message = PGPMessage.new(filename, file=True, compression=CompressionAlgorithm.Uncompressed)
+        cipher = SymmetricKeyAlgorithm.AES256
+
+        sessionkey = cipher.gen_key()
+        encrypted_content = self.public_key.encrypt(pgp_message, cipher=cipher, sessionkey=sessionkey)
+        encrypted_content = self.remote_public_key.encrypt(encrypted_content, cipher=cipher, sessionkey=sessionkey)
+        del sessionkey
+        notification_center.post_notification('PGPFileDidEncrypt', sender=session, data=NotificationData(filename=f'{filename}.asc', contents=encrypted_content))
+
+    @run_in_thread('pgp')
+    def decrypt_file(self, filename, transfer_session):
+        session = self.blink_session
+        notification_center = NotificationCenter()
+
+        if self.private_key is None and len(self.other_private_keys) == 0:
+            notification_center.post_notification('PGPFileDidNotDecrypt', sender=session, data=NotificationData(filename=filename, error="No private keys found"))
+            return
+
+        log.info(f'Trying to decrypt file {filename}')
+
+        try:
+            pgpMessage = PGPMessage.from_file(filename)
+        except (ValueError) as e:
+            log.warning(f'Decryption failed for {filename}, this is not a PGP File, error: {e}')
+            return
+
+        key_list = [(session.account, self.private_key)] if self.private_key is not None else []
+        key_list.extend(self.other_private_keys)
+
+        error = None
+        for (account, key) in key_list:
+            try:
+                decrypted_message = key.decrypt(pgpMessage)
+            except (PGPDecryptionError, PGPError) as e:
+                error = e
+                log.debug(f'-- Decryption failed for {filename} with account key {account.id}, error: {error}')
+                continue
+            else:
+                log.info(f'File decrypted: {decrypted_message.filename}')
+                dir = os.path.dirname(filename)
+                full_decrypted_filepath = os.path.join(dir, decrypted_message.filename)
+                file_contents = decrypted_message.message if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode()
+
+                for name in UniqueFilenameGenerator.generate(full_decrypted_filepath):
+                    try:
+                        openfile(name, 'xb')
+                    except FileExistsError:
+                        continue
+                    else:
+                        full_decrypted_filepath = name
+                        break
+
+                with open(full_decrypted_filepath, 'wb+') as output_file:
+                    output_file.write(file_contents)
+                log.info(f'File saved: {full_decrypted_filepath}')
+                unlink(filename)
+
+                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=full_decrypted_filepath, account=account, id=transfer_session.id))
+                return
+
+        log.warning(f'-- Decryption failed for {filename}, error: {error}')
+        notification_center.post_notification('PGPFileDidNotDecrypt', sender=transfer_session, data=NotificationData(filename=filename, error=error))
 
     @run_in_gui_thread
     def handle_notification(self, notification):
