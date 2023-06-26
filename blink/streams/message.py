@@ -262,7 +262,8 @@ class MessageStream(object, metaclass=MediaStreamType):
         for (account, key) in key_list:
             try:
                 decrypted_message = key.decrypt(pgpMessage)
-            except (PGPDecryptionError, PGPError) as error:
+            except (PGPDecryptionError, PGPError) as e:
+                error = e
                 log.debug(f'-- Decryption failed for {msg_id} with account key {account.id}, error: {error}')
                 continue
             else:
