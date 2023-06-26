@@ -5,18 +5,29 @@ from application.python.decorator import decorator, preserve_signature
 from application.python.descriptor import classproperty
 from application.python.types import Singleton
 from functools import partial
+from itertools import count
 from threading import Event
 from sys import exc_info
 
 from blink.event import CallFunctionEvent
 
 
-__all__ = ['QSingleton', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread', 'translate']
+__all__ = ['QSingleton', 'UniqueFilenameGenerator', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread', 'translate']
 
 translate = QCoreApplication.translate
 
+
 class QSingleton(Singleton, type(QObject)):
     """A metaclass for making Qt objects singletons"""
+
+
+class UniqueFilenameGenerator(object):
+    @classmethod
+    def generate(cls, name):
+        yield name
+        prefix, extension = os.path.splitext(name)
+        for x in count(1):
+            yield "%s-%d%s" % (prefix, x, extension)
 
 
 def call_later(interval, function, *args, **kw):
