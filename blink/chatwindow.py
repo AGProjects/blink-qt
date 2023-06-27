@@ -908,11 +908,11 @@ class ChatWidget(base_class, ui_class):
             self.chat_input.setHtml(user_text)
 
     def _SH_ChatViewSizeChanged(self):
-        # print "chat view size changed"
+        # print("chat view size changed")
         self._align_chat(scroll=True)
 
     def _SH_ChatViewFrameContentsSizeChanged(self, size):
-        # print "frame contents size changed to %r (current=%r)" % (size, self.chat_view.page().mainFrame().contentsSize())
+        # print("frame contents size changed to %r (current=%r)" % (size, self.chat_view.page().mainFrame().contentsSize()))
         self._align_chat(scroll=True)
 
     def _SH_ChatInputTextChanged(self):
