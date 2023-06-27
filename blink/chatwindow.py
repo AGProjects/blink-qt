@@ -12,6 +12,7 @@ from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWebKit import QWebSettings
 from PyQt5.QtWebKitWidgets import QWebPage, QWebView
 from PyQt5.QtWidgets import QApplication, QAction, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
+from PyQt5.QtWidgets import QFileDialog
 
 from abc import ABCMeta, abstractmethod
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy, NotificationData
@@ -1745,6 +1746,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.remove_video = QAction(translate('chat_window', "Remove video"), self, triggered=self._AH_RemoveVideo)
         self.control_button.actions.add_chat = QAction(translate('chat_window', "Add real time chat"), self, triggered=self._AH_AddChat)
         self.control_button.actions.remove_chat = QAction(translate('chat_window', "Remove real time chat"), self, triggered=self._AH_RemoveChat)
+        self.control_button.actions.send_files = QAction(translate("chat_window", "Send File(s)..."), self, triggered=self._AH_SendFiles)
         self.control_button.actions.share_my_screen = QAction(translate('chat_window', "Share my screen"), self, triggered=self._AH_ShareMyScreen)
         self.control_button.actions.request_screen = QAction(translate('chat_window', "Request screen"), self, triggered=self._AH_RequestScreen)
         self.control_button.actions.end_screen_sharing = QAction(translate('chat_window', "End screen sharing"), self, triggered=self._AH_EndScreenSharing)
@@ -1912,6 +1914,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.share_my_screen)
                     elif stream_types != {'screen-sharing'}:
                         menu.addAction(self.control_button.actions.end_screen_sharing)
+            menu.addAction(self.control_button.actions.send_files)
             self.control_button.setMenu(menu)
 
     def _update_panel_buttons(self):
@@ -3014,6 +3017,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _AH_EndScreenSharing(self):
         self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('screen-sharing'))
+
+    def _AH_SendFiles(self, uri=None):
+        session_manager = SessionManager()
+        contact = self.selected_session.blink_session.contact
+        selected_uri = uri or contact.uri
+        for filename in QFileDialog.getOpenFileNames(self, translate('chat_window', 'Select File(s)'), session_manager.send_file_directory, 'Any file (*.*)')[0]:
+            session_manager.send_file(contact, selected_uri, filename)
 
     def _AH_EnableOTR(self, action):
         self.selected_session.chat_widget.start_otr_timer()
