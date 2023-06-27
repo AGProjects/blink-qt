@@ -26,6 +26,7 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
 from application.python.weakref import weakobjectmap, defaultweakobjectmap
+from application.system import makedirs
 from eventlib.proc import spawn
 from zope.interface import implementer
 
@@ -3924,6 +3925,8 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         self.file_selector = None
         self.handler = None
+        self.transfer_type = 'push'
+        self.conference_file = True
 
         # used for outgoing transfers
         self._uri = None
@@ -3995,6 +3998,28 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         self.file_selector = FileSelector.for_file(filename)
         self._stat = os.fstat(self.file_selector.fd.fileno())
+
+        self.state = 'initialized'
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkFileTransferNewOutgoing', self)
+
+
+    def init_outgoing_pull(self, account, contact, contact_uri, filename, hash, transfer_id=RandomID, conference_file=True):
+        assert self.state is None
+        self.transfer_type = 'pull'
+        self.direction = 'outgoing'
+
+        self.conference_file = conference_file
+
+        self.id = transfer_id if transfer_id is not RandomID else str(uuid.uuid4())
+
+        self.account = account
+        self.contact = contact
+        self.contact_uri = contact_uri
+
+        self._uri = self._normalize_uri(contact_uri.uri)
+
+        self.file_selector = FileSelector(name=os.path.basename(filename), hash=hash)
 
         self.state = 'initialized'
         notification_center = NotificationCenter()
@@ -4149,6 +4174,9 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.routes = routes
         self.sip_session = Session(self.account)
         self.stream = MediaStreamRegistry.FileTransferStream(self.file_selector, 'sendonly', transfer_id=self.id)
+
+        if self.transfer_type == 'pull':
+            self.stream = MediaStreamRegistry.FileTransferStream(self.file_selector, 'recvonly', transfer_id=self.id)
         self.handler = self.stream.handler
         self.sip_session.connect(ToHeader(self._uri), routes, [self.stream])
 
@@ -5765,6 +5793,20 @@ class SessionManager(object, metaclass=Singleton):
 
         transfer = BlinkFileTransfer()
         transfer.init_outgoing(account, contact, contact_uri, filename, transfer_id)
+        transfer.connect()
+        return transfer
+
+    def get_file(self, contact, contact_uri, filename, hash, transfer_id=RandomID, account=None, conference_file=True):
+        if account is None:
+            if contact.type == 'bonjour':
+                account = BonjourAccount()
+            else:
+                account = AccountManager().default_account
+
+        self.send_file_directory = os.path.dirname(filename)
+
+        transfer = BlinkFileTransfer()
+        transfer.init_outgoing_pull(account, contact, contact_uri, filename, hash, transfer_id, conference_file)
         transfer.connect()
         return transfer
 
