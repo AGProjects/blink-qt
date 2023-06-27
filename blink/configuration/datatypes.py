@@ -8,11 +8,12 @@ from urllib.parse import urlparse
 
 from application.python.types import MarkerType
 from sipsimple.configuration.datatypes import Hostname, List
+from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.resources import ApplicationData
 
 
-__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'IconDescriptor', 'PresenceState', 'PresenceStateList', 'GraphTimeScale']
+__all__ = ['ApplicationDataPath', 'DefaultPath', 'SoundFile', 'CustomSoundFile', 'HTTPURL', 'FileURL', 'IconDescriptor', 'PresenceState', 'PresenceStateList', 'GraphTimeScale', 'File']
 
 
 class ApplicationDataPath(str):
@@ -211,3 +212,38 @@ class GraphTimeScale(int):
         return value
 
 
+class File(object):
+    def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None):
+        self.name = os.path.join(SIPSimpleSettings().file_transfer.directory.normalized, name)
+        if type is not None and type.startswith('image/'):
+            self.name = os.path.join(ApplicationData.get('transfer_images'), id, name)
+        self.original_name = self.name
+        self.size = size
+        self.contact = sender
+        self.hash = hash
+        self.id = id
+        self.until = until
+        self.url = url
+        self.type = type
+
+    @property
+    def encrypted(self):
+        return self.original_name.endswith('.asc')
+
+    @property
+    def decrypted_filename(self):
+        if self.name.endswith('.asc'):
+            return self.name.rsplit('.', 1)[0]
+        return self.name
+
+    @property
+    def already_exists(self):
+        if os.path.exists(self.decrypted_filename):
+            return True
+
+        for number in range(self.decrypted_filename.count("_")):
+            if os.path.exists(self.decrypted_filename.replace('_', ' ', number)):
+                self.name = self.decrypted_filename.replace('_', ' ', number)
+                return True
+
+        return False
