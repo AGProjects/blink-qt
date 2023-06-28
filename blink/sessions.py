@@ -17,9 +17,9 @@ from operator import attrgetter
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QAbstractListModel, QEasingCurve, QModelIndex, QObject, QProcess, QPropertyAnimation, pyqtSignal
-from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl
+from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl, QFileInfo
 from PyQt5.QtGui import QBrush, QColor, QDesktopServices, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
-from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QListView, QMenu, QShortcut, QStyle, QStyledItemDelegate, QStyleOption
+from PyQt5.QtWidgets import QApplication, QAction, QDialog, QLabel, QListView, QMenu, QShortcut, QStyle, QStyledItemDelegate, QStyleOption, QFileIconProvider
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -47,7 +47,7 @@ from sipsimple.threading import run_in_thread, run_in_twisted_thread
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
-from blink.util import call_later, run_in_gui_thread, translate
+from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status
 from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key
@@ -3173,6 +3173,7 @@ class ChatSessionItem(object):
         self.remote_composing_timer = QTimer()
         self.remote_composing_timer.timeout.connect(self._SH_RemoteComposingTimerTimeout)
         self.participants_model = ConferenceParticipantModel(blink_session)
+        self.files_model = FileListModel(blink_session)
         self.widget = ChatSessionWidget(None)
         self.widget.update_content(self)
         notification_center = NotificationCenter()
@@ -4758,6 +4759,452 @@ class FileTransferModel(QAbstractListModel):
         self.beginResetModel()
         self.items = self.history.load()
         self.endResetModel()
+
+
+ui_class, base_class = uic.loadUiType(Resources.get('filelist_item.ui'))
+
+
+# Chat file list
+
+class FileListItemWidget(base_class, ui_class):
+    class StandardDisplayMode(metaclass=MarkerType):  pass
+    class AlternateDisplayMode(metaclass=MarkerType): pass
+    class SelectedDisplayMode(metaclass=MarkerType):  pass
+
+    def __init__(self, parent=None):
+        super(FileListItemWidget, self).__init__(parent)
+        with Resources.directory:
+            self.setupUi(self)
+        self.palettes = Container()
+        self.palettes.standard = self.palette()
+        self.palettes.alternate = self.palette()
+        self.palettes.selected = self.palette()
+        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+
+        self.pixmaps = Container()
+        self.pixmaps.encrypted_transfer = QPixmap(Resources.get('icons/lock-green-18.svg'))
+
+        self.display_mode = self.StandardDisplayMode
+
+        self.widget_layout.invalidate()
+        self.widget_layout.activate()
+
+    def _get_display_mode(self):
+        return self.__dict__['display_mode']
+
+    def _set_display_mode(self, value):
+        if value not in (self.StandardDisplayMode, self.AlternateDisplayMode, self.SelectedDisplayMode):
+            raise ValueError("invalid display_mode: %r" % value)
+        old_mode = self.__dict__.get('display_mode', None)
+        new_mode = self.__dict__['display_mode'] = value
+        if new_mode == old_mode:
+            return
+        if new_mode is self.StandardDisplayMode:
+            self.setPalette(self.palettes.standard)
+            self.state_indicator.setForegroundRole(QPalette.WindowText)
+            self.filename_label.setForegroundRole(QPalette.WindowText)
+            self.name_label.setForegroundRole(QPalette.Dark)
+            self.status_label.setForegroundRole(QPalette.Dark)
+            self.filesize_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.AlternateDisplayMode:
+            self.setPalette(self.palettes.alternate)
+            self.state_indicator.setForegroundRole(QPalette.WindowText)
+            self.filename_label.setForegroundRole(QPalette.WindowText)
+            self.name_label.setForegroundRole(QPalette.Dark)
+            self.status_label.setForegroundRole(QPalette.Dark)
+            self.filesize_label.setForegroundRole(QPalette.Dark)
+        elif new_mode is self.SelectedDisplayMode:
+            self.setPalette(self.palettes.selected)
+            self.state_indicator.setForegroundRole(QPalette.HighlightedText)
+            self.filename_label.setForegroundRole(QPalette.HighlightedText)
+            self.name_label.setForegroundRole(QPalette.HighlightedText)
+            self.status_label.setForegroundRole(QPalette.HighlightedText)
+            self.filesize_label.setForegroundRole(QPalette.HighlightedText)
+
+    display_mode = property(_get_display_mode, _set_display_mode)
+    del _get_display_mode, _set_display_mode
+
+    def update_content(self, item, initial=False):
+        if initial:
+            if item.direction == 'outgoing':
+                self.name_label.setText('To: ' + item.name)
+            else:
+                self.name_label.setText('From: ' + item.name)
+        icon = QFileIconProvider().icon(QFileInfo(item.decrypted_filename))
+
+        self.icon_label.setPixmap(icon.pixmap(64))
+        self.filename_label.setText(os.path.basename(item.decrypted_filename))
+        self.filesize_label.setText('%s' % FileSizeFormatter.format(item.size))
+        if item.encrypted:
+            self.state_indicator.setPixmap(self.pixmaps.encrypted_transfer)
+        if item.until is not None:
+            self.status_label.setText(translate('chat_window', "Expiry: %s" % item.until.strftime('%d %b %Y %H:%M')))
+        else:
+            self.status_label.setVisible(False)
+
+
+del ui_class, base_class
+
+
+@implementer(IObserver)
+class FileListItem(object):
+
+    def __init__(self, file, direction="incoming", id=None, conference_file=False):
+        self.file = file
+        self._direction = direction
+        self._id = id
+        self.in_conference = conference_file
+
+        self.status = None
+        self.progress = None
+        self.bytes = 0
+        self.total_bytes = 0
+
+        self.widget = FileListItemWidget()
+        self.widget.update_content(self, initial=True)
+
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['widget']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.widget = FileListItemWidget()
+        self.widget.update_content(self, initial=True)
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, self.file)
+
+    def __eq__(self, other):
+        try:
+            return self.id == other.id
+        except AttributeError:
+            return self.id == other
+
+    @property
+    def direction(self):
+        return self._direction
+
+    @property
+    def filename(self):
+        return self.file.name or ''
+
+    @property
+    def name(self):
+        return self.file.contact.name or self.file.contact_uri.uri
+
+    @property
+    def size(self):
+        return self.file.size
+
+    @property
+    def hash(self):
+        return self.file.hash
+
+    @property
+    def encrypted(self):
+        return self.file.encrypted
+
+    @property
+    def until(self):
+        return self.file.until or ''
+
+    @property
+    def decrypted_filename(self):
+        return self.file.decrypted_filename
+
+    @property
+    def already_exists(self):
+        return self.file.already_exists
+
+    @property
+    def id(self):
+        try:
+            return self.file.id
+        except AttributeError:
+            return self.id
+
+
+@implementer(IObserver)
+class FileListModel(QAbstractListModel):
+
+    itemAboutToBeAdded = pyqtSignal(FileListItem)
+    itemAboutToBeRemoved = pyqtSignal(FileListItem)
+    itemAdded = pyqtSignal(FileListItem)
+    itemRemoved = pyqtSignal(FileListItem)
+
+    def __init__(self, session, parent=None):
+        super(FileListModel, self).__init__(parent)
+        self.session = session
+        self.items = []
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkSessionDidShareFile')
+        notification_center.add_observer(self, name='BlinkSessionShouldDownloadFile')
+        notification_center.add_observer(self, name='BlinkMessageWillRemove')
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+
+    @property
+    def ended_items(self):
+        return [item for item in self.items if item.ended]
+
+    def clear_ended(self):
+        with self.history.transaction():
+            for item in self.ended_items:
+                self.removeItem(item)
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self.items)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        item = self.items[index.row()]
+        if role == Qt.UserRole:
+            return item
+        elif role == Qt.SizeHintRole:
+            return item.widget.sizeHint()
+        elif role == Qt.DisplayRole:
+            return str(item)
+        return None
+
+    def addItem(self, item):
+        if item in self.items:
+            return
+        self.itemAboutToBeAdded.emit(item)
+        self.beginInsertRows(QModelIndex(), 0, 0)
+        self.items.insert(0, item)
+        self.endInsertRows()
+        self.itemAdded.emit(item)
+
+    def removeItem(self, id):
+        if id not in self.items:
+            return
+        item = [item for item in self.items if item.id == id][0]
+        self.itemAboutToBeRemoved.emit(item)
+        position = self.items.index(item)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.items[position]
+        self.endRemoveRows()
+        self.itemRemoved.emit(item)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkMessageWillRemove(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+
+        if session is None:
+            return
+        session = notification.sender
+
+        self.removeItem(notification.data)
+
+    def _NH_BlinkSessionDidShareFile(self, notification):
+        if session.remote_focus:
+            self.addItem(FileListItem(notification.data.fiile, direction=notification.data.direction, conference_file=True))
+            return
+        self.addItem(FileListItem(notification.data.file, direction=notification.data.direction))
+
+    def _NH_BlinkSessionShouldDownloadFile(self, notification):
+        session = notification.sender
+        id = notification.data.id
+        if id in self.items:
+            item = [item for item in self.items if item.id == id][0]
+            if not item.hash:
+                MessageManager().get_file_from_url(session, item.file)
+                return
+            SessionManager().get_file(session.contact, session.contact_uri, item.original_filename, item.hash, item.id, account=session.account)
+
+    def _NH_BlinkFileTransferNewIncoming(self, notification):
+        transfer = notification.sender
+        with self.history.transaction():
+            for item in (item for item in self.items if item.failed and item.direction == 'incoming'):
+                if item.transfer.contact == transfer.contact and item.transfer.hash == transfer.hash:
+                    self.removeItem(item)
+                    break
+            self.addItem(FileTransferItem(transfer))
+
+    def _NH_BlinkFileTransferNewOutgoing(self, notification):
+        self.addItem(FileTransferItem(notification.sender))
+
+    def _NH_FileTransferItemDidChange(self, notification):
+        index = self.index(self.items.index(notification.sender))
+        self.dataChanged.emit(index, index)
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        self.beginResetModel()
+        self.items = self.history.load()
+        self.endResetModel()
+
+
+class FileListDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(FileListDelegate, self).__init__(parent)
+
+    def editorEvent(self, event, model, option, index):
+        if event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
+            item = index.data(Qt.UserRole)
+            if item.already_exists:
+                directory = SIPSimpleSettings().file_transfer.directory.normalized
+                link = copy_transfer_file(QUrl.fromLocalFile(item.decrypted_filename), directory)
+                QDesktopServices.openUrl(link)
+                return True
+
+            if not item.hash:
+                MessageManager().get_file_from_url(model.session, item.file)
+                return True
+            SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=model.session.account)
+            return True
+        return super(FileListDelegate, self).editorEvent(event, model, option, index)
+
+    def paint(self, painter, option, index):
+        item = index.data(Qt.UserRole)
+        if option.state & QStyle.State_Selected:
+            item.widget.display_mode = item.widget.SelectedDisplayMode
+        elif index.row() % 2 == 0:
+            item.widget.display_mode = item.widget.StandardDisplayMode
+        else:
+            item.widget.display_mode = item.widget.AlternateDisplayMode
+
+        item.widget.setFixedSize(option.rect.size())
+        painter.drawPixmap(option.rect, item.widget.grab())
+
+    def sizeHint(self, option, index):
+        return index.data(Qt.SizeHintRole)
+
+class FileListView(QListView, ColorHelperMixin):
+    def __init__(self, parent=None):
+        super(FileListView, self).__init__(parent)
+        self.setItemDelegate(FileListDelegate(self))
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.context_menu = QMenu(self)
+        self.actions = ContextMenuActions()
+        self.actions.open_file = QAction(translate('filelist_view', "Open"), self, triggered=self._AH_OpenFile)
+        self.actions.open_downloads_folder = QAction(translate('filelist_view', "Open Transfers Folder"), self, triggered=self._AH_OpenTransfersFolder)
+        self.actions.remove_file = QAction(translate('filelist_view', "Remove File"), self, triggered=self._AH_RemoveFile)
+        self.paint_drop_indicator = False
+
+    def setModel(self, model):
+        selection_model = self.selectionModel()
+        if selection_model is not None:
+            selection_model.deleteLater()
+        super(FileListView, self).setModel(model)
+
+    def contextMenuEvent(self, event):
+        menu = self.context_menu
+        index = self.indexAt(event.pos())
+        if index.isValid():
+            item = index.data(Qt.UserRole)
+            menu.addAction(self.actions.open_file)
+            menu.addAction(self.actions.open_downloads_folder)
+            if not item.in_conference:
+                menu.addAction(self.actions.remove_file)
+        menu.exec_(self.mapToGlobal(event.pos()))
+
+    def hideEvent(self, event):
+        self.context_menu.hide()
+
+    def paintEvent(self, event):
+        super(FileListView, self).paintEvent(event)
+        if self.paint_drop_indicator:
+            rect = self.viewport().rect()  # or should this be self.contentsRect() ? -Dan
+            # color = QColor('#b91959')
+            # color = QColor('#00aaff')
+            # color = QColor('#55aaff')
+            # color = QColor('#00aa00')
+            # color = QColor('#aa007f')
+            # color = QColor('#dd44aa')
+            color = QColor('#aa007f')
+            pen_color = self.color_with_alpha(color, 120)
+            brush_color = self.color_with_alpha(color, 10)
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setBrush(brush_color)
+            painter.setPen(QPen(pen_color, 1.6))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            painter.end()
+
+    def dragEnterEvent(self, event):
+        model = self.model()
+        accepted_mime_types = set(model.accepted_mime_types)
+        provided_mime_types = set(event.mimeData().formats())
+        acceptable_mime_types = accepted_mime_types & provided_mime_types
+        if not acceptable_mime_types:
+            event.ignore()
+        else:
+            event.accept()
+
+    def dragLeaveEvent(self, event):
+        super(ConferenceParticipantListView, self).dragLeaveEvent(event)
+        self.paint_drop_indicator = False
+        self.viewport().update()
+
+    def dragMoveEvent(self, event):
+        super(ConferenceParticipantListView, self).dragMoveEvent(event)
+
+        model = self.model()
+        mime_data = event.mimeData()
+
+        for mime_type in model.accepted_mime_types:
+            if mime_data.hasFormat(mime_type):
+                handler = getattr(self, '_DH_%s' % mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', ''))
+                handler(event)
+                self.viewport().update()
+                break
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        model = self.model()
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.accept()
+        super(ConferenceParticipantListView, self).dropEvent(event)
+        self.paint_drop_indicator = False
+        self.viewport().update()
+
+    def _DH_ApplicationXBlinkContactList(self, event):
+        event.accept(self.viewport().rect())
+        self.paint_drop_indicator = True
+
+    def _DH_ApplicationXBlinkContactUriList(self, event):
+        event.accept(self.viewport().rect())
+        self.paint_drop_indicator = True
+
+    def _DH_TextUriList(self, event):
+        event.ignore(self.viewport().rect())
+        # event.accept(self.viewport().rect())
+        # self.paint_drop_indicator = True
+
+    def _AH_OpenFile(self):
+        item = self.selectedIndexes()[0].data(Qt.UserRole)
+        model = self.model()
+        if item.already_exists:
+            directory = SIPSimpleSettings().file_transfer.directory.normalized
+            link = copy_transfer_file(QUrl.fromLocalFile(item.decrypted_filename), directory)
+            QDesktopServices.openUrl(link)
+            return True
+
+        if not item.hash:
+            MessageManager().get_file_from_url(model.session, item.file)
+            return True
+        SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=model.session.account)
+
+    def _AH_RemoveFile(self):
+        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
+        self.model.removeItem(item)
+
+    def _AH_OpenTransfersFolder(self):
+        settings = BlinkSettings()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.transfers_directory.normalized))
+
 
 # Conference participants
 #
