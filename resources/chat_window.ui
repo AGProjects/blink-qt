@@ -843,7 +843,7 @@ QWidget {
                      </sizepolicy>
                     </property>
                     <property name="text">
-                     <string>Conference Files</string>
+                     <string>Files</string>
                     </property>
                     <property name="indent">
                      <number>3</number>
@@ -952,7 +952,7 @@ QToolButton:pressed {
                 </widget>
                </item>
                <item>
-                <widget class="QListView" name="files_list">
+                <widget class="FileListView" name="files_list">
                  <property name="styleSheet">
                   <string notr="true">QListView { border: 1px inset palette(dark); border-radius: 3px; }</string>
                  </property>
@@ -2310,7 +2310,12 @@ QToolButton:hover {
   <customwidget>
    <class>QWebView</class>
    <extends>QWidget</extends>
-   <header>QtWebKitWidgets/QWebView</header>
+   <header location="global">QtWebKitWidgets/QWebView</header>
+  </customwidget>
+  <customwidget>
+   <class>ElidedLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
   </customwidget>
   <customwidget>
    <class>DurationLabel</class>
@@ -2321,11 +2326,6 @@ QToolButton:hover {
    <class>ToolButton</class>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
-  </customwidget>
-  <customwidget>
-   <class>ElidedLabel</class>
-   <extends>QLabel</extends>
-   <header>blink.widgets.labels</header>
   </customwidget>
   <customwidget>
    <class>ContactState</class>
@@ -2356,6 +2356,11 @@ QToolButton:hover {
   </customwidget>
   <customwidget>
    <class>ConferenceParticipantListView</class>
+   <extends>QListView</extends>
+   <header>blink.sessions</header>
+  </customwidget>
+  <customwidget>
+   <class>FileListView</class>
    <extends>QListView</extends>
    <header>blink.sessions</header>
   </customwidget>
