@@ -1,6 +1,7 @@
 
 import bisect
 import pickle as pickle
+import os
 import re
 
 from PyQt5.QtGui import QIcon
@@ -8,7 +9,7 @@ from PyQt5.QtGui import QIcon
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from application.python.types import Singleton
-from application.system import makedirs
+from application.system import makedirs, unlink
 
 from datetime import date, timezone
 from dateutil.parser import parse
@@ -43,6 +44,7 @@ class HistoryManager(object, metaclass=Singleton):
     def __init__(self):
         self.calls = []
         self.message_history = MessageHistory()
+        self.download_history = DownloadHistory()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -64,6 +66,8 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkGotHistoryMessage')
         notification_center.add_observer(self, name='BlinkGotHistoryMessageRemove')
         notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
+        notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkDidFetchFile')
 
     @run_in_thread('file-io')
     def save(self):
@@ -75,6 +79,9 @@ class HistoryManager(object, metaclass=Singleton):
 
     def get_last_contacts(self, number=5):
         return self.message_history.get_last_contacts(number)
+
+    def get_decrypted_filename(self, file):
+        return self.download_history.get_decrypted_filename(file)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -164,6 +171,7 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkGotHistoryMessageRemove(self, notification):
         self.message_history.remove_message(notification.data)
+        self.download_history.remove(notification.data)
 
     def _NH_BlinkGotHistoryConversationRemove(self, notification):
         self.message_history.remove_contact_messages(notification.sender, notification.data)
@@ -189,6 +197,13 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_BlinkDidSendDispositionNotification(self, notification):
         data = notification.data
         self.message_history.update(data.id, data.status)
+
+    def _NH_BlinkFileTransferDidEnd(self, notification):
+        if not notification.data.error:
+            self.download_history.add(notification.sender)
+
+    def _NH_BlinkDidFetchFile(self, notification):
+        self.download_history.add_file(notification.sender, notification.data.file)
 
 
 class TableVersion(SQLObject):
@@ -216,6 +231,17 @@ class Message(SQLObject):
     remote_idx      = DatabaseIndex('remote_uri')
     id_idx          = DatabaseIndex('message_id')
     unq_idx         = DatabaseIndex(message_id, account_id, remote_uri, unique=True)
+
+
+class DownloadedFiles(SQLObject):
+    class sqlmeta:
+        table = 'downloaded_files'
+    file_id            = StringCol()
+    account_id         = UnicodeCol(length=128)
+    remote_uri         = UnicodeCol(length=128)
+    filename           = UnicodeCol()
+    id_idx             = DatabaseIndex('file_id')
+    unq_idx            = DatabaseIndex(file_id, filename, account_id, unique=True)
 
 
 class TableVersions(object, metaclass=Singleton):
@@ -267,6 +293,104 @@ class TableVersions(object, metaclass=Singleton):
         except Exception as e:
             pass
         self.__versions__[table] = version
+
+
+class DownloadHistory(object, metaclass=Singleton):
+    __version__ = 1
+    phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
+
+    def __init__(self):
+        db_file = ApplicationData.get('message_history.db')
+        db_uri = f'sqlite://{db_file}'
+        self._initialize(db_uri)
+
+    @run_in_thread('db')
+    def _initialize(self, db_uri):
+        self.db = connectionForURI(db_uri)
+        DownloadedFiles._connection = self.db
+        self.table_versions = TableVersions()
+
+        if not DownloadedFiles.tableExists():
+            try:
+                DownloadedFiles.createTable()
+            except Exception as e:
+                pass
+            else:
+                self.table_versions.set_version(DownloadedFiles.sqlmeta.table, self.__version__)
+        else:
+            self._check_table_version()
+
+    def _check_table_version(self):
+        pass
+
+    @classmethod
+    @run_in_thread('db')
+    def add(cls, session):
+        remote_uri = str(session.contact_uri.uri)
+        match = cls.phone_number_re.match(remote_uri)
+        if match:
+            remote_uri = match.group('number')
+        try:
+            DownloadedFiles(file_id=session.id,
+                            account_id=str(session.account.id),
+                            remote_uri=remote_uri,
+                            filename=session.file_selector.name)
+        except dberrors.DuplicateEntryError:
+            pass
+
+    @classmethod
+    @run_in_thread('db')
+    def add_file(cls, session, file):
+        remote_uri = str(session.contact_uri.uri)
+        match = cls.phone_number_re.match(remote_uri)
+        if match:
+            remote_uri = match.group('number')
+        try:
+            DownloadedFiles(file_id=file.id,
+                            account_id=str(session.account.id),
+                            remote_uri=remote_uri,
+                            filename=file.name)
+        except dberrors.DuplicateEntryError:
+            pass
+
+    def get_decrypted_filename(self, file):
+        try:
+            return DownloadedFiles.selectBy(file_id=file.id).getOne().filename
+        except Exception as e:
+            return file.name
+
+    @run_in_thread('db')
+    def remove(self, id):
+        log.debug(f'== Trying to remove download: {id}')
+        result = DownloadedFiles.selectBy(file_id=id)
+        for file in result:
+            self.remove_cache_file(file)
+            file.destroySelf()
+
+    @run_in_thread('file-io')
+    def remove_cache_file(self, file):
+        log.info(f'== Removing file entry and file from cache: {id} {file.filename}')
+        unlink(file.filename)
+        os.rmdir(os.path.dirname(file.filename))
+
+    @run_in_thread('db')
+    def remove_contact_files(self, account, contact):
+        log.info(f'== Removing file entries and files from cache between {account.id} <-> {contact}')
+        result = DownloadedFiles.selectBy(remote_uri=contact, account_id=str(account.id))
+        for file in result:
+            self.remove_cache_file(file)
+            file.destroySelf()
+
+    @run_in_thread('db')
+    def update(self, id, state):
+        messages = Message.selectBy(message_id=id)
+        for message in messages:
+            if message.direction == 'outgoing' and state == 'received':
+                continue
+
+            if message.state != 'displayed' and message.state != state:
+                log.info(f'== Updating {message.direction} {id} {message.state} -> {state}')
+                message.state = state
 
 
 class MessageHistory(object, metaclass=Singleton):
