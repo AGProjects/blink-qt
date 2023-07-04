@@ -376,6 +376,7 @@ class ChatWebPage(QWebPage):
 
 class ChatWebView(QWebView):
     sizeChanged = pyqtSignal()
+    messageShouldRemove = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super(ChatWebView, self).__init__(parent)
@@ -388,6 +389,25 @@ class ChatWebView(QWebView):
 
     def contextMenuEvent(self, event):
         menu = self.page().createStandardContextMenu()
+        hit = self.page().currentFrame().hitTestContent(event.pos())
+        self.id = None
+        if hit.element().hasAttribute('id'):
+            id = hit.element().attribute('id')
+        else:
+            id = hit.element().parent().attribute('id')
+        if not id:
+            id = hit.element().parent().parent().attribute('id')
+
+        if id.startswith('text-'):
+            self.id = id[5:]
+            action = menu.addAction('Remove Message')
+            action.triggered.connect(self._SH_RemoveClicked)
+
+        if id.startswith('message-'):
+            self.id = id[8:]
+            action = menu.addAction('Remove Message')
+            action.triggered.connect(self._SH_RemoveClicked)
+
         if any(action.isVisible() and not action.isSeparator() for action in menu.actions()):
             menu.exec_(event.globalPos())
 
@@ -401,6 +421,9 @@ class ChatWebView(QWebView):
     def resizeEvent(self, event):
         super(ChatWebView, self).resizeEvent(event)
         self.sizeChanged.emit()
+
+    def _SH_RemoveClicked(self):
+        self.messageShouldRemove.emit(self.id)
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_input_lock.ui'))
@@ -687,6 +710,8 @@ class ChatWidget(base_class, ui_class):
         self.chat_input.lockReleased.connect(self._SH_ChatInputLockReleased)
         self.chat_view.sizeChanged.connect(self._SH_ChatViewSizeChanged)
         self.chat_view.page().mainFrame().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
+        self.chat_view.messageShouldRemove.connect(self._SH_MessageShouldRemove)
+
         self.composing_timer.timeout.connect(self._SH_ComposingTimerTimeout)
         self.otr_timer.timeout.connect(self._SH_OTRTimerTimeout)
 
@@ -906,6 +931,10 @@ class ChatWidget(base_class, ui_class):
             self.chat_input.setHtml(text)
             self.chat_input.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, text='\r'))
             self.chat_input.setHtml(user_text)
+
+    def _SH_MessageShouldRemove(self, id):
+        blink_session = self.session.blink_session
+        MessageManager().send_remove_message(blink_session, id)
 
     def _SH_ChatViewSizeChanged(self):
         # print("chat view size changed")

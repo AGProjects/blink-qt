@@ -1271,6 +1271,10 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(session.account, session.contact, content, IsComposingDocument.content_type, session=session)
         self._send_message(outgoing_message)
 
+    def send_remove_message(self, session, id, account=None):
+        outgoing_message = OutgoingMessage(session.account, session.contact, id, 'application/sylk-api-message-remove', session=session)
+        self._send_message(outgoing_message)
+
     def send_imdn_message(self, session, id, timestamp, state, account=None):
         if account is None and not session.account.sms.use_cpim or not session.account.sms.enable_imdn:
             return
