@@ -67,7 +67,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkGotHistoryMessageRemove')
         notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
-        notification_center.add_observer(self, name='BlinkDidFetchFile')
+        notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
 
     @run_in_thread('file-io')
     def save(self):
@@ -202,7 +202,7 @@ class HistoryManager(object, metaclass=Singleton):
         if not notification.data.error:
             self.download_history.add(notification.sender)
 
-    def _NH_BlinkDidFetchFile(self, notification):
+    def _NH_BlinkHTTPFileTransferDidEnd(self, notification):
         self.download_history.add_file(notification.sender, notification.data.file)
 
 
