@@ -46,6 +46,7 @@ from sipsimple.streams.msrp.screensharing import ExternalVNCServerHandler, Exter
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
 
 from blink.logging import MessagingTrace as message_log
+from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
@@ -1491,6 +1492,8 @@ class ServerConference(object):
         self.pending_additions = set()
         self.pending_removals = set()
 
+        self.shared_files = []
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=session)
 
@@ -1569,6 +1572,20 @@ class ServerConference(object):
             self.participants[participant.uri] = participant
             notification.center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
             notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
+
+        data = notification.data
+        if data.conference_info.conference_description.resources is not None and data.conference_info.conference_description.resources.files is not None:
+            files = [file for file in data.conference_info.conference_description.resources.files]
+            for file in [file for file in files if (file.hash, file.name) not in self.shared_files]:
+                self.shared_files.append((file.hash, file.name))
+                sender = SIPURI.parse(file.sender)
+                file.contact, contact_uri = URIUtils.find_contact(sender)
+                shared_file = File(file.name,
+                                   file.size,
+                                   file.contact,
+                                   file.hash,
+                                   str(uuid.uuid4()))
+                notification.center.post_notification('BlinkSessionDidShareFile', sender=self.session, data=NotificationData(file=shared_file, direction='incoming'))
 
     def _NH_SIPConferenceDidNotAddParticipant(self, notification):
         uri = self.sip_prefix_re.sub('', str(notification.data.participant))
@@ -5017,9 +5034,13 @@ class FileListModel(QAbstractListModel):
         self.removeItem(notification.data)
 
     def _NH_BlinkSessionDidShareFile(self, notification):
-        if session.remote_focus:
+        if self.session != notification.sender:
+            return
+
+        if self.session.remote_focus:
             self.addItem(FileListItem(notification.data.fiile, direction=notification.data.direction, conference_file=True))
             return
+
         self.addItem(FileListItem(notification.data.file, direction=notification.data.direction))
 
     def _NH_BlinkSessionShouldDownloadFile(self, notification):
