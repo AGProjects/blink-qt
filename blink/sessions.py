@@ -4,13 +4,14 @@ import pickle as pickle
 import contextlib
 import os
 import re
+import requests
 import string
 import sys
 import uuid
 
 from abc import ABCMeta, abstractproperty
 from collections import defaultdict, deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from itertools import chain
 from operator import attrgetter
@@ -26,7 +27,7 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
 from application.python.weakref import weakobjectmap, defaultweakobjectmap
-from application.system import makedirs
+from application.system import makedirs, openfile, FileExistsError
 from eventlib.proc import spawn
 from zope.interface import implementer
 
@@ -44,6 +45,7 @@ from sipsimple.streams.msrp.filetransfer import FileSelector
 from sipsimple.streams.msrp.screensharing import ExternalVNCServerHandler, ExternalVNCViewerHandler, ScreenSharingStream
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
 
+from blink.logging import MessagingTrace as message_log
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
@@ -4840,7 +4842,12 @@ class FileListItemWidget(base_class, ui_class):
         if item.encrypted:
             self.state_indicator.setPixmap(self.pixmaps.encrypted_transfer)
         if item.until is not None:
-            self.status_label.setText(translate('chat_window', "Expiry: %s" % item.until.strftime('%d %b %Y %H:%M')))
+            if item.expired:
+                self.status_label.setText(translate('chat_window', "Expired: %s" % item.until.strftime('%d %b %Y %H:%M')))
+                self.setToolTip(translate('chat_window', "Item still available in cache or local"))
+                self.status_label.setStyleSheet('color: red')
+            else:
+                self.status_label.setText(translate('chat_window', "Expiry: %s" % item.until.strftime('%d %b %Y %H:%M')))
         else:
             self.status_label.setVisible(False)
 
@@ -4864,7 +4871,6 @@ class FileListItem(object):
 
         self.widget = FileListItemWidget()
         self.widget.update_content(self, initial=True)
-
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -4912,6 +4918,10 @@ class FileListItem(object):
     @property
     def until(self):
         return self.file.until or ''
+
+    @property
+    def expired(self):
+        return self.until != '' and self.until < datetime.now(timezone.utc)
 
     @property
     def decrypted_filename(self):
@@ -5018,7 +5028,7 @@ class FileListModel(QAbstractListModel):
         if id in self.items:
             item = [item for item in self.items if item.id == id][0]
             if not item.hash:
-                MessageManager().get_file_from_url(session, item.file)
+                SessionManager().get_file_from_url(session, item.file)
                 return
             SessionManager().get_file(session.contact, session.contact_uri, item.original_filename, item.hash, item.id, account=session.account)
 
@@ -5057,8 +5067,11 @@ class FileListDelegate(QStyledItemDelegate):
                 QDesktopServices.openUrl(link)
                 return True
 
+            if item.expired:
+                return True
+
             if not item.hash:
-                MessageManager().get_file_from_url(model.session, item.file)
+                SessionManager().get_file_from_url(model.session, item.file)
                 return True
             SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=model.session.account)
             return True
@@ -5192,8 +5205,11 @@ class FileListView(QListView, ColorHelperMixin):
             QDesktopServices.openUrl(link)
             return True
 
+        if item.expired:
+            return True
+
         if not item.hash:
-            MessageManager().get_file_from_url(model.session, item.file)
+            SessionManager().get_file_from_url(model.session, item.file)
             return True
         SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=model.session.account)
 
@@ -6256,6 +6272,40 @@ class SessionManager(object, metaclass=Singleton):
         transfer.init_outgoing_pull(account, contact, contact_uri, filename, hash, transfer_id, conference_file)
         transfer.connect()
         return transfer
+
+    @run_in_thread('file-io')
+    def get_file_from_url(self, session, file):
+        message_log.info(f"Fetching content for filetransfer message from: {file.url}")
+        try:
+            r = requests.get(file.url, timeout=10)
+            r.raise_for_status()
+        except (requests.ConnectionError, requests.Timeout) as e:
+            message_log.warning(f'HTTP filetransfer connection error: {e}')
+        except requests.HTTPError as e:
+            message_log.warning(f'HTTP filetransfer error {e}')
+        except requests.RequestException as e:
+            message_log.warning(f'HTTP filetransfer error {e}')
+        else:
+            directory = ApplicationData.get(f'transfer_images/{file.id}')
+            makedirs(directory)
+            full_filepath = os.path.join(directory, file.name)
+
+            for name in UniqueFilenameGenerator.generate(full_filepath):
+                try:
+                    openfile(name, 'xb')
+                except FileExistsError:
+                    continue
+                else:
+                    full_filepath = name
+                    break
+
+            with open(full_filepath, 'wb+') as output_file:
+                output_file.write(r.content)
+            file.name = full_filepath
+
+            message_log.info(f'File saved: {full_filepath}')
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file))
 
     def update_ringtone(self):
         # Outgoing ringtone
