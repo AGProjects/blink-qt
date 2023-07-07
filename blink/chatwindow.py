@@ -756,6 +756,15 @@ class ChatWidget(base_class, ui_class):
             self.timestamp_rendered_messages.append((message.timestamp, message.id))
         self.last_message = message
 
+    def replace_message(self, id, message):
+        exists = self.chat_element.findFirst(f'#message-{id}')
+
+        if exists.isNull():
+            return
+        else:
+            exists.prependOutside(message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", ''))
+            exists.removeFromDocument()
+
     def update_message_text(self, id, text):
         insertion_point = self.chat_element.findFirst(f'#text-{id}')
         insertion_point.removeAllChildren()
