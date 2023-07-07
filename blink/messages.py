@@ -20,7 +20,7 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null
 from application.system import makedirs
 from application.python.types import Singleton
-from datetime import timezone
+from datetime import datetime, timezone, timedelta
 from dateutil.tz import tzlocal, tzutc
 from urllib.parse import urlsplit, urlunsplit, quote
 from zope.interface import implementer
@@ -34,10 +34,12 @@ from sipsimple.lookup import DNSLookup
 from sipsimple.payloads import ParserError
 from sipsimple.payloads.iscomposing import IsComposingDocument, IsComposingMessage, State, LastActive, Refresh, ContentType
 from sipsimple.payloads.imdn import IMDNDocument, DeliveryNotification, DisplayNotification
+from sipsimple.payloads.rcsfthttp import FTHTTPDocument, FileInfo
 from sipsimple.streams.msrp.chat import CPIMPayload, CPIMParserError, CPIMNamespace, CPIMHeader, ChatIdentity, Message as MSRPChatMessage, SimplePayload
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
+from blink.configuration.datatypes import File
 from blink.logging import MessagingTrace as log
 from blink.resources import Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
@@ -803,6 +805,75 @@ class MessageManager(object, metaclass=Singleton):
             elif content_type == 'text/pgp-public-key':
                 if message['contact'] != account.id:
                     self._save_pgp_key(message['content'], message['contact'])
+            elif content_type == 'application/sylk-file-transfer':
+                try:
+                    document = json.loads(message['content'])
+                except Exception as e:
+                    log.warning('Failed to parse file transfer history message: %s' % str(e))
+                    continue
+
+                from blink.contacts import URIUtils
+                contact, contact_uri = URIUtils.find_contact(message['contact'])
+
+                try:
+                    until = document['until']
+                except KeyError:
+                    until = str(ISOTimestamp(datetime.now() + timedelta(days=30)))
+
+                try:
+                    hash = document['hash']
+                except KeyError:
+                    hash = None
+
+                new_body = FTHTTPDocument.create(file=[FileInfo(file_size=document['filesize'],
+                                                                file_name=document['filename'],
+                                                                content_type=document['filetype'],
+                                                                url=document['url'],
+                                                                until=until,
+                                                                hash=hash)])
+                sender = account
+                if message['direction'] == 'incoming':
+                    sender = ChatIdentity(SIPURI.parse(f'sip:{contact.uri.uri}'), contact.name)
+
+                timestamp = ISOTimestamp(message['timestamp']).replace(tzinfo=timezone.utc).astimezone(tzlocal())
+                try:
+                    is_secure = document['filename'].endswith('.asc')
+                except AttributeError:
+                    is_secure = False
+
+                history_message = BlinkMessage(new_body.decode(),
+                                               FTHTTPDocument.content_type,
+                                               sender,
+                                               timestamp=timestamp,
+                                               id=message['message_id'],
+                                               disposition=message['disposition'],
+                                               direction=message['direction'],
+                                               is_secure=is_secure)
+
+                history_message_data = NotificationData(remote_uri=contact.uri.uri,
+                                                        message=history_message,
+                                                        state='accepted',
+                                                        encryption='OpenPGP' if is_secure else None)
+
+                notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
+
+                try:
+                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+                except StopIteration:
+                    continue
+
+                notification_center.post_notification('BlinkGotMessage',
+                                                      sender=blink_session,
+                                                      data=NotificationData(message=history_message,
+                                                                            history=True,
+                                                                            account=account))
+                file = File(document['filename'], document['filesize'], contact,
+                            document['hash'], message['message_id'], ISOTimestamp(until),
+                            document['url'])
+
+                notification_center.post_notification('BlinkSessionDidShareFile',
+                                                      sender=blink_session,
+                                                      data=NotificationData(file=file, direction=message['direction']))
             elif content_type.startswith('text/'):
                 if message['contact'] is None:
                     continue
@@ -1132,6 +1203,49 @@ class MessageManager(object, metaclass=Singleton):
                                         sender=sender)
                 notification_center.post_notification('BlinkGotComposingIndication', sender=blink_session, data=data)
             return
+
+        if content_type.lower() == FTHTTPDocument.content_type:
+            log.info("Messge is a filetransfer message")
+            try:
+                document = FTHTTPDocument.parse(body)
+            except ParserError as e:
+                log.warning('Failed to parse FT HTTP payload: %s' % str(e))
+            else:
+                for info in document:
+                    try:
+                        until = document['until']
+                    except KeyError:
+                        until = ISOTimestamp(datetime.now() + timedelta(days=30))
+
+                    try:
+                        hash = info.hash.value
+                    except AttributeError:
+                        hash = None
+
+                    file = File(info.file_name.value,
+                                info.file_size.value,
+                                contact,
+                                hash,
+                                message_id,
+                                until,
+                                info.data.url)
+
+                    message.is_secure = info.file_name.value.endswith('.asc')
+
+                    notification_center.post_notification('BlinkGotMessage',
+                                                          sender=blink_session,
+                                                          data=NotificationData(message=message, account=account))
+
+                    history_message_data = NotificationData(remote_uri=contact.uri.uri,
+                                                            message=message,
+                                                            state='accepted',
+                                                            encryption='OpenPGP' if file.encrypted else None)
+
+                    notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
+
+                    notification.center.post_notification('BlinkSessionDidShareFile',
+                                                          sender=blink_session,
+                                                          data=NotificationData(file=file, direction=message.direction))
 
         if not content_type.lower().startswith('text'):
             return

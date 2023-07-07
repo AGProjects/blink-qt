@@ -336,7 +336,7 @@ class MessageStream(object, metaclass=MediaStreamType):
                 log.info(f'File saved: {full_decrypted_filepath}')
                 unlink(filename)
 
-                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=full_decrypted_filepath, account=account, id=transfer_session.id))
+                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=full_decrypted_filepath, account=account))
                 return
 
         log.warning(f'-- Decryption failed for {filename}, error: {error}')

@@ -6,13 +6,13 @@ import re
 import uuid
 
 from PyQt5 import uic
-from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal
+from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QFileInfo
 from PyQt5.QtGui import QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWebKit import QWebSettings
 from PyQt5.QtWebKitWidgets import QWebPage, QWebView
 from PyQt5.QtWidgets import QApplication, QAction, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QFileIconProvider
 
 from abc import ABCMeta, abstractmethod
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy, NotificationData
@@ -34,17 +34,19 @@ from sipsimple.account import AccountManager
 from sipsimple.application import SIPApplication
 from sipsimple.audio import WavePlayer
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.payloads import ParserError
+from sipsimple.payloads.rcsfthttp import FTHTTPDocument
 from sipsimple.streams.msrp.chat import OTRState
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
-from blink.configuration.datatypes import FileURL, GraphTimeScale
+from blink.configuration.datatypes import File, FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.history import HistoryManager
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import IconManager, Resources
-from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter
 from blink.util import run_in_gui_thread, call_later, translate, copy_transfer_file
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
@@ -580,6 +582,28 @@ class ChatTextInput(QTextEdit):
         self.setTextCursor(cursor)
 
 
+class FileIcon(object):
+    def __new__(cls, filename):
+        icon = QFileIconProvider().icon(QFileInfo(filename))
+        image = icon.pixmap(32)
+        image_buffer = QBuffer()
+        image_format = 'png' if image.hasAlphaChannel() else 'jpeg'
+        image.save(image_buffer, image_format)
+        image_data = image_buffer.data()
+        instance = super(FileIcon, cls).__new__(cls)
+        instance.__dict__['data'] = image_data
+        instance.__dict__['type'] = 'image/{}'.format(image_format)
+        return instance
+
+    @property
+    def data(self):
+        return self.__dict__['data']
+
+    @property
+    def type(self):
+        return self.__dict__['type']
+
+
 class IconDescriptor(object):
     def __init__(self, filename):
         self.filename = filename
@@ -596,6 +620,16 @@ class IconDescriptor(object):
 
     def __delete__(self, obj):
         raise AttributeError("attribute cannot be deleted")
+
+
+class AudioDescriptor(object):
+    def __new__(cls, filename):
+        basename = os.path.basename(filename)
+        if basename.startswith('sylk-audio-recording'):
+            instance = super(AudioDescriptor, cls).__new__(cls)
+        else:
+            instance = None
+        return instance
 
 
 class Thumbnail(object):
@@ -664,7 +698,6 @@ ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
 @implementer(IObserver)
 class ChatWidget(base_class, ui_class):
-
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
     checkmark_icon = IconDescriptor(Resources.get('icons/checkmark.svg'))
     warning_icon = IconDescriptor(Resources.get('icons/warning.svg'))
@@ -1693,6 +1726,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.pending_displayed_notifications = {}
         self.render_after_load = []
+        self.fetch_afer_load = deque()
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
@@ -1725,6 +1760,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MessageStreamPGPKeysDidLoad')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
+        notification_center.add_observer(self, name='PGPFileDidDecrypt')
+        notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -1784,6 +1821,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.mute_button.setIcon(svg_icon(Resources.get('icons/mic-on.svg'), Resources.get('icons/mic-off.svg')))
         self.hold_button.setIcon(svg_icon(Resources.get('icons/pause.svg'), Resources.get('icons/paused.svg')))
         self.record_button.setIcon(svg_icon(Resources.get('icons/record.svg'), Resources.get('icons/recording.svg')))
+
         self.control_button.setIcon(self.control_icon)
 
         self.control_menu = QMenu(self.control_button)
@@ -2487,6 +2525,120 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
 
+    def _parse_fthttp(self, blink_session, message, from_history=False):
+        session = blink_session.items.chat
+        try:
+            document = FTHTTPDocument.parse(message.content)
+        except ParserError as e:
+            raise ParserError
+            #log.warning('Failed to parse FT HTTP payload: %s' % str(e))
+
+        for info in document:
+
+            try:
+                hash = info.hash.value
+            except AttributeError:
+                hash = None
+
+            if from_history:
+                id = message.message_id
+            else:
+                id = message.id
+
+            file = File(info.file_name.value,
+                        info.file_size.value,
+                        blink_session.contact,
+                        hash,
+                        id,
+                        info.data.until if info.data.until else None,
+                        url=info.data.url,
+                        type=info.content_type.value)
+
+            file.name = HistoryManager().get_decrypted_filename(file)
+
+            is_audio_message = AudioDescriptor(info.file_name.value)
+
+            try:
+                if info.data.until < datetime.now(timezone.utc):
+                    # session.chat_widget.add_message(ChatStatus(translate('chat_window', 'File transfer is expired: %s') % os.path.basename(info.file_name.value)))
+                    if not file.already_exists:
+                        return None
+            except AttributeError:
+                pass
+
+            if not info.content_type.value.startswith('image/') and not is_audio_message:
+                icon = FileIcon(file.decrypted_filename)
+                icon_data = base64.b64encode(icon.data).decode()
+                content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(icon.type, icon_data)
+                if from_history:
+                    NotificationCenter().post_notification('BlinkSessionDidShareFile',
+                                                           sender=blink_session,
+                                                           data=NotificationData(file=file, direction=message.direction))
+                return '''<a href='%s#%s' style='text-decoration: none !important'><div style="display: flex;">
+                            <div>%s</div>
+                                <div style="display: flex; align-items: center;">
+                                    <div>
+                                        <div style="padding-left: 4px; font-size: 14px; font-weight: 400;">%s</div>
+                                        <div style="padding-left: 4px;">%s</div>
+                                    </div>
+                                </div>
+                            </div></a>''' % (file.decrypted_filename,
+                                             id,
+                                             content,
+                                             os.path.basename(file.decrypted_filename),
+                                             FileSizeFormatter.format(file.size))
+
+            if message.direction == 'outgoing':
+                if is_audio_message:
+                    text = translate('chat_window', 'You sent an audio message. Fetching and processing...')
+                else:
+                    text = translate('chat_window', 'You sent an image: %s. Fetching and processing...' % file.decrypted_filename)
+            else:
+                if is_audio_message:
+                    text = translate('chat_window', 'Sent you an audio message. Processing...')
+                else:
+                    text = translate('chat_window', 'Sent you an image: %s. Processing...' % file.decrypted_filename)
+
+            content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">{text}'
+
+            if not file.already_exists:
+                if file.encrypted and not blink_session.fake_streams.get('messages').can_decrypt:
+                    content = translate('chat_window', "%s can't be decrypted. PGP is disabled" % (os.path.basename(file.decrypted_filename)))
+                    return content
+
+                if from_history:
+                    self.fetch_afer_load.append((blink_session, file, message, info))
+                    NotificationCenter().post_notification('BlinkSessionDidShareFile',
+                                                           sender=blink_session,
+                                                           data=NotificationData(file=file, direction=message.direction))
+                    return content
+
+                if hash:
+                    SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.name, file.hash, file.id, account=blink_session.account, conference_file=False)
+                else:
+                    SessionManager().get_file_from_url(blink_session, file)
+                return content
+
+            if is_audio_message:
+                return f'''<div><audio controls style="height: 35px; width: 350px"><source src="{file.decrypted_filename}" type={file.type}></audio></div>'''
+
+            file_descriptors  = [FileDescriptor(file.decrypted_filename)]
+            image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
+
+            if not image_descriptors:
+                session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Error: image can not be rendered: %s') % os.path.basename(file.decrypted_filename)))
+                return None
+
+            for image in image_descriptors:
+                image_data = base64.b64encode(image.thumbnail.data).decode()
+                content = '''<a href="{}" style='display: flex; border: 0 !important'><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
+
+            if from_history:
+                NotificationCenter().post_notification('BlinkSessionDidShareFile',
+                                                       sender=blink_session,
+                                                       data=NotificationData(file=file, direction=message.direction))
+            return content
+
     def _NH_BlinkGotMessage(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
@@ -2521,6 +2673,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 content = message.content
                 content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+        elif message.content_type.lower() == FTHTTPDocument.content_type:
+            try:
+                content = self._parse_fthttp(blink_session, message)
+            except ParserError:
+                return
+            if content is None:
+                return
         else:
             return
 
@@ -2640,6 +2799,56 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Decryption failed: {notification.data.error}')))
 
+    def _NH_BlinkHTTPFileTranfserDidEnd(self, notification):
+        blink_session = notification.sender
+
+        if blink_session is None:
+            return
+
+        if AudioDescriptor(notification.data.filename):
+            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{notification.data.filename}"></audio></div>'''
+            blink_session.items.chat.chat_widget.update_message_text(notification.data.file.id, content)
+            return
+
+        file_descriptors  = [FileDescriptor(notification.data.file.name)]
+        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
+
+        for image in image_descriptors:
+            image_data = base64.b64encode(image.thumbnail.data).decode()
+            content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
+            blink_session.items.chat.chat_widget.update_message_text(notification.data.file.id, content)
+
+    def _NH_PGPFileDidDecrypt(self, notification):
+        transfer_session = notification.sender
+
+        blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
+
+        if blink_session is None:
+            return
+
+        if AudioDescriptor(notification.data.filename):
+            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{notification.data.filename}"></audio></div>'''
+            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
+            return
+
+        file_descriptors  = [FileDescriptor(notification.data.filename)]
+        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
+
+        for image in image_descriptors:
+            image_data = base64.b64encode(image.thumbnail.data).decode()
+            content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
+            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
+
+    def _NH_PGPFileDidNotDecrypt(self, notification):
+        transfer_session = notification.sender
+
+        blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
+
+        if blink_session is None:
+            return
+
+        session.chat_widget.replace_message(transfer_session.id, ChatStatus(translate('chat_window', f'File decryption failed: {notification.data.error}')))
+
     def _NH_MessageStreamPGPKeysDidLoad(self, notification):
         stream = notification.sender
         blink_session = stream.blink_session
@@ -2683,8 +2892,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 else:
                     content = message.content
                     content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
+            elif message.content_type.lower() == FTHTTPDocument.content_type:
+                try:
+                    content = self._parse_fthttp(blink_session, message, from_history=True)
+                except ParserError as e:
+                    continue
+
+                if not content:
+                    timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
+                    continue
             else:
                 continue
+
             # message.sender = SIPURI.parse(f'sip:{message.remote_uri}')
             if message.direction == 'outgoing':
                 message.sender = blink_session.account
@@ -2731,6 +2950,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 session.chat_widget.add_message(message)
             else:
                 self.render_after_load.append((found_session, message))
+
+        while self.fetch_afer_load:
+            (blink_session, file, message, info) = self.fetch_afer_load.popleft()
+            if file.hash is not None:
+                SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.original_name, file.hash, file.id, account=blink_session.account, conference_file=False)
+            else:
+                SessionManager().get_file_from_url(blink_session, file)
+
         session.chat_widget.show_loading_screen(False)
 
     def _NH_BlinkMessageHistoryLoadDidFail(self, notification):
@@ -2990,6 +3217,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
             self.session_details.setCurrentWidget(self.selected_session.active_panel)
             self.participants_list.setModel(self.selected_session.participants_model)
+            self.files_list.setModel(self.selected_session.files_model)
             self.control_button.setEnabled(True)
             if not self.isMinimized():
                 self.send_pending_imdn_messages(self.selected_session)
