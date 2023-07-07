@@ -1,9 +1,13 @@
+import os
+import shutil
 
 from PyQt5.QtCore import QObject, QThread, QTimer, QCoreApplication
 from PyQt5.QtWidgets import QApplication
 from application.python.decorator import decorator, preserve_signature
 from application.python.descriptor import classproperty
 from application.python.types import Singleton
+from application.system import openfile
+from filecmp import cmp
 from functools import partial
 from itertools import count
 from threading import Event
@@ -12,7 +16,7 @@ from sys import exc_info
 from blink.event import CallFunctionEvent
 
 
-__all__ = ['QSingleton', 'UniqueFilenameGenerator', 'call_in_gui_thread', 'call_later', 'run_in_gui_thread', 'translate']
+__all__ = ['QSingleton', 'UniqueFilenameGenerator', 'call_in_gui_thread', 'call_later', 'copy_transfer_file', 'run_in_gui_thread', 'translate']
 
 translate = QCoreApplication.translate
 
@@ -29,6 +33,35 @@ class UniqueFilenameGenerator(object):
         for x in count(1):
             yield "%s-%d%s" % (prefix, x, extension)
 
+
+def copy_transfer_file(link, directory):
+    if not link.isLocalFile():
+        return link
+
+    filename = link.fileName()
+    destination = os.path.join(directory, filename)
+    if destination == link.toLocalFile():
+        if cmp(link.toLocalFile(), destination, True):
+            return link
+        raise FileNotFoundError
+
+    is_same_file = False
+    for name in UniqueFilenameGenerator.generate(destination):
+        try:
+            openfile(name, 'rb')
+        except FileNotFoundError:
+            destination = name
+            break
+        else:
+            if cmp(link.toLocalFile(), destination, True):
+                is_same_file = True
+                break
+            continue
+
+    if not is_same_file:
+        shutil.copy(link.toLocalFile(), directory)
+    link.setPath(destination)
+    return link
 
 def call_later(interval, function, *args, **kw):
     QTimer.singleShot(int(interval*1000), lambda: function(*args, **kw))

@@ -45,7 +45,7 @@ from blink.history import HistoryManager
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription
-from blink.util import run_in_gui_thread, call_later, translate
+from blink.util import run_in_gui_thread, call_later, translate, copy_transfer_file
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
 from blink.widgets.otr import OTRWidget
@@ -361,7 +361,6 @@ class ChatWebPage(QWebPage):
     def __init__(self, parent=None):
         super(ChatWebPage, self).__init__(parent)
         self.setLinkDelegationPolicy(QWebPage.DelegateAllLinks)
-        self.linkClicked.connect(QDesktopServices.openUrl)
         disable_actions = {QWebPage.OpenLink, QWebPage.OpenLinkInNewWindow, QWebPage.OpenLinkInThisWindow, QWebPage.DownloadLinkToDisk,
                            QWebPage.OpenImageInNewWindow, QWebPage.DownloadImageToDisk, QWebPage.DownloadMediaToDisk,
                            QWebPage.Back, QWebPage.Forward, QWebPage.Stop, QWebPage.Reload}
@@ -710,6 +709,8 @@ class ChatWidget(base_class, ui_class):
         self.chat_input.lockReleased.connect(self._SH_ChatInputLockReleased)
         self.chat_view.sizeChanged.connect(self._SH_ChatViewSizeChanged)
         self.chat_view.page().mainFrame().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
+        self.chat_view.page().linkClicked.connect(self._SH_LinkClicked)
+
         self.chat_view.messageShouldRemove.connect(self._SH_MessageShouldRemove)
 
         self.composing_timer.timeout.connect(self._SH_ComposingTimerTimeout)
@@ -931,6 +932,20 @@ class ChatWidget(base_class, ui_class):
             self.chat_input.setHtml(text)
             self.chat_input.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, text='\r'))
             self.chat_input.setHtml(user_text)
+
+    def _SH_LinkClicked(self, link):
+        directory = SIPSimpleSettings().file_transfer.directory.normalized
+        try:
+            link = copy_transfer_file(link, directory)
+            QDesktopServices.openUrl(link)
+        except FileNotFoundError:
+            blink_session = self.session.blink_session
+            id = None
+            if link.hasFragment():
+                id = link.fragment()
+            NotificationCenter().post_notification('BlinkSessionShouldDownloadFile',
+                                                   sender=blink_session,
+                                                   data=NotificationData(filename=link.fileName(), id=id))
 
     def _SH_MessageShouldRemove(self, id):
         blink_session = self.session.blink_session
