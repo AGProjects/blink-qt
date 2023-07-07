@@ -2,11 +2,13 @@
 import bisect
 import pickle as pickle
 import contextlib
+import io
 import os
 import re
 import requests
 import string
 import sys
+import shutil
 import uuid
 
 from abc import ABCMeta, abstractproperty
@@ -4019,10 +4021,26 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.file_selector = FileSelector.for_file(filename)
         self._stat = os.fstat(self.file_selector.fd.fileno())
 
+        if self.file_selector.type.startswith('image'):
+            directory = ApplicationData.get(f'transfer_images/{self.id}')
+            makedirs(directory)
+            shutil.copy(filename, directory)
+
         self.state = 'initialized'
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferNewOutgoing', self)
 
+        if self._stat.st_size < 26214400:
+            stream = StreamDescription('messages')
+            message_stream = stream.create_stream()
+            message_stream.blink_session = self
+            if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+                message_stream.enable_pgp()
+
+            if message_stream.can_encrypt:
+                self.state = 'encrypting'
+                notification_center.add_observer(self, name='PGPFileDidEncrypt')
+                message_stream.encrypt_file(filename, self)
 
     def init_outgoing_pull(self, account, contact, contact_uri, filename, hash, transfer_id=RandomID, conference_file=True):
         assert self.state is None
@@ -4046,7 +4064,10 @@ class BlinkFileTransfer(BlinkSessionBase):
         notification_center.post_notification('BlinkFileTransferNewOutgoing', self)
 
     def connect(self):
-        assert self.direction == 'outgoing' and self.state in ('initialized', 'ended')
+        assert self.direction == 'outgoing' and self.state in ('initialized', 'ended', 'encrypting', 'encrypted')
+
+        if self.state == 'encrypting':
+            return
 
         notification_center = NotificationCenter()
 
@@ -4198,6 +4219,12 @@ class BlinkFileTransfer(BlinkSessionBase):
         if self.transfer_type == 'pull':
             self.stream = MediaStreamRegistry.FileTransferStream(self.file_selector, 'recvonly', transfer_id=self.id)
         self.handler = self.stream.handler
+
+        if not self.conference_file:
+            directory = ApplicationData.get(f'transfer_images/{self.id}')
+            makedirs(directory)
+            self.handler.save_directory = directory
+
         self.sip_session.connect(ToHeader(self._uri), routes, [self.stream])
 
     def _NH_DNSLookupDidFail(self, notification):
@@ -4218,6 +4245,48 @@ class BlinkFileTransfer(BlinkSessionBase):
 
     def _NH_SIPSessionDidStart(self, notification):
         self.state = 'connected'
+
+    def _NH_PGPFileDidEncrypt(self, notification):
+        if notification.sender is not self:
+            return
+
+        notification.center.remove_observer(self, name='PGPFileDidEncrypt')
+
+        encrypted_file = io.BytesIO(notification.data.contents.__str__().encode())
+        self.file_selector.fd = encrypted_file
+        self.file_selector.name = notification.data.filename
+        encrypted_file.seek(0, os.SEEK_END)
+        self.file_selector.size = encrypted_file.tell()
+        encrypted_file.seek(0)
+
+        self.state = 'encrypted'
+        self.connect()
+
+    def _NH_PGPFileDidDecrypt(self, notification):
+        if notification.sender is not self:
+            return
+
+        notification.center.remove_observer(self, name='PGPFileDidDecrypt')
+        notification.center.remove_observer(self, name='PGPFileDidNotDecrypt')
+
+        self.file_selector.name = notification.data.filename
+        notification.center.post_notification('BlinkFileTransferDidDecrypt',
+                                              sender=self,
+                                              data=NotificationData(reason='File decrypted'))
+        self._terminate(failure_reason=None)
+
+    def _NH_PGPFileDidNotDecrypt(self, notification):
+        if notification.sender is not self:
+            return
+
+        notification.center.remove_observer(self, name='PGPFileDidDecrypt')
+        notification.center.remove_observer(self, name='PGPFileDidNotDecrypt')
+
+        self.file_selector.name = notification.data.filename
+        notification.center.post_notification('BlinkFileTransferDidNotDecrypt',
+                                              sender=self,
+                                              data=NotificationData(reason='File not decrypted'))
+        self._terminate(failure_reason=notification.data.error)
 
     def _NH_MediaStreamDidInitialize(self, notification):
         notification.center.post_notification('BlinkFileTransferDidInitialize', sender=self)
@@ -4241,6 +4310,31 @@ class BlinkFileTransfer(BlinkSessionBase):
             failure_reason = notification.data.reason or 'Failed'
         else:
             failure_reason = None
+
+        if self.direction == 'outgoing' and self.transfer_type == 'push':
+            self._terminate(failure_reason=failure_reason)
+            return
+
+        if self.file_selector.name.endswith('.asc') and not notification.data.error:
+            stream = StreamDescription('messages')
+            message_stream = stream.create_stream()
+            message_stream.blink_session = self
+            if self.account.sms.enable_pgp and self.account.sms.private_key is not None and os.path.exists(self.account.sms.private_key.normalized):
+                message_stream.enable_pgp()
+
+            if message_stream.can_decrypt:
+                state = SessionState('decrypting')
+                state.reason = ''
+                state.error = None
+                self.state = state
+
+            notification_center = NotificationCenter()
+            notification_center.add_observer(self, name='PGPFileDidDecrypt')
+            notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
+
+            message_stream.decrypt_file(self.file_selector.name, self)
+            return
+
         self._terminate(failure_reason=failure_reason)
 
 
@@ -4539,6 +4633,12 @@ class FileTransferItem(object):
             self.status = translate('sessions', 'Connected')
         elif state == 'ending':
             self.status = translate('sessions', 'Ending...')
+        elif state == 'decrypting':
+            self.status = translate('sessions', 'Decrypting...')
+        elif state == 'encrypting':
+            self.status = translate('sessions', 'Encrypting...')
+        elif state == 'encrypted':
+            self.status = translate('sessions', 'Encrypted...')
         else:
             self.status = None
         self.progress = None
@@ -4578,6 +4678,22 @@ class FileTransferItem(object):
         self.widget.update_content(self, initial=True)
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
+        self.status = notification.data.reason
+        self.widget.update_content(self)
+        notification.center.post_notification('FileTransferItemDidChange', sender=self)
+        notification.center.remove_observer(self, sender=self.transfer)
+
+    def _NH_BlinkFileTransferDidDecrypt(self, notification):
+        self.status = notification.data.reason
+        self.widget.update_content(self)
+        notification.center.post_notification('FileTransferItemDidChange', sender=self)
+
+    def _NH_BlinkFileTransferDidNotDecrypt(self, notification):
+        self.status = notification.data.reason
+        self.widget.update_content(self)
+        notification.center.post_notification('FileTransferItemDidChange', sender=self)
+
+    def _NH_BlinkFileTransferDidEncrypt(self, notification):
         self.status = notification.data.reason
         self.widget.update_content(self)
         notification.center.post_notification('FileTransferItemDidChange', sender=self)
