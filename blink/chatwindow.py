@@ -2599,12 +2599,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if is_audio_message:
                     text = translate('chat_window', 'You sent an audio message. Fetching and processing...')
                 else:
-                    text = translate('chat_window', 'You sent an image: %s. Fetching and processing...' % file.decrypted_filename)
+                    text = translate('chat_window', 'You sent an image: %s. Fetching and processing...') % file.decrypted_filename
             else:
                 if is_audio_message:
                     text = translate('chat_window', 'Sent you an audio message. Processing...')
                 else:
-                    text = translate('chat_window', 'Sent you an image: %s. Processing...' % file.decrypted_filename)
+                    text = translate('chat_window', 'Sent you an image: %s. Processing...') % file.decrypted_filename
 
             content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">{text}'
 
