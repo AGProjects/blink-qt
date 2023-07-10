@@ -1,3 +1,26 @@
+blink (5.6.0) UNRELEASED; urgency=medium
+
+  * Added support for filetransfer messages
+  * Added support for encrypting/decrypting MSRP file transfers
+  * Added support for file encryption/decryption
+  * Added support for displaying conference files
+  * Added support for pull filetransfers
+  * Added HTTP download function
+  * Added filepane content
+  * Added replace function for chat messages
+  * Added menuitem in chat to send files
+  * Added unique name generator function
+  * Support removing messages
+  * Fixed displaying decryption error
+  * Fixed parsing images in chat, they should be base64 encoded
+  * Fixed traceback for incoming messages without disposition
+  * Prevent traceback on PGPKeys load when there is no chat in the session
+  * Several UI fixes
+  * Python >= 3.10 fixes
+  * Update help and release notes urls
+
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Mon, 10 Jul 2023 12:29:03 +0200
+
 blink (5.5.1) unstable; urgency=medium
 
   * Handle scaling for different screen resolutions
