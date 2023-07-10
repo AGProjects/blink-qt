@@ -1,4 +1,4 @@
-blink (5.6.0) UNRELEASED; urgency=medium
+blink (5.6.0) unstable; urgency=medium
 
   * Added support for filetransfer messages
   * Added support for encrypting/decrypting MSRP file transfers
@@ -19,7 +19,7 @@ blink (5.6.0) UNRELEASED; urgency=medium
   * Python >= 3.10 fixes
   * Update help and release notes urls
 
- -- Tijmen de Mes <tijmen@ag-projects.com>  Mon, 10 Jul 2023 12:29:03 +0200
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Mon, 10 Jul 2023 15:27:23 +0200
 
 blink (5.5.1) unstable; urgency=medium
 
