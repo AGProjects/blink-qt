@@ -2010,6 +2010,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _update_panel_buttons(self):
         self.info_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
+        if self.selected_session.blink_session.remote_focus:
+            self.info_panel_files_button.setVisible(len(self.selected_session.blink_session.server_conference.shared_files) == 0)
+            self.participants_panel_files_button.setVisible(len(self.selected_session.blink_session.server_conference.shared_files) == 0)
+        else:
+            self.info_panel_files_button.setVisible(True)
         self.files_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
 
     def _update_session_info_panel(self, elements=set(), update_visibility=False):
