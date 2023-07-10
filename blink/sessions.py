@@ -4974,7 +4974,7 @@ class FileListItemWidget(base_class, ui_class):
         self.filesize_label.setText('%s' % FileSizeFormatter.format(item.size))
         if item.encrypted:
             self.state_indicator.setPixmap(self.pixmaps.encrypted_transfer)
-        if item.until is not None:
+        if item.until is not None and not item.in_conference:
             if item.expired:
                 self.status_label.setText(translate('chat_window', "Expired: %s" % item.until.strftime('%d %b %Y %H:%M')))
                 self.setToolTip(translate('chat_window', "Item still available in cache or local"))
@@ -5154,7 +5154,7 @@ class FileListModel(QAbstractListModel):
             return
 
         if self.session.remote_focus:
-            self.addItem(FileListItem(notification.data.fiile, direction=notification.data.direction, conference_file=True))
+            self.addItem(FileListItem(notification.data.file, direction=notification.data.direction, conference_file=True))
             return
 
         self.addItem(FileListItem(notification.data.file, direction=notification.data.direction))
