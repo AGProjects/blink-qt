@@ -686,6 +686,11 @@ All rights reserved.</source>
         <source>You sent an image: %s. Fetching and processing...</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="2733"/>
+        <source>%s can&apos;t be decrypted. PGP is disabled</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>conference_button</name>
