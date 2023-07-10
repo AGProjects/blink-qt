@@ -832,8 +832,10 @@ class ChatWidget(base_class, ui_class):
     def show_loading_screen(self, visible):
         if visible:
             self.loading_element.appendInside(self.loading_template)
+            body = self.chat_view.page().mainFrame().findFirstElement('body').setStyleProperty('overflow', 'hidden')
         else:
             self.loading_element.removeAllChildren()
+            body = self.chat_view.page().mainFrame().findFirstElement('body').setStyleProperty('overflow', 'auto')
 
     def send_sip_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         account = self.session.blink_session.account
