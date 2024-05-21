@@ -560,7 +560,9 @@ class WebPage(QWebEnginePage):
     def __init__(self, parent=None):
         super(WebPage, self).__init__(parent)
         disable_actions = {QWebEnginePage.OpenLinkInNewBackgroundTab, QWebEnginePage.OpenLinkInNewWindow, QWebEnginePage.OpenLinkInThisWindow,
-                           QWebEnginePage.DownloadLinkToDisk, QWebEnginePage.DownloadImageToDisk, QWebEnginePage.DownloadMediaToDisk}
+                           QWebEnginePage.OpenLinkInNewTab,
+                           QWebEnginePage.DownloadLinkToDisk, QWebEnginePage.DownloadImageToDisk,
+                           QWebEnginePage.DownloadMediaToDisk}
         for action in (self.action(action) for action in disable_actions):
             action.setVisible(False)
         self.call_link_clicked = False
