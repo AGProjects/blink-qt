@@ -281,7 +281,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         font.setPointSizeF(title_font_size)
         self.title_label.setFont(font)
         font_metrics = self.create_status_label.fontMetrics()
-        self.create_status_label.setMinimumHeight(font_metrics.height() + 2*(font_metrics.height() + font_metrics.leading()))   # reserve space for 3 lines
+        self.create_status_label.setMinimumHeight(font_metrics.height() + 2 * (font_metrics.height() + font_metrics.leading()))   # reserve space for 3 lines
         font_metrics = self.email_note_label.fontMetrics()
         self.email_note_label.setMinimumWidth(font_metrics.width('The E-mail address is used when sending voicemail'))  # hack to make text justification look nice everywhere
         self.add_account_button.setChecked(True)
@@ -503,10 +503,10 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         X509PrivateKey(key)
         X509Certificate(ca)
         makedirs(ApplicationData.get('tls'))
-        certificate_path = ApplicationData.get(os.path.join('tls', sip_address+'.crt'))
+        certificate_path = ApplicationData.get(os.path.join('tls', sip_address + '.crt'))
         certificate_file = open(certificate_path, 'w')
         os.chmod(certificate_path, 0o600)
-        certificate_file.write(crt+key)
+        certificate_file.write(crt + key)
         certificate_file.close()
         ca_path = ApplicationData.get(os.path.join('tls', 'ca.crt'))
         try:
