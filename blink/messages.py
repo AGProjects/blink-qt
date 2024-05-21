@@ -736,6 +736,13 @@ class MessageManager(object, metaclass=Singleton):
 
         log.info(f'History synchronization enabled for {account.id}, fetching from: {url}')
 
+        if account.sms.history_synchronization_timestamp is not None:
+            last_sync = ISOTimestamp(account.sms.history_synchronization_timestamp)
+            expired_time = ISOTimestamp.now() - last_sync
+            if expired_time.total_seconds() < 500:
+                log.info(f'History synchronization skipped for {account.id}, will only sync on interval > 500s ({expired_time.total_seconds()})')
+                return
+
         try:
             r = requests.get(url, headers=headers, timeout=10)
             r.raise_for_status()
@@ -931,7 +938,8 @@ class MessageManager(object, metaclass=Singleton):
 
         if last_id is not None:
             account.sms.history_synchronization_id = last_id
-            account.save()
+        account.sms.history_synchronization_timestamp = ISOTimestamp.now()
+        account.save()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -1085,6 +1093,7 @@ class MessageManager(object, metaclass=Singleton):
 
             account.sms.history_synchronization_token = token
             account.sms.history_synchronization_url = url
+            account.sms.history_synchronization_timestamp = None
             account.save()
             self._sync_messages(account)
             return

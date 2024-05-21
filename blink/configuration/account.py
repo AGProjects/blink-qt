@@ -77,6 +77,7 @@ class SMSSettingsExtension(SMSSettings):
     history_synchronization_url = Setting(type=HTTPURL, default=None, nillable=True)
     history_synchronization_token = Setting(type=str, default=None, nillable=True)
     history_synchronization_id = Setting(type=str, default=None, nillable=True)
+    history_synchronization_timestamp = RuntimeSetting(type=str, default=None, nillable=True)
 
 
 class SoundSettings(SettingsGroup):
