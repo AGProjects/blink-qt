@@ -2690,6 +2690,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 content = message.content
                 content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         elif message.content_type.lower() == FTHTTPDocument.content_type:
+            if not session.chat_widget.history_loaded:
+                return
             try:
                 content = self._parse_fthttp(blink_session, message, account=received_account)
             except ParserError:
