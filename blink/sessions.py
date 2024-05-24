@@ -5071,6 +5071,10 @@ class FileListItem(object):
         except AttributeError:
             return self.id
 
+    @property
+    def account(self):
+        return self.file.account
+
 
 @implementer(IObserver)
 class FileListModel(QAbstractListModel):
@@ -5167,7 +5171,7 @@ class FileListModel(QAbstractListModel):
             if not item.hash:
                 SessionManager().get_file_from_url(session, item.file)
                 return
-            SessionManager().get_file(session.contact, session.contact_uri, item.original_filename, item.hash, item.id, account=session.account)
+            SessionManager().get_file(session.contact, session.contact_uri, item.file.original_name, item.hash, item.id, account=item.account)
 
     def _NH_BlinkFileTransferNewIncoming(self, notification):
         transfer = notification.sender
@@ -5210,7 +5214,7 @@ class FileListDelegate(QStyledItemDelegate):
             if not item.hash:
                 SessionManager().get_file_from_url(model.session, item.file)
                 return True
-            SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=model.session.account)
+            SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
             return True
         return super(FileListDelegate, self).editorEvent(event, model, option, index)
 
@@ -5348,7 +5352,7 @@ class FileListView(QListView, ColorHelperMixin):
         if not item.hash:
             SessionManager().get_file_from_url(model.session, item.file)
             return True
-        SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=model.session.account)
+        SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
 
     def _AH_RemoveFile(self):
         item = self.listview.selectedIndexes()[0].data(Qt.UserRole)

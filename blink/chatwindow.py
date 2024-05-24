@@ -2532,8 +2532,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
 
-    def _parse_fthttp(self, blink_session, message, from_history=False):
+    def _parse_fthttp(self, blink_session, message, from_history=False, account=None):
         session = blink_session.items.chat
+
+        if account is None:
+            try:
+                account = AccountManager().get_account(message.account_id)
+            except AttributeError:
+                account = blink_session.account
+
         try:
             document = FTHTTPDocument.parse(message.content)
         except ParserError as e:
@@ -2559,7 +2566,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         id,
                         info.data.until if info.data.until else None,
                         url=info.data.url,
-                        type=info.content_type.value)
+                        type=info.content_type.value,
+                        account=account)
 
             file.name = HistoryManager().get_decrypted_filename(file)
 
@@ -2621,7 +2629,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     return content
 
                 if hash:
-                    SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.name, file.hash, file.id, account=blink_session.account, conference_file=False)
+                    SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.name, file.hash, file.id, account=file.account, conference_file=False)
                 else:
                     SessionManager().get_file_from_url(blink_session, file)
                 return content
@@ -2682,7 +2690,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         elif message.content_type.lower() == FTHTTPDocument.content_type:
             try:
-                content = self._parse_fthttp(blink_session, message)
+                content = self._parse_fthttp(blink_session, message, account=received_account)
             except ParserError:
                 return
             if content is None:
@@ -2961,7 +2969,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         while self.fetch_afer_load:
             (blink_session, file, message, info) = self.fetch_afer_load.popleft()
             if file.hash is not None:
-                SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.original_name, file.hash, file.id, account=blink_session.account, conference_file=False)
+                SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.original_name, file.hash, file.id, account=file.account, conference_file=False)
             else:
                 SessionManager().get_file_from_url(blink_session, file)
 

@@ -876,7 +876,7 @@ class MessageManager(object, metaclass=Singleton):
                                                                             account=account))
                 file = File(document['filename'], document['filesize'], contact,
                             document['hash'], message['message_id'], ISOTimestamp(until),
-                            document['url'])
+                            document['url'], account=account)
 
                 notification_center.post_notification('BlinkSessionDidShareFile',
                                                       sender=blink_session,
@@ -1237,7 +1237,8 @@ class MessageManager(object, metaclass=Singleton):
                                 hash,
                                 message_id,
                                 until,
-                                info.data.url)
+                                info.data.url,
+                                account=account)
 
                     message.is_secure = info.file_name.value.endswith('.asc')
 

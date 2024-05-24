@@ -213,7 +213,7 @@ class GraphTimeScale(int):
 
 
 class File(object):
-    def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None):
+    def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None, account=None):
         self.name = os.path.join(SIPSimpleSettings().file_transfer.directory.normalized, name)
         if type is not None and type.startswith('image/'):
             self.name = os.path.join(ApplicationData.get('transfer_images'), id, name)
@@ -225,6 +225,7 @@ class File(object):
         self.until = until
         self.url = url
         self.type = type
+        self.account = account
 
     @property
     def encrypted(self):
