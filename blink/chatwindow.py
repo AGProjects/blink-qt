@@ -2618,7 +2618,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">{text}'
 
             if not file.already_exists:
-                if file.encrypted and not blink_session.fake_streams.get('messages').can_decrypt:
+                if file.encrypted and not blink_session.fake_streams.get('messages').can_decrypt and not blink_session.fake_streams.get('messages').can_decrypt_with_others:
                     content = translate('chat_window', "%s can't be decrypted. PGP is disabled") % os.path.basename(file.decrypted_filename)
                     return content
 
