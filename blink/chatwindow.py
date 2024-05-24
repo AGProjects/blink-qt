@@ -1762,9 +1762,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MessageStreamPGPKeysDidLoad')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
-        notification_center.add_observer(self, name='PGPFileDidDecrypt')
         notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -2815,6 +2815,31 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Decryption failed: {notification.data.error}')))
 
+    def _NH_BlinkFileTransferDidEnd(self, notification):
+        transfer_session = notification.sender
+
+        if notification.data.error:
+            return
+
+        blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
+
+        if blink_session is None:
+            return
+
+        if AudioDescriptor(transfer_session.file_selector.name):
+            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{transfer_session.file_selector.name}"></audio></div>'''
+            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
+            return
+
+        file_descriptors  = [FileDescriptor(transfer_session.file_selector.name)]
+        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
+
+        for image in image_descriptors:
+            image_data = base64.b64encode(image.thumbnail.data).decode()
+            content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
+            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
+
+
     def _NH_BlinkHTTPFileTranfserDidEnd(self, notification):
         blink_session = notification.sender
 
@@ -2833,27 +2858,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             image_data = base64.b64encode(image.thumbnail.data).decode()
             content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
             blink_session.items.chat.chat_widget.update_message_text(notification.data.file.id, content)
-
-    def _NH_PGPFileDidDecrypt(self, notification):
-        transfer_session = notification.sender
-
-        blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
-
-        if blink_session is None:
-            return
-
-        if AudioDescriptor(notification.data.filename):
-            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{notification.data.filename}"></audio></div>'''
-            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
-            return
-
-        file_descriptors  = [FileDescriptor(notification.data.filename)]
-        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
-
-        for image in image_descriptors:
-            image_data = base64.b64encode(image.thumbnail.data).decode()
-            content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
-            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
 
     def _NH_PGPFileDidNotDecrypt(self, notification):
         transfer_session = notification.sender
