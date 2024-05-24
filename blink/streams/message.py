@@ -95,6 +95,10 @@ class MessageStream(object, metaclass=MediaStreamType):
     def can_decrypt(self):
         return self.private_key is not None
 
+    @property
+    def can_decrypt_with_others(self):
+        return len(self.other_private_keys) > 0
+
     def _get_private_key(self):
         return self.__dict__['private_key']
 
@@ -395,14 +399,15 @@ class MessageStream(object, metaclass=MediaStreamType):
         if self.private_key is None:
             self.private_key = self._load_key(str(session.account.id), public_key=False)
 
-        if None not in [self.public_key, self.private_key]:
+        self._load_other_keys(session)
+
+        if None not in [self.public_key, self.private_key] or self.can_decrypt_with_others:
             notification_center = NotificationCenter()
             notification_center.post_notification('MessageStreamPGPKeysDidLoad', sender=self)
-        self._load_other_keys(session)
 
     def _load_other_keys(self, session):
         account_manager = AccountManager()
-        for account in (account for account in account_manager.iter_accounts() if account is not session.account and account.enabled):
+        for account in (account for account in account_manager.iter_accounts() if account is not session.account):
             loaded_key = self._load_key(str(account.id), public_key=False)
             if loaded_key is None:
                 continue

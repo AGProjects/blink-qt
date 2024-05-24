@@ -2879,7 +2879,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         for message in session.chat_widget.pending_decryption:
             if isinstance(message, BlinkMessage):
                 continue
-            if stream and stream.can_decrypt:
+            if stream and (stream.can_decrypt or stream.can_decrypt_with_others):
                 stream.decrypt(message)
 
     def _NH_BlinkMessageHistoryLoadDidSucceed(self, notification):
@@ -2902,7 +2902,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     encrypted = True
                     session.chat_widget.pending_decryption.append((message))
                     stream = blink_session.fake_streams.get('messages')
-                    if stream and stream.can_decrypt:
+                    if stream and (stream.can_decrypt or stream.can_decrypt_with_others):
                         stream.decrypt(message)
                 else:
                     content = message.content

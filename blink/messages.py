@@ -688,6 +688,9 @@ class MessageManager(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         if account is session.account:
             notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
+        elif account is not None:
+            notification_center.post_notification('BlinkGotHistoryMessageUpdate', sender=account, data=message)
+
 
         if message is not None and message.direction != 'outgoing' and message.disposition is not None and 'positive-delivery' in message.disposition:
             log.debug("-- Should send delivered imdn for incoming message")
@@ -1282,9 +1285,7 @@ class MessageManager(object, metaclass=Singleton):
             notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
 
         if encryption == 'OpenPGP':
-            if blink_session.fake_streams.get('messages').can_decrypt:
-                blink_session.fake_streams.get('messages').decrypt(message)
-            else:
+            if not blink_session.fake_streams.get('messages').can_decrypt and blink_session.account is account and not blink_session.fake_streams.get('messages').can_decrypt_others:
                 self._incoming_encrypted_message_queue.append((message, account, contact))
                 if account is blink_session.account:
                     notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
@@ -1292,6 +1293,8 @@ class MessageManager(object, metaclass=Singleton):
                 notification_center.post_notification('BlinkGotMessage',
                                                       sender=blink_session,
                                                       data=NotificationData(message=message, account=account))
+            else:
+                blink_session.fake_streams.get('messages').decrypt(message)
             return
 
         self._handle_incoming_message(message, blink_session, account)

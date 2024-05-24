@@ -65,6 +65,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
         notification_center.add_observer(self, name='BlinkGotHistoryMessage')
         notification_center.add_observer(self, name='BlinkGotHistoryMessageRemove')
+        notification_center.add_observer(self, name='BlinkGotHistoryMessageUpdate')
         notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
@@ -175,6 +176,9 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkGotHistoryConversationRemove(self, notification):
         self.message_history.remove_contact_messages(notification.sender, notification.data)
+
+    def _NH_BlinkGotHistoryMessageUpdate(self, notification):
+        self.message_history.update_message(notification)
 
     def _NH_BlinkMessageDidSucceed(self, notification):
         data = notification.data
@@ -563,6 +567,14 @@ class MessageHistory(object, metaclass=Singleton):
             else:
                 if message.content != dbmessage.content:
                     dbmessage.content = message.content
+
+    @run_in_thread('db')
+    def update_message(self, notification):
+        message = notification.data
+
+        db_message = Message.selectBy(message_id=message.id)[0]
+        if db_message.content != message.content:
+            db_message.content = message.content
 
     @run_in_thread('db')
     def update(self, id, state):
