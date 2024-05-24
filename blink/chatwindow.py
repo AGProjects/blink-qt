@@ -1763,6 +1763,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
         notification_center.add_observer(self, name='PGPFileDidDecrypt')
+        notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
@@ -2862,6 +2863,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if blink_session is None:
             return
 
+        session = blink_session.items.chat
         session.chat_widget.replace_message(transfer_session.id, ChatStatus(translate('chat_window', f'File decryption failed: {notification.data.error}')))
 
     def _NH_MessageStreamPGPKeysDidLoad(self, notification):
