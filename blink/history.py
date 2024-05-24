@@ -373,9 +373,17 @@ class DownloadHistory(object, metaclass=Singleton):
 
     @run_in_thread('file-io')
     def remove_cache_file(self, file):
-        log.info(f'== Removing file entry and file from cache: {id} {file.filename}')
+        path = os.path.dirname(file.filename)
+        blink_settings = BlinkSettings()
+        if path == blink_settings.transfers_directory.normalized:
+            log.info(f'== Not removing downloaded file: {file.file_id} {file.filename}')
+            return
+        log.info(f'== Removing file entry and file from cache: {file.file_id} {file.filename}')
         unlink(file.filename)
-        os.rmdir(os.path.dirname(file.filename))
+        try:
+            os.rmdir(os.path.dirname(file.filename))
+        except OSError:
+            pass
 
     @run_in_thread('db')
     def remove_contact_files(self, account, contact):
