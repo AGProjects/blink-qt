@@ -3753,9 +3753,10 @@ class ChatSessionListView(QListView):
                 pass
             self.setFocus(Qt.OtherFocusReason)
         else:
-            self.hide()
             current_tab = self.chat_window.tab_widget.currentWidget()
             current_tab.chat_input.setFocus(Qt.OtherFocusReason)
+            self.hide()
+
 
     def _SH_DoubleClicked(self, index):
         self.animation.setDirection(QPropertyAnimation.Backward)
