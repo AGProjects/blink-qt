@@ -967,10 +967,6 @@ class ChatWidget(base_class, ui_class):
     def _scroll_to_bottom(self):
         self.chat_js.scroll_to_bottom()
 
-    def _print_scrollbar_position(self):
-        frame = self.chat_view.page().mainFrame()
-        print("%d out of %d, %d+%d=%d (%d)" % (frame.scrollBarValue(Qt.Vertical), frame.scrollBarMaximum(Qt.Vertical), frame.scrollBarValue(Qt.Vertical), self.chat_view.size().height(),
-                                               frame.scrollBarValue(Qt.Vertical) + self.chat_view.size().height(), frame.contentsSize().height()))
 
     def dragEnterEvent(self, event):
         mime_data = event.mimeData()
