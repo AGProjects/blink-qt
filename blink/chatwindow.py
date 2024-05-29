@@ -4,13 +4,15 @@ import locale
 import os
 import re
 import uuid
+import sys
+import json
 
 from PyQt5 import uic
-from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QFileInfo
+from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QObject, QFileInfo, pyqtSlot
 from PyQt5.QtGui import QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
 from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWebKit import QWebSettings
-from PyQt5.QtWebKitWidgets import QWebPage, QWebView
+from PyQt5.QtWebChannel import QWebChannel
+from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineView, QWebEngineSettings, QWebEngineScript
 from PyQt5.QtWidgets import QApplication, QAction, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
 from PyQt5.QtWidgets import QFileDialog, QFileIconProvider
 
@@ -24,6 +26,7 @@ from collections.abc import MutableSet
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from dateutil.tz import tzlocal
+from functools import partial
 from itertools import count
 from lxml import etree, html
 from lxml.html.clean import autolink
@@ -90,7 +93,7 @@ class ChatMessageStyle(object):
         else:
             self.info = dict((element.tag, element.text) for element in xml_tree.getroot())
         try:
-            self.variants = tuple(sorted(name[:-len('.style')] for name in os.listdir(self.path) if name.endswith('.style')))
+            self.variants = tuple(sorted(name[:-len('.css')] for name in os.listdir(self.path) if name.endswith('.css')))
         except (OSError, IOError):
             self.variants = ()
         if not self.variants:
@@ -359,23 +362,29 @@ class ChatSender(object):
         return self.__colors__[hash(self.uri) % len(self.__colors__)]
 
 
-class ChatWebPage(QWebPage):
+class ChatWebPage(QWebEnginePage):
+    linkClicked = pyqtSignal(QUrl)
+
     def __init__(self, parent=None):
         super(ChatWebPage, self).__init__(parent)
-        self.setLinkDelegationPolicy(QWebPage.DelegateAllLinks)
-        disable_actions = {QWebPage.OpenLink, QWebPage.OpenLinkInNewWindow, QWebPage.OpenLinkInThisWindow, QWebPage.DownloadLinkToDisk,
-                           QWebPage.OpenImageInNewWindow, QWebPage.DownloadImageToDisk, QWebPage.DownloadMediaToDisk,
-                           QWebPage.Back, QWebPage.Forward, QWebPage.Stop, QWebPage.Reload}
+        disable_actions = {QWebEnginePage.OpenLinkInNewBackgroundTab, QWebEnginePage.OpenLinkInNewTab, QWebEnginePage.OpenLinkInNewWindow,
+                           QWebEnginePage.OpenLinkInThisWindow,
+                           QWebEnginePage.DownloadLinkToDisk, QWebEnginePage.DownloadImageToDisk, QWebEnginePage.DownloadMediaToDisk,
+                           QWebEnginePage.Back, QWebEnginePage.Forward, QWebEnginePage.Stop, QWebEnginePage.Reload,
+                           QWebEnginePage.SavePage, QWebEnginePage.ViewSource}
         for action in (self.action(action) for action in disable_actions):
             action.setVisible(False)
 
-    def acceptNavigationRequest(self, frame, request, navigation_type):  # not sure if needed since we already disabled the corresponding actions. (can they be triggered otherwise?)
-        if navigation_type in (QWebPage.NavigationTypeBackOrForward, QWebPage.NavigationTypeReload):
+    def acceptNavigationRequest(self, url, navigation_type, is_main_frame):  # not sure if needed since we already disabled the corresponding actions. (can they be triggered otherwise?)
+        if navigation_type in (QWebEnginePage.NavigationTypeBackForward, QWebEnginePage.NavigationTypeReload):
             return False
-        return super(ChatWebPage, self).acceptNavigationRequest(frame, request, navigation_type)
+        elif navigation_type == QWebEnginePage.NavigationTypeLinkClicked:
+            self.linkClicked.emit(url)
+            return False
+        return super(ChatWebPage, self).acceptNavigationRequest(url, navigation_type, is_main_frame)
 
 
-class ChatWebView(QWebView):
+class ChatWebView(QWebEngineView):
     sizeChanged = pyqtSignal()
     messageShouldRemove = pyqtSignal(str)
 
@@ -386,28 +395,20 @@ class ChatWebView(QWebView):
         self.setPalette(palette)
         self.setPage(ChatWebPage(self))
         self.setAttribute(Qt.WA_OpaquePaintEvent, False)
-        self.settings().setAttribute(QWebSettings.DeveloperExtrasEnabled, True)  # temporary for debugging -Dan
+        self.last_message_id = None
 
     def contextMenuEvent(self, event):
         menu = self.page().createStandardContextMenu()
-        hit = self.page().currentFrame().hitTestContent(event.pos())
-        self.id = None
-        if hit.element().hasAttribute('id'):
-            id = hit.element().attribute('id')
-        else:
-            id = hit.element().parent().attribute('id')
-        if not id:
-            id = hit.element().parent().parent().attribute('id')
+        if self.last_message_id is not None:
+            if self.last_message_id.startswith('text-'):
+                self.id = self.last_message_id[5:]
+                action = menu.addAction('Remove Message')
+                action.triggered.connect(self._SH_RemoveClicked)
 
-        if id.startswith('text-'):
-            self.id = id[5:]
-            action = menu.addAction('Remove Message')
-            action.triggered.connect(self._SH_RemoveClicked)
-
-        if id.startswith('message-'):
-            self.id = id[8:]
-            action = menu.addAction('Remove Message')
-            action.triggered.connect(self._SH_RemoveClicked)
+            if self.last_message_id.startswith('message-'):
+                self.id = self.last_message_id[8:]
+                action = menu.addAction('Remove Message')
+                action.triggered.connect(self._SH_RemoveClicked)
 
         if any(action.isVisible() and not action.isSeparator() for action in menu.actions()):
             menu.exec_(event.globalPos())
@@ -693,6 +694,95 @@ class FileDescriptor(object):
         return QUrl.fromLocalFile(self.filename).toString()
 
 
+class ChatJSInterface(QObject):
+    contextMenuEvent = pyqtSignal(str)
+    js_file = open(Resources.get('chat/js_helper_functions.js')).read()
+
+    def __init__(self, page, parent=None):
+        super(ChatJSInterface, self).__init__(parent)
+        self.page = page
+        self.loaded = False
+        self._js_operations_queue = deque()
+        self.channel = QWebChannel()
+        self.channel.registerObject('chat', self)
+        self.page.setWebChannel(self.channel)
+        self.page.profile().scripts().insert(self._get_script())
+        self.page.loadFinished.connect(self._SH_LoadFinished)
+
+    def _get_script(self):
+        script = QWebEngineScript()
+        script.setSourceCode(self.js_file)
+        script.setWorldId(QWebEngineScript.MainWorld)
+        script.setInjectionPoint(QWebEngineScript.DocumentCreation)
+        script.setRunsOnSubFrames(True)
+        return script
+
+    def _SH_LoadFinished(self, ok):
+        if ok:
+            self.loaded = True
+            self.page.runJavaScript('startWebChannel()')
+            self._run_js()
+
+    def _js_operation(self, operation):
+        self._js_operations_queue.append(operation)
+        self._run_js()
+
+    def _run_js(self):
+        if not self.loaded:
+            return
+        while self._js_operations_queue:
+            operation = self._js_operations_queue.popleft()
+            if isinstance(operation, tuple):
+                self.page.runJavaScript(*operation)
+            else:
+                self.page.runJavaScript(operation)
+
+    def append_element(self, query, content):
+        content = json.dumps(content)
+        self._js_operation(f"appendElement('{query}', {content})")
+
+    def update_element(self, query, content):
+        content = json.dumps(content)
+        self._js_operation(f"updateElement('{query}', {content})")
+
+    def replace_element(self, query, content):
+        content = json.dumps(content)
+        self._js_operation(f"replaceElement('{query}', {content})")
+
+    def remove_element(self, query):
+        self._js_operation(f"removeElement('{query}')")
+
+    def empty_element(self, query):
+        self._js_operation(f"emptyElement('{query}')")
+
+    def previous_sibling(self, query, content):
+        content = json.dumps(content)
+        self._js_operation(f"previousSibling('{query}', {content})")
+
+    def prepend_outside_element(self, query, content):
+        content = json.dumps(content)
+        self._js_operation(f"prependOutside('{query}', {content})")
+
+    def set_style_property_element(self, query, property, value):
+        self._js_operation(f"styleElement('{query}', '{property}', '{value}')")
+
+    def get_height_element(self, query, callback):
+        self._js_operation((f"getHeightElement('{query}')", callback))
+
+    def scroll_to_bottom(self):
+        self._js_operation('scrollToBottom()')
+
+    def append_message_to_chat(self, content, id=None):
+        content = json.dumps(content)
+        self._js_operation(f"appendMessageToChat({content})")
+        if id:
+            self._js_operation(f"addContextMenuToElement('#message-{id}')")
+
+    @pyqtSlot(str)
+    def handleContextMenuEvent(self, id):
+        self.last_message_id = id
+        self.contextMenuEvent.emit(id)
+
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
 
@@ -719,9 +809,8 @@ class ChatWidget(base_class, ui_class):
         self.font_family = blink_settings.chat_window.font or self.style.font_family
         self.font_size = blink_settings.chat_window.font_size or self.style.font_size
         self.user_icons_css_class = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
-        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path) + '/', style_url=self.style_variant + '.style', font_family=self.font_family, font_size=self.font_size))
-        self.chat_element = self.chat_view.page().mainFrame().findFirstElement('#chat')
-        self.loading_element = self.chat_view.page().mainFrame().findFirstElement('#loading')
+        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path) + '/', style_url=self.style_variant + '.css', font_family=self.font_family, font_size=self.font_size), baseUrl=QUrl.fromLocalFile(os.path.abspath(sys.argv[0])))
+        self.chat_js = ChatJSInterface(self.chat_view.page())
         self.composing_timer = QTimer()
         self.otr_timer = QTimer()
         self.otr_timer.setSingleShot(True)
@@ -741,8 +830,10 @@ class ChatWidget(base_class, ui_class):
         self.chat_input.textEntered.connect(self._SH_ChatInputTextEntered)
         self.chat_input.lockReleased.connect(self._SH_ChatInputLockReleased)
         self.chat_view.sizeChanged.connect(self._SH_ChatViewSizeChanged)
-        self.chat_view.page().mainFrame().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
+
+        self.chat_view.page().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
         self.chat_view.page().linkClicked.connect(self._SH_LinkClicked)
+        self.chat_js.contextMenuEvent.connect(self._SH_ContextMenuEvent)
 
         self.chat_view.messageShouldRemove.connect(self._SH_MessageShouldRemove)
 
@@ -755,53 +846,43 @@ class ChatWidget(base_class, ui_class):
 
     def add_message(self, message):
         if hasattr(message, 'id'):
-            exists = self.chat_element.findFirst(f'#text-{message.id}')
-            if not exists.isNull():
-                return
-
             if self.last_message is not None and not self.last_message.history and message.history:
                 message.history = False
 
             for i, (timestamp, id) in enumerate(self.timestamp_rendered_messages):
-                if timestamp >= message.timestamp:
-                    insertion_point = self.chat_element.findFirst(f'#message-{id}')
+                if id == message.id:
+                    return
 
+                if timestamp >= message.timestamp:
                     if message.is_related_to(self.last_message):
                         message.consecutive = True
-                        sibling = insertion_point.previousSibling()
-                        sibling.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", ''))
+                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
+                        self.chat_js.previous_sibling(f'message-{id}', html_message)
                     else:
-                        insertion_point.prependOutside(message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", ''))
-
+                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
+                        self.chat_js.prepend_outside_element(f'message-{id}', html_message)
                     self.timestamp_rendered_messages.insert(i, (message.timestamp, message.id))
                     self.last_message = message
                     return
 
-        insertion_point = self.chat_element.findFirst('#insert')
         if message.is_related_to(self.last_message):
             message.consecutive = True
-            insertion_point.replace(message.to_html(self.style, user_icons=self.user_icons_css_class))
+            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
+            self.chat_js.replace_element('#insert', html_message)
         else:
-            insertion_point.removeFromDocument()
-            self.chat_element.appendInside(message.to_html(self.style, user_icons=self.user_icons_css_class))
+            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
+            self.chat_js.append_message_to_chat(html_message, message.id)
 
         if hasattr(message, 'id'):
             self.timestamp_rendered_messages.append((message.timestamp, message.id))
         self.last_message = message
 
     def replace_message(self, id, message):
-        exists = self.chat_element.findFirst(f'#message-{id}')
-
-        if exists.isNull():
-            return
-        else:
-            exists.prependOutside(message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", ''))
-            exists.removeFromDocument()
+        html = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
+        self.chat_js.replace_element(f'#message-{id}', html)
 
     def update_message_text(self, id, text):
-        insertion_point = self.chat_element.findFirst(f'#text-{id}')
-        insertion_point.removeAllChildren()
-        insertion_point.appendInside(text)
+        self.chat_js.update_element(f'#text-{id}', text)
 
     def update_message_status(self, id, status):
         if status == 'pending':
@@ -812,30 +893,24 @@ class ChatWidget(base_class, ui_class):
             icon = self.done_all_icon
         else:
             icon = self.checkmark_icon
-        insertion_point = self.chat_element.findFirst(f'span#status-{id}')
-        insertion_point.replace(ChatMessageStatus(status, icon.filename, id).to_html(self.style))
+        html = ChatMessageStatus(status, icon.filename, id).to_html(self.style)
+        self.chat_js.replace_element(f'span#status-{id}', html)
 
     def update_message_encryption(self, id, is_secure=False):
         if is_secure is True:
-            insertion_point = self.chat_element.findFirst(f'span#encryption-{id}')
-            insertion_point.removeAllChildren()
-            insertion_point.appendInside(f'<img src={self.encrypted_icon.filename} class="status-icon is-secure">')
+            html = f'<img src={self.encrypted_icon.filename} class="status-icon is-secure">'
+            self.chat_js.update_element(f'span#encryption-{id}', html)
 
     def remove_message(self, id):
-        exists = self.chat_element.findFirst(f'#message-{id}')
-
-        if exists.isNull():
-            return
-        else:
-            exists.removeFromDocument()
+        self.chat_js.remove_element(f'#message-{id}')
 
     def show_loading_screen(self, visible):
         if visible:
-            self.loading_element.appendInside(self.loading_template)
-            body = self.chat_view.page().mainFrame().findFirstElement('body').setStyleProperty('overflow', 'hidden')
+            self.chat_js.append_element('#loading', self.loading_template)
+            self.chat_js.set_style_property_element('body', 'overflow', 'hidden')
         else:
-            self.loading_element.removeAllChildren()
-            body = self.chat_view.page().mainFrame().findFirstElement('body').setStyleProperty('overflow', 'auto')
+            self.chat_js.empty_element('#loading')
+            self.chat_js.set_style_property_element('body', 'overflow', 'auto')
 
     def send_sip_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         account = self.session.blink_session.account
@@ -874,27 +949,23 @@ class ChatWidget(base_class, ui_class):
     def stop_otr_timer(self):
         self.otr_timer.stop()
 
-    def _align_chat(self, scroll=False):
-        # frame_height = self.chat_view.page().mainFrame().contentsSize().height()
+    def _process_height(self, height, scroll=False):
         widget_height = self.chat_view.size().height()
-        content_height = self.chat_element.geometry().height()
-        # print widget_height, frame_height, content_height
+        content_height = height
         if widget_height > content_height:
-            self.chat_element.setStyleProperty('position', 'relative')
-            self.chat_element.setStyleProperty('top', '%dpx' % (widget_height - content_height))
+            self.chat_js.set_style_property_element('#chat', 'position', 'relative')
+            self.chat_js.set_style_property_element('#chat', 'top', '%dpx' % (widget_height - content_height))
         else:
-            self.chat_element.setStyleProperty('position', 'static')
-            self.chat_element.setStyleProperty('top', None)
-        frame = self.chat_view.page().mainFrame()
-        if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height * 0.2:
-            # print "scroll requested or scrollbar is closer than %dpx to the bottom" % (widget_height*0.2)
-            # self._print_scrollbar_position()
+            self.chat_js.set_style_property_element('#chat', 'position', 'static')
+            self.chat_js.set_style_property_element('#chat', 'top', '0')
+        if scroll:
             self._scroll_to_bottom()
-            # self._print_scrollbar_position()
+
+    def _align_chat(self, scroll=False):
+        self.chat_js.get_height_element('#chat', partial(self._process_height, scroll=scroll))
 
     def _scroll_to_bottom(self):
-        frame = self.chat_view.page().mainFrame()
-        frame.setScrollBarValue(Qt.Vertical, frame.scrollBarMaximum(Qt.Vertical))
+        self.chat_js.scroll_to_bottom()
 
     def _print_scrollbar_position(self):
         frame = self.chat_view.page().mainFrame()
@@ -976,6 +1047,9 @@ class ChatWidget(base_class, ui_class):
             self.chat_input.setHtml(text)
             self.chat_input.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, text='\r'))
             self.chat_input.setHtml(user_text)
+
+    def _SH_ContextMenuEvent(self, id):
+        self.chat_view.last_message_id = id
 
     def _SH_LinkClicked(self, link):
         directory = SIPSimpleSettings().file_transfer.directory.normalized
@@ -2437,7 +2511,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.mute_button.setChecked(settings.audio.muted)
         elif notification.sender is blink_settings:
             if 'presence.icon' in notification.data.modified:
-                QWebSettings.clearMemoryCaches()
+                QWebEngineSettings.clearMemoryCaches()
             if 'chat_window.session_info.alternate_style' in notification.data.modified:
                 if blink_settings.chat_window.session_info.alternate_style:
                     title_role = 'alt-title'
@@ -2980,7 +3054,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.original_name, file.hash, file.id, account=file.account, conference_file=False)
             else:
                 SessionManager().get_file_from_url(blink_session, file)
-
+        session.chat_widget._align_chat(True)
         session.chat_widget.show_loading_screen(False)
 
     def _NH_BlinkMessageHistoryLoadDidFail(self, notification):

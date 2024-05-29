@@ -2,15 +2,17 @@
 import os
 import re
 import urllib.parse
+import sys
 
 from PyQt5 import uic
-from PyQt5.QtCore import Qt, QEvent, QRegExp
+from PyQt5.QtCore import Qt, QEvent, QRegExp, QUrl
 from PyQt5.QtGui import QFont, QRegExpValidator, QValidator
 from PyQt5.QtWidgets import QActionGroup, QApplication, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
+from functools import partial
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implementer
@@ -23,7 +25,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.accounts import AddAccountDialog
-from blink.chatwindow import ChatMessageStyle, ChatStyleError, ChatMessage, ChatEvent, ChatSender
+from blink.chatwindow import ChatMessageStyle, ChatStyleError, ChatMessage, ChatEvent, ChatSender, ChatJSInterface
 from blink.configuration.datatypes import FileURL
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
@@ -326,7 +328,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # Chat
         self.style_view.sizeChanged.connect(self._SH_StyleViewSizeChanged)
-        self.style_view.page().mainFrame().contentsSizeChanged.connect(self._SH_StyleViewFrameContentsSizeChanged)
+        self.style_view.page().contentsSizeChanged.connect(self._SH_StyleViewFrameContentsSizeChanged)
 
         self.style_button.activated[int].connect(self._SH_StyleButtonActivated)
         self.style_variant_button.activated[str].connect(self._SH_StyleVariantButtonActivated)
@@ -994,19 +996,20 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         font_size = blink_settings.chat_window.font_size or style.font_size
         user_icons = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
 
-        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path) + '/', style_url=style_variant+'.style', font_family=font_family, font_size=font_size))
-        chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
-        chat_element.last_message = None
+        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path) + '/', style_url=style_variant + '.css', font_family=font_family, font_size=font_size), baseUrl=QUrl.fromLocalFile(os.path.abspath(sys.argv[0])))
+        self.chat_js = ChatJSInterface(self.style_view.page())
+        self.style_view.last_message = None
 
         def add_message(message):
-            insertion_point = chat_element.findFirst('#insert')
-            if message.is_related_to(chat_element.last_message):
+            if message.is_related_to(self.style_view.last_message):
                 message.consecutive = True
-                insertion_point.replace(message.to_html(style, user_icons=user_icons))
+
+                html_message = message.to_html(style, user_icons=user_icons)
+                self.chat_js.replace_element('#insert', html_message)
             else:
-                insertion_point.removeFromDocument()
-                chat_element.appendInside(message.to_html(style, user_icons=user_icons))
-            chat_element.last_message = message
+                html_message = message.to_html(style, user_icons=user_icons)
+                self.chat_js.append_message_to_chat(html_message)
+            self.style_view.last_message = message
 
         ruby = ChatSender("Ruby", 'ruby@example.com', Resources.get('icons/avatar-ruby.png'))
         nate = ChatSender("Nate", 'nate@example.net', Resources.get('icons/avatar-nate.png'))
@@ -1023,7 +1026,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         for message in messages:
             add_message(message)
 
-        del chat_element.last_message
+        del self.style_view.last_message
 
     def show(self):
         selection_model = self.account_list.selectionModel()
@@ -1085,20 +1088,20 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         idd_prefix = self.idd_prefix_button.currentText()
         self.pstn_example_transformed_label.setText("%s%s442079460000" % ('' if prefix == 'None' else prefix, idd_prefix))
 
-    def _align_style_preview(self, scroll=False):
-        chat_element = self.style_view.page().mainFrame().findFirstElement('#chat')
+    def _process_height(self, height, scroll=False):
         widget_height = self.style_view.size().height()
-        content_height = chat_element.geometry().height()
+        content_height = height
         if widget_height > content_height:
-            chat_element.setStyleProperty('position', 'relative')
-            chat_element.setStyleProperty('top', '%dpx' % (widget_height - content_height))
+            self.chat_js.set_style_property_element('#chat', 'position', 'relative')
+            self.chat_js.set_style_property_element('#chat', 'top', '%dpx' % (widget_height - content_height))
         else:
-            chat_element.setStyleProperty('position', 'static')
-            chat_element.setStyleProperty('top', None)
-        frame = self.style_view.page().mainFrame()
-        if scroll or frame.scrollBarMaximum(Qt.Vertical) - frame.scrollBarValue(Qt.Vertical) <= widget_height * 0.2:
-            frame = self.style_view.page().mainFrame()
-            frame.setScrollBarValue(Qt.Vertical, frame.scrollBarMaximum(Qt.Vertical))
+            self.chat_js.set_style_property_element('#chat', 'position', 'static')
+            self.chat_js.set_style_property_element('#chat', 'top', None)
+        if scroll:
+            self.chat_js.scroll_to_bottom()
+
+    def _align_style_preview(self, scroll=False):
+        self.chat_js.get_height_element('#chat', partial(self._process_height, scroll=scroll))
 
     # Signal handlers
     #

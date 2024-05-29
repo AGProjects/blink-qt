@@ -157,6 +157,8 @@ body
 	margin-right: 8px;
 	padding-right: 1px;
 	margin-bottom: -1px;
+    display: flex;
+    flex-direction: row-reverse;
 }
 
 .x-message.consecutive
@@ -172,13 +174,14 @@ body
 	line-height: 1.3em;
 	/*overflow: auto;*/
 	padding-bottom: 1px;
+    flex: auto
 }
 
 .x-message .x-time
 {
 	visibility: hidden;
 	font-weight: bold;
-	/*position: absolute;*/
+	position: absolute;
 	margin-top: 0px;
 	padding-left: 4px;
 	padding-top: 0px;
@@ -187,6 +190,7 @@ body
 	-webkit-box-shadow: 0px 1px 4px rgba(0, 0, 0, .5);
 	background-color: rgba(255, 255, 255, .8);
 	color: rgba(16, 16, 16, .8);
+    flex: 1 0 auto;
 }
 
 .message:not(.focus) .x-message.ltr .x-time,
