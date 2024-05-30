@@ -10,7 +10,7 @@ from PyQt5 import uic
 from PyQt5.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
 from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt5.QtGui import QBrush, QColor, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
-from PyQt5.QtWebKitWidgets import QWebView
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import QAction, QApplication, QItemDelegate, QStyledItemDelegate, QStyle
 from PyQt5.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QRadioButton, QTableView, QWidget
 
@@ -684,7 +684,7 @@ class GoogleContactsList(object):
         return self._contact_map.pop(id, *args)
 
 
-class GoogleAuthorizationView(QWebView):
+class GoogleAuthorizationView(QWebEngineView):
     finished = pyqtSignal()
     accepted = pyqtSignal(str, str)  # accepted.emit(code, email)
     rejected = pyqtSignal()
