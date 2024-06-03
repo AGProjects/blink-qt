@@ -5810,8 +5810,11 @@ class IncomingDialogBase(QDialog):
             self.slot = slot = self._slots.reserve()
 
             blink = QApplication.instance()
-            screen_geometry = blink.desktop().screenGeometry(self)
-            available_geometry = blink.desktop().availableGeometry(self)
+            # We can also display on the main window screen if desired ... -- Tijmen
+            # screen = blink.screenAt(blink.main_window.pos())
+            screen = blink.primaryScreen()
+            screen_geometry = screen.geometry()
+            available_geometry = screen.availableGeometry()
             window_frame_size = blink.main_window.frameSize() - blink.main_window.size()
 
             width = limit(self.sizeHint().width(), min=self.minimumSize().width(), max=min(self.maximumSize().width(), available_geometry.width() - window_frame_size.width()))
