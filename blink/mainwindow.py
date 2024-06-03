@@ -91,6 +91,7 @@ class MainWindow(base_class, ui_class):
         self.main_view.setCurrentWidget(self.contacts_panel)
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
         self.search_view.setCurrentWidget(self.search_list_panel)
+        self.export_pgp_key_action.setEnabled(False)
 
         # System tray
         if QSystemTrayIcon.isSystemTrayAvailable():
@@ -914,6 +915,11 @@ class MainWindow(base_class, ui_class):
         action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
         action.setData(account)
         action.triggered.connect(self._AH_VoicemailActionTriggered)
+
+    def _NH_SIPAccountManagerDidStart(self, notification):
+        account = notification.sender.default_account
+        if account is not BonjourAccount() and account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+            self.export_pgp_key_action.setEnabled(True)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account
