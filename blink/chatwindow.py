@@ -845,7 +845,9 @@ class ChatWidget(base_class, ui_class):
         return IconManager().get('avatar') or self.default_user_icon
 
     def add_message(self, message):
+        id = None
         if hasattr(message, 'id'):
+            id = message.id
             if self.last_message is not None and not self.last_message.history and message.history:
                 message.history = False
 
@@ -871,7 +873,8 @@ class ChatWidget(base_class, ui_class):
             self.chat_js.replace_element('#insert', html_message)
         else:
             html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
-            self.chat_js.append_message_to_chat(html_message, message.id)
+
+            self.chat_js.append_message_to_chat(html_message, id)
 
         if hasattr(message, 'id'):
             self.timestamp_rendered_messages.append((message.timestamp, message.id))
