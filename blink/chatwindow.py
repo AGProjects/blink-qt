@@ -2314,11 +2314,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _update_chat_encryption_icon(self):
         stream = self.selected_session.chat_stream
         stream_info = self.selected_session.blink_session.info.streams.chat
+        messages_info = self.selected_session.blink_session.info.streams.messages
         if self.chat_encryption_label.isEnabled() and stream_info.encryption == 'OTR':
             if self.chat_encryption_label.hovered and stream is not None and not stream._done:
                 self.chat_encryption_label.setPixmap(self.pixmaps.light_green_lock if stream_info.otr_verified else self.pixmaps.light_orange_lock)
             else:
                 self.chat_encryption_label.setPixmap(self.pixmaps.green_lock if stream_info.otr_verified else self.pixmaps.orange_lock)
+        elif self.chat_encryption_label.isEnabled() and messages_info.encryption == 'OpenPGP':
+            self.chat_encryption_label.setPixmap(self.pixmaps.green_lock)
         else:
             self.chat_encryption_label.setPixmap(self.pixmaps.grey_lock)
 
