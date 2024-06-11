@@ -77,6 +77,7 @@ function addContextMenuToElement(query) {
         elem.addEventListener('contextmenu', handleContextMenu);
     }
 }
+
 function appendMessageToChat(content) {
     removeElement('#insert');
     appendElement('#chat', content);
@@ -116,20 +117,10 @@ function handleContextMenu(e) {
     chat.handleContextMenuEvent(id);
 }
 
-let timer = null;
-let tries = 3;
-function startWebChannel() {
-    if (typeof QWebChannel === undefined) {
-        tries = tries - 1;
-        if (tries > 0) {
-            if (timer) {
-                clearTimeout(timer);
-            }
-            timer = setTimeout(startWebChannel, 1000);
-        }
-        return
-    }
+window.onload = function() {
     new QWebChannel(qt.webChannelTransport, function(channel) {
-        window.chat = channel.objects.chat
+        chat = channel.objects.chat;
+        window.chat = chat;
+        chat._JH_LoadFinished(true);
     })
 }

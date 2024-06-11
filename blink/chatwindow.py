@@ -707,7 +707,6 @@ class ChatJSInterface(QObject):
         self.channel.registerObject('chat', self)
         self.page.setWebChannel(self.channel)
         self.page.profile().scripts().insert(self._get_script())
-        self.page.loadFinished.connect(self._SH_LoadFinished)
 
     def _get_script(self):
         script = QWebEngineScript()
@@ -717,10 +716,10 @@ class ChatJSInterface(QObject):
         script.setRunsOnSubFrames(True)
         return script
 
-    def _SH_LoadFinished(self, ok):
+    @pyqtSlot(bool)
+    def _JH_LoadFinished(self, ok):
         if ok:
             self.loaded = True
-            self.page.runJavaScript('startWebChannel()')
             self._run_js()
 
     def _js_operation(self, operation):
