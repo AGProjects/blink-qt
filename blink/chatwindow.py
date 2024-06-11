@@ -411,7 +411,8 @@ class ChatWebView(QWebEngineView):
                 action.triggered.connect(self._SH_RemoveClicked)
 
         if any(action.isVisible() and not action.isSeparator() for action in menu.actions()):
-            menu.exec_(event.globalPos())
+            menu.aboutToHide.connect(self._SH_AboutToHide)
+            menu.exec(event.globalPos())
 
     def createWindow(self, window_type):
         print("create window of type", window_type)
@@ -427,6 +428,9 @@ class ChatWebView(QWebEngineView):
     def _SH_RemoveClicked(self):
         self.messageShouldRemove.emit(self.id)
 
+    def _SH_AboutToHide(self):
+        self.id = None
+        self.last_message_id = None
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_input_lock.ui'))
 
@@ -775,12 +779,16 @@ class ChatJSInterface(QObject):
         content = json.dumps(content)
         self._js_operation(f"appendMessageToChat({content})")
         if id:
+            self.add_context_menu(id)
+
+    def add_context_menu(self, id):
+        if id is not None:
             self._js_operation(f"addContextMenuToElement('#message-{id}')")
 
     @pyqtSlot(str)
     def handleContextMenuEvent(self, id):
-        self.last_message_id = id
-        self.contextMenuEvent.emit(id)
+        if id != '':
+            self.contextMenuEvent.emit(id)
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
@@ -844,9 +852,9 @@ class ChatWidget(base_class, ui_class):
         return IconManager().get('avatar') or self.default_user_icon
 
     def add_message(self, message):
-        id = None
+        message_id = None
         if hasattr(message, 'id'):
-            id = message.id
+            message_id = message.id
             if self.last_message is not None and not self.last_message.history and message.history:
                 message.history = False
 
@@ -859,9 +867,11 @@ class ChatWidget(base_class, ui_class):
                         message.consecutive = True
                         html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
                         self.chat_js.previous_sibling(f'message-{id}', html_message)
+                        self.chat_js.add_context_menu(message.id)
                     else:
                         html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
                         self.chat_js.prepend_outside_element(f'message-{id}', html_message)
+                        self.chat_js.add_context_menu(message.id)
                     self.timestamp_rendered_messages.insert(i, (message.timestamp, message.id))
                     self.last_message = message
                     return
@@ -870,10 +880,10 @@ class ChatWidget(base_class, ui_class):
             message.consecutive = True
             html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
             self.chat_js.replace_element('#insert', html_message)
+            self.chat_js.add_context_menu(message_id)
         else:
             html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
-
-            self.chat_js.append_message_to_chat(html_message, id)
+            self.chat_js.append_message_to_chat(html_message, message_id)
 
         if hasattr(message, 'id'):
             self.timestamp_rendered_messages.append((message.timestamp, message.id))
@@ -882,7 +892,7 @@ class ChatWidget(base_class, ui_class):
     def replace_message(self, id, message):
         html = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
         self.chat_js.replace_element(f'#message-{id}', html)
-
+        self.chat_js.add_context_menu(id)
     def update_message_text(self, id, text):
         self.chat_js.update_element(f'#text-{id}', text)
 

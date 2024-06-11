@@ -107,12 +107,13 @@ function print(content) {
 }
 
 function handleContextMenu(e) {
+    e.stopPropagation();
     let id = e.target.getAttribute('id');
     if (id === null) {
-        id = e.target.offsetParent.getAttribute('id')
+        id = e.target.parentElement.getAttribute('id')
     }
     if (id === null) {
-        id = e.target.offsetParent.offsetParent.getAttribute('id')
+        id = e.target.parentElement.parentElement.getAttribute('id')
     }
     chat.handleContextMenuEvent(id);
 }
