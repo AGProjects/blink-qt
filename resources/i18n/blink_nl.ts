@@ -460,7 +460,7 @@ Alle rechten voorbehouden.</translation>
     </message>
     <message>
         <location filename="../../blink/chatwindow.py" line="1932"/>
-        <source>Start real time chat session</source>
+        <source>Start MSRP chat</source>
         <translation>Realtime chatsessie starten</translation>
     </message>
     <message>
@@ -945,7 +945,7 @@ Alle rechten voorbehouden.</translation>
     </message>
     <message>
         <location filename="../../blink/contacts.py" line="4034"/>
-        <source>Start Real Time Chat Session</source>
+        <source>Start MSRP Chat Session</source>
         <translation>Realtime chatsessie starten</translation>
     </message>
     <message>

@@ -413,7 +413,7 @@ All rights reserved.</source>
     </message>
     <message>
         <location filename="../../blink/chatwindow.py" line="1932"/>
-        <source>Start real time chat session</source>
+        <source>Start MSRP chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -948,7 +948,7 @@ All rights reserved.</source>
     </message>
     <message>
         <location filename="../../blink/contacts.py" line="4034"/>
-        <source>Start Real Time Chat Session</source>
+        <source>Start Real MSRP Session</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -1128,13 +1128,13 @@ padding: 2px;</string>
    </widget>
    <widget class="QMenu" name="chat_menu">
     <property name="title">
-     <string>&amp;Chat</string>
+     <string>&amp;Messages</string>
     </property>
-    <addaction name="join_conference_action"/>
     <addaction name="show_last_messages_action"/>
     <addaction name="export_pgp_key_action"/>
     <addaction name="auto_accept_chat_action"/>
     <addaction name="received_messages_sound_action"/>
+    <addaction name="join_conference_action"/>
    </widget>
    <widget class="QMenu" name="devices_menu">
     <property name="title">
@@ -1344,7 +1344,7 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Auto-accept &amp;chat from my contacts</string>
+    <string>Auto-accept MSRP chat from my contacts</string>
    </property>
   </action>
   <action name="add_account_action">
@@ -1385,7 +1385,7 @@ padding: 2px;</string>
   </action>
   <action name="join_conference_action">
    <property name="text">
-    <string>&amp;Join Conference...</string>
+    <string>&amp;Join MSRP Conference...</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+J</string>
@@ -1396,7 +1396,7 @@ padding: 2px;</string>
   </action>
   <action name="chat_window_action">
    <property name="text">
-    <string>&amp;Chat</string>
+    <string>&amp;Messages</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+G</string>
@@ -1448,7 +1448,7 @@ padding: 2px;</string>
   </action>
   <action name="show_last_messages_action">
    <property name="text">
-    <string>&amp;Show last conversations</string>
+    <string>&amp;Show Messages</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>

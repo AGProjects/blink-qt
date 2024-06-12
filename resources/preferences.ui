@@ -2854,13 +2854,13 @@
         <item row="1" column="0">
          <widget class="QGroupBox" name="chat_sessions_group_box">
           <property name="title">
-           <string>Chat Sessions</string>
+           <string>MSRP chat</string>
           </property>
           <layout class="QVBoxLayout" name="chat_sessions_group_box_layout">
            <item>
             <widget class="QCheckBox" name="auto_accept_chat_button">
              <property name="text">
-              <string>Automatically accept chat requests from known contacts</string>
+              <string>Automatically accept requests from known contacts</string>
              </property>
             </widget>
            </item>
@@ -2874,7 +2874,7 @@
            <item>
             <widget class="QCheckBox" name="chat_message_alert_button">
              <property name="text">
-              <string>Play a sound when a chat message is received</string>
+              <string>Play a sound when a message is received</string>
              </property>
             </widget>
            </item>
@@ -2897,7 +2897,7 @@
         <item row="1" column="1">
          <widget class="QGroupBox" name="chat_window_group_box">
           <property name="title">
-           <string>Chat Window</string>
+           <string>Messages Window</string>
           </property>
           <layout class="QVBoxLayout" name="chat_window_group_box_layout">
            <item>
@@ -3954,7 +3954,7 @@
      <normaloff>icons/chat.png</normaloff>icons/chat.png</iconset>
    </property>
    <property name="text">
-    <string>Chat</string>
+    <string>Messages</string>
    </property>
   </action>
   <action name="screen_sharing_action">

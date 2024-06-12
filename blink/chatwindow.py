@@ -1913,7 +1913,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_menu = QMenu(self.control_button)
         self.control_button.setMenu(self.control_menu)
         self.control_button.actions = ContextMenuActions()
-        self.control_button.actions.connect = QAction(translate('chat_window', "Start real time chat session"), self, triggered=self._AH_Connect)
+        self.control_button.actions.connect = QAction(translate('chat_window', "Start MSRP chat"), self, triggered=self._AH_Connect)
         self.control_button.actions.connect_with_audio = QAction(translate('chat_window', "Start audio call"), self, triggered=self._AH_ConnectWithAudio)
         self.control_button.actions.connect_with_video = QAction(translate('chat_window', "Start video call"), self, triggered=self._AH_ConnectWithVideo)
         self.control_button.actions.disconnect = QAction(translate('chat_window', "Disconnect"), self, triggered=self._AH_Disconnect)
