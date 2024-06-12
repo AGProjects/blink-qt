@@ -3577,7 +3577,7 @@ class ContactListView(QListView):
             rect.setTop(self.visualRect(model.index(model.items.index(groups[-1]))).bottom())
         elif isinstance(item, Group):
             index = groups.index(item)
-            rect.setHeight(rect.height() / 2)
+            rect.setHeight(int(rect.height() / 2))
             if rect.contains(event.pos()):
                 drop_groups = (groups[index - 1], groups[index]) if index > 0 else (Null, groups[index])
             else:
@@ -3591,7 +3591,10 @@ class ContactListView(QListView):
         else:
             contiguous_selection = False
         selected_groups = set(model.items[row] for row in selected_rows)
-        overlapping_groups = len(selected_groups.intersection(drop_groups))
+        try:
+            overlapping_groups = len(selected_groups.intersection(drop_groups))
+        except TypeError:
+            overlapping_groups = 0
         allowed_overlapping = 0 if contiguous_selection else 1
         if event.source() is not self or overlapping_groups <= allowed_overlapping:
             drop_groups[0].widget.drop_indicator = self.BelowItem
