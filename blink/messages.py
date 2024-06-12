@@ -641,7 +641,7 @@ class MessageManager(object, metaclass=Singleton):
 
     @run_in_thread('file-io')
     def _save_pgp_key(self, data, uri):
-        log.info(f'-- Saving public key for {uri}')
+        log.info(f'Saving public key for {uri}')
         settings = SIPSimpleSettings()
 
         id = str(uri).replace('/', '_').replace('sip:', '')
@@ -685,7 +685,7 @@ class MessageManager(object, metaclass=Singleton):
                 pass
             else:
                 if content == public_key:
-                    print('Import skipped, public keys are the same')
+                    log.info(f'Private key import for {account.id} skipped because are the same')
                     return True
         return False
 
@@ -742,14 +742,14 @@ class MessageManager(object, metaclass=Singleton):
         url = urlunsplit((scheme, netloc, path, query, fragment))
         headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
 
-        log.info(f'History synchronization enabled for {account.id}, fetching from: {url}')
-
         if account.sms.history_synchronization_timestamp is not None:
             last_sync = ISOTimestamp(account.sms.history_synchronization_timestamp)
             expired_time = ISOTimestamp.now() - last_sync
             if expired_time.total_seconds() < 500:
-                log.info(f'History synchronization skipped for {account.id}, will only sync on interval > 500s ({expired_time.total_seconds()})')
+                log.debug(f'History synchronization skipped for {account.id}, will only sync on interval > 500s ({expired_time.total_seconds()})')
                 return
+
+        log.info(f'Fetching message history for {account.id} from server {url}')
 
         try:
             r = requests.get(url, headers=headers, timeout=10)
@@ -779,7 +779,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         last_id = None
 
-        log.debug(f'-- Number of messages fetched for {account.id}: {len(messages)}')
+        log.debug(f'-- {len(messages)} messages fetched from server for {account.id}')
         while messages:
             message = messages.pop(0)
 
@@ -1036,8 +1036,6 @@ class MessageManager(object, metaclass=Singleton):
         if account is None:
             return
 
-        log.info(f'Received a message for {account.id}')
-
         data = notification.data
         content_type = data.headers.get('Content-Type', Null).content_type
         from_header = data.headers.get('From', Null)
@@ -1045,9 +1043,8 @@ class MessageManager(object, metaclass=Singleton):
         to_header = data.headers.get('To', Null)
 
         if x_replicated_message is not Null:
-            log.info('Message is a replicated message')
             if not account.sms.enable_message_replication:
-                log.info('Skipping message, replicated message handling is disabled')
+                log.debug(f'Skipping replicated message for account {account.id}')
                 return
 
         cpim_message = None
@@ -1071,9 +1068,13 @@ class MessageManager(object, metaclass=Singleton):
             message_id = str(uuid.uuid4())
 
         encryption = self.check_encryption(content_type, body)
-        if encryption == 'OpenPGP':
-            log.info('Message is Open PGP encrypted')
+        enc_text = f'{encryption} encrypted ' if encryption else ' '
 
+        log.info(f'Received {enc_text}{content_type.lower()} message {message_id} for account {account.id} from {sender.uri}')
+        if x_replicated_message is not Null:
+            log.debug(f'Message {message_id} is a replicated message from another device')
+            
+        if encryption == 'OpenPGP':
             if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
                 if not self.pgp_requests[account, GeneratePGPKeyRequest]:
                     generate_dialog = GeneratePGPKeyDialog()
@@ -1087,7 +1088,6 @@ class MessageManager(object, metaclass=Singleton):
                 return
 
         if content_type.lower() == 'application/sylk-api-token':
-            log.info('Message is a Sylk API token')
             try:
                 data = json.loads(body)
             except json.decoder.JSONDecodeError:
@@ -1107,7 +1107,7 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if content_type.lower() == 'text/pgp-private-key':
-            log.info('Message is a private key')
+            log.info(f'Received private key of account {account.id} from another device')
             if not account.sms.enable_pgp:
                 log.info(f"-- Skipping private key import, PGP is disabled for {account.id}")
                 return
@@ -1131,7 +1131,6 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if content_type.lower() == 'text/pgp-public-key':
-            log.info('Message is a public key')
             self._save_pgp_key(body, sender.uri)
             return
 
@@ -1442,6 +1441,7 @@ class MessageManager(object, metaclass=Singleton):
         contact, contact_uri = URIUtils.find_contact(uri)
         session_manager = SessionManager()
         account = AccountManager().default_account
+        log.info(f"Create message view for account {account.id} to {contact_uri.uri}")
 
         try:
             blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)

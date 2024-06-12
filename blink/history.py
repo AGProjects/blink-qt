@@ -512,7 +512,6 @@ class MessageHistory(object, metaclass=Singleton):
         if message.content.startswith('?OTRv'):
             return
 
-        log.info(f"== Adding message to storage: {message.id}")
         user = session.uri.user
         domain = session.uri.host
 
@@ -523,6 +522,8 @@ class MessageHistory(object, metaclass=Singleton):
         match = cls.phone_number_re.match(remote_uri)
         if match:
             remote_uri = match.group('number')
+
+        log.info(f"Storing {direction} message {message.id} of account {session.account.id} with {remote_uri} ")
 
         if direction == 'outgoing':
             display_name = message.sender.display_name
@@ -604,21 +605,20 @@ class MessageHistory(object, metaclass=Singleton):
         if message_info.encryption is not None and message.is_secure:
             db_messages = Message.selectBy(message_id=message.id)
             for db_message in db_messages:
-                encryption_type = str([f'{message_info.encryption}'])
+                encryption_type = str(f'{message_info.encryption}')
                 if db_message.encryption_type != encryption_type:
-                    log.debug(f'== Updating {message.id} encryption {db_message.encryption_type} -> {encryption_type}')
+                    log.debug(f'== Updating {message.direction} {message.id} encryption to {encryption_type}')
                     db_message.encryption_type = encryption_type
 
     @run_in_thread('db')
     def load(self, uri, session):
-        log.debug(f'== Loading messages for {uri}')
         notification_center = NotificationCenter()
         try:
             result = Message.selectBy(remote_uri=uri).orderBy('timestamp')[-100:]
         except Exception as e:
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
-        log.debug(f"== Messages loaded for {uri}: {len(list(result))}")
+        log.debug(f"== Loaded {len(list(result))} messages for {uri} from history")
         notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
 
     @run_in_thread('db')

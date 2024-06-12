@@ -251,12 +251,11 @@ class MessageStream(object, metaclass=MediaStreamType):
             msg_id = message.message_id
         except AttributeError:
             msg_id = message.id
-        log.info(f'Trying to decrypt message {msg_id}')
 
         try:
             pgpMessage = PGPMessage.from_blob(message.content)
         except (ValueError) as e:
-            log.warning(f'Decryption failed for {msg_id}, this is not a PGPMessage, error: {e}')
+            log.warning(f'Decryption error for {msg_id} of {account.id}, not a PGPMessage: {e}')
             return
 
         key_list = [(session.account, self.private_key)] if self.private_key is not None else []
@@ -268,15 +267,15 @@ class MessageStream(object, metaclass=MediaStreamType):
                 decrypted_message = key.decrypt(pgpMessage)
             except (PGPDecryptionError, PGPError) as e:
                 error = e
-                log.debug(f'-- Decryption failed for {msg_id} with account key {account.id}, error: {error}')
+                log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} to {account.id} : {error}')
                 continue
             else:
                 message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message
-                log.info(f'Message decrypted: {msg_id}')
+                #log.info(f'Message decrypted: {msg_id}')
                 notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
                 return
 
-        log.warning(f'-- Decryption failed for {msg_id}, error: {error}')
+        log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} to {account.id} : {error}')
         notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=error))
 
     @run_in_thread('pgp')
