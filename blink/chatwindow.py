@@ -2548,14 +2548,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionNewIncoming(self, notification):
         if notification.sender.streams.types.intersection(self.__streamtypes__):
             self.show()
-            history = HistoryManager()
-            history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             self.show()
-            history = HistoryManager()
-            history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         model = self.session_model
@@ -2583,8 +2579,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionWillAddStream(self, notification):
         if notification.data.stream.type in self.__streamtypes__:
             self.show()
-            history = HistoryManager()
-            history.load(notification.sender.contact.uri.uri, notification.sender)
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         self._update_control_menu()
@@ -3295,6 +3289,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.show()
         session.chat_widget.chat_input.setFocus(Qt.OtherFocusReason)
+        history = HistoryManager()
+        history.load(session.blink_session.contact.uri.uri, session.blink_session)
 
     def _SH_SessionModelSessionRemoved(self, session):
         self.tab_widget.removeTab(self.tab_widget.indexOf(session.chat_widget))
