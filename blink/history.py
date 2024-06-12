@@ -78,7 +78,7 @@ class HistoryManager(object, metaclass=Singleton):
     def load(self, uri, session):
         return self.message_history.load(uri, session)
 
-    def get_last_contacts(self, number=5):
+    def get_last_contacts(self, number=10):
         return self.message_history.get_last_contacts(number)
 
     def get_decrypted_filename(self, file):
@@ -622,7 +622,7 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
 
     @run_in_thread('db')
-    def get_last_contacts(self, number=5):
+    def get_last_contacts(self, number=10):
         log.debug(f'== Getting last {number} contacts with messages')
 
         query = f'select remote_uri, max(timestamp) from messages group by remote_uri order by timestamp desc limit {Message.sqlrepr(number)}'
