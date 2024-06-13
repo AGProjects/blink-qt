@@ -2038,8 +2038,8 @@ padding: 2px;</source>
     </message>
     <message>
         <location filename="../blink.ui" line="1462"/>
-        <source>&amp;Export PGP private key</source>
-        <translation>PGP-privésleutel &amp;exporteren</translation>
+        <source>&amp;Export PGP key to my other devices</source>
+        <translation>PGP-privésleutel &amp;exporteren aan mijn andere toestelen</translation>
     </message>
     <message>
         <location filename="../../blink/mainwindow.py" line="100"/>

@@ -1030,7 +1030,7 @@ All rights reserved.</source>
     <name>export_key_dialog</name>
     <message>
         <location filename="../export_private_key_dialog.ui" line="83"/>
-        <source>Export Private Key</source>
+        <source>Export PGP key to my other devices</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
