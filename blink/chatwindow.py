@@ -399,6 +399,7 @@ class ChatWebView(QWebEngineView):
 
     def contextMenuEvent(self, event):
         menu = self.page().createStandardContextMenu()
+        self.id = None
         if self.last_message_id is not None:
             if self.last_message_id.startswith('text-'):
                 self.id = self.last_message_id[5:]
@@ -429,8 +430,8 @@ class ChatWebView(QWebEngineView):
         self.messageShouldRemove.emit(self.id)
 
     def _SH_AboutToHide(self):
-        self.id = None
         self.last_message_id = None
+
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_input_lock.ui'))
 
