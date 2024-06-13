@@ -133,9 +133,6 @@
          <property name="autoFillBackground">
           <bool>false</bool>
          </property>
-         <property name="styleSheet">
-          <string notr="true">letter-spacing: 12px;</string>
-         </property>
          <property name="inputMethodHints">
           <set>Qt::ImhDigitsOnly|Qt::ImhNoPredictiveText|Qt::ImhPreferNumbers</set>
          </property>

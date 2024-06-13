@@ -105,9 +105,6 @@
        <property name="text">
         <string>Press **Export** and enter this pincode when prompted on your other device:</string>
        </property>
-       <property name="textFormat">
-        <enum>Qt::MarkdownText</enum>
-       </property>
       </widget>
      </item>
      <item>
@@ -135,9 +132,6 @@
            <underline>false</underline>
            <strikeout>false</strikeout>
           </font>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">letter-spacing: 12px;</string>
          </property>
          <property name="text">
           <string>PINCODE</string>
