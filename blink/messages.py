@@ -238,6 +238,9 @@ class ExportDialog(IncomingDialogBase, ui_class):
         self.export_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
         self.export_button.setEnabled(False)
 
+    def accept(self):
+        pass
+
     def show(self, activate=True):
         self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
         super(ExportDialog, self).show()
@@ -273,6 +276,7 @@ class ExportPrivateKeyRequest(QObject):
         with open(f'{filename}.pubkey', 'rb') as f:
             self.public_key = f.read().decode()
 
+        self.dialog.export_button.clicked.connect(self._SH_ExportButtonClicked)
         try:
             pgp_message = PGPMessage.new(private_key)
             self.enc_message = pgp_message.encrypt(self.pincode)
@@ -299,11 +303,12 @@ class ExportPrivateKeyRequest(QObject):
     def __ge__(self, other):
         return self.priority >= other.priority
 
+    def _SH_ExportButtonClicked(self):
+        self.accepted.emit(self, f'{self.public_key}{str(self.enc_message)}')
+
     def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-        if result == QDialog.Accepted:
-            self.accepted.emit(self, f'{self.public_key}{str(self.enc_message)}')
-        elif result == QDialog.Rejected:
+        if result == QDialog.DialogCode.Rejected:
             self.rejected.emit(self)
 
 
