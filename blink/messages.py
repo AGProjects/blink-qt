@@ -469,7 +469,7 @@ class OutgoingMessage(object):
                         public_key = f.read().decode()
                     public_key_message = OutgoingMessage(self.session.account, self.contact, str(public_key), 'text/pgp-public-key', session=self.session)
                     MessageManager()._send_message(public_key_message)
-                if self.account.sms.enable_pgp and not stream.can_encrypt:
+                if self.account is not BonjourAccount() and self.account.sms.enable_pgp and not stream.can_encrypt:
                     lookup_message = OutgoingMessage(self.account, self.contact, 'Public key request', 'application/sylk-api-pgp-key-lookup', session=self.session)
                     lookup_message.send()
             self.session.routes = routes
