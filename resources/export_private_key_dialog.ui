@@ -103,7 +103,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Press **Export** and enter this pincode when prompted on your other device:</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Press &lt;span style=&quot; font-weight:600;&quot;&gt;Export&lt;/span&gt; and enter this pincode when prompted on your other device:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
        </property>
       </widget>
      </item>
