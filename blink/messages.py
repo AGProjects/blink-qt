@@ -1077,7 +1077,7 @@ class MessageManager(object, metaclass=Singleton):
             
         if encryption == 'OpenPGP':
             if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
-                if not self.pgp_requests[account, GeneratePGPKeyRequest]:
+                if not self.pgp_requests[account, GeneratePGPKeyRequest] and account is not BonjourAccount():
                     generate_dialog = GeneratePGPKeyDialog()
                     generate_request = GeneratePGPKeyRequest(generate_dialog, account, 0)
                     generate_request.accepted.connect(self._SH_GeneratePGPKeys)
@@ -1194,6 +1194,10 @@ class MessageManager(object, metaclass=Singleton):
                 if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
                     blink_session.fake_streams.get('messages').enable_pgp()
                 notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
+
+        if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)) and account is BonjourAccount():
+            stream = blink_session.fake_streams.get('messages')
+            stream.generate_keys()
 
         if account.sms.use_cpim and account.sms.enable_imdn and content_type.lower() == IMDNDocument.content_type:
             # print("-- IMDN received")
@@ -1329,6 +1333,12 @@ class MessageManager(object, metaclass=Singleton):
 
         if session.account.sms.enable_pgp and (session.account.sms.private_key is None or not os.path.exists(session.account.sms.private_key.normalized)):
             for request in self.pgp_requests[session.account, GeneratePGPKeyRequest]:
+                return
+
+            if session.account is BonjourAccount():
+                session = session
+                stream = session.fake_streams.get('messages')
+                stream.generate_keys()
                 return
 
             generate_dialog = GeneratePGPKeyDialog()
