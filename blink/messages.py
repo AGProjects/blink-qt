@@ -305,6 +305,7 @@ class ExportPrivateKeyRequest(QObject):
 
     def _SH_ExportButtonClicked(self):
         self.accepted.emit(self, f'{self.public_key}{str(self.enc_message)}')
+        self.dialog.export_button.setEnabled(False)
 
     def _SH_DialogFinished(self, result):
         self.finished.emit(self)
