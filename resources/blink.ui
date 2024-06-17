@@ -1134,6 +1134,7 @@ padding: 2px;</string>
     <addaction name="export_pgp_key_action"/>
     <addaction name="auto_accept_chat_action"/>
     <addaction name="received_messages_sound_action"/>
+    <addaction name="separator"/>
     <addaction name="join_conference_action"/>
    </widget>
    <widget class="QMenu" name="devices_menu">
