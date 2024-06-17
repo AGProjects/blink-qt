@@ -1211,7 +1211,7 @@ class MessageManager(object, metaclass=Singleton):
             # print("-- IMDN received, ignored")
             return
 
-        if content_type.lower() == IsComposingDocument.content_type:
+        if content_type.lower() == IsComposingDocument.content_type and x_replicated_message is Null:
             try:
                 document = IsComposingMessage.parse(body)
             except ParserError as e:
