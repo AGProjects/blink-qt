@@ -828,6 +828,7 @@ class ChatWidget(base_class, ui_class):
         self.history_loaded = False
         self.timestamp_rendered_messages = []
         self.pending_decryption = []
+        self.size = QSizeF()
         if session is not None:
             notification_center = NotificationCenter()
             notification_center.add_observer(ObserverWeakrefProxy(self), sender=session.blink_session)
@@ -1083,8 +1084,9 @@ class ChatWidget(base_class, ui_class):
         self._align_chat(scroll=True)
 
     def _SH_ChatViewFrameContentsSizeChanged(self, size):
-        # print("frame contents size changed to %r (current=%r)" % (size, self.chat_view.page().mainFrame().contentsSize()))
-        self._align_chat(scroll=True)
+        # print("frame contents size changed to %r (current=%r)" % (self.size, self.chat_view.page().contentsSize()))
+        self._align_chat(scroll=size.height() > self.size.height())
+        self.size = size
 
     def _SH_ChatInputTextChanged(self):
         if self.session.blink_session.chat_type is None:
