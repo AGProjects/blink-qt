@@ -43,6 +43,7 @@ from sipsimple.streams.msrp.chat import OTRState
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
+from blink.accounts import AccountModel,ActiveAccountModel
 from blink.configuration.datatypes import File, FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
@@ -1807,6 +1808,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.zrtp_widget.nameChanged.connect(self._SH_ZRTPWidgetNameChanged)
         self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
 
+        self.identity.currentIndexChanged[int].connect(self._SH_IdentityCurrentIndexChanged)
+
         geometry = QSettings().value("chat_window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
@@ -1850,6 +1853,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
+
+        self.account_model = AccountModel(self)
+        self.enabled_account_model = ActiveAccountModel(self.account_model, self)
+        self.identity.setModel(self.enabled_account_model)
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -3277,6 +3284,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.selected_session.blink_session.sip_session.cancel_proposal()
         else:
             self.selected_session.end()
+
+    def _SH_IdentityCurrentIndexChanged(self, index):
+        if index != -1:
+            account = self.identity.itemData(index).account
+            try:
+                self.selected_session.blink_session.account = account
+                NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
+                self._update_session_info_panel(elements='session')
+            except KeyError:
+                pass
 
     def _SH_SessionModelSessionAdded(self, session):
         model = self.session_model

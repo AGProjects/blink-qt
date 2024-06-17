@@ -953,6 +953,9 @@ QToolButton:pressed {
                </item>
                <item>
                 <widget class="FileListView" name="files_list">
+                 <property name="toolTip">
+                  <string/>
+                 </property>
                  <property name="styleSheet">
                   <string notr="true">QListView { border: 1px inset palette(dark); border-radius: 3px; }</string>
                  </property>
@@ -2016,6 +2019,16 @@ QToolButton:pressed {
          </widget>
         </item>
         <item>
+         <widget class="ChatAccountSelector" name="identity">
+          <property name="toolTip">
+           <string>Select the SIP account used for this chat</string>
+          </property>
+          <property name="frame">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QWidget" name="toolbar_widget" native="true">
           <property name="styleSheet">
            <string notr="true">QWidget#widget1 {
@@ -2319,19 +2332,14 @@ QToolButton:hover {
    <header location="global">QtWebKitWidgets/QWebView</header>
   </customwidget>
   <customwidget>
-   <class>ElidedLabel</class>
-   <extends>QLabel</extends>
-   <header>blink.widgets.labels</header>
-  </customwidget>
-  <customwidget>
-   <class>DurationLabel</class>
-   <extends>QLabel</extends>
-   <header>blink.widgets.labels</header>
-  </customwidget>
-  <customwidget>
    <class>ToolButton</class>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
+  </customwidget>
+  <customwidget>
+   <class>ElidedLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
   </customwidget>
   <customwidget>
    <class>ContactState</class>
@@ -2347,6 +2355,11 @@ QToolButton:hover {
    <class>ChatWebView</class>
    <extends>QWebView</extends>
    <header>blink.chatwindow</header>
+  </customwidget>
+  <customwidget>
+   <class>DurationLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
   </customwidget>
   <customwidget>
    <class>SlidingStackedWidget</class>
@@ -2369,6 +2382,11 @@ QToolButton:hover {
    <class>FileListView</class>
    <extends>QListView</extends>
    <header>blink.sessions</header>
+  </customwidget>
+  <customwidget>
+   <class>ChatAccountSelector</class>
+   <extends>QComboBox</extends>
+   <header>blink.accounts</header>
   </customwidget>
  </customwidgets>
  <tabstops>

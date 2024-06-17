@@ -3,7 +3,10 @@ import json
 import os
 import re
 import sys
-import sip
+try:
+    from PyQt5 import sip
+except ImportError:
+    import sip
 import urllib.request, urllib.parse, urllib.error
 
 from PyQt5 import uic
@@ -253,6 +256,56 @@ class AccountSelector(QComboBox):
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         account = notification.data.account
+        if account is not None:
+            model = self.model()
+            source_model = model.sourceModel()
+            account_index = source_model.accounts.index(account)
+            self.setCurrentIndex(model.mapFromSource(source_model.index(account_index)).row())
+
+
+
+
+@implementer(IObserver)
+class ChatAccountSelector(QComboBox):
+
+    def __init__(self, parent=None):
+        super(ChatAccountSelector, self).__init__(parent)
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name="SIPAccountManagerDidChangeDefaultAccount")
+        notification_center.add_observer(self, name="SIPAccountManagerDidStart")
+        notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPAccountManagerDidStart(self, notification):
+        account = AccountManager().default_account
+        if account is not None:
+            model = self.model()
+            source_model = model.sourceModel()
+            account_index = source_model.accounts.index(account)
+            self.setCurrentIndex(model.mapFromSource(source_model.index(account_index)).row())
+
+    def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
+        account = notification.data.account
+        if account is not None:
+            model = self.model()
+            source_model = model.sourceModel()
+            account_index = source_model.accounts.index(account)
+            current_account = self.currentData().account
+            if not current_account.enabled:
+                self.setCurrentIndex(model.mapFromSource(source_model.index(account_index)).row())
+            # else:
+            #     self.setCurrentIndex(model.mapFromSource(source_model.index(current_account_index)).row())
+
+    def _NH_BlinkSessionListSelectionChanged(self, notification):
+        if not notification.data.selected_session:
+            return
+
+        account = notification.data.selected_session.account
         if account is not None:
             model = self.model()
             source_model = model.sourceModel()
