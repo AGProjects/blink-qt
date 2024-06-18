@@ -1025,6 +1025,11 @@ class ChatWidget(base_class, ui_class):
         image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
         other_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is None]
 
+        if blink_session.chat_type is None:
+            for image in image_descriptors:
+                session_manager.send_file(blink_session.contact, blink_session.contact_uri, image.filename, account=blink_session.account)
+            return
+
         for image in image_descriptors:
             try:
                 image_data = base64.b64encode(image.thumbnail.data).decode()
