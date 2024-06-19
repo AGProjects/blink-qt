@@ -1455,7 +1455,7 @@ class MessageManager(object, metaclass=Singleton):
         log.info(f"Create message view for account {account.id} to {contact_uri.uri}")
 
         try:
-            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
             session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
         else:
