@@ -1463,3 +1463,5 @@ class MessageManager(object, metaclass=Singleton):
                 blink_session.add_stream(StreamDescription('messages'))
                 if blink_session.account.sms.enable_pgp:
                     blink_session.fake_streams.get('messages').enable_pgp()
+            else:
+                NotificationCenter().post_notification('BlinkSessionIsSelected', sender=blink_session)

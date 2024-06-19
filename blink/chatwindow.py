@@ -1829,6 +1829,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForOutgoing')
+        notification_center.add_observer(self, name='BlinkSessionIsSelected')
         notification_center.add_observer(self, name='ChatStreamGotMessage')
         notification_center.add_observer(self, name='ChatStreamGotComposingIndication')
         notification_center.add_observer(self, name='ChatStreamDidSendMessage')
@@ -2594,6 +2595,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionWillAddStream(self, notification):
         if notification.data.stream.type in self.__streamtypes__:
             self.show()
+
+    def _NH_BlinkSessionIsSelected(self, notification):
+        model = self.session_model
+        position = model.sessions.index(notification.sender.items.chat)
+        selection_model = self.session_list.selectionModel()
+        selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
+        self.show()
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         self._update_control_menu()
