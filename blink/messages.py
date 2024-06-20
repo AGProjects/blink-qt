@@ -1149,7 +1149,7 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         from blink.contacts import URIUtils
-        contact, contact_uri = URIUtils.find_contact(sender.uri)
+        contact, contact_uri = URIUtils.find_contact(sender.uri, display_name=sender.display_name, instance_id=instance_id)
 
         if x_replicated_message is not Null:
             contact, contact_uri = URIUtils.find_contact(to_header.uri)
@@ -1180,7 +1180,7 @@ class MessageManager(object, metaclass=Singleton):
             message.direction = "outgoing"
 
         try:
-            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (instance_id and instance_id == session.remote_instance_id))
         except StopIteration:
             blink_session = None
             if content_type.lower() in self.__ignored_content_types__:
@@ -1197,8 +1197,8 @@ class MessageManager(object, metaclass=Singleton):
                                                                             state='accepted'))
                 return
             else:
-                log.debug("Starting new message session for incoming message")
-                blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+                log.info(f"Create incoming message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
+                blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
         else:
             if blink_session.fake_streams.get('messages') is None:
                 stream = StreamDescription('messages')
@@ -1465,12 +1465,13 @@ class MessageManager(object, metaclass=Singleton):
         contact, contact_uri = URIUtils.find_contact(uri)
         session_manager = SessionManager()
         account = AccountManager().default_account
-        log.info(f"Create message view for account {account.id} to {contact_uri.uri}")
+        instance_id = contact.settings.id if contact.type == 'bonjour' else None
+        log.info(f"Create outgoing message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
 
         try:
             blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
-            session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+            session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
         else:
             if blink_session.fake_streams.get('messages') is None:
                 blink_session.add_stream(StreamDescription('messages'))

@@ -503,6 +503,7 @@ class BlinkSession(BlinkSessionBase):
             self.contact = None
             self.contact_uri = None
             self.uri = None
+            self.remote_instance_id = None
             self.server_conference = ServerConference(self)
 
             self._delete_when_done = False
@@ -677,7 +678,7 @@ class BlinkSession(BlinkSessionBase):
     def remote_focus(self):
         return self.sip_session is not None and self.sip_session.remote_focus
 
-    def init_incoming(self, sip_session, streams, contact, contact_uri, reinitialize=False):
+    def init_incoming(self, sip_session, streams, contact, contact_uri, reinitialize=False, remote_instance_id=None):
         assert self.state in (None, 'initialized', 'ended')
         assert self.contact is None or contact.settings is self.contact.settings
         notification_center = NotificationCenter()
@@ -690,6 +691,7 @@ class BlinkSession(BlinkSessionBase):
         self.sip_session = sip_session
         self.account = sip_session.account
         self.contact = contact
+        self.remote_instance_id = remote_instance_id
         self.contact_uri = contact_uri
         self.uri = self._parse_uri(contact_uri.uri)
         self.streams.extend(streams)
@@ -703,7 +705,7 @@ class BlinkSession(BlinkSessionBase):
         notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
         self.sip_session.accept(streams)
 
-    def init_outgoing(self, account, contact, contact_uri, stream_descriptions, sibling=None, reinitialize=False):
+    def init_outgoing(self, account, contact, contact_uri, stream_descriptions, sibling=None, reinitialize=False, remote_instance_id=None):
         assert self.state in (None, 'initialized', 'ended')
         assert self.contact is None or contact.settings is self.contact.settings
         notification_center = NotificationCenter()
@@ -717,6 +719,7 @@ class BlinkSession(BlinkSessionBase):
         self.account = account
         self.contact = contact
         self.contact_uri = contact_uri
+        self.remote_instance_id = remote_instance_id
         self.uri = self._normalize_uri(contact_uri.uri)
         # reevaluate later, after we add the .active/.proposed attributes to streams, if creating the sip session and the streams at this point is desirable -Dan
         # note: creating the sip session early also need the test in hold/unhold/end to change from sip_session is (not) None to sip_session.state is (not) None -Dan
@@ -6369,7 +6372,7 @@ class SessionManager(object, metaclass=Singleton):
 
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
 
-    def create_session(self, contact, contact_uri, streams, account=None, connect=True, sibling=None):
+    def create_session(self, contact, contact_uri, streams, account=None, connect=True, sibling=None, remote_instance_id=None):
         if account is None:
             if contact.type == 'bonjour':
                 account = BonjourAccount()
@@ -6383,7 +6386,7 @@ class SessionManager(object, metaclass=Singleton):
             session = BlinkSession()
             reinitialize = False
 
-        session.init_outgoing(account, contact, contact_uri, streams, sibling=sibling, reinitialize=reinitialize)
+        session.init_outgoing(account, contact, contact_uri, streams, sibling=sibling, reinitialize=reinitialize, remote_instance_id=remote_instance_id)
         self.last_dialed_uri = session.uri
         if connect:
             session.connect()
