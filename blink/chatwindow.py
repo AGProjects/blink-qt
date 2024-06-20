@@ -917,6 +917,11 @@ class ChatWidget(base_class, ui_class):
             self.chat_js.update_element(f'span#encryption-{id}', html)
 
     def remove_message(self, id):
+        try:
+            if self.last_message is not None and self.last_message.id == id:
+                self.last_message = None
+        except AttributeError:
+            pass
         self.chat_js.remove_element(f'#message-{id}')
 
     def show_loading_screen(self, visible):

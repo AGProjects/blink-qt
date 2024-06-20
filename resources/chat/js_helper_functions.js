@@ -37,6 +37,22 @@ function removeElement(query) {
         } else {
             elem.remove();
         }
+
+        // Return if we're removing #insert
+        if (query.startsWith('#insert')) {
+            return;
+        }
+
+        // Check if insert element is still in the chat. Could be gone if we removed last message
+        let insert = getElement('#insert')
+        if (insert) {
+            return
+        }
+        let messages = document.querySelectorAll('[id^=message-]')
+        let last_message = [...messages].pop()
+        insert = document.createElement('span');
+        insert.setAttribute('id', 'insert');
+        last_message.append(insert);
     }
 }
 
