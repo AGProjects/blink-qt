@@ -2871,7 +2871,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {notification.data.data.reason}')))
+        reason = notification.data.data.reason.decode() if isinstance(notification.data.data.reason, bytes) else notification.data.data.reason
+        session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
         call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status='failed')
 
     def _NH_BlinkMessageWillRemove(self, notification):
