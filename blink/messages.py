@@ -1141,7 +1141,11 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if content_type.lower() == 'text/pgp-public-key':
-            self._save_pgp_key(body, sender.uri)
+            if account is BonjourAccount():
+                if instance_id:
+                    self._save_pgp_key(body, instance_id)
+            else:
+                self._save_pgp_key(body, sender.uri)
             return
 
         from blink.contacts import URIUtils
