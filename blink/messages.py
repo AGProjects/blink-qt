@@ -378,6 +378,10 @@ class OutgoingMessage(object):
             routes = routes if routes is not None else self.session.routes
             from_uri = self.account.uri
             content = self.content
+            if self.account is BonjourAccount():
+                settings = SIPSimpleSettings()
+                from_uri.parameters['instance_id'] = settings.instance_id
+
             if self.session is not None:
                 stream = self.session.fake_streams.get('messages')
                 if self.content_type.lower() not in self.__disabled_imdn_content_types__:
