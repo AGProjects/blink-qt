@@ -1360,7 +1360,7 @@ class SMPVerificationHandler(object):
         else:
             stream_info = self.blink_session.info.streams.chat
 
-        if stream_info.chat.smp_status in (SMPVerification.Succeeded, SMPVerification.Failed):
+        if stream_info.smp_status in (SMPVerification.Succeeded, SMPVerification.Failed):
             return
         if notification.data.status == SMPStatus.Success:
             if notification.data.same_secrets:
