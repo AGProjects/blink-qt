@@ -1081,6 +1081,8 @@ class MessageManager(object, metaclass=Singleton):
         enc_text = f'{encryption} encrypted ' if encryption else ''
 
         log.info(f'Received {enc_text}{content_type.lower()} message {message_id} for account {account.id} from {sender.uri}')
+        if account is BonjourAccount() and instance_id:
+            log.debug(f'Bonjour neighbour instance id is {instance_id}')
         if x_replicated_message is not Null:
             log.debug(f'Message {message_id} is a replicated message from another device')
             
