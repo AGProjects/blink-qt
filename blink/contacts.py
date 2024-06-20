@@ -3542,7 +3542,6 @@ class ContactListView(QListView):
             uri = uri.uri
         except AttributeError:
             uri = uri
-
         session_manager.create_message_session(uri or contact.uri.uri)
 
     def _AH_SendFiles(self, uri=None):
@@ -4822,7 +4821,7 @@ class URIUtils(object):
         return cls.number_trim_re.sub('', token)
 
     @classmethod
-    def find_contact(cls, uri, display_name=None, exact=True):
+    def find_contact(cls, uri, display_name=None, exact=True, instance_id=None):
         contact_model = QApplication.instance().main_window.contact_model
         if isinstance(uri, BaseSIPURI):
             uri = SIPURI.new(uri)
@@ -4864,8 +4863,12 @@ class URIUtils(object):
             if matched_numbers:
                 return matched_numbers[0][2:]  # ratio, index, contact, uri
 
-        display_name = display_name or "%s@%s" % (uri.user.decode(), uri.host.decode())
-        contact = Contact(DummyContact(display_name, [DummyContactURI(str(uri).partition(':')[2], default=True)]), None)
+        if instance_id:
+            display_name = display_name or "Bonjour %s" % instance_id or "%s@%s" % (uri.user.decode(), uri.host.decode())
+            contact = Contact(DummyContact(display_name, [DummyContactURI(str(uri), default=True)]), None)
+        else:
+            display_name = display_name or "%s@%s" % (uri.user.decode(), uri.host.decode())
+            contact = Contact(DummyContact(display_name, [DummyContactURI(str(uri).partition(':')[2], default=True)]), None)
         return contact, contact.uri
 
 
