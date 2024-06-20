@@ -1078,7 +1078,7 @@ class MessageManager(object, metaclass=Singleton):
             message_id = str(uuid.uuid4())
 
         encryption = self.check_encryption(content_type, body)
-        enc_text = f'{encryption} encrypted ' if encryption else ' '
+        enc_text = f'{encryption} encrypted ' if encryption else ''
 
         log.info(f'Received {enc_text}{content_type.lower()} message {message_id} for account {account.id} from {sender.uri}')
         if x_replicated_message is not Null:
