@@ -357,7 +357,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         # print('-- Reload PGP keys in stream')
         session = self.blink_session
 
-        self.remote_public_key = self._load_key(str(session.contact_uri.uri), True)
+        self.remote_public_key = self._load_key(session.remote_instance_id or str(session.contact_uri.uri), True)
         self.public_key = self._load_key(str(session.account.id))
         self.private_key = self._load_key(str(session.account.id), public_key=False)
         self._load_other_keys(session)
@@ -390,7 +390,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         session = self.blink_session
 
         if self.remote_public_key is None:
-            self.remote_public_key = self._load_key(str(session.contact_uri.uri), True)
+            self.remote_public_key = self._load_key(session.remote_instance_id or str(session.contact_uri.uri), True)
 
         if self.public_key is None:
             self.public_key = self._load_key(str(session.account.id))
