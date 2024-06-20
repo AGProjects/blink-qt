@@ -615,12 +615,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
 
-    def _add_contact_to_messages_group(self, account, contact):  # Maybe this needs to be placed in Contacts? -- Tijmen
-        if not account.sms.add_unknown_contacts:
-            return
-        if contact.type not in ['dummy', 'unknown']:
-            return
-
+    def _add_contact_to_messages_group(self, account, contact):
         log.debug(f'-- Adding contact {contact.uri.uri} to message list')
         group_id = '_messages'
         try:
