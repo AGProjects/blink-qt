@@ -1047,6 +1047,10 @@ class MessageManager(object, metaclass=Singleton):
         from_header = data.headers.get('From', Null)
         x_replicated_message = data.headers.get('X-Replicated-Message', Null)
         to_header = data.headers.get('To', Null)
+        instance_id = data.from_header.uri.parameters.get('instance_id', None)
+
+        if instance_id and instance_id.startswith('urn:uuid:'):
+            instance_id = instance_id[9:]
 
         if x_replicated_message is not Null:
             if not account.sms.enable_message_replication:
