@@ -278,531 +278,6 @@
             </item>
            </layout>
           </widget>
-          <widget class="QWidget" name="server_settings_tab">
-           <attribute name="title">
-            <string>Server Settings</string>
-           </attribute>
-           <layout class="QGridLayout" name="server_settings_tab_layout">
-            <property name="leftMargin">
-             <number>10</number>
-            </property>
-            <property name="topMargin">
-             <number>10</number>
-            </property>
-            <property name="rightMargin">
-             <number>10</number>
-            </property>
-            <property name="bottomMargin">
-             <number>10</number>
-            </property>
-            <property name="spacing">
-             <number>5</number>
-            </property>
-            <item row="0" column="0" colspan="6">
-             <widget class="QLabel" name="sip_proxy_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>SIP Proxy server</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0" colspan="6">
-             <widget class="Line" name="line_3">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="1" colspan="5">
-             <widget class="QCheckBox" name="always_use_my_proxy_button">
-              <property name="text">
-               <string>Always use the proxy server for outgoing sessions</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="0">
-             <widget class="QLabel" name="outbound_proxy_label">
-              <property name="minimumSize">
-               <size>
-                <width>105</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Outbound Proxy:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="1">
-             <widget class="QLineEdit" name="outbound_proxy_host_editor"/>
-            </item>
-            <item row="3" column="2">
-             <widget class="QLabel" name="outbound_proxy_port_label">
-              <property name="text">
-               <string>Port:</string>
-              </property>
-              <property name="indent">
-               <number>3</number>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="3">
-             <widget class="QSpinBox" name="outbound_proxy_port">
-              <property name="minimum">
-               <number>1</number>
-              </property>
-              <property name="maximum">
-               <number>65535</number>
-              </property>
-              <property name="value">
-               <number>5060</number>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="4">
-             <widget class="QLabel" name="outbound_proxy_transport_label">
-              <property name="text">
-               <string>Transport:</string>
-              </property>
-              <property name="indent">
-               <number>3</number>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="5">
-             <widget class="QComboBox" name="outbound_proxy_transport_button">
-              <item>
-               <property name="text">
-                <string>UDP</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>TCP</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>TLS</string>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item row="4" column="0">
-             <widget class="QLabel" name="auth_username_label">
-              <property name="text">
-               <string>Auth Username:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="4" column="1">
-             <widget class="QLineEdit" name="auth_username_editor"/>
-            </item>
-            <item row="5" column="0" colspan="6">
-             <widget class="QLabel" name="voicemail_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">margin-top: 20px;</string>
-              </property>
-              <property name="text">
-               <string>Other Servers</string>
-              </property>
-             </widget>
-            </item>
-            <item row="6" column="0" colspan="6">
-             <widget class="Line" name="line_5">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="7" column="0">
-             <widget class="QLabel" name="voicemail_uri_label">
-              <property name="text">
-               <string>Voicemail URI:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="7" column="1" colspan="5">
-             <widget class="LineEdit" name="voicemail_uri_editor">
-              <property name="inactiveText" stdset="0">
-               <string>Discovered by subscribing to myself</string>
-              </property>
-              <property name="widgetSpacing" stdset="0">
-               <number>0</number>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="0">
-             <widget class="QLabel" name="xcap_root_label">
-              <property name="text">
-               <string>XCAP Root URL:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="1" colspan="5">
-             <widget class="LineEdit" name="xcap_root_editor">
-              <property name="inactiveText" stdset="0">
-               <string>Taken from the DNS TXT record for xcap.domain</string>
-              </property>
-              <property name="widgetSpacing" stdset="0">
-               <number>0</number>
-              </property>
-             </widget>
-            </item>
-            <item row="9" column="1" colspan="5">
-             <widget class="QLineEdit" name="server_tools_url_editor"/>
-            </item>
-            <item row="9" column="0">
-             <widget class="QLabel" name="server_tools_url_label">
-              <property name="text">
-               <string>Server Setting URL:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="11" column="0" colspan="6">
-             <spacer name="server_settings_spacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="10" column="0">
-             <widget class="QLabel" name="conference_server_label">
-              <property name="text">
-               <string>Conference Server:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="10" column="1" colspan="5">
-             <widget class="LineEdit" name="conference_server_editor">
-              <property name="widgetSpacing" stdset="0">
-               <number>0</number>
-              </property>
-              <property name="inactiveText" stdset="0">
-               <string>conference.sip2sip.info</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-          <widget class="QWidget" name="network_tab">
-           <attribute name="title">
-            <string>NAT Traversal</string>
-           </attribute>
-           <widget class="QWidget" name="widget" native="true">
-            <property name="geometry">
-             <rect>
-              <x>0</x>
-              <y>170</y>
-              <width>621</width>
-              <height>201</height>
-             </rect>
-            </property>
-            <widget class="Line" name="rtp_line">
-             <property name="geometry">
-              <rect>
-               <x>9</x>
-               <y>45</y>
-               <width>611</width>
-               <height>16</height>
-              </rect>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-            </widget>
-            <widget class="QLabel" name="rtp_label">
-             <property name="geometry">
-              <rect>
-               <x>6</x>
-               <y>10</y>
-               <width>171</width>
-               <height>41</height>
-              </rect>
-             </property>
-             <property name="font">
-              <font>
-               <weight>75</weight>
-               <bold>true</bold>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">margin-top: 20px;</string>
-             </property>
-             <property name="text">
-              <string>Audio and Video</string>
-             </property>
-            </widget>
-            <widget class="QCheckBox" name="use_ice_button">
-             <property name="geometry">
-              <rect>
-               <x>108</x>
-               <y>60</y>
-               <width>199</width>
-               <height>22</height>
-              </rect>
-             </property>
-             <property name="text">
-              <string>Enable ICE</string>
-             </property>
-            </widget>
-            <widget class="QLineEdit" name="stun_server_list_editor">
-             <property name="geometry">
-              <rect>
-               <x>110</x>
-               <y>90</y>
-               <width>490</width>
-               <height>27</height>
-              </rect>
-             </property>
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="toolTip">
-              <string>server1.com:3566, server2.com:3456</string>
-             </property>
-            </widget>
-            <widget class="QLabel" name="stun_label">
-             <property name="geometry">
-              <rect>
-               <x>6</x>
-               <y>88</y>
-               <width>96</width>
-               <height>27</height>
-              </rect>
-             </property>
-             <property name="text">
-              <string>STUN servers:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </widget>
-           <widget class="QWidget" name="widget_2" native="true">
-            <property name="geometry">
-             <rect>
-              <x>0</x>
-              <y>-20</y>
-              <width>631</width>
-              <height>201</height>
-             </rect>
-            </property>
-            <widget class="Line" name="msrp_line">
-             <property name="geometry">
-              <rect>
-               <x>9</x>
-               <y>43</y>
-               <width>613</width>
-               <height>16</height>
-              </rect>
-             </property>
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-            </widget>
-            <widget class="QLabel" name="msrp_label">
-             <property name="geometry">
-              <rect>
-               <x>6</x>
-               <y>10</y>
-               <width>181</width>
-               <height>37</height>
-              </rect>
-             </property>
-             <property name="font">
-              <font>
-               <weight>75</weight>
-               <bold>true</bold>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">margin-top: 20px;</string>
-             </property>
-             <property name="text">
-              <string>Chat and File transfers</string>
-             </property>
-            </widget>
-            <widget class="LineEdit" name="msrp_relay_host_editor">
-             <property name="geometry">
-              <rect>
-               <x>110</x>
-               <y>89</y>
-               <width>490</width>
-               <height>27</height>
-              </rect>
-             </property>
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-             <property name="inactiveText" stdset="0">
-              <string>Relay address is learned from DNS</string>
-             </property>
-             <property name="widgetSpacing" stdset="0">
-              <number>0</number>
-             </property>
-            </widget>
-            <widget class="QLabel" name="msrp_relay_label">
-             <property name="geometry">
-              <rect>
-               <x>9</x>
-               <y>92</y>
-               <width>95</width>
-               <height>17</height>
-              </rect>
-             </property>
-             <property name="text">
-              <string>MSRP Relay:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-            <widget class="QLabel" name="msrp_relay_transport_label">
-             <property name="geometry">
-              <rect>
-               <x>30</x>
-               <y>160</y>
-               <width>73</width>
-               <height>17</height>
-              </rect>
-             </property>
-             <property name="text">
-              <string>Transport:</string>
-             </property>
-             <property name="indent">
-              <number>3</number>
-             </property>
-            </widget>
-            <widget class="QSpinBox" name="msrp_relay_port">
-             <property name="geometry">
-              <rect>
-               <x>110</x>
-               <y>122</y>
-               <width>74</width>
-               <height>27</height>
-              </rect>
-             </property>
-             <property name="specialValueText">
-              <string>2855</string>
-             </property>
-             <property name="minimum">
-              <number>0</number>
-             </property>
-             <property name="maximum">
-              <number>65535</number>
-             </property>
-             <property name="value">
-              <number>0</number>
-             </property>
-            </widget>
-            <widget class="QComboBox" name="msrp_relay_transport_button">
-             <property name="geometry">
-              <rect>
-               <x>110</x>
-               <y>155</y>
-               <width>55</width>
-               <height>27</height>
-              </rect>
-             </property>
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <item>
-              <property name="text">
-               <string>TLS</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>TCP</string>
-              </property>
-             </item>
-            </widget>
-            <widget class="QCheckBox" name="always_use_my_msrp_relay_button">
-             <property name="geometry">
-              <rect>
-               <x>108</x>
-               <y>61</y>
-               <width>317</width>
-               <height>22</height>
-              </rect>
-             </property>
-             <property name="toolTip">
-              <string>Normally the realy is used only for incoming sessions</string>
-             </property>
-             <property name="toolTipDuration">
-              <number>5</number>
-             </property>
-             <property name="text">
-              <string>Always use the relay for outgoing sessions</string>
-             </property>
-            </widget>
-            <widget class="QLabel" name="msrp_relay_port_label">
-             <property name="geometry">
-              <rect>
-               <x>66</x>
-               <y>127</y>
-               <width>37</width>
-               <height>17</height>
-              </rect>
-             </property>
-             <property name="text">
-              <string>Port:</string>
-             </property>
-             <property name="indent">
-              <number>3</number>
-             </property>
-            </widget>
-           </widget>
-          </widget>
           <widget class="QWidget" name="media_tab">
            <attribute name="title">
             <string>Media</string>
@@ -1242,6 +717,21 @@
             <string>Messages</string>
            </attribute>
            <layout class="QGridLayout" name="gridLayout_3">
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
+            </property>
             <item row="0" column="0">
              <widget class="QWidget" name="message_widget" native="true">
               <property name="minimumSize">
@@ -1251,6 +741,21 @@
                </size>
               </property>
               <layout class="QGridLayout" name="gridLayout_2">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <property name="spacing">
+                <number>5</number>
+               </property>
                <item row="3" column="0" colspan="2">
                 <widget class="QCheckBox" name="message_iscomposing_enabled_button">
                  <property name="text">
@@ -1320,6 +825,9 @@
                    <bold>true</bold>
                   </font>
                  </property>
+                 <property name="styleSheet">
+                  <string notr="true">margin-top: 20px;</string>
+                 </property>
                  <property name="text">
                   <string>History and synchronization</string>
                  </property>
@@ -1360,6 +868,9 @@
                    <weight>75</weight>
                    <bold>true</bold>
                   </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">margin-top: 20px;</string>
                  </property>
                  <property name="text">
                   <string>When sending and receiving messages</string>
@@ -1419,6 +930,517 @@
                </size>
               </property>
              </spacer>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="server_settings_tab">
+           <attribute name="title">
+            <string>Server Settings</string>
+           </attribute>
+           <layout class="QGridLayout" name="server_settings_tab_layout">
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
+            </property>
+            <item row="0" column="0" colspan="6">
+             <widget class="QLabel" name="sip_proxy_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>SIP Proxy server</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0" colspan="6">
+             <widget class="Line" name="line_3">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1" colspan="5">
+             <widget class="QCheckBox" name="always_use_my_proxy_button">
+              <property name="text">
+               <string>Always use the proxy server for outgoing sessions</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="outbound_proxy_label">
+              <property name="minimumSize">
+               <size>
+                <width>105</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Outbound Proxy:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QLineEdit" name="outbound_proxy_host_editor"/>
+            </item>
+            <item row="3" column="2">
+             <widget class="QLabel" name="outbound_proxy_port_label">
+              <property name="text">
+               <string>Port:</string>
+              </property>
+              <property name="indent">
+               <number>3</number>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="3">
+             <widget class="QSpinBox" name="outbound_proxy_port">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>65535</number>
+              </property>
+              <property name="value">
+               <number>5060</number>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="4">
+             <widget class="QLabel" name="outbound_proxy_transport_label">
+              <property name="text">
+               <string>Transport:</string>
+              </property>
+              <property name="indent">
+               <number>3</number>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="5">
+             <widget class="QComboBox" name="outbound_proxy_transport_button">
+              <item>
+               <property name="text">
+                <string>UDP</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>TCP</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>TLS</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="auth_username_label">
+              <property name="text">
+               <string>Auth Username:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QLineEdit" name="auth_username_editor"/>
+            </item>
+            <item row="5" column="0" colspan="6">
+             <widget class="QLabel" name="voicemail_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
+              <property name="text">
+               <string>Other Servers</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="0" colspan="6">
+             <widget class="Line" name="line_5">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="0">
+             <widget class="QLabel" name="voicemail_uri_label">
+              <property name="text">
+               <string>Voicemail URI:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="1" colspan="5">
+             <widget class="LineEdit" name="voicemail_uri_editor">
+              <property name="inactiveText" stdset="0">
+               <string>Discovered by subscribing to myself</string>
+              </property>
+              <property name="widgetSpacing" stdset="0">
+               <number>0</number>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="0">
+             <widget class="QLabel" name="xcap_root_label">
+              <property name="text">
+               <string>XCAP Root URL:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="1" colspan="5">
+             <widget class="LineEdit" name="xcap_root_editor">
+              <property name="inactiveText" stdset="0">
+               <string>Taken from the DNS TXT record for xcap.domain</string>
+              </property>
+              <property name="widgetSpacing" stdset="0">
+               <number>0</number>
+              </property>
+             </widget>
+            </item>
+            <item row="9" column="1" colspan="5">
+             <widget class="QLineEdit" name="server_tools_url_editor"/>
+            </item>
+            <item row="9" column="0">
+             <widget class="QLabel" name="server_tools_url_label">
+              <property name="text">
+               <string>Server Setting URL:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="11" column="0" colspan="6">
+             <spacer name="server_settings_spacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="10" column="0">
+             <widget class="QLabel" name="conference_server_label">
+              <property name="text">
+               <string>Conference Server:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="10" column="1" colspan="5">
+             <widget class="LineEdit" name="conference_server_editor">
+              <property name="widgetSpacing" stdset="0">
+               <number>0</number>
+              </property>
+              <property name="inactiveText" stdset="0">
+               <string>conference.sip2sip.info</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="network_tab">
+           <attribute name="title">
+            <string>NAT Traversal</string>
+           </attribute>
+           <layout class="QGridLayout" name="gridLayout_7">
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
+            </property>
+            <item row="0" column="0">
+             <widget class="QWidget" name="widget_2" native="true">
+              <layout class="QGridLayout" name="gridLayout_9">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <property name="spacing">
+                <number>5</number>
+               </property>
+               <item row="5" column="0">
+                <widget class="QLabel" name="msrp_relay_label">
+                 <property name="text">
+                  <string>MSRP Relay:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="1">
+                <widget class="QSpinBox" name="msrp_relay_port">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="specialValueText">
+                  <string>2855</string>
+                 </property>
+                 <property name="minimum">
+                  <number>0</number>
+                 </property>
+                 <property name="maximum">
+                  <number>65535</number>
+                 </property>
+                 <property name="value">
+                  <number>0</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QCheckBox" name="always_use_my_msrp_relay_button">
+                 <property name="toolTip">
+                  <string>Normally the realy is used only for incoming sessions</string>
+                 </property>
+                 <property name="toolTipDuration">
+                  <number>5</number>
+                 </property>
+                 <property name="text">
+                  <string>Always use the relay for outgoing sessions</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="1">
+                <widget class="LineEdit" name="msrp_relay_host_editor">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="inactiveText" stdset="0">
+                  <string>Relay address is learned from DNS</string>
+                 </property>
+                 <property name="widgetSpacing" stdset="0">
+                  <number>0</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="9" column="1">
+                <widget class="QComboBox" name="msrp_relay_transport_button">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <item>
+                  <property name="text">
+                   <string>TLS</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>TCP</string>
+                  </property>
+                 </item>
+                </widget>
+               </item>
+               <item row="9" column="0">
+                <widget class="QLabel" name="msrp_relay_transport_label">
+                 <property name="text">
+                  <string>Transport:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                 <property name="indent">
+                  <number>3</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="7" column="0">
+                <widget class="QLabel" name="msrp_relay_port_label">
+                 <property name="text">
+                  <string>Port:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                 <property name="indent">
+                  <number>3</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0" colspan="2">
+                <widget class="QLabel" name="msrp_label">
+                 <property name="font">
+                  <font>
+                   <weight>75</weight>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true"/>
+                 </property>
+                 <property name="text">
+                  <string>Chat and File transfers</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0" colspan="2">
+                <widget class="Line" name="msrp_line">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <spacer name="verticalSpacer_6">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="3" column="0">
+             <widget class="QWidget" name="widget" native="true">
+              <layout class="QGridLayout" name="gridLayout_8">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <property name="spacing">
+                <number>5</number>
+               </property>
+               <item row="4" column="0">
+                <widget class="QLabel" name="stun_label">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="text">
+                  <string>STUN servers:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QCheckBox" name="use_ice_button">
+                 <property name="text">
+                  <string>Enable ICE</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QLineEdit" name="stun_server_list_editor">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="toolTip">
+                  <string>server1.com:3566, server2.com:3456</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0" rowspan="2" colspan="3">
+                <widget class="QLabel" name="rtp_label">
+                 <property name="font">
+                  <font>
+                   <weight>75</weight>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">margin-top: 20px;</string>
+                 </property>
+                 <property name="text">
+                  <string>Audio and Video</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0" colspan="2">
+                <widget class="Line" name="rtp_line">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
             </item>
            </layout>
           </widget>
