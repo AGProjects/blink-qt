@@ -706,7 +706,8 @@ class MessageManager(object, metaclass=Singleton):
             log.debug("-- Should send delivered imdn for incoming message")
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
-        self._add_contact_to_messages_group(session.account, session.contact)
+        if session.account is not BonjourAccount():
+            self._add_contact_to_messages_group(session.account, session.contact)
         notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message, account=account))
 
     def _request_history_synchronization_token(self, account):
