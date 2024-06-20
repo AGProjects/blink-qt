@@ -9,7 +9,34 @@ function getElement(query) {
 function removeElement(query) {
     let elem = getElement(query);
     if (elem) {
-        elem.remove();
+        // Check for consecutive messages
+        let elem_messages = elem.querySelectorAll('[id^=message-]');
+        if (elem_messages.length !== 0) {
+            let child_messages = Array.from(elem_messages)
+            let first_message = child_messages.shift();
+
+            let smooth_operator = elem.querySelector('[class^=x-wrap]');
+            if (smooth_operator) {
+                first_message.classList.remove('consecutive');
+                first_message.append(...child_messages)
+                elem.replaceWith(first_message);
+            } else {
+                // Stockholm theme
+                let elem_replace = elem.querySelector('[class^=x-message]');
+                if (elem_replace) {
+                    elem.setAttribute('id', first_message.getAttribute('id'))
+                    let time = elem.querySelector('[class^=x-time]')
+                    if (time) {
+                        time.replaceWith(first_message.querySelector('[class^=x-time]'));
+                    }
+                    elem_replace.replaceChildren(...first_message.children);
+                    first_message.remove();
+                }
+                elem.append(...child_messages);
+            }
+        } else {
+            elem.remove();
+        }
     }
 }
 
@@ -123,5 +150,6 @@ window.onload = function() {
         chat = channel.objects.chat;
         window.chat = chat;
         chat._JH_LoadFinished(true);
-    })
+    });
+
 }
