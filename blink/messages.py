@@ -636,7 +636,7 @@ class MessageManager(object, metaclass=Singleton):
         new_contact.uris = [ContactURI(uri=uri.uri, type=uri.type) for uri in contact.uris]
         new_contact.save()
 
-        group.contacts.add(contact)
+        group.contacts.add(new_contact)
         group.save()
 
     @run_in_thread('file-io')
