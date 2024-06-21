@@ -4074,6 +4074,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.contact_uri = None
         self.sip_session = None
         self.stream = None
+        self.remote_instance_id = None
 
         self.file_selector = None
         self.handler = None
