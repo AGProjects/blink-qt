@@ -20,16 +20,21 @@ credits_text = """
 </style>
 </head>
 <body>
-<table width="100%" cellspacing="2" cellpadding="0" border="0">
- <tr><td class="name" align="right">AG Projects</td><td align="left"><a href="http://ag-projects.com/">http://ag-projects.com/</a></td></tr>
- <tr><td class="name" align="right">NLnet Foundation</td><td align="left"><a href="http://nlnet.nl/">http://nlnet.nl/</a></td></tr>
- <tr><td class="name" align="right">IETF Community</td><td align="left"><a href="http://ietf.org/">http://ietf.org/</a></td></tr>
- <tr><td class="name" align="right">SIP Simple Client</td><td align="left"><a href="http://sipsimpleclient.org/">http://sipsimpleclient.org/</a></td></tr>
-</table>
+<a href="http://nlnet.nl/">NLnet Foundation</a>
+<p>
+Software authors:
+<p>
+
+<ul>
+ <li>Dan Pascu</li>
+ <li>Lucian Stănescu</li>
+ <li>Adrian Georgescu</li>
+ <li>Saúl Ibarra Corretgé</li>
+ <li>Tijmen de Mes</li>
+</ul>
 </body>
 </html>
 """
-
 
 ui_class, base_class = uic.loadUiType(Resources.get('about_panel.ui'))
 
