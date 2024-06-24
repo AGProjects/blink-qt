@@ -105,6 +105,37 @@ function previousSibling(id, content) {
     }
 }
 
+function insertAsParent(id, content, new_consecutive) {
+    let elem = getElementById(id);
+    if (elem) {
+        content = parseHtml(content);
+        new_consecutive = parseHtml(new_consecutive);
+        let elem_messages = elem.querySelectorAll('[id^=message-]');
+        let insert = content.querySelector('[id^=insert]');
+
+        if (elem_messages.length !== 0) {
+            let child_messages = Array.from(elem_messages);
+            child_messages.unshift(new_consecutive);
+            console.log(child_messages);
+            insert.replaceWith(child_messages);
+            elem.replaceWith(content);
+            fix_index();
+            return
+        }
+        insert.replaceWith(new_consecutive);
+        elem.replaceWith(content);
+        fix_index();
+    }
+}
+
+function appendOutside(id, content) {
+    let elem = getElementById(id);
+    if (elem) {
+        content = parseHtml(content);
+        elem.after(content);
+    }
+}
+
 function prependOutside(id, content) {
     let elem = getElementById(id);
     if (elem) {

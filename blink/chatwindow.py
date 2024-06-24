@@ -764,9 +764,18 @@ class ChatJSInterface(QObject):
         content = json.dumps(content)
         self._js_operation(f"previousSibling('{query}', {content})")
 
+    def insert_as_parent(self, query, content, new_consecutive):
+        content = json.dumps(content)
+        new_consecutive = json.dumps(new_consecutive)
+        self._js_operation(f"insertAsParent('{query}', {content}, {new_consecutive})")
+
     def prepend_outside_element(self, query, content):
         content = json.dumps(content)
         self._js_operation(f"prependOutside('{query}', {content})")
+
+    def append_outside_element(self, query, content):
+        content = json.dumps(content)
+        self._js_operation(f"appendOutside('{query}', {content})")
 
     def set_style_property_element(self, query, property, value):
         self._js_operation(f"styleElement('{query}', '{property}', '{value}')")
@@ -861,22 +870,44 @@ class ChatWidget(base_class, ui_class):
             if self.last_message is not None and not self.last_message.history and message.history:
                 message.history = False
 
-            for i, (timestamp, id) in enumerate(self.timestamp_rendered_messages):
+            for i, (timestamp, id, rendered_message) in enumerate(self.timestamp_rendered_messages):
                 if id == message.id:
                     return
 
+                (prev_timestamp, prev_id, previous_rendered_message) = self.timestamp_rendered_messages[i-1]
                 if timestamp >= message.timestamp:
-                    if message.is_related_to(self.last_message):
+                    if message.is_related_to(previous_rendered_message):
+                        print(f'consecutive {message_id} to previous {previous_rendered_message.id} {timestamp} > {message.timestamp}')
                         message.consecutive = True
-                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
-                        self.chat_js.previous_sibling(f'message-{id}', html_message)
+                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
+                        if previous_rendered_message.consecutive:
+                            self.chat_js.append_outside_element(f'message-{previous_rendered_message.id}', html_message)
+                        else:
+                            if message.is_related_to(rendered_message):
+                                self.chat_js.prepend_outside_element(f'message-{id}', html_message)
+                            else:
+                                self.chat_js.append_element(f'#message-{prev_id}', html_message)
                         self.chat_js.add_context_menu(message.id)
+                    elif message.is_related_to(rendered_message):
+                        if rendered_message.consecutive:
+                            message.consecutive = True
+                            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
+                            self.chat_js.previous_sibling(f'message-{id}', html_message)
+                            self.chat_js.add_context_menu(message.id)
+                        else:
+                            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
+                            rendered_message.consecutive = True
+                            html_rendered_message = rendered_message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
+                            self.timestamp_rendered_messages[i] = (rendered_message.timestamp, rendered_message.id, rendered_message)
+                            self.chat_js.insert_as_parent(f'message-{id}', html_message, html_rendered_message)
+                            self.chat_js.add_context_menu(message.id)
                     else:
-                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
+                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
                         self.chat_js.prepend_outside_element(f'message-{id}', html_message)
                         self.chat_js.add_context_menu(message.id)
-                    self.timestamp_rendered_messages.insert(i, (message.timestamp, message.id))
-                    self.last_message = message
+                    self.timestamp_rendered_messages.insert(i, (message.timestamp, message.id, message))
+                    if self.last_message.timestamp < message.timestamp:
+                        self.last_message = message
                     return
 
         if message.is_related_to(self.last_message):
@@ -889,7 +920,7 @@ class ChatWidget(base_class, ui_class):
             self.chat_js.append_message_to_chat(html_message, message_id)
 
         if hasattr(message, 'id'):
-            self.timestamp_rendered_messages.append((message.timestamp, message.id))
+            self.timestamp_rendered_messages.append((message.timestamp, message.id, message))
         self.last_message = message
 
     def replace_message(self, id, message):
