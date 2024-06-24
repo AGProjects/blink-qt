@@ -2775,6 +2775,17 @@ class AudioSessionListView(QListView):
         self.setDropIndicatorShown(False)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
+        self.actions.add_audio = QAction(translate('audio_session', "Add audio"), self, triggered=self._AH_AddAudio)
+        self.actions.remove_audio = QAction(translate('audio_session', "Remove audio"), self, triggered=self._AH_RemoveAudio)
+        self.actions.add_video = QAction(translate('audio_session', "Add video"), self, triggered=self._AH_AddVideo)
+        self.actions.remove_video = QAction(translate('audio_session', "Remove video"), self, triggered=self._AH_RemoveVideo)
+        self.actions.add_chat = QAction(translate('audio_session', "Add MSRP chat"), self, triggered=self._AH_AddChat)
+        self.actions.remove_chat = QAction(translate('audio_session', "Remove MSRP chat"), self, triggered=self._AH_RemoveChat)
+        self.actions.share_my_screen = QAction(translate('audio_session', "Share my screen"), self, triggered=self._AH_ShareMyScreen)
+        self.actions.request_screen = QAction(translate('audio_session', "Request screen"), self, triggered=self._AH_RequestScreen)
+        self.actions.end_screen_sharing = QAction(translate('audio_session', "End screen sharing"), self, triggered=self._AH_EndScreenSharing)
+        self.actions.send_messages = QAction(translate('audio_session', "Send Messages"), self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction(translate('audio_session', "Send File(s)..."), self, triggered=self._AH_SendFiles)
         self.dragged_session = None
         self.ignore_selection_changes = False
         self._pressed_position = None
@@ -2787,8 +2798,47 @@ class AudioSessionListView(QListView):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BlinkActiveSessionDidChange')
 
+    def _update_control_menu(self, item):
+        menu = self.context_menu
+        menu.hide()
+        blink_session = item.blink_session
+        state = blink_session.state
+        if state == 'connected':
+            stream_types = blink_session.streams.types
+            if 'audio' not in stream_types:
+                menu.addAction(self.actions.add_audio)
+            if stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
+                menu.addAction(self.actions.remove_audio)
+            if 'video' not in stream_types:
+                menu.addAction(self.actions.add_video)
+            elif stream_types != {'video'}:
+                menu.addAction(self.actions.remove_video)
+            if 'chat' not in stream_types:
+                menu.addAction(self.actions.add_chat)
+                menu.addAction(self.actions.send_messages)
+            elif stream_types != {'chat'}:
+                menu.addAction(self.actions.remove_chat)
+            if 'screen-sharing' not in stream_types:
+                menu.addAction(self.actions.request_screen)
+                menu.addAction(self.actions.share_my_screen)
+            elif stream_types != {'screen-sharing'}:
+                menu.addAction(self.actions.end_screen_sharing)
+            menu.addAction(self.actions.send_files)
+
     def contextMenuEvent(self, event):
-        pass
+        menu = self.context_menu
+        index = self.indexAt(event.pos())
+        if index.isValid():
+            item = index.data(Qt.ItemDataRole.UserRole)
+            blink_session = item.blink_session
+            state = blink_session.state
+            if state == 'connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
+                return
+            elif state == 'connected/received_proposal':
+                return
+            menu.clear()
+            self._update_control_menu(item)
+        menu.exec(self.mapToGlobal(event.pos()))
 
     def hideEvent(self, event):
         self.context_menu.hide()
@@ -3006,6 +3056,82 @@ class AudioSessionListView(QListView):
                     sibling.items.audio.widget.drop_indicator = True
             else:
                 session.widget.drop_indicator = True
+
+    def _AH_AddVideo(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            if 'audio' in session.blink_session.streams:
+                session.blink_session.add_stream(StreamDescription('video'))
+            else:
+                session.blink_session.add_streams([StreamDescription('video'), StreamDescription('audio')])
+
+    def _AH_RemoveVideo(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            session.blink_session.remove_stream(session.blink_session.streams.get('video'))
+
+    def _AH_AddAudio(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            session.blink_session.add_stream(StreamDescription('audio'))
+
+    def _AH_RemoveAudio(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            session.blink_session.remove_stream(session.blink_session.streams.get('audio'))
+
+    def _AH_AddChat(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            session.blink_session.add_stream(StreamDescription('chat'))
+
+    def _AH_RemoveChat(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            session.blink_session.remove_stream(session.blink_session.streams.get('chat'))
+
+    def _AH_ShareMyScreen(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            if 'audio' in session.blink_session.streams:
+                session.blink_session.add_stream(StreamDescription('screen-sharing', mode='server'))
+            else:
+                session.blink_session.add_streams([StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
+
+    def _AH_RequestScreen(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            if 'audio' in session.blink_session.streams:
+                session.blink_session.add_stream(StreamDescription('screen-sharing', mode='viewer'))
+            else:
+                session.blink_session.add_streams([StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
+
+    def _AH_EndScreenSharing(self):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            session.blink_session.remove_stream(session.blink_session.streams.get('screen-sharing'))
+
+    def _AH_SendSMS(self):
+        blink = QApplication.instance()
+        blink.chat_window.show()
+
+    def _AH_SendFiles(self, uri=None):
+        selected_indexes = self.selectedIndexes()
+        if selected_indexes:
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
+            contact = session.blink_session.contact
+            session_manager = SessionManager()
+            for filename in QFileDialog.getOpenFileNames(self, translate('audio_session', 'Select File(s)'), session_manager.send_file_directory, 'Any file (*.*)')[0]:
+                session_manager.send_file(contact, contact.uri, filename)
 
     def _SH_HangupShortcutActivated(self):
         selected_indexes = self.selectedIndexes()
