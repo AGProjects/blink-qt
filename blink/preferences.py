@@ -1023,7 +1023,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         for message in messages:
             add_message(message)
-
+        self._align_style_preview(True)
         del self.style_view.last_message
 
     def show(self):
