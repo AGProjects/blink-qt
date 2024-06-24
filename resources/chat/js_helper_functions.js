@@ -6,6 +6,24 @@ function getElement(query) {
     return document.querySelector(query);
 }
 
+function fix_index() {
+    insert = getElement('#insert')
+    if (insert) {
+        return
+    }
+    console.log('Adding insert')
+    let messages = document.querySelectorAll('[id^=message-]')
+    let last_message = [...messages].pop()
+    insert = document.createElement('span');
+    insert.setAttribute('id', 'insert');
+    let smooth_operator = document.querySelectorAll('[class^=x-wrap]').length !== 0;
+    if (!smooth_operator && last_message.classList.contains('consecutive')) {
+        last_message.after(insert);
+    } else {
+        last_message.append(insert);
+    }
+}
+
 function removeElement(query) {
     let elem = getElement(query);
     if (elem) {
@@ -44,15 +62,7 @@ function removeElement(query) {
         }
 
         // Check if insert element is still in the chat. Could be gone if we removed last message
-        let insert = getElement('#insert')
-        if (insert) {
-            return
-        }
-        let messages = document.querySelectorAll('[id^=message-]')
-        let last_message = [...messages].pop()
-        insert = document.createElement('span');
-        insert.setAttribute('id', 'insert');
-        last_message.append(insert);
+        fix_index();
     }
 }
 
