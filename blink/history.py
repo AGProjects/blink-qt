@@ -629,7 +629,11 @@ class MessageHistory(object, metaclass=Singleton):
     def get_last_contacts(self, number=10):
         log.debug(f'== Getting last {number} contacts with messages')
 
-        query = f'select remote_uri, max(timestamp) from messages group by remote_uri order by timestamp desc limit {Message.sqlrepr(number)}'
+        query = f"""
+            select im.display_name, am.remote_uri, max(am.timestamp) from messages as am
+            left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
+            on am.remote_uri = im.remote_uri
+            where am.content_type not like "%pgp%" and am.content_type not like "%sylk-api%" group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
         notification_center = NotificationCenter()
         try:
             result = self.db.queryAll(query)
@@ -637,7 +641,7 @@ class MessageHistory(object, metaclass=Singleton):
             return
 
         log.debug(f"== Contacts fetched: {len(list(result))}")
-        result = [''.join(uri) for (uri, timestamp) in result]
+        result = [(display_name, uri) for (display_name, uri, timestamp) in result]
         notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=list(result)))
 
     @run_in_thread('db')

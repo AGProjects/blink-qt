@@ -3133,8 +3133,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkMessageHistoryLastContactsDidSucceed(self, notification):
         contacts = notification.data.contacts
         message_manager = MessageManager()
-        for contact in contacts[::-1]:
-            message_manager.create_message_session(contact)
+        for display_name, contact in contacts[::-1]:
+            message_manager.create_message_session(contact, display_name)
 
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session

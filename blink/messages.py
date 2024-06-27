@@ -1457,12 +1457,14 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
         self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
 
-    def create_message_session(self, uri):
+    def create_message_session(self, uri, display_name=None):
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(uri)
         session_manager = SessionManager()
         account = AccountManager().default_account
         instance_id = contact.settings.id if contact.type == 'bonjour' else None
+        if contact.type == 'dummy' and display_name is not None:
+            contact.settings.name = display_name
         log.info(f"Create outgoing message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
 
         try:
