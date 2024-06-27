@@ -273,6 +273,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.xcap_root_editor.editingFinished.connect(self._SH_XCAPRootEditorEditingFinished)
         self.server_tools_url_editor.editingFinished.connect(self._SH_ServerToolsURLEditorEditingFinished)
         self.conference_server_editor.editingFinished.connect(self._SH_ConferenceServerEditorEditingFinished)
+        self.enable_xcap_button.clicked.connect(self._SH_EnableXcapButtonClicked)
 
         # Account NAT traversal settings
         self.use_ice_button.clicked.connect(self._SH_UseICEButtonClicked)
@@ -925,7 +926,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.msrp_relay_port.setValue(msrp_relay.port)
             self.msrp_relay_transport_button.setCurrentIndex(self.msrp_relay_transport_button.findText(msrp_relay.transport.upper()))
 
+            self.enable_xcap_button.setChecked(account.xcap.enabled)
             self.voicemail_uri_editor.setText(account.message_summary.voicemail_uri or '')
+            if not account.xcap.enabled:
+                self.xcap_root_editor.setEnabled(False)
             self.xcap_root_editor.setText(account.xcap.xcap_root or '')
             self.server_tools_url_editor.setText(account.server.settings_url or '')
             self.conference_server_editor.setText(account.server.conference_server or '')
@@ -1411,6 +1415,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if account.message_summary.voicemail_uri != voicemail_uri:
             account.message_summary.voicemail_uri = voicemail_uri
             account.save()
+
+    def _SH_EnableXcapButtonClicked(self, checked):
+        account = self.selected_account
+        account.xcap.enabled = checked
+        self.xcap_root_editor.setEnabled(checked)
+        account.save()
 
     def _SH_XCAPRootEditorEditingFinished(self):
         account = self.selected_account
