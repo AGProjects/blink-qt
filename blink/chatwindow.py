@@ -3035,12 +3035,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = blink_session.items.chat
 
         messages = notification.data.messages
+        account_manager = AccountManager()
 
         if session is None:
             return
 
         for message in messages:
             encrypted = False
+            state = message.state
+            account = account_manager.get_account(message.account_id) if account_manager.has_account(message.account_id) else None
+
+            # We don't load messages if the account is not present.
+            if account is None:
+                continue
+
             if message.content_type.startswith('image/'):
                 content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.rstrip())
             elif message.content_type.startswith('text/'):
@@ -3069,22 +3077,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             # message.sender = SIPURI.parse(f'sip:{message.remote_uri}')
             if message.direction == 'outgoing':
-                message.sender = blink_session.account
-                try:
-                    uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
-                except AttributeError:
-                    uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
+                uri = message.account_id
             else:
                 uri = message.remote_uri
 
             timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
             # print(f"t: {timestamp}")
-            account_manager = AccountManager()
             if account_manager.has_account(uri):
-                account = account_manager.get_account(uri)
-                sender = ChatSender(message.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
+                found_account = account_manager.get_account(uri)
+                sender = ChatSender(message.display_name or found_account.display_name, uri, session.chat_widget.user_icon.filename)
             else:
-                account = None
                 sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
 
             session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True))
