@@ -6,6 +6,7 @@ import io
 import os
 import re
 import requests
+import random
 import string
 import sys
 import shutil
@@ -6405,6 +6406,8 @@ class ConferenceDialog(base_class, ui_class):
                 self.room_button.removeItem(self.room_button.count()-1)
             self.room_button.insertItem(0, current_text)
 
+        if not current_text:
+            current_text = random.choice('123456789') + ''.join(random.choice('0123456789') for x in range(6))
         account_manager = AccountManager()
         session_manager = SessionManager()
         account = account_manager.default_account
