@@ -444,7 +444,7 @@ class OutgoingMessage(object):
             notification_center = NotificationCenter()
             notification_center.post_notification('BlinkMessageIsPending', sender=self.session, data=NotificationData(message=self.message, id=self.id))
 
-        if self.session.routes:
+        if self.session.routes and self.session.account == self.account:
             self._send()
         else:
             self._lookup()
