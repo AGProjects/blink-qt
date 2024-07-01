@@ -3045,8 +3045,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             state = message.state
             account = account_manager.get_account(message.account_id) if account_manager.has_account(message.account_id) else None
 
-            # We don't load messages if the account is not present.
-            if account is None:
+            # We don't load messages if the account is not present or not enabled.
+            if account is None or not account.enabled:
                 continue
 
             if message.content_type.startswith('image/'):
