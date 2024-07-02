@@ -335,6 +335,9 @@ class ChatMessage(ChatContent):
             return style.html.message.format(message=self, **kw)
 
 
+class ChatMessageFile(ChatMessage): pass
+
+
 class ChatSender(object):
     __colors__ = ["aqua", "aquamarine", "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue", "crimson", "cyan", "darkblue", "darkcyan",
                   "darkgoldenrod", "darkgreen", "darkgrey", "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred", "darksalmon", "darkseagreen", "darkslateblue",
@@ -1075,7 +1078,7 @@ class ChatWidget(base_class, ui_class):
             else:
                 content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
                 sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
-                self.add_message(ChatMessage(content, sender, 'outgoing'))
+                self.add_message(ChatMessageFile(content, sender, 'outgoing'))
 
         for descriptor in other_descriptors:
             session_manager.send_file(blink_session.contact, blink_session.contact_uri, descriptor.filename, account=blink_session.account)
@@ -1093,7 +1096,7 @@ class ChatWidget(base_class, ui_class):
                 account = self.session.blink_session.account
                 content = '''<img src="{}" class="scaled-to-fit" />'''.format(text)
                 sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
-                self.add_message(ChatMessage(content, sender, 'outgoing'))
+                self.add_message(ChatMessageFile(content, sender, 'outgoing'))
         else:
             user_text = self.chat_input.toHtml()
             self.chat_input.setHtml(text)
@@ -2852,15 +2855,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             account = None
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
+
+        if message.content_type.lower() == FTHTTPDocument.content_type:
+            chat_message = ChatMessageFile(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)
+        else:
+            chat_message = ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)
+
         if session.chat_widget.history_loaded:
             if message in session.chat_widget.pending_decryption and not encrypted:
                 session.chat_widget.pending_decryption.remove(message)
                 session.chat_widget.update_message_text(message.id, content)
             else:
-                session.chat_widget.add_message(ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history))
+                session.chat_widget.add_message(chat_message)
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
         else:
-            self.render_after_load.append((session, ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)))
+            self.render_after_load.append((session, chat_message))
 
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
@@ -3088,9 +3097,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 sender = ChatSender(message.display_name or found_account.display_name, uri, session.chat_widget.user_icon.filename)
             else:
                 sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
+            if message.content_type.lower() == FTHTTPDocument.content_type:
+                chat_message = ChatMessageFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
+            else:
+                chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
 
-            session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True))
-            # session.chat_widget.add_message(ChatMessage(content, sender, message.direction, id=message.id, timestamp=timestamp))
+            session.chat_widget.add_message(chat_message)
+
             if message.direction == "outgoing":
                 session.chat_widget.update_message_status(id=message.message_id, status=message.state)
             elif message.state != 'displayed' and 'display' in message.disposition and not encrypted:
