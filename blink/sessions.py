@@ -23,7 +23,7 @@ from PyQt5 import uic
 from PyQt5.QtCore import Qt, QAbstractListModel, QEasingCurve, QModelIndex, QObject, QProcess, QPropertyAnimation, pyqtSignal
 from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl, QFileInfo
 from PyQt5.QtGui import QBrush, QColor, QDesktopServices, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
-from PyQt5.QtWidgets import QApplication, QAction, QDialog, QLabel, QListView, QMenu, QShortcut, QStyle, QStyledItemDelegate, QStyleOption, QFileIconProvider
+from PyQt5.QtWidgets import QApplication, QAction, QDialog, QLabel, QListView, QMenu, QShortcut, QStyle, QStyledItemDelegate, QStyleOption, QFileIconProvider, QFileDialog
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
