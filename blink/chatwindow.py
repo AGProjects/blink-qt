@@ -1,4 +1,5 @@
 
+import bisect
 import base64
 import locale
 import os
@@ -13,7 +14,7 @@ from PyQt5.QtGui import QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearG
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWebChannel import QWebChannel
 from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineView, QWebEngineSettings, QWebEngineScript
-from PyQt5.QtWidgets import QApplication, QAction, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
+from PyQt5.QtWidgets import QApplication, QAction, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
 from PyQt5.QtWidgets import QFileDialog, QFileIconProvider
 
 from abc import ABCMeta, abstractmethod
@@ -50,7 +51,7 @@ from blink.contacts import URIUtils
 from blink.history import HistoryManager
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import IconManager, Resources
-from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter, IncomingDialogBase, RequestList
 from blink.util import run_in_gui_thread, call_later, translate, copy_transfer_file
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
@@ -390,7 +391,7 @@ class ChatWebPage(QWebEnginePage):
 
 class ChatWebView(QWebEngineView):
     sizeChanged = pyqtSignal()
-    messageShouldRemove = pyqtSignal(str)
+    messageDelete = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super(ChatWebView, self).__init__(parent)
@@ -407,13 +408,13 @@ class ChatWebView(QWebEngineView):
         if self.last_message_id is not None:
             if self.last_message_id.startswith('text-'):
                 self.id = self.last_message_id[5:]
-                action = menu.addAction('Remove Message')
-                action.triggered.connect(self._SH_RemoveClicked)
+                action = menu.addAction('Delete Message')
+                action.triggered.connect(self._SH_DeleteClicked)
 
             if self.last_message_id.startswith('message-'):
                 self.id = self.last_message_id[8:]
-                action = menu.addAction('Remove Message')
-                action.triggered.connect(self._SH_RemoveClicked)
+                action = menu.addAction('Delete Message')
+                action.triggered.connect(self._SH_DeleteClicked)
 
         if any(action.isVisible() and not action.isSeparator() for action in menu.actions()):
             menu.aboutToHide.connect(self._SH_AboutToHide)
@@ -430,8 +431,8 @@ class ChatWebView(QWebEngineView):
         super(ChatWebView, self).resizeEvent(event)
         self.sizeChanged.emit()
 
-    def _SH_RemoveClicked(self):
-        self.messageShouldRemove.emit(self.id)
+    def _SH_DeleteClicked(self):
+        self.messageDelete.emit(self.id)
 
     def _SH_AboutToHide(self):
         self.last_message_id = None
@@ -804,6 +805,114 @@ class ChatJSInterface(QObject):
         if id != '':
             self.contextMenuEvent.emit(id)
 
+
+ui_class, base_class = uic.loadUiType(Resources.get('delete_message_dialog.ui'))
+
+
+class DeleteMessageDialog(IncomingDialogBase, ui_class):
+    def __init__(self, parent=None):
+        super(DeleteMessageDialog, self).__init__(parent)
+
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        with Resources.directory:
+            self.setupUi(self)
+
+        self.delete_button = self.dialog_button_box.addButton(translate("delete_message_dialog", "Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
+        self.delete_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
+        self.delete_button.setStyleSheet("""
+                                         border-color: #800000;
+                                         color: #800000;
+                                         """)
+        self.slot = None
+
+    def show(self, activate=True):
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
+        super(DeleteMessageDialog, self).show()
+
+
+class DeleteMessageRequest(QObject):
+    finished = pyqtSignal(object)
+    accepted = pyqtSignal(object)
+    rejected = pyqtSignal(object)
+    priority = 5
+
+    template = open(Resources.get('chat/template.html')).read()
+
+    def __init__(self, dialog, session, account, id, messages):
+        super(DeleteMessageRequest, self).__init__()
+        self.session = session
+        self.account = account
+        self.dialog = dialog
+        self.id = id
+        self.dialog.finished.connect(self._SH_DialogFinished)
+
+        blink_settings = BlinkSettings()
+        self.style = ChatMessageStyle(blink_settings.chat_window.style)
+        self.style_variant = blink_settings.chat_window.style_variant or self.style.default_variant
+        self.font_family = blink_settings.chat_window.font or self.style.font_family
+        self.font_size = blink_settings.chat_window.font_size or self.style.font_size
+        self.user_icons = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
+        self.dialog.message_view.setHtml(self.template.format(base_url=FileURL(self.style.path) + '/', style_url=self.style_variant + '.css', font_family=self.font_family, font_size=self.font_size), baseUrl=QUrl.fromLocalFile(os.path.abspath(sys.argv[0])))
+        self.chat_js = ChatJSInterface(self.dialog.message_view.page())
+
+        self.dialog.message_view.last_message = None
+
+        def add_message(message):
+            if message.direction == 'outgoing':
+                replace = self.dialog.delete_both_checkbox.text().replace('__REMOTE_PARTY__', self.session.contact.name)
+                self.dialog.delete_both_checkbox.setText(replace)
+            else:
+                self.dialog.delete_both_checkbox.hide()
+                self.dialog.delete_both_checkbox.setEnabled(False)
+
+            if isinstance(message, ChatMessageFile):
+                replace1 = self.dialog.delete_message_dialog_text.text().replace('message', translate('delete_message_dialog', 'file'))
+                replace2 = self.dialog.delete_message_dialog_title.text().replace('message', translate('delete_message_dialog', 'file'))
+                self.dialog.delete_message_dialog_text.setText(replace1)
+                self.dialog.delete_message_dialog_title.setText(replace2)
+
+            message.consecutive = False
+            message.history = False
+            if message.is_related_to(self.dialog.message_view.last_message):
+                message.consecutive = True
+                html_message = message.to_html(self.style, user_icons=self.user_icons)
+                self.chat_js.replace_element('#insert', html_message)
+            else:
+                html_message = message.to_html(self.style, user_icons=self.user_icons)
+                self.chat_js.append_message_to_chat(html_message)
+            self.dialog.message_view.last_message = message
+
+        for message in messages:
+            add_message(message)
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __gt__(self, other):
+        return self.priority > other.priority
+
+    def __ge__(self, other):
+        return self.priority >= other.priority
+
+    def _SH_DialogFinished(self, result):
+        self.finished.emit(self)
+        if result == QDialog.DialogCode.Accepted:
+            self.accepted.emit(self)
+        elif result == QDialog.DialogCode.Rejected:
+            self.rejected.emit(self)
+
+
+del ui_class, base_class
 ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
 
 
@@ -841,6 +950,7 @@ class ChatWidget(base_class, ui_class):
         self.history_loaded = False
         self.timestamp_rendered_messages = []
         self.pending_decryption = []
+        self.remove_requests = RequestList()
         self.size = QSizeF()
         if session is not None:
             notification_center = NotificationCenter()
@@ -857,7 +967,7 @@ class ChatWidget(base_class, ui_class):
         self.chat_view.page().linkClicked.connect(self._SH_LinkClicked)
         self.chat_js.contextMenuEvent.connect(self._SH_ContextMenuEvent)
 
-        self.chat_view.messageShouldRemove.connect(self._SH_MessageShouldRemove)
+        self.chat_view.messageDelete.connect(self._SH_MessageDelete)
 
         self.composing_timer.timeout.connect(self._SH_ComposingTimerTimeout)
         self.otr_timer.timeout.connect(self._SH_OTRTimerTimeout)
@@ -1120,9 +1230,35 @@ class ChatWidget(base_class, ui_class):
                                                    sender=blink_session,
                                                    data=NotificationData(filename=link.fileName(), id=id))
 
-    def _SH_MessageShouldRemove(self, id):
+    def delete_message(self, session, account, id, messages=[]):
+        for request in self.remove_requests[account, DeleteMessageRequest]:
+            request.dialog.hide()
+            self.remove_requests.remove(request)
+
+        delete_dialog = DeleteMessageDialog()
+        delete_request = DeleteMessageRequest(delete_dialog, session, account, id, messages)
+        delete_request.accepted.connect(self._SH_MessageDeleteAccepted)
+        delete_request.finished.connect(self._SH_MessageDeleteRequestFinished)
+        bisect.insort_right(self.remove_requests, delete_request)
+        delete_request.dialog.show()
+
+    def _SH_MessageDelete(self, id):
         blink_session = self.session.blink_session
-        MessageManager().send_remove_message(blink_session, id)
+
+        messages = [message for (timestamp, msg_id, message) in self.timestamp_rendered_messages if msg_id == id]
+        account_manager = AccountManager()
+        account = account_manager.get_account(messages[0].sender.uri)
+        self.delete_message(blink_session, account, id, messages)
+
+    def _SH_MessageDeleteAccepted(self, request):
+        self.remove_message(request.id)
+        NotificationCenter().post_notification('BlinkMessageWillDelete', sender=request.session, data=NotificationData(id=request.id))
+        if request.dialog.delete_both_checkbox.isChecked():
+            MessageManager().send_remove_message(request.session, request.id, request.account)
+
+    def _SH_MessageDeleteRequestFinished(self, request):
+        request.dialog.hide()
+        self.remove_requests.remove(request)
 
     def _SH_ChatViewSizeChanged(self):
         # print("chat view size changed")
@@ -1235,6 +1371,14 @@ class ChatWidget(base_class, ui_class):
             self.composing_timer.stop()
             self.chat_input.reset_locks()
 
+    def _NH_BlinkSessionShouldDeleteFile(self, notification):
+        item = notification.data.item
+        blink_session = self.session.blink_session
+
+        messages = [message for (timestamp, msg_id, message) in self.timestamp_rendered_messages if msg_id == item.id]
+        account_manager = AccountManager()
+        account = account_manager.get_account(messages[0].sender.uri)
+        self.delete_message(blink_session, account, item.id, messages)
 
 del ui_class, base_class
 
@@ -1886,9 +2030,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkGotMessage')
         notification_center.add_observer(self, name='BlinkGotComposingIndication')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
+        notification_center.add_observer(self, name='BlinkGotMessageDelete')
         notification_center.add_observer(self, name='BlinkMessageDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageDidFail')
-        notification_center.add_observer(self, name='BlinkMessageWillRemove')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
         notification_center.add_observer(self, name='BlinkMessageHistoryLastContactsDidSucceed')
@@ -2902,6 +3046,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         data = notification.data
         session.chat_widget.update_message_status(id=data.id, status=data.status)
 
+    def _NH_BlinkGotMessageDelete(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+
+        if session is None:
+            return
+
+        session.chat_widget.remove_message(notification.data)
+
     def _NH_BlinkMessageDidSucceed(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
@@ -2920,14 +3073,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
         call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status='failed')
 
-    def _NH_BlinkMessageWillRemove(self, notification):
-        blink_session = notification.sender
-        session = blink_session.items.chat
 
-        if session is None:
-            return
-
-        session.chat_widget.remove_message(notification.data)
 
     def _NH_PGPMessageDidDecrypt(self, notification):
         blink_session = notification.sender
@@ -2989,7 +3135,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             image_data = base64.b64encode(image.thumbnail.data).decode()
             content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
             blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
-
 
     def _NH_BlinkHTTPFileTranfserDidEnd(self, notification):
         blink_session = notification.sender

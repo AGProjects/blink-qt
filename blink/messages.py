@@ -806,7 +806,7 @@ class MessageManager(object, metaclass=Singleton):
                 notification_center.post_notification('BlinkGotHistoryConversationRemove', sender=account, data=message['content'])
             elif content_type == 'application/sylk-message-remove':
                 payload = json.loads(message['content'])
-                notification_center.post_notification('BlinkGotHistoryMessageRemove', data=payload['message_id'])
+                notification_center.post_notification('BlinkGotHistoryMessageDelete', data=payload['message_id'])
 
                 from blink.contacts import URIUtils
                 contact, contact_uri = URIUtils.find_contact(message['contact'])
@@ -815,7 +815,7 @@ class MessageManager(object, metaclass=Singleton):
                 except StopIteration:
                     pass
                 else:
-                    notification_center.post_notification('BlinkMessageWillRemove', sender=blink_session, data=payload['message_id'])
+                    notification_center.post_notification('BlinkGotMessageDelete', sender=blink_session, data=payload['message_id'])
             elif content_type == 'application/sylk-conversation-read':
                 pass
             elif content_type == 'text/pgp-public-key':
@@ -1156,14 +1156,14 @@ class MessageManager(object, metaclass=Singleton):
 
         if content_type == 'application/sylk-message-remove':
             payload = json.loads(body)
-            notification_center.post_notification('BlinkGotHistoryMessageRemove', data=payload['message_id'])
+            notification_center.post_notification('BlinkGotHistoryMessageDelete', data=payload['message_id'])
 
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
             except StopIteration:
                 pass
             else:
-                notification_center.post_notification('BlinkMessageWillRemove', sender=blink_session, data=payload['message_id'])
+                notification_center.post_notification('BlinkGotMessageDelete', sender=blink_session, data=payload['message_id'])
             return
 
         timestamp = cpim_message.timestamp if cpim_message is not None and cpim_message.timestamp is not None else ISOTimestamp.now()
@@ -1423,8 +1423,8 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(session.account, session.contact, content, IsComposingDocument.content_type, session=session)
         self._send_message(outgoing_message)
 
-    def send_remove_message(self, session, id, account=None):
-        outgoing_message = OutgoingMessage(session.account, session.contact, id, 'application/sylk-api-message-remove', session=session)
+    def send_remove_message(self, session, id, account):
+        outgoing_message = OutgoingMessage(account, session.contact, id, 'application/sylk-api-message-remove', session=session)
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):

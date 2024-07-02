@@ -5223,7 +5223,8 @@ class FileListModel(QAbstractListModel):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BlinkSessionDidShareFile')
         notification_center.add_observer(self, name='BlinkSessionShouldDownloadFile')
-        notification_center.add_observer(self, name='BlinkMessageWillRemove')
+        notification_center.add_observer(self, name='BlinkGotMessageDelete')
+        notification_center.add_observer(self, name='BlinkMessageWillDelete')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
 
     @property
@@ -5259,6 +5260,12 @@ class FileListModel(QAbstractListModel):
         self.endInsertRows()
         self.itemAdded.emit(item)
 
+    def deleteItem(self, id):
+        if id not in self.items:
+            return
+        item = [item for item in self.items if item.id == id][0]
+        NotificationCenter().post_notification('BlinkSessionShouldDeleteFile', sender=self.session, data=NotificationData(item=item))
+
     def removeItem(self, id):
         if id not in self.items:
             return
@@ -5275,13 +5282,21 @@ class FileListModel(QAbstractListModel):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_BlinkMessageWillRemove(self, notification):
+    def _NH_BlinkMessageWillDelete(self, notification):
         blink_session = notification.sender
         session = blink_session.items.chat
 
         if session is None:
             return
-        session = notification.sender
+
+        self.removeItem(notification.data.id)
+
+    def _NH_BlinkGotMessageDelete(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+
+        if session is None:
+            return
 
         self.removeItem(notification.data)
 

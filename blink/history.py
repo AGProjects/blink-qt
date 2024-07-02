@@ -28,7 +28,7 @@ from blink.resources import ApplicationData, Resources
 from blink.util import run_in_gui_thread, translate
 import traceback
 
-from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex
+from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex, AND
 from sqlobject import connectionForURI
 from sqlobject import dberrors
 
@@ -61,10 +61,11 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageDidFail')
         notification_center.add_observer(self, name='BlinkMessageDidEncrypt')
         notification_center.add_observer(self, name='BlinkMessageDidDecrypt')
+        notification_center.add_observer(self, name='BlinkMessageWillDelete')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
         notification_center.add_observer(self, name='BlinkGotHistoryMessage')
-        notification_center.add_observer(self, name='BlinkGotHistoryMessageRemove')
+        notification_center.add_observer(self, name='BlinkGotHistoryMessageDelete')
         notification_center.add_observer(self, name='BlinkGotHistoryMessageUpdate')
         notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
@@ -170,7 +171,7 @@ class HistoryManager(object, metaclass=Singleton):
         account = notification.sender
         self.message_history.add_from_history(account, **notification.data.__dict__)
 
-    def _NH_BlinkGotHistoryMessageRemove(self, notification):
+    def _NH_BlinkGotHistoryMessageDelete(self, notification):
         self.message_history.remove_message(notification.data)
         self.download_history.remove(notification.data)
 
@@ -187,6 +188,10 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_BlinkMessageDidFail(self, notification):
         data = notification.data
         self.message_history.update(data.id, 'failed')
+
+    def _NH_BlinkMessageWillDelete(self, notification):
+        data = notification.data
+        self.message_history.update(data.id, 'deleted')
 
     def _NH_BlinkMessageDidDecrypt(self, notification):
         self.message_history.update_encryption(notification)
@@ -592,7 +597,7 @@ class MessageHistory(object, metaclass=Singleton):
     def update(self, id, state):
         messages = Message.selectBy(message_id=id)
         for message in messages:
-            if message.direction == 'outgoing' and state == 'received':
+            if message.direction == 'outgoing' and state == 'received' and state != 'deleted':
                 continue
 
             if message.state != 'displayed' and message.state != state:
@@ -618,7 +623,7 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         remote_uri = '%s@local' % session.remote_instance_id if session.remote_instance_id else uri
         try:
-            result = Message.selectBy(remote_uri=remote_uri).orderBy('timestamp')[-100:]
+            result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted')).orderBy('timestamp')[-100:]
         except Exception as e:
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
@@ -633,7 +638,8 @@ class MessageHistory(object, metaclass=Singleton):
             select im.display_name, am.remote_uri, max(am.timestamp) from messages as am
             left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
             on am.remote_uri = im.remote_uri
-            where am.content_type not like "%pgp%" and am.content_type not like "%sylk-api%" group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
+            where am.content_type not like "%pgp%" and am.content_type not like "%sylk-api%" and am.state != 'deleted' group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
+        print(query)
         notification_center = NotificationCenter()
         try:
             result = self.db.queryAll(query)
