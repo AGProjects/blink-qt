@@ -199,6 +199,9 @@ function handleContextMenu(e) {
     if (id === null) {
         id = e.target.parentElement.parentElement.getAttribute('id')
     }
+    if (id === null) {
+        id = e.target.closest('[id^=message-]').getAttribute('id');
+    }
     chat.handleContextMenuEvent(id);
 }
 
