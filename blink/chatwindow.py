@@ -3136,10 +3136,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if notification.data.error:
             return
-
-        blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
-
-        if blink_session is None:
+        try:
+            blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
+        except StopIteration:
             return
 
         if AudioDescriptor(transfer_session.file_selector.name):
