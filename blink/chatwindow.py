@@ -2015,7 +2015,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.pending_displayed_notifications = {}
         self.render_after_load = []
-        self.fetch_afer_load = deque()
+        self.fetch_after_load = deque()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -2919,10 +2919,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     content = translate('chat_window', "%s can't be decrypted. PGP is disabled") % os.path.basename(file.decrypted_filename)
                     return content
 
-                if from_history:
+                if from_history or not session.chat_widget.history_loaded:
                     queue_item = (blink_session, file, message, info)
-                    if queue_item not in self.fetch_afer_load:
-                        self.fetch_afer_load.append(queue_item)
+                    if queue_item not in self.fetch_after_load:
+                        self.fetch_after_load.append(queue_item)
                     NotificationCenter().post_notification('BlinkSessionDidShareFile',
                                                            sender=blink_session,
                                                            data=NotificationData(file=file, direction=message.direction))
@@ -2989,14 +2989,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 content = message.content
                 content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         elif message.content_type.lower() == FTHTTPDocument.content_type:
-            if not session.chat_widget.history_loaded:
-                queue_item = (blink_session, file, message, info)
-                if queue_item not in self.fetch_afer_load:
-                    self.fetch_afer_load.append(queue_item)
-                NotificationCenter().post_notification('BlinkSessionDidShareFile',
-                                                       sender=blink_session,
-                                                       data=NotificationData(file=file, direction=message.direction))
-                return
             try:
                 content = self._parse_fthttp(blink_session, message, account=received_account)
             except ParserError:
@@ -3292,8 +3284,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 self.render_after_load.append((found_session, message))
 
-        while self.fetch_afer_load:
-            (blink_session, file, message, info) = self.fetch_afer_load.popleft()
+        while self.fetch_after_load:
+            (blink_session, file, message, info) = self.fetch_after_load.popleft()
             if file.hash is not None:
                 SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.original_name, file.hash, file.id, account=file.account, conference_file=False)
             else:
