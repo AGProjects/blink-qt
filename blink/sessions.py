@@ -4665,7 +4665,7 @@ class FileTransferItemWidget(base_class, ui_class):
 
     def update_content(self, item, initial=False):
         if initial:
-            if item.direction == 'outgoing':
+            if item.direction == 'outgoing' and item.transfer.transfer_type != 'pull':
                 self.name_label.setText('To: ' + item.name)
                 self.icon_label.setPixmap(self.pixmaps.outgoing_transfer)
             else:
