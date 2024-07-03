@@ -1019,8 +1019,15 @@ class ChatWidget(base_class, ui_class):
                         self.chat_js.prepend_outside_element(f'message-{id}', html_message)
                         self.chat_js.add_context_menu(message.id)
                     self.timestamp_rendered_messages.insert(i, (message.timestamp, message.id, message))
-                    if self.last_message.timestamp < message.timestamp:
-                        self.last_message = message
+
+                    try:
+                        if self.last_message.timestamp < message.timestamp:
+                            self.last_message = message
+                    except TypeError:
+                        self.last_message.timestamp = self.last_message.timestamp.replace(tzinfo=tzlocal())
+                        if self.last_message.timestamp < message.timestamp:
+                            self.last_message = message
+
                     return
 
         if message.is_related_to(self.last_message):
