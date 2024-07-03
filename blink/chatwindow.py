@@ -2920,7 +2920,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     return content
 
                 if from_history:
-                    self.fetch_afer_load.append((blink_session, file, message, info))
+                    queue_item = (blink_session, file, message, info)
+                    if queue_item not in self.fetch_afer_load:
+                        self.fetch_afer_load.append(queue_item)
                     NotificationCenter().post_notification('BlinkSessionDidShareFile',
                                                            sender=blink_session,
                                                            data=NotificationData(file=file, direction=message.direction))
@@ -2988,6 +2990,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         elif message.content_type.lower() == FTHTTPDocument.content_type:
             if not session.chat_widget.history_loaded:
+                queue_item = (blink_session, file, message, info)
+                if queue_item not in self.fetch_afer_load:
+                    self.fetch_afer_load.append(queue_item)
+                NotificationCenter().post_notification('BlinkSessionDidShareFile',
+                                                       sender=blink_session,
+                                                       data=NotificationData(file=file, direction=message.direction))
                 return
             try:
                 content = self._parse_fthttp(blink_session, message, account=received_account)
