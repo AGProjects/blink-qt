@@ -336,7 +336,7 @@ class ChatMessage(ChatContent):
             return style.html.message.format(message=self, **kw)
 
 
-class ChatMessageFile(ChatMessage): pass
+class ChatFile(ChatMessage): pass
 
 
 class ChatSender(object):
@@ -866,7 +866,7 @@ class DeleteMessageRequest(QObject):
                 self.dialog.delete_both_checkbox.hide()
                 self.dialog.delete_both_checkbox.setEnabled(False)
 
-            if isinstance(message, ChatMessageFile):
+            if isinstance(message, ChatFile):
                 replace1 = self.dialog.delete_message_dialog_text.text().replace('message', translate('delete_message_dialog', 'file'))
                 replace2 = self.dialog.delete_message_dialog_title.text().replace('message', translate('delete_message_dialog', 'file'))
                 self.dialog.delete_message_dialog_text.setText(replace1)
@@ -1188,7 +1188,7 @@ class ChatWidget(base_class, ui_class):
             else:
                 content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
                 sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
-                self.add_message(ChatMessageFile(content, sender, 'outgoing'))
+                self.add_message(ChatFile(content, sender, 'outgoing'))
 
         for descriptor in other_descriptors:
             session_manager.send_file(blink_session.contact, blink_session.contact_uri, descriptor.filename, account=blink_session.account)
@@ -1206,7 +1206,7 @@ class ChatWidget(base_class, ui_class):
                 account = self.session.blink_session.account
                 content = '''<img src="{}" class="scaled-to-fit" />'''.format(text)
                 sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
-                self.add_message(ChatMessageFile(content, sender, 'outgoing'))
+                self.add_message(ChatFile(content, sender, 'outgoing'))
         else:
             user_text = self.chat_input.toHtml()
             self.chat_input.setHtml(text)
@@ -3001,7 +3001,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
 
         if message.content_type.lower() == FTHTTPDocument.content_type:
-            chat_message = ChatMessageFile(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)
+            chat_message = ChatFile(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)
         else:
             chat_message = ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)
 
@@ -3243,7 +3243,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
             if message.content_type.lower() == FTHTTPDocument.content_type:
-                chat_message = ChatMessageFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
+                chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
             else:
                 chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
 
