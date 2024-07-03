@@ -1049,6 +1049,10 @@ class ChatWidget(base_class, ui_class):
         self.chat_js.add_context_menu(id)
     def update_message_text(self, id, text):
         self.chat_js.update_element(f'#text-{id}', text)
+        for i, (timestamp, rendered_id, rendered_message) in enumerate(self.timestamp_rendered_messages):
+            if rendered_id == id:
+                rendered_message.message = text
+                self.timestamp_rendered_messages[i] = (rendered_message.timestamp, rendered_message.id, rendered_message)
 
     def update_message_status(self, id, status):
         if status == 'pending':
