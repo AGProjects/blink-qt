@@ -4186,7 +4186,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.account = account
         self.contact = contact
         self.contact_uri = contact_uri
-
+        self._hash = hash
         self._uri = self._normalize_uri(contact_uri.uri)
 
         self.file_selector = FileSelector(name=os.path.basename(filename), hash=hash)
@@ -4209,6 +4209,9 @@ class BlinkFileTransfer(BlinkSessionBase):
             stat = os.fstat(file_selector.fd.fileno())
             if self._stat is not None and stat.st_mtime == self._stat.st_mtime:
                 file_selector.hash = self.file_selector.hash
+            if self.transfer_type == 'pull':
+                file_selector.hash = self._hash
+
             self.file_selector = file_selector
             self._stat = stat
             self.state = 'initialized'
