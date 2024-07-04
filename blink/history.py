@@ -110,6 +110,7 @@ class HistoryManager(object, metaclass=Singleton):
         bisect.insort(self.calls, entry)
         self.calls = self.calls[-self.history_size:]
         self.save()
+        self.message_history.add_call_history_entry(entry, session)
 
     def _NH_SIPSessionDidFail(self, notification):
         if notification.sender.account is BonjourAccount():
@@ -131,6 +132,7 @@ class HistoryManager(object, metaclass=Singleton):
         bisect.insort(self.calls, entry)
         self.calls = self.calls[-self.history_size:]
         self.save()
+        self.message_history.add_call_history_entry(entry, session)
 
     def _NH_ChatStreamGotMessage(self, notification):
         message = notification.data.message
@@ -464,6 +466,53 @@ class MessageHistory(object, metaclass=Singleton):
 
     @classmethod
     @run_in_thread('db')
+    def add_call_history_entry(cls, entry, session):
+        timestamp_native = entry.call_time
+        timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
+        timestamp_fixed = timestamp_utc - entry.call_time.utcoffset()
+        timestamp = parse(str(timestamp_fixed))
+        media = "audio"
+
+        if not session.streams and not session.proposed_streams:
+            return
+
+        streams = [stream.type for stream in session.streams] if session.streams else [stream.type for stream in session.proposed_streams]
+        if 'audio' not in streams and 'video' not in streams:
+            return
+
+        media = 'video' if 'video' in streams else 'audio'
+        media = 'file-transfer' if 'file-transfer' in streams else media
+
+        log.info(f"== Adding call history message to storage: {entry.direction} {media} to {entry.uri}")
+
+        uri = str(entry.uri)
+
+        result = 0
+        if entry.duration:
+            seconds = int(entry.duration.total_seconds())
+            if seconds >= 3600:
+                result = """ (%dh%02d'%02d")""" % (seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+            else:
+                result = """ (%d'%02d")""" % (seconds / 60, seconds % 60)
+        try:
+            message = Message(remote_uri=entry.uri,
+                              display_name=entry.name,
+                              uri=uri,
+                              content=str([result, entry.reason.title() if entry.reason else '', media]),
+                              content_type='application/blink-call-history',
+                              message_id=str(uuid.uuid4()),
+                              account_id=str(entry.account_id),
+                              direction=entry.direction,
+                              timestamp=timestamp,
+                              disposition='',
+                              state='failed' if entry.failed else '')
+        except dberrors.DuplicateEntryError:
+            pass
+        else:
+            NotificationCenter().post_notification('BlinkMessageHistoryCallHistoryDidStore', sender=session, data=NotificationData(message=message))
+
+    @classmethod
+    @run_in_thread('db')
     def add_from_history(cls, account, remote_uri, message, state=None, encryption=None):
         if message.content.startswith('?OTRv'):
             return
@@ -642,7 +691,12 @@ class MessageHistory(object, metaclass=Singleton):
             select im.display_name, am.remote_uri, max(am.timestamp) from messages as am
             left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
             on am.remote_uri = im.remote_uri
-            where am.content_type not like "%pgp%" and am.content_type not like "%sylk-api%" and am.state != 'deleted' group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
+            where
+            am.content_type not like "%pgp%"
+            and am.content_type not like "%sylk-api%"
+            and am.content_type != "application/blink-call-history"
+            and am.state != 'deleted'
+            group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
         print(query)
         notification_center = NotificationCenter()
         try:

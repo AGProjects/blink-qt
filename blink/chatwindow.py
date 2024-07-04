@@ -2055,6 +2055,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
         notification_center.add_observer(self, name='BlinkMessageHistoryLastContactsDidSucceed')
+        notification_center.add_observer(self, name='BlinkMessageHistoryCallHistoryDidStore')
         notification_center.add_observer(self, name='MessageStreamPGPKeysDidLoad')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
@@ -3244,6 +3245,24 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if not content:
                     timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
                     continue
+            elif message.content_type.lower() == 'application/blink-call-history':
+                content_list = eval(message.content)
+
+                media_types = {'audio': translate('chat_window', 'audio'),
+                               'video': translate('chat_window', 'video'),
+                               'file-transfer': translate('chat_window', 'file-transfer')}
+                try:
+                    media_type = media_types[content_list[2]]
+                except KeyError:
+                    media_type = media_types['audio']
+                session_type = translate('chat_window', 'call') if media_type != 'file-transfer' else ''
+
+                if message.state != 'failed':
+                    content = '%s %s %s %s' % (message.direction.capitalize(), media_type, session_type, content_list[0])
+                    content = f'<div style="color: #000000">{content}</div>'
+                else:
+                    content = translate('chat_window', '%s %s %s failed (%s)') % (message.direction.capitalize(), media_type, session_type, content_list[1])
+                    content = f'<div style="color: #800000">{content}</div>'
             else:
                 continue
 
@@ -3262,6 +3281,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
             if message.content_type.lower() == FTHTTPDocument.content_type:
                 chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
+            elif message.content_type.lower() == 'application/blink-call-history':
+                chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)
             else:
                 chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
 
@@ -3313,6 +3334,48 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         message_manager = MessageManager()
         for display_name, contact in contacts[::-1]:
             message_manager.create_message_session(contact, display_name)
+
+    def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
+        message = notification.data.message
+        contact, contact_uri = URIUtils.find_contact(message.remote_uri, display_name=message.display_name)
+
+        try:
+            blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is contact.settings)
+        except StopIteration:
+            return
+
+        account_manager = AccountManager()
+
+        if not blink_session.items.chat.chat_widget.history_loaded:
+            return
+
+        account = account_manager.get_account(message.account_id) if account_manager.has_account(message.account_id) else None
+
+        if account is None or not account.enabled:
+            return
+
+        if message.content_type.lower() == 'application/blink-call-history':
+            content_list = eval(message.content)
+
+            media_types = {'audio': translate('chat_window', 'audio'),
+                           'video': translate('chat_window', 'video'),
+                           'file-transfer': translate('chat_window', 'file-transfer')}
+            try:
+                media_type = media_types[content_list[2]]
+            except KeyError:
+                media_type = media_types['audio']
+            session_type = translate('chat_window', 'call') if media_type != 'file-transfer' else ''
+
+            if message.state != 'failed':
+                content = '%s %s %s %s' % (message.direction.capitalize(), media_type, session_type, content_list[0])
+                content = f'<div style="color: #000000">{content}</div>'
+            else:
+                content = translate('chat_window', '%s %s %s failed (%s)') % (message.direction.capitalize(), media_type, session_type, content_list[1])
+                content = f'<div style="color: #800000">{content}</div>'
+
+            timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
+            chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)
+            blink_session.items.chat.chat_widget.add_message(chat_message)
 
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session
