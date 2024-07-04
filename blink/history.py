@@ -153,7 +153,7 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history.update(notification.data.message.message_id, 'delivered')
 
     def _NH_ChatStreamDidNotDeliverMessage(self, notification):
-        self.message_history.update(notification.data.message.message_id, 'failed')
+        self.message_history.update(notification.data.message_id, 'failed')
 
     def _NH_BlinkMessageIsParsed(self, notification):
         session = notification.sender

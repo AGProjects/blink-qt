@@ -3371,7 +3371,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.update_message_status(id=notification.data.message.message_id, status='failed')
+        session.chat_widget.update_message_status(id=notification.data.message_id, status='failed')
         # TODO: implement -Saul
 
     def _NH_ChatStreamOTREncryptionStateChanged(self, notification):
