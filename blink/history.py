@@ -370,23 +370,27 @@ class DownloadHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def remove(self, id):
-        log.debug(f'== Trying to remove download: {id}')
+        log.debug(f'== Trying to remove download cache: {id}')
         result = DownloadedFiles.selectBy(file_id=id)
         for file in result:
             self.remove_cache_file(file)
+            log.info(f'== Removing file entry: {file.file_id}')
             file.destroySelf()
 
     @run_in_thread('file-io')
     def remove_cache_file(self, file):
-        path = os.path.dirname(file.filename)
-        blink_settings = BlinkSettings()
-        if path == blink_settings.transfers_directory.normalized:
-            log.info(f'== Not removing downloaded file: {file.file_id} {file.filename}')
+        filename = os.path.basename(file.filename)
+        if filename.endswith('.asc'):
+            filename = filename.rsplit('.', 1)[0]
+        cached_file = os.path.join(ApplicationData.get('transfer_images'), file.file_id, filename)
+        file_in_cache = os.path.exists(cached_file)
+        if not file_in_cache:
+            log.info(f'== Not removing file, not present in cache: {file.file_id} {cached_file}')
             return
-        log.info(f'== Removing file entry and file from cache: {file.file_id} {file.filename}')
-        unlink(file.filename)
+        log.info(f'== Removing file from cache: {file.file_id} {cached_file}')
+        unlink(cached_file)
         try:
-            os.rmdir(os.path.dirname(file.filename))
+            os.rmdir(os.path.dirname(cached_file))
         except OSError:
             pass
 
