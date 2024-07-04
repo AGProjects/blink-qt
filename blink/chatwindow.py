@@ -307,6 +307,14 @@ class ChatNotification(ChatContent):
 class ChatEvent(ChatNotification):
     __cssclasses__ = ('event',)
 
+    direction = ChatContentStringAttribute('direction', allowed_values=('incoming', 'outgoing'))
+
+    def __init__(self, message, direction='incoming', history=False, focus=False, id=None, timestamp=None):
+        super(ChatEvent, self).__init__(message, history, focus)
+        self.direction = direction
+        self.id = str(uuid.uuid4()) if id is None else id
+        self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
+
 
 class ChatStatus(ChatNotification):
     __cssclasses__ = ('status',)
