@@ -122,6 +122,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self.setOrganizationName("AG Projects")
         self.setApplicationName("Blink")
         self.setApplicationVersion(__version__)
+        self.setWindowIcon(QIcon(Resources.get('icons/blink.png')))
 
         self.main_window = MainWindow()
         self.chat_window = ChatWindow()
