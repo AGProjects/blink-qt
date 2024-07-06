@@ -655,14 +655,14 @@ padding: 2px;</string>
            <widget class="QToolButton" name="add_contact_button">
             <property name="minimumSize">
              <size>
-              <width>35</width>
-              <height>35</height>
+              <width>26</width>
+              <height>26</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>35</width>
-              <height>35</height>
+              <width>26</width>
+              <height>26</height>
              </size>
             </property>
             <property name="toolTip">
@@ -714,14 +714,14 @@ padding: 2px;</string>
               </property>
               <property name="minimumSize">
                <size>
-                <width>28</width>
-                <height>28</height>
+                <width>26</width>
+                <height>26</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>28</width>
-                <height>28</height>
+                <width>26</width>
+                <height>26</height>
                </size>
               </property>
               <property name="toolTip">
@@ -746,14 +746,14 @@ padding: 2px;</string>
              <widget class="ToolButton" name="video_call_button">
               <property name="minimumSize">
                <size>
-                <width>35</width>
-                <height>35</height>
+                <width>26</width>
+                <height>26</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>35</width>
-                <height>35</height>
+                <width>26</width>
+                <height>26</height>
                </size>
               </property>
               <property name="toolTip">
@@ -778,14 +778,14 @@ padding: 2px;</string>
              <widget class="ToolButton" name="chat_session_button">
               <property name="minimumSize">
                <size>
-                <width>35</width>
-                <height>35</height>
+                <width>26</width>
+                <height>26</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>35</width>
-                <height>35</height>
+                <width>26</width>
+                <height>26</height>
                </size>
               </property>
               <property name="toolTip">
@@ -860,14 +860,14 @@ padding: 2px;</string>
            <widget class="QToolButton" name="silent_button">
             <property name="minimumSize">
              <size>
-              <width>35</width>
-              <height>35</height>
+              <width>26</width>
+              <height>26</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>35</width>
-              <height>35</height>
+              <width>26</width>
+              <height>26</height>
              </size>
             </property>
             <property name="font">
