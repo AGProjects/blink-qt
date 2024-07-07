@@ -41,7 +41,7 @@ class ApplicationData(object):
         if cls._cached_directory is None:
             if platform.system() == 'Darwin':
                 from Foundation import NSApplicationSupportDirectory, NSSearchPathForDirectoriesInDomains, NSUserDomainMask
-                cls._cached_directory = os.path.join(NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, True)[0], 'Blink')
+                cls._cached_directory = os.path.join(NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, True)[0], 'Blink-Qt')
             elif platform.system() == 'Windows':
                 cls._cached_directory = os.path.join(os.environ['APPDATA'], 'Blink')
             else:
