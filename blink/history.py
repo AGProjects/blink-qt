@@ -3,6 +3,7 @@ import bisect
 import pickle as pickle
 import os
 import re
+import uuid
 
 from PyQt5.QtGui import QIcon
 
