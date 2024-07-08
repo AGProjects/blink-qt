@@ -477,7 +477,6 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def _retry_failed_messages(self):
-        print('timer')
         messages = Message.selectBy(state='failed-local')
         if len(list(messages)) > 0 :
             log.debug(f"==  {len(list(messages))} failed local messages from history")
