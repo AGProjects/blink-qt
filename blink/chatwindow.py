@@ -3096,9 +3096,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         reason = notification.data.data.reason.decode() if isinstance(notification.data.data.reason, bytes) else notification.data.data.reason
-        session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
-        call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status='failed')
-
+        try:
+            status = 'failed-local' if notification.data.originator == 'local' else 'failed'
+        except AttributeError:
+            status = 'failed'
+        if status == 'failed':
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
+        call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status=status)
 
 
     def _NH_PGPMessageDidDecrypt(self, notification):
