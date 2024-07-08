@@ -361,7 +361,11 @@ class MessageStream(object, metaclass=MediaStreamType):
         self.remote_public_key = self._load_key(session.remote_instance_id or str(session.contact_uri.uri), True)
         self.public_key = self._load_key(str(session.account.id))
         self.private_key = self._load_key(str(session.account.id), public_key=False)
+        self.other_private_keys = []
         self._load_other_keys(session)
+        if None not in [self.public_key, self.private_key] or self.can_decrypt_with_others:
+            notification_center = NotificationCenter()
+            notification_center.post_notification('MessageStreamPGPKeysDidLoad', sender=self)
 
     def _load_key(self, id, remote=False, public_key=True):
         settings = SIPSimpleSettings()
