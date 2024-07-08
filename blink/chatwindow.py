@@ -3032,8 +3032,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 session.chat_widget.add_message(chat_message)
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
+            if received_account is not None and received_account.enabled and received_account != blink_session.account:
+                NotificationCenter().post_notification('BlinkSessionMessageAccountShouldChange', sender=session, data=NotificationData(account=received_account))
         else:
-            self.render_after_load.append((session, chat_message))
+            self.render_after_load.append((session, received_account, chat_message))
 
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
@@ -3213,6 +3215,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
 
+        last_account = None
         for message in messages:
             encrypted = False
             state = message.state
@@ -3221,6 +3224,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             # We don't load messages if the account is not present or not enabled.
             if account is None or not account.enabled:
                 continue
+
+            last_account = account
 
             if message.content_type.startswith('image/'):
                 content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.rstrip())
@@ -3307,11 +3312,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.history_loaded = True
 
         while len(self.render_after_load) > 0:
-            (found_session, message) = self.render_after_load.pop()
+            (found_session, received_account, message) = self.render_after_load.pop()
+            if received_account is not None and received_account != last_account and received_account != session.blink_session.account:
+                last_account = received_account
             if found_session is session:
                 session.chat_widget.add_message(message)
             else:
-                self.render_after_load.append((found_session, message))
+                self.render_after_load.append((found_session, received_account, message))
+
+        if last_account is not None and last_account.enabled and last_account != blink_session.account:
+            NotificationCenter().post_notification('BlinkSessionMessageAccountShouldChange', sender=session, data=NotificationData(account=last_account))
 
         while self.fetch_after_load:
             (blink_session, file, message, info) = self.fetch_after_load.popleft()
