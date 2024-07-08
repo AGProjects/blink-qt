@@ -1080,7 +1080,7 @@ class MessageManager(object, metaclass=Singleton):
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
         if x_replicated_message is not Null:
             log.debug(f'Message {message_id} is a replicated message from another device')
-            
+
         if encryption == 'OpenPGP':
             if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
                 if not self.pgp_requests[account, GeneratePGPKeyRequest] and account is not BonjourAccount():
@@ -1205,6 +1205,9 @@ class MessageManager(object, metaclass=Singleton):
                     blink_session.fake_streams.get('messages').enable_pgp()
                 notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
 
+            if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
+                blink_session.fake_streams.get('messages').enable_pgp()
+
         if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)) and account is BonjourAccount():
             stream = blink_session.fake_streams.get('messages')
             stream.generate_keys()
@@ -1304,7 +1307,7 @@ class MessageManager(object, metaclass=Singleton):
             notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
 
         if encryption == 'OpenPGP':
-            if not blink_session.fake_streams.get('messages').can_decrypt and blink_session.account is account and not blink_session.fake_streams.get('messages').can_decrypt_others:
+            if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
                 self._incoming_encrypted_message_queue.append((message, account, contact))
                 if account is blink_session.account:
                     notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)

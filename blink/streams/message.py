@@ -246,6 +246,7 @@ class MessageStream(object, metaclass=MediaStreamType):
 
         if self.private_key is None and len(self.other_private_keys) == 0:
             notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message))
+            return
 
         try:
             msg_id = message.message_id
@@ -255,7 +256,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         try:
             pgpMessage = PGPMessage.from_blob(message.content)
         except (ValueError) as e:
-            log.warning(f'Decryption error for {msg_id} of {account.id}, not a PGPMessage: {e}')
+            log.warning(f'Decryption error for {msg_id}, not a PGPMessage: {e}')
             return
 
         key_list = [(session.account, self.private_key)] if self.private_key is not None else []
@@ -275,7 +276,7 @@ class MessageStream(object, metaclass=MediaStreamType):
                 notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
                 return
 
-        log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} to {account.id} : {error}')
+        log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri}: {error}')
         notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=error))
 
     @run_in_thread('pgp')
@@ -398,6 +399,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         if self.private_key is None:
             self.private_key = self._load_key(str(session.account.id), public_key=False)
 
+        self.other_private_keys = []
         self._load_other_keys(session)
 
         if None not in [self.public_key, self.private_key] or self.can_decrypt_with_others:
@@ -406,7 +408,7 @@ class MessageStream(object, metaclass=MediaStreamType):
 
     def _load_other_keys(self, session):
         account_manager = AccountManager()
-        for account in (account for account in account_manager.iter_accounts() if account is not session.account):
+        for account in (account for account in account_manager.iter_accounts() if account is not session.account and account.enabled):
             loaded_key = self._load_key(str(account.id), public_key=False)
             if loaded_key is None:
                 continue
