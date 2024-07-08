@@ -669,10 +669,10 @@ class MessageHistory(object, metaclass=Singleton):
     def update(self, id, state):
         messages = Message.selectBy(message_id=id)
         for message in messages:
-            if message.direction == 'outgoing' and state == 'received' and state != 'deleted':
+            if message.direction == 'outgoing' and state == 'received':
                 continue
 
-            if message.state != 'displayed' and message.state != state:
+            if (state == 'deleted' or message.state != 'displayed') and message.state != state:
                 log.info(f'== Updating {message.direction} {id} {message.state} -> {state}')
                 message.state = state
 
