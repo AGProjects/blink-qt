@@ -1431,7 +1431,8 @@ class MessageManager(object, metaclass=Singleton):
                 if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
                     blink_session.fake_streams.get('messages').enable_pgp()
 
-            outgoing_message = OutgoingMessage(account, contact, message.content, message.content_type, timestamp=message.timestamp, id=message.message_id, session=blink_session)
+            timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
+            outgoing_message = OutgoingMessage(account, contact, message.content, message.content_type, timestamp=timestamp, id=message.message_id, session=blink_session)
             self._send_message(outgoing_message)
 
     def export_private_key(self, account):
