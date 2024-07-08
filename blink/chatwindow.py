@@ -326,12 +326,13 @@ class ChatMessage(ChatContent):
     direction = ChatContentStringAttribute('direction', allowed_values=('incoming', 'outgoing'))
     autoreply = ChatContentBooleanOption('autoreply')
 
-    def __init__(self, message, sender, direction, history=False, focus=False, id=None, timestamp=None):
+    def __init__(self, message, sender, direction, history=False, focus=False, id=None, timestamp=None, account=None):
         super(ChatMessage, self).__init__(message, history, focus)
         self.sender = sender
         self.direction = direction
         self.id = str(uuid.uuid4()) if id is None else id
         self.status = ''
+        self.account = account
         self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
 
     def is_related_to(self, other):
@@ -1265,8 +1266,11 @@ class ChatWidget(base_class, ui_class):
         blink_session = self.session.blink_session
 
         messages = [message for (timestamp, msg_id, message) in self.timestamp_rendered_messages if msg_id == id]
-        account_manager = AccountManager()
-        account = account_manager.get_account(messages[0].sender.uri)
+        if messages[0].direction == 'outgoing':
+            account_manager = AccountManager()
+            account = account_manager.get_account(messages[0].sender.uri)
+        else:
+            account = messages[0].account
         self.delete_message(blink_session, account, id, messages)
 
     def _SH_MessageDeleteAccepted(self, request):
@@ -3021,9 +3025,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
 
         if message.content_type.lower() == FTHTTPDocument.content_type:
-            chat_message = ChatFile(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)
+            chat_message = ChatFile(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history, account=received_account)
         else:
-            chat_message = ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history)
+            chat_message = ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history, account=received_account)
 
         if session.chat_widget.history_loaded:
             if message in session.chat_widget.pending_decryption and not encrypted:
@@ -3285,11 +3289,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
             if message.content_type.lower() == FTHTTPDocument.content_type:
-                chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
+                chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account)
             elif message.content_type.lower() == 'application/blink-call-history':
                 chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)
             else:
-                chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True)
+                chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account)
 
             session.chat_widget.add_message(chat_message)
 

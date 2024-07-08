@@ -1426,8 +1426,8 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(session.account, session.contact, content, IsComposingDocument.content_type, session=session)
         self._send_message(outgoing_message)
 
-    def send_remove_message(self, session, id, account):
-        outgoing_message = OutgoingMessage(account, session.contact, id, 'application/sylk-api-message-remove', session=session)
+    def send_remove_message(self, session, id, account=None):
+        outgoing_message = OutgoingMessage(session.account if account is None else account, session.contact, id, 'application/sylk-api-message-remove', session=session)
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
