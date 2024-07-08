@@ -5,6 +5,7 @@ import os
 import re
 import uuid
 
+from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QIcon
 
 from application.notification import IObserver, NotificationCenter, NotificationData
@@ -102,6 +103,7 @@ class HistoryManager(object, metaclass=Singleton):
             traceback.print_exc()
         else:
             self.calls = data[-self.history_size:]
+        self.message_history._retry_failed_messages()
 
     def _NH_SIPSessionDidEnd(self, notification):
         if notification.sender.account is BonjourAccount():
@@ -190,7 +192,11 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkMessageDidFail(self, notification):
         data = notification.data
-        self.message_history.update(data.id, 'failed')
+        try:
+            status = 'failed-local' if data.data.originator == 'local' else 'failed'
+        except AttributeError:
+            status = 'failed'
+        self.message_history.update(data.id, status)
 
     def _NH_BlinkMessageWillDelete(self, notification):
         data = notification.data
@@ -426,6 +432,10 @@ class MessageHistory(object, metaclass=Singleton):
         db_uri = f'sqlite://{db_file}'
         makedirs(ApplicationData.directory)
         self._initialize(db_uri)
+        self._retry_timer = QTimer()
+        self._retry_timer.setInterval(60 * 1000)  # a minute (in milliseconds)
+        self._retry_timer.timeout.connect(self._retry_failed_messages)
+        self._retry_timer.start()
 
     @run_in_thread('db')
     def _initialize(self, db_uri):
@@ -464,6 +474,14 @@ class MessageHistory(object, metaclass=Singleton):
                         self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
                 else:
                     self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+
+    @run_in_thread('db')
+    def _retry_failed_messages(self):
+        print('timer')
+        messages = Message.selectBy(state='failed-local')
+        if len(list(messages)) > 0 :
+            log.debug(f"==  {len(list(messages))} failed local messages from history")
+            NotificationCenter().post_notification('BlinkMessageHistoryFailedLocalFound', data=NotificationData(messages=list(messages)))
 
     @classmethod
     @run_in_thread('db')

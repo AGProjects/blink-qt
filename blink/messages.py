@@ -508,6 +508,12 @@ class OutgoingMessage(object):
 
         if self.session is None:
             return
+
+        originator = 'local'
+        if hasattr(notification.data, 'headers'):
+            originator = 'remote'
+        notification.data.originator = originator
+
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
@@ -614,6 +620,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
+        notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
 
     def _add_contact_to_messages_group(self, account, contact):
         log.debug(f'-- Adding contact {contact.uri.uri} to message list')
@@ -1394,6 +1401,38 @@ class MessageManager(object, metaclass=Singleton):
             msg_id = message.id
 
         self.send_imdn_message(session, msg_id, message.timestamp, 'error')
+
+    def _NH_BlinkMessageHistoryFailedLocalFound(self, notification):
+        messages = notification.data.messages
+        for message in messages:
+            from blink.contacts import URIUtils
+            contact, contact_uri = URIUtils.find_contact(message.remote_uri)
+            session_manager = SessionManager()
+            account = AccountManager().get_account(message.account_id)
+
+            instance_id = contact.settings.id if contact.type == 'bonjour' else None
+            if contact.type == 'dummy' and message.display_name is not None:
+                contact.settings.name = message.display_name
+
+            try:
+                blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (instance_id and instance_id == session.remote_instance_id))
+            except StopIteration:
+                log.info(f"Create message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
+                blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+            else:
+                if blink_session.fake_streams.get('messages') is None:
+                    stream = StreamDescription('messages')
+                    blink_session.fake_streams.extend([stream.create_stream()])
+                    blink_session._delete_when_done = False
+                    if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+                        blink_session.fake_streams.get('messages').enable_pgp()
+                    notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
+
+                if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
+                    blink_session.fake_streams.get('messages').enable_pgp()
+
+            outgoing_message = OutgoingMessage(account, contact, message.content, message.content_type, timestamp=message.timestamp, id=message.message_id, session=blink_session)
+            self._send_message(outgoing_message)
 
     def export_private_key(self, account):
         if account is None:
