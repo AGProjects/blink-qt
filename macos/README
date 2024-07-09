@@ -5,7 +5,8 @@ and optional upx utility to compact the image.
 Generate a spec file used by pyinstaller using make_spec.sh script. The
 resulting file must be tweaked, see the modified blink.specs file.
 
-Copy blink.spec in the top directory, go there and run:
+Copy blink.spec in the top directory and edit at least the code signing
+identity, then go there and run:
 
 pyinstaller blink.spec
 
