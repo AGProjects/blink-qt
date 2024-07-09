@@ -6,7 +6,7 @@
     margin-top: -.4em;
 }
 
-.status-icon.failed {
+.status-icon.failed, status-icon.failed-local {
     height: 1.6em;
 }
 
@@ -81,3 +81,6 @@
     filter: invert(12%) sepia(77%) saturate(5700%) hue-rotate(357deg) brightness(73%) contrast(112%);
 }
 
+.failed-local {
+    filter: invert(69%) sepia(55%) saturate(1038%) hue-rotate(336deg) brightness(105%) contrast(101%);
+}

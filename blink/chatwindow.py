@@ -1069,6 +1069,8 @@ class ChatWidget(base_class, ui_class):
             icon = self.clock_icon
         if status == 'failed':
             icon = self.warning_icon
+        elif status == 'failed-local':
+            icon = self.warning_icon
         elif status == 'displayed':
             icon = self.done_all_icon
         else:
