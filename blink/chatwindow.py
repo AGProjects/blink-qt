@@ -932,6 +932,7 @@ class ChatWidget(base_class, ui_class):
     warning_icon = IconDescriptor(Resources.get('icons/warning.svg'))
     done_all_icon = IconDescriptor(Resources.get('icons/done-all.svg'))
     encrypted_icon = IconDescriptor(Resources.get('icons/lock-grey-12.svg'))
+    clock_icon = IconDescriptor(Resources.get('icons/clock.svg'))
 
     chat_template = open(Resources.get('chat/template.html')).read()
     loading_template = open(Resources.get('chat/loading.html')).read()
@@ -1065,7 +1066,7 @@ class ChatWidget(base_class, ui_class):
 
     def update_message_status(self, id, status):
         if status == 'pending':
-            return
+            icon = self.clock_icon
         if status == 'failed':
             icon = self.warning_icon
         elif status == 'displayed':
