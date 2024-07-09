@@ -725,8 +725,9 @@ class ChatJSInterface(QObject):
         self.channel = QWebChannel()
         self.channel.registerObject('chat', self)
         self.page.setWebChannel(self.channel)
-        self.page.profile().scripts().insert(self._get_script())
+        # self.page.profile().scripts().insert(self._get_script())
 
+    # Somehow the script gets inserted in every page, for now we load it from html
     def _get_script(self):
         script = QWebEngineScript()
         script.setSourceCode(self.js_file)
