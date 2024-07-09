@@ -298,7 +298,7 @@ class MessageContactsManager(object, metaclass=Singleton):
                 notification.center.post_notification('MessageContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact.settings))
             else:
                 self.contacts.add(contact.settings)
-                notification.center.post_notification('MessageContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact.settings))
+                notification.center.post_notification('MessageContactsManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact.settings))
         deleted_contact_ids = self.contacts.ids - {found_contact.settings.id for found_contact in found_contacts}
         for id in deleted_contact_ids:
             contact = self.contacts.pop(id)
@@ -396,7 +396,7 @@ class MessageContactsGroup(VirtualGroup):
         handler(notification)
 
     def _NH_MessageContactsManagerDidActivate(self, notification):
-        notification.center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=[]))
+        notification.center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=self.contacts))
 
     def _NH_MessageContactsManagerDidDeactivate(self, notification):
         notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
