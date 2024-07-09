@@ -4,18 +4,8 @@ Messaging notes
 
 Blink support two types of media for messaging.
 
-1. Session based chat using MSRP protocol (real-time chat)
-2. SIP Message method (asynchronous messaging)
-
-
-Real-time chat
-==============
-
-To start a session based chat open the Chat window, click on the session
-menu button and select Start Real Time Chat option or right click a contact
-and select the same option.  Once established, the session using MSRP media
-uses TLS transport and end-to-end encryption using OTR is by default
-enabled.
+1. SIP Message method (asynchronous messaging)
+2. Session based chat using MSRP protocol (real-time chat sessions)
 
 
 Asynchronous messaging
@@ -47,8 +37,12 @@ with the following content types:
 
   * application/sylk-api-token (will auto discover the URL and index for offline storage)
   * application/sylk-api-pgp-key-lookup (will return the OpenPGP key if exists)
+  * application/sylk-message-remove for message removal
+  * application/sylk-conversation-remove for removal of all messages with a contact
+  * application/sylk-conversation-read to confrim read of all messages
+  * application/sylk-file-transfer containing MSRP URL for file download
 
-All settings are subsequently auto-discovered by Blink.
+When using SylkServer, all server settings are auto-discovered by Blink.
 
 To replicate messages from multiple devices they all must use the same
 private PGP key.  The import PGP panel is presented at start of messaging
@@ -64,3 +58,14 @@ The public keys of the recipients are looked up in SylkServer at the start
 of a messaging session.  If a key is found, it will be returned as SIP
 message with a special content type recognized by Blink and saved in a file
 e.g. ~/.blink/keys/user@domain.pubkey
+
+
+Real-time chat 
+==============
+
+To start an MSRP session based chat open the Chat window, click on the
+session menu button and select Start MSRP Chat option or right click a
+contact and select the same option.  Once established, the session using
+MSRP media uses TLS transport and end-to-end encryption using OTR is by
+default enabled.
+
