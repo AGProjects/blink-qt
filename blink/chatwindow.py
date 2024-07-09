@@ -2066,7 +2066,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkMessageHistoryCallHistoryDidStore')
         notification_center.add_observer(self, name='MessageStreamPGPKeysDidLoad')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
-        notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
         notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
@@ -3136,13 +3135,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
             session.chat_widget.update_message_encryption(message.message_id, True)
-
-    def _NH_PGPMessageDidNotDecrypt(self, notification):
-        blink_session = notification.sender
-        session = blink_session.items.chat
-        if session is None:
-            return
-        session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Decryption failed: {notification.data.error}')))
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
         transfer_session = notification.sender
