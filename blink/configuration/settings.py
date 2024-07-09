@@ -128,6 +128,8 @@ class BlinkPresenceSettings(SettingsGroup):
 class BlinkInterfaceSettings(SettingsGroup):
     show_history_name_and_uri = Setting(type=bool, default=False)
     language = Setting(type=str, default='default')
+    show_messages_group = Setting(type=bool, default=True)
+
 
 class BlinkSettings(SettingsObject):
     __id__ = 'BlinkSettings'
