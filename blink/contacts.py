@@ -3329,8 +3329,9 @@ class ContactListView(QListView):
         self.detail_view.hide()
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
-        self.actions.add_group = QAction(translate("contact_list", "Add Group"), self, triggered=self._AH_AddGroup)
-        self.actions.add_contact = QAction(translate("contact_list", "Add Contact"), self, triggered=self._AH_AddContact)
+        self.actions.add_group = QAction(translate("contact_list", "Add new group"), self, triggered=self._AH_AddGroup)
+        self.actions.add_contact = QAction(translate("contact_list", "Add new contact"), self, triggered=self._AH_AddContact)
+        self.actions.add_item = QAction(translate("contact_list", "Add"), self, triggered=self._AH_AddItem)
         self.actions.edit_item = QAction(translate("contact_list", "Edit"), self, triggered=self._AH_EditItem)
         self.actions.delete_item = QAction(translate("contact_list", "Delete"), self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction(translate("contact_list", "Delete Selection"), self, triggered=self._AH_DeleteSelection)
@@ -3393,19 +3394,21 @@ class ContactListView(QListView):
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         elif len(selected_items) > 1:
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
             menu.addAction(self.actions.delete_selection)
             menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        elif isinstance(selected_items[0], Group):
+            menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
+        elif isinstance(selected_items[0], Group):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
+            menu.addSeparator()
+            menu.addAction(self.actions.add_group)
+            menu.addAction(self.actions.add_contact)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.edit_item.setEnabled(selected_items[0].editable)
             self.actions.delete_item.setEnabled(selected_items[0].deletable)
@@ -3495,18 +3498,26 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.transfer_call)
                 self.actions.transfer_call.setEnabled(can_transfer)
 
+            if contact.group.settings is MessageContactsGroup():
+                menu.addSeparator()
+                if isinstance(contact.settings, MessageContact):
+                    menu.addAction(self.actions.add_item)
+                menu.addAction(self.actions.edit_item)
+            else:
+                menu.addSeparator()
+                menu.addAction(self.actions.edit_item)
+                menu.addAction(self.actions.delete_item)
+                menu.addAction(self.actions.undo_last_delete)
+                self.actions.undo_last_delete.setText(undo_delete_text)
+                self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+                self.actions.delete_item.setEnabled(contact.deletable)
+
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
-            menu.addAction(self.actions.edit_item)
-            menu.addAction(self.actions.delete_item)
-            menu.addAction(self.actions.undo_last_delete)
-            self.actions.undo_last_delete.setText(undo_delete_text)
 
             self.actions.edit_item.setEnabled(contact.editable)
-            self.actions.delete_item.setEnabled(contact.deletable)
-            self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-        menu.exec_(event.globalPos())
+        menu.exec(event.globalPos())
 
     def hideEvent(self, event):
         self.context_menu.hide()
@@ -3666,6 +3677,15 @@ class ContactListView(QListView):
         preferred_group = groups.pop() if len(groups) == 1 else None
         main_window = QApplication.instance().main_window
         main_window.contact_editor_dialog.open_for_add(main_window.search_box.text(), preferred_group)
+
+    def _AH_AddItem(self):
+        index = self.selectionModel().selectedIndexes()[0]
+        item = index.data(Qt.ItemDataRole.UserRole)
+        if isinstance(item, Group):
+            self.scrollTo(index)
+            item.widget.edit()
+        else:
+            QApplication.instance().main_window.contact_editor_dialog.open_for_add(item.uri.uri)
 
     def _AH_EditItem(self):
         index = self.selectionModel().selectedIndexes()[0]
@@ -3882,6 +3902,7 @@ class ContactSearchListView(QListView):
         self.detail_view.hide()
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
+        self.actions.add_item = QAction(translate("contact_list", "Add"), self, triggered=self._AH_AddItem)
         self.actions.edit_item = QAction(translate("contact_list", "Edit"), self, triggered=self._AH_EditItem)
         self.actions.delete_item = QAction(translate("contact_list", "Delete"), self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction(translate("contact_list", "Delete Selection"), self, triggered=self._AH_DeleteSelection)
@@ -3958,6 +3979,9 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.share_my_screen)
             menu.addAction(self.actions.transfer_call)
             menu.addSeparator()
+            if contact.group.settings is MessageContactsGroup():
+                if isinstance(contact.settings, MessageContact):
+                    menu.addAction(self.actions.add_item)
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
             menu.addAction(self.actions.undo_last_delete)
@@ -3977,7 +4001,7 @@ class ContactSearchListView(QListView):
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
-        menu.exec_(event.globalPos())
+        menu.exec(event.globalPos())
 
     def focusInEvent(self, event):
         super(ContactSearchListView, self).focusInEvent(event)
@@ -4078,6 +4102,10 @@ class ContactSearchListView(QListView):
         super(ContactSearchListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
         self.drop_indicator_index = QModelIndex()
+
+    def _AH_AddItem(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        QApplication.instance().main_window.contact_editor_dialog.open_for_add(contact.uri.uri)
 
     def _AH_EditItem(self):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
@@ -4320,7 +4348,7 @@ class ContactDetailView(QListView):
         self.actions.transfer_call.setEnabled(can_transfer)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
         self.actions.delete_contact.setEnabled(model.contact_detail.deletable)
-        menu.exec_(event.globalPos())
+        menu.exec(event.globalPos())
 
     def hideEvent(self, event):
         self.context_menu.hide()
@@ -4862,7 +4890,7 @@ class ContactURITableView(QTableView):
     def contextMenuEvent(self, event):
         selected_items = [item for item in (index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
         if selected_items:
-            self.context_menu.exec_(event.globalPos())
+            self.context_menu.exec(event.globalPos())
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Backspace, Qt.Key_Delete):
