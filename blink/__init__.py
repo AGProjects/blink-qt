@@ -1,6 +1,7 @@
 
 import os
 import sys
+import platform
 
 from PyQt5.QtCore import Qt, QEvent, QLocale, QTranslator
 from PyQt5.QtWidgets import QApplication, QMessageBox
@@ -56,6 +57,9 @@ if hasattr(sys, 'frozen'):
     httplib2.CA_CERTS = os.environ['SSL_CERT_FILE'] = Resources.get('tls/cacerts.pem')
     makedirs(ApplicationData.get('logs'))
     sys.stdout.file = ApplicationData.get('logs/output.log')
+
+if platform.system() == 'Darwin':
+    QApplication.setStyle('fusion')
 
 
 class IPAddressMonitor(object):
