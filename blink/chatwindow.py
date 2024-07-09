@@ -2747,8 +2747,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if 'audio.muted' in notification.data.modified:
                 self.mute_button.setChecked(settings.audio.muted)
         elif notification.sender is blink_settings:
-            if 'presence.icon' in notification.data.modified:
-                QWebEngineSettings.clearMemoryCaches()
             if 'chat_window.session_info.alternate_style' in notification.data.modified:
                 if blink_settings.chat_window.session_info.alternate_style:
                     title_role = 'alt-title'
