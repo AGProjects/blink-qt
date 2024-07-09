@@ -20,6 +20,8 @@ from zope.interface import implementer
 
 from sipsimple.account import BonjourAccount
 from sipsimple.addressbook import AddressbookManager
+from sipsimple.payloads.iscomposing import IsComposingDocument
+from sipsimple.payloads.imdn import IMDNDocument
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
@@ -72,6 +74,8 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkMessageContactsDidChange')
+        notification_center.add_observer(self, name='MessageContactsManagerDidActivate')
 
     @run_in_thread('file-io')
     def save(self):
@@ -179,9 +183,15 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_BlinkGotHistoryMessageDelete(self, notification):
         self.message_history.remove_message(notification.data)
         self.download_history.remove(notification.data)
+        settings = BlinkSettings()
+        if settings.interface.show_messages_group:
+            self.message_history.get_all_contacts()
 
     def _NH_BlinkGotHistoryConversationRemove(self, notification):
         self.message_history.remove_contact_messages(notification.sender, notification.data)
+        settings = BlinkSettings()
+        if settings.interface.show_messages_group:
+            self.message_history.get_all_contacts()
 
     def _NH_BlinkGotHistoryMessageUpdate(self, notification):
         self.message_history.update_message(notification)
@@ -222,6 +232,12 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkHTTPFileTransferDidEnd(self, notification):
         self.download_history.add_file(notification.sender, notification.data.file)
+
+    def _NH_BlinkMessageContactsDidChange(self, notification):
+        self.message_history.get_all_contacts()
+
+    def _NH_MessageContactsManagerDidActivate(self, notification):
+        self.message_history.get_all_contacts()
 
 
 class TableVersion(SQLObject):
@@ -581,6 +597,10 @@ class MessageHistory(object, metaclass=Singleton):
                     **optional_fields)
         except dberrors.DuplicateEntryError:
             pass
+        else:
+            if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
+                notification_center = NotificationCenter()
+                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri))
 
     @classmethod
     @run_in_thread('db')
@@ -655,6 +675,10 @@ class MessageHistory(object, metaclass=Singleton):
             else:
                 if message.content != dbmessage.content:
                     dbmessage.content = message.content
+        else:
+            if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
+                notification_center = NotificationCenter()
+                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=session.account, data=NotificationData(remote_uri=remote_uri))
 
     @run_in_thread('db')
     def update_message(self, notification):
@@ -725,6 +749,30 @@ class MessageHistory(object, metaclass=Singleton):
         log.debug(f"== Contacts fetched: {len(list(result))}")
         result = [(display_name, uri) for (display_name, uri, timestamp) in result]
         notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=list(result)))
+
+    @run_in_thread('db')
+    def get_all_contacts(self):
+        log.debug(f'== Getting all contacts with messages')
+
+        query = """
+            select im.display_name, am.remote_uri from messages as am
+            left join (select display_name, remote_uri from messages where direction='incoming' group by remote_uri) as im
+            on (am.remote_uri = im.remote_uri)
+            where
+            am.content_type not like '%pgp%'
+            and not am.content_type like '%sylk-api%'
+            and am.content_type != "application/blink-call-history"
+            and am.state != 'deleted'
+            group by am.remote_uri
+            """
+        notification_center = NotificationCenter()
+        try:
+            result = self.db.queryAll(query)
+        except Exception as e:
+            return
+
+        log.debug(f"== Contacts fetched: {len(list(result))}")
+        notification_center.post_notification('BlinkMessageHistoryAllContactsDidSucceed', data=NotificationData(contacts=list(result)))
 
     @run_in_thread('db')
     def remove(self, account):

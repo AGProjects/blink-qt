@@ -45,6 +45,7 @@ from sipsimple.core import BaseSIPURI, SIPURI
 from sipsimple.threading import run_in_thread
 
 from blink.configuration.datatypes import IconDescriptor, FileURL
+from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
 from blink.messages import MessageManager
@@ -216,6 +217,198 @@ class AllContactsGroup(VirtualGroup):
     def _NH_AddressbookContactWasDeleted(self, notification):
         contact = notification.sender
         notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+
+
+class MessageContact(object):
+    id = WriteOnceAttribute()
+
+    def __init__(self, name, uris, id):
+        self.id = id
+        self.name = name
+        self.uris = DummyContactURIList(uris)
+        self.presence = DummyPresence()
+        self.preferred_media = PreferredMedia('messages')
+
+    def __reduce__(self):
+        return self.__class__, (self.name, self.uris)
+
+
+@implementer(IObserver)
+class MessageContactsManager(object, metaclass=Singleton):
+
+    contacts = WriteOnceAttribute()
+
+    def __init__(self):
+        self.contacts = MessageContactsList()
+        self.active = False
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=BlinkSettings())
+        notification_center.add_observer(self, name='BlinkMessageHistoryAllContactsDidSucceed')
+        notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
+        notification_center.add_observer(self, name='AddressbookContactWasCreated')
+        notification_center.add_observer(self, name='AddressbookContactWasDeleted')
+
+    @property
+    def active(self):
+        return self.__dict__['active']
+
+    @active.setter
+    def active(self, value):
+        old_value = self.__dict__.get('active', False)
+        new_value = self.__dict__['active'] = value
+        if old_value != new_value:
+            notification_center = NotificationCenter()
+            if new_value:
+                notification_center.post_notification('MessageContactsManagerDidActivate', sender=self)
+            else:
+                notification_center.post_notification('MessageContactsManagerDidDeactivate', sender=self)
+
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if 'interface.show_messages_group' in notification.data.modified:
+            if notification.sender.interface.show_messages_group:
+                self.active = True
+            else:
+                self.active = False
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        settings = BlinkSettings()
+        if settings.interface.show_messages_group:
+            self.active = True
+
+    def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
+        contacts = notification.data.contacts
+        found_contacts = []
+        for (display_name, uri) in contacts:
+            contact, contact_uri = URIUtils.find_contact(uri)
+            if contact.type in ['dummy']:
+                if not display_name:
+                    display_name = uri
+                contact = Contact(MessageContact(display_name, [contact_uri], uri), None)
+            found_contacts.append(contact)
+            try:
+                self.contacts[contact.settings.id]
+            except KeyError:
+                self.contacts.add(contact.settings)
+                notification.center.post_notification('MessageContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact.settings))
+            else:
+                self.contacts.add(contact.settings)
+                notification.center.post_notification('MessageContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact.settings))
+        deleted_contact_ids = self.contacts.ids - {found_contact.settings.id for found_contact in found_contacts}
+        for id in deleted_contact_ids:
+            contact = self.contacts.pop(id)
+            notification.center.post_notification('MessageContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        if not self.active:
+            return
+        if notification.sender is BonjourAccount():
+            return
+
+        uri = notification.data.remote_uri
+        contact, contact_uri = URIUtils.find_contact(uri)
+        if contact.type in ['dummy']:
+            display_name = uri
+            contact = Contact(MessageContact(display_name, [contact_uri], uri), None)
+        try:
+            self.contacts[contact.settings.id]
+        except KeyError:
+            self.contacts.add(contact.settings)
+            notification.center.post_notification('MessageContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact.settings))
+
+    def _NH_AddressbookContactWasCreated(self, notification):
+        contact = notification.sender
+        removed = None
+        for uri in contact.uris:
+            try:
+                removed = self.contacts.pop(uri.uri)
+                notification.center.post_notification('MessageContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=removed))
+            except KeyError:
+                pass
+
+        if removed:
+            self.contacts.add(contact)
+            notification.center.post_notification('MessageContactsManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_AddressbookContactWasDeleted(self, notification):
+        contact = notification.sender
+        try:
+            removed = self.contacts.pop(contact.id)
+            notification.center.post_notification('MessageContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=removed))
+        except KeyError:
+            pass
+        else:
+            NotificationCenter().post_notification('BlinkMessageContactsDidChange', sender=self)
+
+
+class MessageContactsList(object):
+    def __init__(self):
+        self._contact_map = {}
+
+    def __getitem__(self, id):
+        return self._contact_map[id]
+
+    def __contains__(self, id):
+        return id in self._contact_map
+
+    def __iter__(self):
+        return iter(list(self._contact_map.values()))
+
+    def __len__(self):
+        return len(self._contact_map)
+
+    __hash__ = None
+
+    @property
+    def ids(self):
+        return set(self._contact_map)
+
+    def add(self, contact):
+        self._contact_map[contact.id] = contact
+
+    def pop(self, id, *args):
+        return self._contact_map.pop(id, *args)
+
+    def remove(self, contact):
+        return self._contact_map.pop(contact.id, None)
+
+
+@implementer(IObserver)
+class MessageContactsGroup(VirtualGroup):
+
+    __id__ = '__messages'
+
+    name = Setting(type=str, default='Messages')
+    contacts = property(lambda self: self.__manager__.contacts)
+
+    def __init__(self):
+        self.__manager__ = MessageContactsManager()
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=self.__manager__)
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_MessageContactsManagerDidActivate(self, notification):
+        notification.center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=[]))
+
+    def _NH_MessageContactsManagerDidDeactivate(self, notification):
+        notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
+
+    def _NH_MessageContactsManagerDidAddContact(self, notification):
+        notification.center.post_notification('VirtualGroupDidAddContact', sender=self, data=notification.data)
+
+    def _NH_MessageContactsManagerDidRemoveContact(self, notification):
+        notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=notification.data)
+
+    def _NH_MessageContactsManagerDidUpdateContact(self, notification):
+        notification.center.post_notification('VirtualContactDidChange', sender=notification.data)
 
 
 class PreferredMedia(str):
@@ -1240,7 +1433,7 @@ class Contact(object):
 
     native = property(lambda self: self.type == 'addressbook')
 
-    movable = property(lambda self: self.type == 'addressbook')
+    movable = property(lambda self: self.type == 'addressbook' and self.group.settings is not MessageContactsGroup())
     editable = property(lambda self: self.type == 'addressbook')
     deletable = property(lambda self: self.type == 'addressbook')
 
@@ -3323,9 +3516,13 @@ class ContactListView(QListView):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
-                session_manager = SessionManager()
-                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
-        elif event.key() == Qt.Key_Space:
+                if item.group.settings is MessageContactsGroup():
+                    session_manager = MessageManager()
+                    session_manager.create_message_session(item.uri.uri)
+                else:
+                    session_manager = SessionManager()
+                    session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+        elif event.key() == Qt.Key.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
@@ -3635,8 +3832,12 @@ class ContactListView(QListView):
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.UserRole)
         if isinstance(item, Contact):
-            session_manager = SessionManager()
-            session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+            if item.group.settings is MessageContactsGroup():
+                session_manager = MessageManager()
+                session_manager.create_message_session(item.uri.uri)
+            else:
+                session_manager = SessionManager()
+                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -3793,8 +3994,12 @@ class ContactSearchListView(QListView):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
-                session_manager = SessionManager()
-                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+                if item.group.settings is MessageContactsGroup():
+                    session_manager = MessageManager()
+                    session_manager.create_message_session(item.uri.uri)
+                else:
+                    session_manager = SessionManager()
+                    session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
         elif event.key() == Qt.Key_Escape:
             QApplication.instance().main_window.search_box.clear()
         elif event.key() == Qt.Key_Space:
@@ -3973,8 +4178,12 @@ class ContactSearchListView(QListView):
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.UserRole)
         if isinstance(item, Contact):
-            session_manager = SessionManager()
-            session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+            if item.group.settings is MessageContactsGroup():
+                session_manager = MessageManager()
+                session_manager.create_message_session(item.uri.uri)
+            else:
+                session_manager = SessionManager()
+                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -4125,8 +4334,12 @@ class ContactDetailView(QListView):
                 selected_uri = item.uri
             else:
                 selected_uri = contact.uri
-            session_manager = SessionManager()
-            session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
+            if item.group.settings is MessageContactsGroup():
+                session_manager = MessageManager()
+                session_manager.create_message_session(selected_uri)
+            else:
+                session_manager = SessionManager()
+                session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
         elif event.key() == Qt.Key_Escape:
             self.animation.setDirection(QPropertyAnimation.Backward)
             self.animation.start()
@@ -4331,8 +4544,12 @@ class ContactDetailView(QListView):
             selected_uri = item.uri
         else:
             selected_uri = contact.uri
-        session_manager = SessionManager()
-        session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
+        if item.group.settings is MessageContactsGroup():
+            session_manager = MessageManager()
+            session_manager.create_message_session(selected_uri)
+        else:
+            session_manager = SessionManager()
+            session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
 
     @run_in_gui_thread
     def handle_notification(self, notification):

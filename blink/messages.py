@@ -26,8 +26,6 @@ from urllib.parse import urlsplit, urlunsplit, quote
 from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
-from sipsimple.addressbook import AddressbookManager, Group, Contact, ContactURI
-from sipsimple.configuration import DuplicateIDError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPURI, FromHeader, ToHeader, Message, RouteHeader
 from sipsimple.lookup import DNSLookup
@@ -622,30 +620,6 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
 
-    def _add_contact_to_messages_group(self, account, contact):
-        log.debug(f'-- Adding contact {contact.uri.uri} to message list')
-        group_id = '_messages'
-        try:
-            group = next((group for group in AddressbookManager().get_groups() if group.id == group_id))
-        except StopIteration:
-            try:
-                group = Group(id=group_id)
-            except DuplicateIDError as e:
-                return
-            else:
-                group.name = 'Messages'
-                group.position = 0
-                group.expanded = True
-
-        new_contact = Contact()
-        new_contact.name = contact.name
-        new_contact.preferred_media = contact.preferred_media
-        new_contact.uris = [ContactURI(uri=uri.uri, type=uri.type) for uri in contact.uris]
-        new_contact.save()
-
-        group.contacts.add(new_contact)
-        group.save()
-
     @run_in_thread('file-io')
     def _save_pgp_key(self, data, uri):
         log.info(f'Saving public key for {uri}')
@@ -708,8 +682,6 @@ class MessageManager(object, metaclass=Singleton):
             log.debug("-- Should send delivered imdn for incoming message")
             self.send_imdn_message(session, message.id, message.timestamp, 'delivered')
 
-        if session.account is not BonjourAccount():
-            self._add_contact_to_messages_group(session.account, session.contact)
         notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message, account=account))
 
     def _request_history_synchronization_token(self, account):
@@ -929,7 +901,6 @@ class MessageManager(object, metaclass=Singleton):
                                                           message=history_message,
                                                           encryption=encryption,
                                                           state=message['state']))
-                self._add_contact_to_messages_group(account, contact)
 
                 try:
                     blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
@@ -1318,7 +1289,6 @@ class MessageManager(object, metaclass=Singleton):
                 self._incoming_encrypted_message_queue.append((message, account, contact))
                 if account is blink_session.account:
                     notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
-                self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
                 notification_center.post_notification('BlinkGotMessage',
                                                       sender=blink_session,
                                                       data=NotificationData(message=message, account=account))
@@ -1498,13 +1468,13 @@ class MessageManager(object, metaclass=Singleton):
 
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id, blink_session)
         self._send_message(outgoing_message)
-        self._add_contact_to_messages_group(blink_session.account, blink_session.contact)
 
     def create_message_session(self, uri, display_name=None):
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(uri)
         session_manager = SessionManager()
         account = AccountManager().default_account
+
         instance_id = contact.settings.id if contact.type == 'bonjour' else None
         if contact.type == 'dummy' and display_name is not None:
             contact.settings.name = display_name

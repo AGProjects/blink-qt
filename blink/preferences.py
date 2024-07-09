@@ -386,6 +386,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Interface
         self.history_name_and_uri_button.clicked.connect(self._SH_HistoryNameAndUriButtonClicked)
         self.language_button.activated[int].connect(self._SH_LanguageButtonActivated)
+        self.show_messages_group_button.clicked.connect(self._SH_ShowMessagesGroupButtonClicked)
 
         # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
@@ -825,6 +826,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.tls_verify_server_button.setChecked(settings.tls.verify_server)
 
         self.history_name_and_uri_button.setChecked(blink_settings.interface.show_history_name_and_uri)
+        self.show_messages_group_button.setChecked(blink_settings.interface.show_messages_group)
 
         language_index = self.language_button.findText(Language.mapping[blink_settings.interface.language])
         if language_index == -1:
@@ -1945,6 +1947,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
             blink = QApplication.instance()
             blink.restart()
+
+    def _SH_ShowMessagesGroupButtonClicked(self, checked):
+        settings = BlinkSettings()
+        settings.interface.show_messages_group = checked
+        settings.save()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
