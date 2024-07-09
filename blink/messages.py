@@ -463,7 +463,7 @@ class OutgoingMessage(object):
             # TODO: Figure out how now to send a public when required, not always on start of the first message in the session
             if self.content_type != 'text/pgp-public-key' and not self.session.routes:
                 stream = self.session.fake_streams.get('messages')
-                if self.session.account.sms.enable_pgp and stream.can_decrypt:
+                if stream and self.session.account.sms.enable_pgp and stream.can_decrypt:
                     directory = os.path.join(SIPSimpleSettings().chat.keys_directory.normalized, 'private')
                     filename = os.path.join(directory, f'{self.session.account.id}')
 
