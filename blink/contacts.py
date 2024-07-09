@@ -1311,7 +1311,7 @@ class Group(object):
 
     movable = True
     editable = True
-    deletable = property(lambda self: not self.virtual and self.settings.id != '_messages')
+    deletable = property(lambda self: not self.virtual)
 
     def __init__(self, group):
         self.settings = group
