@@ -1,3 +1,4 @@
+import platform
 
 from PyQt5.QtCore import Qt, QCoreApplication, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt5.QtGui import QBrush, QColor, QLinearGradient, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
@@ -624,6 +625,15 @@ class StateButton(QToolButton):
         size = max(pixmap.width(), pixmap.height())
         offset_x = int((size - pixmap.width())/2)
         offset_y = int((size - pixmap.height())/2)
+        if platform.system() == 'Darwin':
+            if size == 48:
+                # default icon
+                offset_x = offset_x + 8
+                offset_y = offset_y + 8
+            else:
+                # user chosen icon
+                offset_x = offset_x + 14
+                offset_y = offset_y + 16
 
         new_pixmap = QPixmap(size, size)
         new_pixmap.fill(Qt.transparent)
