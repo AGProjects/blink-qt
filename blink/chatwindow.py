@@ -1198,21 +1198,19 @@ class ChatWidget(base_class, ui_class):
         image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
         other_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is None]
 
-        if blink_session.chat_type is None:
-            for image in image_descriptors:
-                session_manager.send_file(blink_session.contact, blink_session.contact_uri, image.filename, account=blink_session.account)
-            return
+        # for image in image_descriptors:
+        #     try:
+        #         image_data = base64.b64encode(image.thumbnail.data).decode()
+        #         self.send_message(image_data, content_type=image.thumbnail.type)
+        #     except Exception as e:
+        #         self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), str(e))))  # decide what type to use here. -Dan
+        #     else:
+        #         content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
+        #         sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
+        #         self.add_message(ChatFile(content, sender, 'outgoing'))
 
         for image in image_descriptors:
-            try:
-                image_data = base64.b64encode(image.thumbnail.data).decode()
-                self.send_message(image_data, content_type=image.thumbnail.type)
-            except Exception as e:
-                self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), str(e))))  # decide what type to use here. -Dan
-            else:
-                content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
-                sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
-                self.add_message(ChatFile(content, sender, 'outgoing'))
+            session_manager.send_file(blink_session.contact, blink_session.contact_uri, image.filename, account=blink_session.account)
 
         for descriptor in other_descriptors:
             session_manager.send_file(blink_session.contact, blink_session.contact_uri, descriptor.filename, account=blink_session.account)
