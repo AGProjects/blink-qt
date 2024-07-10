@@ -145,7 +145,7 @@ class VNCClient(QObject):
         except RFBClientError:
             self.thread.quit()
         else:
-            self.socket_notifier = QSocketNotifier(self.rfb_client.socket, QSocketNotifier.Read, self)
+            self.socket_notifier = QSocketNotifier(self.rfb_client.socket, QSocketNotifier.Type.Read, self)
             self.socket_notifier.activated.connect(self._SH_SocketNotifierActivated)
             notification_center.post_notification('VNCClientDidStart', sender=self)
 

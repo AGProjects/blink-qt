@@ -112,17 +112,17 @@ class XCAPRootValidator(WebURLValidator):
 
     def validate(self, input, pos):
         state, input, pos = super(XCAPRootValidator, self).validate(input, pos)
-        if state == QValidator.Acceptable:
+        if state == QValidator.State.Acceptable:
             if input.endswith(('?', ';', '&')):
-                state = QValidator.Invalid
+                state = QValidator.State.Invalid
             else:
                 url = urllib.parse.urlparse(input)
                 if url.params or url.query or url.fragment:
-                    state = QValidator.Invalid
+                    state = QValidator.State.Invalid
                 elif url.port is not None:
                     port = int(url.port)
                     if not (0 < port <= 65535):
-                        state = QValidator.Invalid
+                        state = QValidator.State.Invalid
         return state, input, pos
 
 
@@ -150,20 +150,20 @@ class SIPPortEditor(QSpinBox):
 
     def validate(self, input, pos):
         state, input, pos = super(SIPPortEditor, self).validate(input, pos)
-        if state == QValidator.Acceptable:
+        if state == QValidator.State.Acceptable:
             value = int(input)
             if 0 < value < 1024:
-                state = QValidator.Intermediate
+                state = QValidator.State.Intermediate
             elif value == self.sibling.value() != 0:
-                state = QValidator.Intermediate
+                state = QValidator.State.Intermediate
         return state, input, pos
 
 
 class AccountDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
-        account_info = index.data(Qt.UserRole)
+        account_info = index.data(Qt.ItemDataRole.UserRole)
         if not account_info.account.enabled:
-            option.state &= ~QStyle.State_Enabled
+            option.state &= ~QStyle.StateFlag.State_Enabled
         super(AccountDelegate, self).paint(painter, option, index)
 
 
@@ -179,7 +179,7 @@ class AccountListView(QListView):
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
             index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
+            selection_model.setCurrentIndex(index, selection_model.SelectionFlag.Select)
 
 
 class blocked_qt_signals(object):
@@ -532,7 +532,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         combo_box = self.audio_input_device_button
         option = QStyleOptionComboBox()
         combo_box.initStyleOption(option)
-        wide_padding = (combo_box.height() - combo_box.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, combo_box).height() >= 10)
+        wide_padding = (combo_box.height() - combo_box.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option, QStyle.SubControl.SC_ComboBoxEditField, combo_box).height() >= 10)
         if False and wide_padding: # TODO: review later and decide if its worth or not -Dan
             self.audio_alert_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.audio_input_device_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
@@ -545,9 +545,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def eventFilter(self, watched, event):
         if watched is self.camera_preview:
             event_type = event.type()
-            if event_type == QEvent.Show:
+            if event_type == QEvent.Type.Show:
                 self.camera_preview.producer = SIPApplication.video_device.producer
-            elif event_type == QEvent.Hide:
+            elif event_type == QEvent.Type.Hide:
                 self.camera_preview.producer = None
         return False
 
@@ -576,7 +576,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         except IndexError:
             return None
         else:
-            return selected_index.data(Qt.UserRole).account
+            return selected_index.data(Qt.ItemDataRole.UserRole).account
 
     def _sync_defaults(self):
         settings = SIPSimpleSettings()
@@ -722,7 +722,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.audio_codecs_list.clear()
             for codec in settings.rtp.audio_codec_order:
                 item = QListWidgetItem(codec, self.audio_codecs_list)
-                item.setCheckState(Qt.Checked if codec in settings.rtp.audio_codec_list else Qt.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if codec in settings.rtp.audio_codec_list else Qt.CheckState.Unchecked)
 
         # Answering Machine settings
         self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
@@ -743,7 +743,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.video_codecs_list.clear()
             for codec in settings.rtp.video_codec_order:
                 item = QListWidgetItem(codec, self.video_codecs_list)
-                item.setCheckState(Qt.Checked if codec in settings.rtp.video_codec_list else Qt.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if codec in settings.rtp.video_codec_list else Qt.CheckState.Unchecked)
 
         self.h264_profile_button.setCurrentIndex(self.h264_profile_button.findData(str(settings.video.h264.profile)))
         self.video_codec_bitrate_button.setCurrentIndex(self.video_codec_bitrate_button.findData(settings.video.max_bitrate))
@@ -855,7 +855,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if account is not bonjour_account:
             self.password_editor.setText(account.auth.password)
             selected_index = self.account_list.selectionModel().selectedIndexes()[0]
-            selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
+            selected_account_info = self.account_list.model().data(selected_index, Qt.ItemDataRole.UserRole)
             if not account.enabled:
                 selected_account_info.registration_state = None
                 selected_account_info.registrar = None
@@ -877,7 +877,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             audio_codec_list = account.rtp.audio_codec_list or settings.rtp.audio_codec_list
             for codec in audio_codec_order:
                 item = QListWidgetItem(codec, self.account_audio_codecs_list)
-                item.setCheckState(Qt.Checked if codec in audio_codec_list else Qt.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if codec in audio_codec_list else Qt.CheckState.Unchecked)
 
         with blocked_qt_signals(self.account_video_codecs_list):
             self.account_video_codecs_list.clear()
@@ -885,7 +885,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             video_codec_list = account.rtp.video_codec_list or settings.rtp.video_codec_list
             for codec in video_codec_order:
                 item = QListWidgetItem(codec, self.account_video_codecs_list)
-                item.setCheckState(Qt.Checked if codec in video_codec_list else Qt.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if codec in video_codec_list else Qt.CheckState.Unchecked)
 
         self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_order is not None)
         self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_order is not None)
@@ -1042,7 +1042,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 index = next(index for index, account in enumerate(model.accounts) if account is default_account)
             except StopIteration:
                 index = 0
-            selection_model.select(model.index(index), selection_model.ClearAndSelect)
+            selection_model.select(model.index(index), selection_model.SelectionFlag.ClearAndSelect)
         self._update_logs_size_label()
         super(PreferencesWindow, self).show()
         self.raise_()
@@ -1123,7 +1123,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         except IndexError:
             return
 
-        selected_account = selected_index.data(Qt.UserRole).account
+        selected_account = selected_index.data(Qt.ItemDataRole.UserRole).account
         if account.id != selected_account.id:
             return
 
@@ -1136,7 +1136,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.delete_account_button.setEnabled(False)
             self.account_tab_widget.setEnabled(False)
         else:
-            selected_account = selected_index.data(Qt.UserRole).account
+            selected_account = selected_index.data(Qt.ItemDataRole.UserRole).account
             self.delete_account_button.setEnabled(selected_account is not BonjourAccount())
             tab_widget = self.account_tab_widget
             tab_widget.setEnabled(True)
@@ -1165,8 +1165,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         except IndexError:
             pass
         else:
-            account_info = self.account_list.model().data(topLeft, Qt.UserRole)
-            selected_account_info = self.account_list.model().data(selected_index, Qt.UserRole)
+            account_info = self.account_list.model().data(topLeft, Qt.ItemDataRole.UserRole)
+            selected_account_info = self.account_list.model().data(selected_index, Qt.ItemDataRole.UserRole)
             if selected_account_info is account_info:
                 if account_info.registration_state:
                     self.account_registration_label.setText(translate('preferences_window', 'Registration %s') % account_info.registration_state.title())
@@ -1177,10 +1177,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         model = self.account_list.model()
 
         selected_index = self.account_list.selectionModel().selectedIndexes()[0]
-        selected_account = selected_index.data(Qt.UserRole).account
+        selected_account = selected_index.data(Qt.ItemDataRole.UserRole).account
 
         title, message = translate('preferences_window', "Remove Account"), translate('preferences_window', "Permanently remove account %s?") % selected_account.id
-        if QMessageBox.question(self, title, message, QMessageBox.Ok | QMessageBox.Cancel) == QMessageBox.Cancel:
+        if QMessageBox.question(self, title, message, QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel) == QMessageBox.StandardButton.Cancel:
             return
 
         account_manager = AccountManager()
@@ -1230,14 +1230,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_AccountAudioCodecsListItemChanged(self, item):
         account = self.selected_account
         items = [self.account_audio_codecs_list.item(row) for row in range(self.account_audio_codecs_list.count())]
-        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
+        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.CheckState.Checked]
         account.rtp.audio_codec_order = [item.text() for item in items]
         account.save()
 
     def _SH_AccountAudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
         items = [self.account_audio_codecs_list.item(row) for row in range(self.account_audio_codecs_list.count())]
-        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
+        account.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.CheckState.Checked]
         account.rtp.audio_codec_order = [item.text() for item in items]
         account.save()
 
@@ -1251,7 +1251,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             audio_codec_list = settings.rtp.audio_codec_list
             for codec in audio_codec_order:
                 item = QListWidgetItem(codec, self.account_audio_codecs_list)
-                item.setCheckState(Qt.Checked if codec in audio_codec_list else Qt.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if codec in audio_codec_list else Qt.CheckState.Unchecked)
 
         account.rtp.audio_codec_list  = DefaultValue
         account.rtp.audio_codec_order = DefaultValue
@@ -1260,14 +1260,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_AccountVideoCodecsListItemChanged(self, item):
         account = self.selected_account
         items = [self.account_video_codecs_list.item(row) for row in range(self.account_video_codecs_list.count())]
-        account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
+        account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.CheckState.Checked]
         account.rtp.video_codec_order = [item.text() for item in items]
         account.save()
 
     def _SH_AccountVideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         account = self.selected_account
         items = [self.account_video_codecs_list.item(row) for row in range(self.account_video_codecs_list.count())]
-        account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
+        account.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.CheckState.Checked]
         account.rtp.video_codec_order = [item.text() for item in items]
         account.save()
 
@@ -1281,7 +1281,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             video_codec_list = settings.rtp.video_codec_list
             for codec in video_codec_order:
                 item = QListWidgetItem(codec, self.account_video_codecs_list)
-                item.setCheckState(Qt.Checked if codec in video_codec_list else Qt.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if codec in video_codec_list else Qt.CheckState.Unchecked)
 
         account.rtp.video_codec_list  = DefaultValue
         account.rtp.video_codec_order = DefaultValue
@@ -1611,14 +1611,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_AudioCodecsListItemChanged(self, item):
         settings = SIPSimpleSettings()
         item_iterator = (self.audio_codecs_list.item(row) for row in range(self.audio_codecs_list.count()))
-        settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.Checked]
+        settings.rtp.audio_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.CheckState.Checked]
         settings.save()
 
     def _SH_AudioCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
         items = [self.audio_codecs_list.item(row) for row in range(self.audio_codecs_list.count())]
         settings.rtp.audio_codec_order = [item.text() for item in items]
-        settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
+        settings.rtp.audio_codec_list = [item.text() for item in items if item.checkState() == Qt.CheckState.Checked]
         settings.save()
 
     # Answering machine signal handlers
@@ -1670,14 +1670,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_VideoCodecsListItemChanged(self, item):
         settings = SIPSimpleSettings()
         item_iterator = (self.video_codecs_list.item(row) for row in range(self.video_codecs_list.count()))
-        settings.rtp.video_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.Checked]
+        settings.rtp.video_codec_list = [item.text() for item in item_iterator if item.checkState() == Qt.CheckState.Checked]
         settings.save()
 
     def _SH_VideoCodecsListModelRowsMoved(self, source_parent, source_start, source_end, dest_parent, dest_row):
         settings = SIPSimpleSettings()
         items = [self.video_codecs_list.item(row) for row in range(self.video_codecs_list.count())]
         settings.rtp.video_codec_order = [item.text() for item in items]
-        settings.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.Checked]
+        settings.rtp.video_codec_list = [item.text() for item in items if item.checkState() == Qt.CheckState.Checked]
         settings.save()
 
     def _SH_VideoCodecBitrateButtonActivated(self, index):
@@ -1942,7 +1942,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             settings.save()
             title = translate('preferences_window', "Restart required")
             question = translate('preferences_window', "The application language was changed. A restart is required to apply the change. Would you like to restart now?")
-            if QMessageBox.question(self, title, question) == QMessageBox.No:
+            if QMessageBox.question(self, title, question) == QMessageBox.StandardButton.No:
                 return
 
             blink = QApplication.instance()

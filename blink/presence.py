@@ -515,8 +515,8 @@ ui_class, base_class = uic.loadUiType(Resources.get('pending_watcher.ui'))
 class PendingWatcherDialog(base_class, ui_class):
     def __init__(self, account, uri, display_name, parent=None):
         super(PendingWatcherDialog, self).__init__(parent)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
         default_font_size = self.uri_label.fontInfo().pointSizeF()

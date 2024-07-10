@@ -31,10 +31,10 @@ __all__ = ['ScreensharingWindow', 'VNCViewer']
 
 class ButtonMaskMapper(dict):
     class qt:
-        NoButton    = Qt.NoButton
-        LeftButton  = Qt.LeftButton
+        NoButton    = Qt.MouseButton.NoButton
+        LeftButton  = Qt.MouseButton.LeftButton
         MidButton   = Qt.MidButton
-        RightButton = Qt.RightButton
+        RightButton = Qt.MouseButton.RightButton
 
     class vnc:
         NoButton    = 0b00000000
@@ -122,8 +122,8 @@ class VNCWindowsKeyMap(object):
 
     def __getitem__(self, event):
         key = event.key()
-        if Qt.Key_A <= key <= Qt.Key_Z:
-            if bool(event.modifiers() & Qt.ShiftModifier) ^ bool(event.nativeModifiers() & self.__capsmodifier__):
+        if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
+            if bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier) ^ bool(event.nativeModifiers() & self.__capsmodifier__):
                 return key
             else:
                 return key + 0x20  # make it lowercase
@@ -143,7 +143,7 @@ class VNCKeyMap(object):
 
 
 class VNCKey(int):
-    __modifiermap__ = {Qt.Key_Shift: Qt.ShiftModifier, Qt.Key_Control: Qt.ControlModifier, Qt.Key_Alt: Qt.AltModifier, Qt.Key_Meta: Qt.MetaModifier, Qt.Key_AltGr: Qt.GroupSwitchModifier}
+    __modifiermap__ = {Qt.Key.Key_Shift: Qt.KeyboardModifier.ShiftModifier, Qt.Key.Key_Control: Qt.KeyboardModifier.ControlModifier, Qt.Key.Key_Alt: Qt.KeyboardModifier.AltModifier, Qt.Key.Key_Meta: Qt.KeyboardModifier.MetaModifier, Qt.Key.Key_AltGr: Qt.KeyboardModifier.GroupSwitchModifier}
     __keymap__ = VNCKeyMap()
 
     def __new__(cls, key, qt_key):
@@ -163,7 +163,7 @@ class VNCKey(int):
 class ActiveKeys(set):
     @property
     def modifiers(self):
-        return reduce(__or__, (key.qt_modifier for key in self if key.qt_modifier is not None), Qt.NoModifier)
+        return reduce(__or__, (key.qt_modifier for key in self if key.qt_modifier is not None), Qt.KeyboardModifier.NoModifier)
 
 
 class VNCViewer(QWidget):
@@ -172,14 +172,14 @@ class VNCViewer(QWidget):
     def __init__(self, vncclient=None, parent=None):
         super(VNCViewer, self).__init__(parent)
         self.setMouseTracking(True)
-        self.setFocusPolicy(Qt.WheelFocus)
-        # self.setCursor(Qt.BlankCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
+        # self.setCursor(Qt.CursorShape.BlankCursor)
         self.client = vncclient or parent.client
         self.client.started.connect(self._SH_ClientStarted)
         self.client.finished.connect(self._SH_ClientFinished)
         self.client.imageSizeChanged.connect(self._SH_ImageSizeChanged)
         self.client.imageChanged.connect(self._SH_ImageUpdated)
-        self.client.passwordRequested.connect(self._SH_PasswordRequested, Qt.BlockingQueuedConnection)
+        self.client.passwordRequested.connect(self._SH_PasswordRequested, Qt.ConnectionType.BlockingQueuedConnection)
         self.colors_8bit = [qRgb((i & 0x07) << 5, (i & 0x38) << 2, i & 0xc0) for i in range(256)]
         self.scale = False
         self.view_only = False
@@ -235,14 +235,14 @@ class VNCViewer(QWidget):
 
     def event(self, event):
         event_type = event.type()
-        if event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseButtonDblClick, QEvent.MouseMove, QEvent.Wheel):
+        if event_type in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick, QEvent.Type.MouseMove, QEvent.Type.Wheel):
             if not self.view_only:
                 event.accept()
                 self.mouseEvent(event)
             else:
                 event.ignore()
             return True
-        elif event_type in (QEvent.KeyPress, QEvent.KeyRelease):
+        elif event_type in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
             if not self.view_only:
                 event.accept()
                 self.keyEvent(event)
@@ -260,15 +260,15 @@ class VNCViewer(QWidget):
         elif self.scale:
             inverse_transform, invertible = self.transform.inverted()
             image_rect = inverse_transform.mapRect(event_rect).adjusted(-1, -1, 1, 1).intersected(image.rect())
-            painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.setTransform(self.transform)
-            if image.format() == QImage.Format_Indexed8:
+            if image.format() == QImage.Format.Format_Indexed8:
                 image_area = image.copy(image_rect)
                 image_area.setColorTable(self.colors_8bit)
                 painter.drawImage(image_rect, image_area)
             else:
                 painter.drawImage(image_rect, image, image_rect)
-        elif image.format() == QImage.Format_Indexed8:
+        elif image.format() == QImage.Format.Format_Indexed8:
             image_area = image.copy(event_rect)
             image_area.setColorTable(self.colors_8bit)
             painter.drawImage(event_rect, image_area)
@@ -310,7 +310,7 @@ class VNCViewer(QWidget):
             x = event.x()
             y = event.y()
         button_mask = self.button_mask_map[event.buttons()]
-        if event.type() == QEvent.Wheel and event.angleDelta():
+        if event.type() == QEvent.Type.Wheel and event.angleDelta():
             wheel_delta = event.angleDelta()
             wheel_button_mask = 0
             if wheel_delta.y() > 0:
@@ -326,11 +326,11 @@ class VNCViewer(QWidget):
 
     def keyEvent(self, event):
         vnc_key = VNCKey.from_event(event)
-        key_down = event.type() == QEvent.KeyPress
+        key_down = event.type() == QEvent.Type.KeyPress
         if vnc_key:
             expected_modifiers = self._active_keys.modifiers
             keyboard_modifiers = event.modifiers()
-            if vnc_key.qt_key in VNCKey.__modifiermap__ and vnc_key.qt_key != Qt.Key_AltGr and vnc_key != 0xffe7:
+            if vnc_key.qt_key in VNCKey.__modifiermap__ and vnc_key.qt_key != Qt.Key.Key_AltGr and vnc_key != 0xffe7:
                 keyboard_modifiers ^= vnc_key.qt_modifier  # we want the modifier mask as it was before this modifier key was pressed/released
             if (keyboard_modifiers ^ expected_modifiers) & expected_modifiers:
                 self._reset_keyboard(preserve_modifiers=keyboard_modifiers)
@@ -347,7 +347,7 @@ class VNCViewer(QWidget):
                 else:
                     self._reset_keyboard(preserve_modifiers=event.modifiers())
 
-    def _reset_keyboard(self, preserve_modifiers=Qt.NoModifier):
+    def _reset_keyboard(self, preserve_modifiers=Qt.KeyboardModifier.NoModifier):
         dated_keys = {key for key in self._active_keys if key.qt_modifier is None or not (key.qt_modifier & preserve_modifiers)}
         for vnc_key in dated_keys:
             self.client.key_event(vnc_key, False)
@@ -393,11 +393,11 @@ class ScreensharingDialog(base_class, ui_class):
         super(ScreensharingDialog, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.setWindowModality(Qt.WindowModal)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
         parent.installEventFilter(self)
 
     def eventFilter(self, watched, event):
-        if watched is self.parent() and event.type() in (QEvent.Close, QEvent.Hide):
+        if watched is self.parent() and event.type() in (QEvent.Type.Close, QEvent.Type.Hide):
             self.reject()
         return False
 
@@ -407,7 +407,7 @@ class ScreensharingDialog(base_class, ui_class):
         self.username_editor.show()
         self.username_editor.clear()
         self.password_editor.clear()
-        self.username_editor.setFocus(Qt.OtherFocusReason)
+        self.username_editor.setFocus(Qt.FocusReason.OtherFocusReason)
         self.setMinimumHeight(190)
         self.resize(self.minimumSize())
         result = self.exec_()
@@ -419,7 +419,7 @@ class ScreensharingDialog(base_class, ui_class):
         self.username_editor.hide()
         self.username_editor.clear()
         self.password_editor.clear()
-        self.password_editor.setFocus(Qt.OtherFocusReason)
+        self.password_editor.setFocus(Qt.FocusReason.OtherFocusReason)
         self.setMinimumHeight(165)
         self.resize(self.minimumSize())
         result = self.exec_()
@@ -442,7 +442,7 @@ class ScreensharingToolbox(base_class, ui_class):
         self.animation = QPropertyAnimation(self, b'pos')
         self.animation.setDuration(250)
         self.animation.setDirection(QPropertyAnimation.Forward)
-        self.animation.setEasingCurve(QEasingCurve.Linear)  # or OutCirc with 300ms
+        self.animation.setEasingCurve(QEasingCurve.Type.Linear)  # or OutCirc with 300ms
         self.retract_timer = QTimer(self)
         self.retract_timer.setInterval(3000)
         self.retract_timer.setSingleShot(True)
@@ -454,23 +454,23 @@ class ScreensharingToolbox(base_class, ui_class):
 
         # fix the SVG icons, as the generated code loads them as pixmaps, losing their ability to scale -Dan
         scale_icon = QIcon()
-        scale_icon.addFile(Resources.get('icons/scale.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        scale_icon.addFile(Resources.get('icons/scale.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
         viewonly_icon = QIcon()
-        viewonly_icon.addFile(Resources.get('icons/viewonly.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        viewonly_icon.addFile(Resources.get('icons/viewonly.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
         screenshot_icon = QIcon()
-        screenshot_icon.addFile(Resources.get('icons/screenshot.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        screenshot_icon.addFile(Resources.get('icons/screenshot.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
         fullscreen_icon = QIcon()
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Normal, state=QIcon.On)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Active, state=QIcon.On)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Disabled, state=QIcon.On)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Selected, state=QIcon.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Active, state=QIcon.State.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Disabled, state=QIcon.State.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Selected, state=QIcon.State.On)
         minimize_icon = QIcon()
-        minimize_icon.addFile(Resources.get('icons/minimize.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        minimize_icon.addFile(Resources.get('icons/minimize-active.svg'), mode=QIcon.Active, state=QIcon.Off)
+        minimize_icon.addFile(Resources.get('icons/minimize.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        minimize_icon.addFile(Resources.get('icons/minimize-active.svg'), mode=QIcon.Mode.Active, state=QIcon.State.Off)
         close_icon = QIcon()
-        close_icon.addFile(Resources.get('icons/close.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        close_icon.addFile(Resources.get('icons/close-active.svg'), mode=QIcon.Active, state=QIcon.Off)
+        close_icon.addFile(Resources.get('icons/close.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        close_icon.addFile(Resources.get('icons/close-active.svg'), mode=QIcon.Mode.Active, state=QIcon.State.Off)
 
         self.scale_action.setIcon(scale_icon)
         self.viewonly_action.setIcon(viewonly_icon)
@@ -500,7 +500,7 @@ class ScreensharingToolbox(base_class, ui_class):
         self.color_depth_button.addItem('LowColor (8 bits)', LowColor)
 
     def eventFilter(self, watched, event):
-        if watched is self.parent() and event.type() == QEvent.Resize:
+        if watched is self.parent() and event.type() == QEvent.Type.Resize:
             new_x = (watched.width() - self.width()) / 2
             self.move(new_x, self.y())
             self.animation.setStartValue(QPoint(new_x, -self.height() + self.exposedPixels))
@@ -520,7 +520,7 @@ class ScreensharingToolbox(base_class, ui_class):
         option = QStyleOption()
         option.initFrom(self)
         painter = QStylePainter(self)
-        painter.drawPrimitive(QStyle.PE_Widget, option)
+        painter.drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option)
 
     def expose(self):
         if self.animation.state() == QPropertyAnimation.Running and self.animation.direction() == QPropertyAnimation.Forward:
@@ -571,7 +571,7 @@ class ScreensharingWindow(base_class, ui_class):
         self.vncviewer = VNCViewer(self.vncclient)
         self.vncviewer.setGeometry(self.scroll_area.viewport().geometry())
         self.scroll_area.setWidget(self.vncviewer)
-        self.vncviewer.setFocus(Qt.OtherFocusReason)
+        self.vncviewer.setFocus(Qt.FocusReason.OtherFocusReason)
 
         self.fullscreen_toolbox = ScreensharingToolbox(self)
         self.fullscreen_toolbox.hide()
@@ -614,7 +614,7 @@ class ScreensharingWindow(base_class, ui_class):
         self.fullscreen_toolbox.color_depth_button.setCurrentIndex(index)
         self.color_depth_button.blockSignals(False)
         self.fullscreen_toolbox.color_depth_button.blockSignals(False)
-        self.vncclient.settings = self.color_depth_button.itemData(index, Qt.UserRole)
+        self.vncclient.settings = self.color_depth_button.itemData(index, Qt.ItemDataRole.UserRole)
 
     def _SH_ScaleActionTriggered(self):
         if self.scale_action.isChecked():
@@ -634,7 +634,7 @@ class ScreensharingWindow(base_class, ui_class):
 
     def _SH_FullscreenActionTriggered(self):
         if self.fullscreen_action.isChecked():
-            self.scroll_area.setFrameShape(QFrame.NoFrame)
+            self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
             self.toolbar.hide()
             self.showFullScreen()
             self.fullscreen_toolbox.animation.stop()
@@ -645,7 +645,7 @@ class ScreensharingWindow(base_class, ui_class):
             self.fullscreen_toolbox.retract_timer.stop()
             self.fullscreen_toolbox.animation.stop()
             self.fullscreen_toolbox.hide()
-            self.scroll_area.setFrameShape(QFrame.StyledPanel)
+            self.scroll_area.setFrameShape(QFrame.Shape.StyledPanel)
             self.toolbar.show()
             self.showNormal()
 

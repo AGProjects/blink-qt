@@ -271,7 +271,7 @@ class ChatContent(object, metaclass=ABCMeta):
         except KeyError:
             document = QTextDocument()
             document.setHtml(self.message)
-            return self.__dict__.setdefault('text_direction', 'rtl' if document.firstBlock().textDirection() == Qt.RightToLeft else 'ltr')
+            return self.__dict__.setdefault('text_direction', 'rtl' if document.firstBlock().textDirection() == Qt.LayoutDirection.RightToLeft else 'ltr')
 
     def add_css_class(self, name):
         self.__cssclasses__.add(name)
@@ -381,18 +381,18 @@ class ChatWebPage(QWebEnginePage):
 
     def __init__(self, parent=None):
         super(ChatWebPage, self).__init__(parent)
-        disable_actions = {QWebEnginePage.OpenLinkInNewBackgroundTab, QWebEnginePage.OpenLinkInNewTab, QWebEnginePage.OpenLinkInNewWindow,
-                           QWebEnginePage.OpenLinkInThisWindow,
-                           QWebEnginePage.DownloadLinkToDisk, QWebEnginePage.DownloadImageToDisk, QWebEnginePage.DownloadMediaToDisk,
-                           QWebEnginePage.Back, QWebEnginePage.Forward, QWebEnginePage.Stop, QWebEnginePage.Reload,
-                           QWebEnginePage.SavePage, QWebEnginePage.ViewSource}
+        disable_actions = {QWebEnginePage.WebAction.OpenLinkInNewBackgroundTab, QWebEnginePage.WebAction.OpenLinkInNewTab, QWebEnginePage.WebAction.OpenLinkInNewWindow,
+                           QWebEnginePage.WebAction.OpenLinkInThisWindow,
+                           QWebEnginePage.WebAction.DownloadLinkToDisk, QWebEnginePage.WebAction.DownloadImageToDisk, QWebEnginePage.WebAction.DownloadMediaToDisk,
+                           QWebEnginePage.WebAction.Back, QWebEnginePage.WebAction.Forward, QWebEnginePage.WebAction.Stop, QWebEnginePage.WebAction.Reload,
+                           QWebEnginePage.WebAction.SavePage, QWebEnginePage.WebAction.ViewSource}
         for action in (self.action(action) for action in disable_actions):
             action.setVisible(False)
 
     def acceptNavigationRequest(self, url, navigation_type, is_main_frame):  # not sure if needed since we already disabled the corresponding actions. (can they be triggered otherwise?)
-        if navigation_type in (QWebEnginePage.NavigationTypeBackForward, QWebEnginePage.NavigationTypeReload):
+        if navigation_type in (QWebEnginePage.NavigationType.NavigationTypeBackForward, QWebEnginePage.NavigationType.NavigationTypeReload):
             return False
-        elif navigation_type == QWebEnginePage.NavigationTypeLinkClicked:
+        elif navigation_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
             self.linkClicked.emit(url)
             return False
         return super(ChatWebPage, self).acceptNavigationRequest(url, navigation_type, is_main_frame)
@@ -405,10 +405,10 @@ class ChatWebView(QWebEngineView):
     def __init__(self, parent=None):
         super(ChatWebView, self).__init__(parent)
         palette = self.palette()
-        palette.setBrush(QPalette.Base, Qt.transparent)
+        palette.setBrush(QPalette.ColorRole.Base, Qt.GlobalColor.transparent)
         self.setPalette(palette)
         self.setPage(ChatWebPage(self))
-        self.setAttribute(Qt.WA_OpaquePaintEvent, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
         self.last_message_id = None
 
     def contextMenuEvent(self, event):
@@ -459,7 +459,7 @@ class ChatInputLock(base_class, ui_class):
             parent.installEventFilter(self)
 
     def eventFilter(self, watched, event):
-        if event.type() == QEvent.Resize:
+        if event.type() == QEvent.Type.Resize:
             self.setGeometry(watched.contentsRect())
         return False
 
@@ -470,8 +470,8 @@ class ChatInputLock(base_class, ui_class):
         option = QStyleOption()
         option.initFrom(self)
         painter = QStylePainter(self)
-        painter.setRenderHint(QStylePainter.Antialiasing, True)
-        painter.drawPrimitive(QStyle.PE_Widget, option)
+        painter.setRenderHint(QStylePainter.RenderHint.Antialiasing, True)
+        painter.drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option)
 
 
 class LockType(object, metaclass=MarkerType):
@@ -518,7 +518,7 @@ class ChatTextInput(QTextEdit):
         key, modifiers = event.key(), event.modifiers()
         if self.isReadOnly():
             event.ignore()
-        elif key in (Qt.Key_Enter, Qt.Key_Return) and modifiers == Qt.NoModifier:
+        elif key in (Qt.Key.Key_Enter, Qt.Key.Key_Return) and modifiers == Qt.KeyboardModifier.NoModifier:
             document = self.document()
             last_block = document.lastBlock()
             if document.characterCount() > 1 or last_block.textList():
@@ -530,13 +530,13 @@ class ChatTextInput(QTextEdit):
                 if document.blockCount() > 1 and not last_block.text() and not last_block.textList():
                     # prevent an extra empty line being added at the end of the text
                     cursor = self.textCursor()
-                    cursor.movePosition(cursor.End)
+                    cursor.movePosition(cursor.MoveOperation.End)
                     cursor.deletePreviousChar()
                 text = self.toHtml()
                 self.clear()
                 self.textEntered.emit(text)
             event.accept()
-        elif key == Qt.Key_Up and modifiers == Qt.ControlModifier:
+        elif key == Qt.Key.Key_Up and modifiers == Qt.KeyboardModifier.ControlModifier:
             try:
                 history_entry = self.history[self.history_index - 1]
             except IndexError:
@@ -547,7 +547,7 @@ class ChatTextInput(QTextEdit):
                 self.history_index -= 1
                 self.setHtml(history_entry)
             event.accept()
-        elif key == Qt.Key_Down and modifiers == Qt.ControlModifier:
+        elif key == Qt.Key.Key_Down and modifiers == Qt.KeyboardModifier.ControlModifier:
             if self.history_index == 0:
                 pass
             elif self.history_index == -1:
@@ -598,7 +598,7 @@ class ChatTextInput(QTextEdit):
     def setHtml(self, text):
         super(ChatTextInput, self).setHtml(text)
         cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.End)
+        cursor.movePosition(QTextCursor.MoveOperation.End)
         self.setTextCursor(cursor)
 
 
@@ -731,8 +731,8 @@ class ChatJSInterface(QObject):
     def _get_script(self):
         script = QWebEngineScript()
         script.setSourceCode(self.js_file)
-        script.setWorldId(QWebEngineScript.MainWorld)
-        script.setInjectionPoint(QWebEngineScript.DocumentCreation)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
         script.setRunsOnSubFrames(True)
         return script
 
@@ -1167,7 +1167,7 @@ class ChatWidget(base_class, ui_class):
         event.accept()
 
     def dragMoveEvent(self, event):
-        if event.possibleActions() & (Qt.CopyAction | Qt.LinkAction):
+        if event.possibleActions() & (Qt.DropAction.CopyAction | Qt.DropAction.LinkAction):
             event.accept(self.rect())
         else:
             event.ignore(self.rect())
@@ -1234,7 +1234,7 @@ class ChatWidget(base_class, ui_class):
         else:
             user_text = self.chat_input.toHtml()
             self.chat_input.setHtml(text)
-            self.chat_input.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, text='\r'))
+            self.chat_input.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier, text='\r'))
             self.chat_input.setHtml(user_text)
 
     def _SH_ContextMenuEvent(self, id):
@@ -1414,7 +1414,7 @@ class VideoToolButton(QToolButton):
     active = QtDynamicProperty('active', bool)
 
     def event(self, event):
-        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() == 'active':
+        if event.type() == QEvent.Type.DynamicPropertyChange and event.propertyName() == 'active':
             self.setVisible(self.active)
         return super(VideoToolButton, self).event(event)
 
@@ -1432,7 +1432,7 @@ class VideoWidget(VideoSurface, ui_class):
         self.session_item = session_item
         self.blink_session = session_item.blink_session
         self.parent_widget = parent
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.fullscreen_button.clicked.connect(self._SH_FullscreenButtonClicked)
         self.screenshot_button.clicked.connect(self._SH_ScreenshotButtonClicked)
         self.detach_button.clicked.connect(self._SH_DetachButtonClicked)
@@ -1460,8 +1460,8 @@ class VideoWidget(VideoSurface, ui_class):
         super(VideoWidget, self).setupUi(self)
 
         self.no_flicker_widget = QLabel()
-        self.no_flicker_widget.setWindowFlags(Qt.FramelessWindowHint)
-        # self.no_flicker_widget.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.no_flicker_widget.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        # self.no_flicker_widget.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
 
         self.camera_preview = VideoSurface(self, framerate=10)
         self.camera_preview.interactive = True
@@ -1475,58 +1475,58 @@ class VideoWidget(VideoSurface, ui_class):
         self.detach_animation = None
         self.detach_animation = QPropertyAnimation(self, b'geometry')
         self.detach_animation.setDuration(200)
-        self.detach_animation.setEasingCurve(QEasingCurve.Linear)
+        self.detach_animation.setEasingCurve(QEasingCurve.Type.Linear)
 
         self.preview_animation = None
         self.preview_animation = QPropertyAnimation(self.camera_preview, b'geometry')
         self.preview_animation.setDuration(500)
-        self.preview_animation.setDirection(QPropertyAnimation.Forward)
-        self.preview_animation.setEasingCurve(QEasingCurve.OutQuad)
+        self.preview_animation.setDirection(QPropertyAnimation.Direction.Forward)
+        self.preview_animation.setEasingCurve(QEasingCurve.Type.OutQuad)
 
         self.idle_timer = QTimer()
         self.idle_timer.setSingleShot(True)
         self.idle_timer.setInterval(3000)
 
         for button in self.tool_buttons:
-            button.setCursor(Qt.ArrowCursor)
+            button.setCursor(Qt.CursorShape.ArrowCursor)
             button.installEventFilter(self)
             button.active = False
 
         # fix the SVG icons, as the generated code loads them as pixmaps, losing their ability to scale -Dan
         fullscreen_icon = QIcon()
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Normal, state=QIcon.On)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Active, state=QIcon.On)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Disabled, state=QIcon.On)
-        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Selected, state=QIcon.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Active, state=QIcon.State.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Disabled, state=QIcon.State.On)
+        fullscreen_icon.addFile(Resources.get('icons/fullscreen-exit.svg'), mode=QIcon.Mode.Selected, state=QIcon.State.On)
 
         detach_icon = QIcon()
-        detach_icon.addFile(Resources.get('icons/detach.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Normal, state=QIcon.On)
-        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Active, state=QIcon.On)
-        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Disabled, state=QIcon.On)
-        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Selected, state=QIcon.On)
+        detach_icon.addFile(Resources.get('icons/detach.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.On)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Mode.Active, state=QIcon.State.On)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Mode.Disabled, state=QIcon.State.On)
+        detach_icon.addFile(Resources.get('icons/attach.svg'), mode=QIcon.Mode.Selected, state=QIcon.State.On)
 
         mute_icon = QIcon()
-        mute_icon.addFile(Resources.get('icons/mic-on.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Normal, state=QIcon.On)
-        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Active, state=QIcon.On)
-        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Disabled, state=QIcon.On)
-        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Selected, state=QIcon.On)
+        mute_icon.addFile(Resources.get('icons/mic-on.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.On)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Mode.Active, state=QIcon.State.On)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Mode.Disabled, state=QIcon.State.On)
+        mute_icon.addFile(Resources.get('icons/mic-off.svg'), mode=QIcon.Mode.Selected, state=QIcon.State.On)
 
         hold_icon = QIcon()
-        hold_icon.addFile(Resources.get('icons/pause.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Normal, state=QIcon.On)
-        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Active, state=QIcon.On)
-        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Disabled, state=QIcon.On)
-        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Selected, state=QIcon.On)
+        hold_icon.addFile(Resources.get('icons/pause.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.On)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Mode.Active, state=QIcon.State.On)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Mode.Disabled, state=QIcon.State.On)
+        hold_icon.addFile(Resources.get('icons/paused.svg'), mode=QIcon.Mode.Selected, state=QIcon.State.On)
 
         screenshot_icon = QIcon()
-        screenshot_icon.addFile(Resources.get('icons/screenshot.svg'), mode=QIcon.Normal, state=QIcon.Off)
+        screenshot_icon.addFile(Resources.get('icons/screenshot.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
 
         close_icon = QIcon()
-        close_icon.addFile(Resources.get('icons/close.svg'), mode=QIcon.Normal, state=QIcon.Off)
-        close_icon.addFile(Resources.get('icons/close-active.svg'), mode=QIcon.Active, state=QIcon.Off)
+        close_icon.addFile(Resources.get('icons/close.svg'), mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+        close_icon.addFile(Resources.get('icons/close-active.svg'), mode=QIcon.Mode.Active, state=QIcon.State.Off)
 
         self.fullscreen_button.setIcon(fullscreen_icon)
         self.screenshot_button.setIcon(screenshot_icon)
@@ -1553,9 +1553,9 @@ class VideoWidget(VideoSurface, ui_class):
     def eventFilter(self, watched, event):
         event_type = event.type()
         if watched is self.parent():
-            if event_type == QEvent.Resize:
+            if event_type == QEvent.Type.Resize:
                 self.setGeometry(self.geometryHint())
-        elif event_type == QEvent.Enter:
+        elif event_type == QEvent.Type.Enter:
             self.idle_timer.stop()
             cursor = self.cursor()
             cursor_pos = cursor.pos()
@@ -1564,7 +1564,7 @@ class VideoWidget(VideoSurface, ui_class):
                 # simulate a mouse move in and out of the button to force qt to update the button state.
                 cursor.setPos(self.mapToGlobal(watched.geometry().center()))
                 cursor.setPos(cursor_pos)
-        elif event_type == QEvent.Leave:
+        elif event_type == QEvent.Type.Leave:
             self.idle_timer.start()
         return False
 
@@ -1589,11 +1589,11 @@ class VideoWidget(VideoSurface, ui_class):
         if not self.idle_timer.isActive():
             for button in self.active_tool_buttons:
                 button.show()
-            self.setCursor(Qt.ArrowCursor)
+            self.setCursor(Qt.CursorShape.ArrowCursor)
         self.idle_timer.start()
 
     def resizeEvent(self, event):
-        if self.preview_animation and self.preview_animation.state() == QPropertyAnimation.Running:
+        if self.preview_animation and self.preview_animation.state() == QPropertyAnimation.State.Running:
             return
 
         if not event.oldSize().isValid():
@@ -1694,11 +1694,11 @@ class VideoWidget(VideoSurface, ui_class):
                 button.active = False
             self.camera_preview.setMaximumHeight(16777215)
             self.camera_preview.setGeometry(self.rect())
-            self.camera_preview.setCursor(Qt.ArrowCursor)
+            self.camera_preview.setCursor(Qt.CursorShape.ArrowCursor)
             self.camera_preview.interactive = False
             self.camera_preview.scale_factor = 1.0
             self.camera_preview.producer = SIPApplication.video_device.producer
-            self.setCursor(Qt.ArrowCursor)
+            self.setCursor(Qt.CursorShape.ArrowCursor)
             self.show()
 
     def _NH_BlinkSessionDidConnect(self, notification):
@@ -1712,12 +1712,12 @@ class VideoWidget(VideoSurface, ui_class):
                 button.active = False
             self.camera_preview.setMaximumHeight(16777215)
             self.camera_preview.setGeometry(self.rect())
-            self.camera_preview.setCursor(Qt.ArrowCursor)
+            self.camera_preview.setCursor(Qt.CursorShape.ArrowCursor)
             self.camera_preview.interactive = False
             self.camera_preview.scale_factor = 1.0
             self.camera_preview.producer = SIPApplication.video_device.producer
             self.producer = video_stream.producer
-            self.setCursor(Qt.ArrowCursor)
+            self.setCursor(Qt.CursorShape.ArrowCursor)
             self.show()
         else:
             self.hide()
@@ -1735,11 +1735,11 @@ class VideoWidget(VideoSurface, ui_class):
                 button.active = False
             self.camera_preview.setMaximumHeight(16777215)
             self.camera_preview.setGeometry(self.rect())
-            self.camera_preview.setCursor(Qt.ArrowCursor)
+            self.camera_preview.setCursor(Qt.CursorShape.ArrowCursor)
             self.camera_preview.interactive = False
             self.camera_preview.scale_factor = 1.0
             self.camera_preview.producer = SIPApplication.video_device.producer
-            self.setCursor(Qt.ArrowCursor)
+            self.setCursor(Qt.CursorShape.ArrowCursor)
             self.show()
 
     def _NH_BlinkSessionDidAddStream(self, notification):
@@ -1786,7 +1786,7 @@ class VideoWidget(VideoSurface, ui_class):
             self.setGeometry(self.geometryHint())
 
     def _NH_VideoStreamReceivedKeyFrame(self, notification):
-        if notification.sender.blink_session is self.blink_session and self.preview_animation and self.preview_animation.state() != QPropertyAnimation.Running and self.camera_preview.size() == self.size():
+        if notification.sender.blink_session is self.blink_session and self.preview_animation and self.preview_animation.state() != QPropertyAnimation.State.Running and self.camera_preview.size() == self.size():
             if self.preview_animation:
                 self.preview_animation.setStartValue(self.rect())
                 self.preview_animation.setEndValue(QRect(0, 0, self.camera_preview.width_for_height(81), 81))
@@ -1809,7 +1809,7 @@ class VideoWidget(VideoSurface, ui_class):
     def _SH_IdleTimerTimeout(self):
         for button in self.active_tool_buttons:
             button.hide()
-        self.setCursor(Qt.BlankCursor)
+        self.setCursor(Qt.CursorShape.BlankCursor)
 
     def _SH_FullscreenButtonClicked(self, checked):
         if checked:
@@ -1836,7 +1836,7 @@ class VideoWidget(VideoSurface, ui_class):
             self.detach_button.active = True
             self.showNormal()
             self.window().show()
-        self.setCursor(Qt.ArrowCursor)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def _SH_DetachButtonClicked(self, checked):
         if checked:
@@ -1863,8 +1863,8 @@ class VideoWidget(VideoSurface, ui_class):
             self.show()
             self.no_flicker_widget.hide()
 
-            self.detach_animation.setDirection(QPropertyAnimation.Forward)
-            self.detach_animation.setEasingCurve(QEasingCurve.OutQuad)
+            self.detach_animation.setDirection(QPropertyAnimation.Direction.Forward)
+            self.detach_animation.setEasingCurve(QEasingCurve.Type.OutQuad)
             self.detach_animation.setStartValue(start_geometry)
             self.detach_animation.setEndValue(final_geometry)
             self.detach_animation.start()
@@ -1875,8 +1875,8 @@ class VideoWidget(VideoSurface, ui_class):
             # do this early or late? -Dan
             self.parent_widget.window().show()
 
-            self.detach_animation.setDirection(QPropertyAnimation.Backward)
-            self.detach_animation.setEasingCurve(QEasingCurve.InQuad)
+            self.detach_animation.setDirection(QPropertyAnimation.Direction.Backward)
+            self.detach_animation.setEasingCurve(QEasingCurve.Type.InQuad)
             self.detach_animation.setStartValue(final_geometry)  # start and end are reversed because we go backwards
             self.detach_animation.setEndValue(start_geometry)
             self.detach_animation.start()
@@ -1913,7 +1913,7 @@ class VideoWidget(VideoSurface, ui_class):
         QDesktopServices.openUrl(QUrl.fromLocalFile(settings.screenshots_directory.normalized))
 
     def _SH_DetachAnimationFinished(self):
-        if self.detach_animation.direction() == QPropertyAnimation.Backward:
+        if self.detach_animation.direction() == QPropertyAnimation.Direction.Backward:
             pixmap = self.grab()
             self.no_flicker_widget.resize(pixmap.size())
             self.no_flicker_widget.setPixmap(pixmap)
@@ -1938,12 +1938,12 @@ class VideoWidget(VideoSurface, ui_class):
             self.mute_button.active = True
             self.hold_button.active = True
             self.close_button.active = True
-        self.setCursor(Qt.ArrowCursor)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def _SH_PreviewAnimationFinished(self):
         self.camera_preview.setMaximumHeight(135)
         self.camera_preview.interactive = True
-        self.setCursor(Qt.ArrowCursor)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
         self.detach_button.active = True
         self.fullscreen_button.active = True
         self.screenshot_button.active = True
@@ -1960,13 +1960,13 @@ class NoSessionsLabel(QLabel):
         font = self.font()
         font.setPointSize(20)
         self.setFont(font)
-        self.setAlignment(Qt.AlignCenter)
+        self.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.setStyleSheet("""QLabel { border: 1px inset palette(dark); border-radius: 3px; background-color: white; color: #545454; }""")
         self.setText(translate('chat_window', "No Sessions"))
         chat_window.session_panel.installEventFilter(self)
 
     def eventFilter(self, watched, event):
-        if event.type() == QEvent.Resize:
+        if event.type() == QEvent.Type.Resize:
             self.resize(event.size())
         return False
 
@@ -2109,8 +2109,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         def blended_pixmap(pixmap, color):
             blended_pixmap = QPixmap(pixmap)
             painter = QPainter(blended_pixmap)
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
             painter.fillRect(blended_pixmap.rect(), color)
             painter.end()
             return blended_pixmap
@@ -2124,9 +2124,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         # fix the SVG icons as the generated code loads them as pixmaps, losing their ability to scale -Dan
         def svg_icon(filename_off, filename_on):
             icon = QIcon()
-            icon.addFile(filename_off, mode=QIcon.Normal, state=QIcon.Off)
-            icon.addFile(filename_on,  mode=QIcon.Normal, state=QIcon.On)
-            icon.addFile(filename_on,  mode=QIcon.Active, state=QIcon.On)
+            icon.addFile(filename_off, mode=QIcon.Mode.Normal, state=QIcon.State.Off)
+            icon.addFile(filename_on,  mode=QIcon.Mode.Normal, state=QIcon.State.On)
+            icon.addFile(filename_on,  mode=QIcon.Mode.Active, state=QIcon.State.On)
             return icon
 
         self.mute_button.setIcon(svg_icon(Resources.get('icons/mic-on.svg'), Resources.get('icons/mic-off.svg')))
@@ -2155,14 +2155,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.enable_otr = QAction(translate('chat_window', "Enable OTR for messaging"), self, triggered=self._AH_EnableOTR)
         self.control_button.actions.enable_otr_progress = QAction(translate('chat_window', "Enabling OTR for messaging"), self, enabled=False)
         self.control_button.actions.disable_otr = QAction(translate('chat_window', "Disable OTR for messaging"), self, triggered=self._AH_DisableOTR)
-        self.control_button.actions.main_window = QAction(translate('chat_window', "Main Window"), self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ApplicationShortcut)
+        self.control_button.actions.main_window = QAction(translate('chat_window', "Main Window"), self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ShortcutContext.ApplicationShortcut)
 
         self.addAction(self.control_button.actions.main_window)  # make this active even when it's not in the control_button's menu
 
         self.slide_direction = self.session_details.RightToLeft  # decide if we slide from one direction only -Dan
         self.slide_direction = self.session_details.Automatic
         self.session_details.animationDuration = 300
-        self.session_details.animationEasingCurve = QEasingCurve.OutCirc
+        self.session_details.animationEasingCurve = QEasingCurve.Type.OutCirc
 
         self.audio_latency_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
         self.video_latency_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0), enabled=False)     # disable for now
@@ -2198,7 +2198,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.record_button.hide()
         self.control_button.setEnabled(False)
 
-        self.info_label.setForegroundRole(QPalette.Dark)
+        self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
 
         # prepare the RTP stream encryption labels so we can take over their behaviour
         self.audio_encryption_label.hovered = False
@@ -2209,7 +2209,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.chat_encryption_label.hovered = False
 
         # prepare self.session_widget so we can take over some of its painting and behaviour
-        self.session_widget.setAttribute(Qt.WA_Hover, True)
+        self.session_widget.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.session_widget.hovered = False
 
     def _get_selected_session(self):
@@ -2359,7 +2359,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                          'connected': translate('chat_window', "Connected")}
 
             if blink_session.state == 'ended':
-                self.status_value_label.setForegroundRole(QPalette.AlternateBase if blink_session.state.error else QPalette.WindowText)
+                self.status_value_label.setForegroundRole(QPalette.ColorRole.AlternateBase if blink_session.state.error else QPalette.ColorRole.WindowText)
                 self.status_value_label.setText(blink_session.state.reason)
 
                 self.chat_value_widget.setEnabled(True)
@@ -2368,7 +2368,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     self.chat_encryption_label.setVisible(False)
                     self.chat_connection_label.setVisible(False)
             elif state in state_map:
-                self.status_value_label.setForegroundRole(QPalette.WindowText)
+                self.status_value_label.setForegroundRole(QPalette.ColorRole.WindowText)
                 self.status_value_label.setText(state_map[state])
 
             want_duration = blink_session.state == 'connected/*' or blink_session.state == 'ended' and not blink_session.state.error
@@ -2579,25 +2579,25 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def eventFilter(self, watched, event):
         event_type = event.type()
         if watched is self.session_widget:
-            if event_type == QEvent.HoverEnter:
+            if event_type == QEvent.Type.HoverEnter:
                 watched.hovered = True
-            elif event_type == QEvent.HoverLeave:
+            elif event_type == QEvent.Type.HoverLeave:
                 watched.hovered = False
-            elif event_type == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
+            elif event_type == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton:
                 self._EH_ShowSessions()
         elif watched is self.state_label:
-            if event_type == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
+            if event_type == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
                 upper_half = QRect(0, 0, int(self.state_label.width()), int(self.state_label.height() / 2))
                 if upper_half.contains(event.pos()):
                     self._EH_CloseSession()
                 else:
                     self._EH_ShowSessions()
-            elif event_type == QEvent.Paint:  # and self.session_widget.hovered:
+            elif event_type == QEvent.Type.Paint:  # and self.session_widget.hovered:
                 watched.event(event)
                 self.drawSessionWidgetIndicators()
                 return True
         elif watched in (self.latency_graph, self.packet_loss_graph, self.traffic_graph):
-            if event_type == QEvent.Wheel and event.modifiers() == Qt.ControlModifier:
+            if event_type == QEvent.Type.Wheel and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
                 settings = BlinkSettings()
                 wheel_delta = event.angleDelta().y()
                 if wheel_delta > 0 and settings.chat_window.session_info.graph_time_scale > GraphTimeScale.min_value:
@@ -2607,29 +2607,29 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     settings.chat_window.session_info.graph_time_scale += 1
                     settings.save()
         elif watched in (self.audio_encryption_label, self.video_encryption_label):
-            if event_type == QEvent.Enter:
+            if event_type == QEvent.Type.Enter:
                 watched.hovered = True
                 self._update_rtp_encryption_icon(watched)
-            elif event_type == QEvent.Leave:
+            elif event_type == QEvent.Type.Leave:
                 watched.hovered = False
                 self._update_rtp_encryption_icon(watched)
-            elif event_type == QEvent.EnabledChange and not watched.isEnabled():
+            elif event_type == QEvent.Type.EnabledChange and not watched.isEnabled():
                 watched.setPixmap(self.pixmaps.grey_lock)
-            elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
+            elif event_type in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick) and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier and watched.isEnabled():
                 self._EH_RTPEncryptionLabelClicked(watched)
         elif watched is self.chat_encryption_label:
-            if event_type == QEvent.Enter:
+            if event_type == QEvent.Type.Enter:
                 watched.hovered = True
                 self._update_chat_encryption_icon()
-            elif event_type == QEvent.Leave:
+            elif event_type == QEvent.Type.Leave:
                 watched.hovered = False
                 self._update_chat_encryption_icon()
-            elif event_type == QEvent.EnabledChange and not watched.isEnabled():
+            elif event_type == QEvent.Type.EnabledChange and not watched.isEnabled():
                 watched.setPixmap(self.pixmaps.grey_lock)
-            elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
+            elif event_type in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick) and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier and watched.isEnabled():
                 self._EH_ChatEncryptionLabelClicked()
         elif watched is self.info_panel:
-            if event_type == QEvent.Resize:
+            if event_type == QEvent.Type.Resize:
                 if self.zrtp_widget.isVisibleTo(self.info_panel):
                     rect = self.zrtp_widget.geometry()
                     rect.setWidth(self.info_panel.width())
@@ -2651,18 +2651,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             background_color = self.state_label.state_colors[self.state_label.state]
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
             gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3 * 255))
             gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
-            background_color = palette.color(QPalette.Window)
+            background_color = palette.color(QPalette.ColorRole.Window)
             contrast_color = self.calc_light_color(background_color)
-        foreground_color = palette.color(QPalette.Normal, QPalette.WindowText)
+        foreground_color = palette.color(QPalette.ColorGroup.Normal, QPalette.ColorRole.WindowText)
         line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
 
         # draw the expansion indicator at the bottom (works best with a state_label of width 14)
         arrow_rect = QRect(0, 0, 14, 14)
@@ -2672,8 +2672,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         arrow.translate(2, 1)
 
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.translate(arrow_rect.center())
         painter.translate(0, +1)
         painter.setPen(contrast_pen)
@@ -2688,8 +2688,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         cross_rect.moveTopRight(rect.topRight())
 
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.translate(cross_rect.center())
         painter.translate(+1.5, +1)
         painter.translate(0, +1)
@@ -2781,8 +2781,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         model = self.session_model
         position = model.sessions.index(notification.sender.items.chat)
         selection_model = self.session_list.selectionModel()
-        selection_model.select(model.index(position), selection_model.ClearAndSelect)
-        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible)  # or PositionAtCenter
+        selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         if notification.sender.streams.types.intersection(self.__streamtypes__):
             self.show()
 
@@ -2790,8 +2790,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         model = self.session_model
         position = model.sessions.index(notification.sender.items.chat)
         selection_model = self.session_list.selectionModel()
-        selection_model.select(model.index(position), selection_model.ClearAndSelect)
-        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible)  # or PositionAtCenter
+        selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             self.show()
 
@@ -3608,11 +3608,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.tab_widget.insertTab(position, session.chat_widget, session.name)
         self.no_sessions_label.hide()
         selection_model = self.session_list.selectionModel()
-        selection_model.select(model.index(position), selection_model.ClearAndSelect)
-        self.session_list.scrollTo(model.index(position), QListView.EnsureVisible)  # or PositionAtCenter
+        selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.show()
-        session.chat_widget.chat_input.setFocus(Qt.OtherFocusReason)
+        session.chat_widget.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
         history = HistoryManager()
         history.load(session.blink_session.contact.uri.uri, session.blink_session)
 
@@ -3626,7 +3626,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.no_sessions_label.show()
         elif not self.session_list.isVisibleTo(self):
             if self.session_list.animation:
-                self.session_list.animation.setDirection(QPropertyAnimation.Forward)
+                self.session_list.animation.setDirection(QPropertyAnimation.Direction.Forward)
                 self.session_list.animation.setStartValue(self.session_widget.geometry())
                 self.session_list.animation.setEndValue(self.session_panel.rect())
             self.session_list.show()
@@ -3640,7 +3640,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         # print("-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()]))
-        self.selected_session = selected[0].topLeft().data(Qt.UserRole) if selected else None
+        self.selected_session = selected[0].topLeft().data(Qt.ItemDataRole.UserRole) if selected else None
         if self.selected_session is not None:
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
             self.session_details.setCurrentWidget(self.selected_session.active_panel)
@@ -3752,7 +3752,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.selected_session.end(delete=True)
 
     def _EH_ShowSessions(self):
-        self.session_list.animation.setDirection(QPropertyAnimation.Forward)
+        self.session_list.animation.setDirection(QPropertyAnimation.Direction.Forward)
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.animation.setEndValue(self.session_panel.rect())
         self.session_list.scrollToTop()
@@ -3780,7 +3780,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.otr_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 320))
                 self.otr_widget.verification_stack.setCurrentWidget(self.otr_widget.smp_panel)
                 self.otr_widget.show()
-                self.otr_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
+                self.otr_widget.peer_name_value.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _EH_RTPEncryptionLabelClicked(self, encryption_label):
         stream = self.selected_session.blink_session.streams.get(encryption_label.stream_type)
@@ -3797,7 +3797,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.zrtp_widget.stream_type = encryption_label.stream_type
                 self.zrtp_widget.setGeometry(QRect(0, encryption_label.rect().translated(encryption_label.mapTo(self.info_panel, QPoint(0, 0))).bottom() + 3, self.info_panel.width(), 320))
                 self.zrtp_widget.show()
-                self.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
+                self.zrtp_widget.peer_name_value.setFocus(Qt.FocusReason.OtherFocusReason)
 
 
 del ui_class, base_class
