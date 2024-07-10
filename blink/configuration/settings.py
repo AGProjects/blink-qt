@@ -60,7 +60,7 @@ class LogsSettingsExtension(LogsSettings):
 
 
 class RTPSettingsExtension(RTPSettings):
-    audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'PCMU', 'PCMA', 'AMR', 'AMR-WB')))
+    audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'speex', 'GSM', 'iLBC', 'PCMU', 'PCMA')))
     video_codec_order = Setting(type=VideoCodecList, default=VideoCodecList(('H264', 'VP8', 'VP9')))
 
 
