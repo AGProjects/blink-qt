@@ -3633,7 +3633,7 @@ class ContactListView(QListView):
             if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
-                index = self.indexAt(event.position().toPoint())
+                index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
                 item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
