@@ -179,7 +179,7 @@ class Blink(QApplication, metaclass=QSingleton):
     def run(self):
         self.first_run = not os.path.exists(ApplicationData.get('config'))
         self.sip_application.start(FileStorage(ApplicationData.directory))
-        self.exec_()
+        self.exec()
         self.update_manager.shutdown()
         self.sip_application.stop()
         self.sip_application.thread.join()

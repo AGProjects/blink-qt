@@ -108,7 +108,7 @@ class FileTransferWindow(base_class, ui_class):
             menu.addAction(self.actions.clear_list)
         else:
             menu.addAction(self.actions.open_downloads_folder)
-        menu.exec_(self.mapToGlobal(pos))
+        menu.exec(self.mapToGlobal(pos))
 
     def _AH_OpenFile(self):
         item = self.listview.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)

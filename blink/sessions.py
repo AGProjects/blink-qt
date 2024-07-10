@@ -5414,7 +5414,7 @@ class FileListView(QListView, ColorHelperMixin):
             menu.addAction(self.actions.open_downloads_folder)
             if not item.in_conference:
                 menu.addAction(self.actions.remove_file)
-        menu.exec_(self.mapToGlobal(event.pos()))
+        menu.exec(self.mapToGlobal(event.pos()))
 
     def hideEvent(self, event):
         self.context_menu.hide()
