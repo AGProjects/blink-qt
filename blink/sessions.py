@@ -6415,7 +6415,7 @@ class ConferenceDialog(base_class, ui_class):
         self.room_button.setCurrentIndex(-1)
         self.audio_button.setChecked(True)
         self.chat_button.setChecked(True)
-        self.accept_button.setEnabled(False)
+        self.accept_button.setEnabled(True)
         super(ConferenceDialog, self).show()
 
     def join_conference(self):
