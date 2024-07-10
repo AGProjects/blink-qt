@@ -2,10 +2,13 @@
 Blink Qt
 --------
 
-This is Blink Qt, a state of the art, easy to use SIP client for Linux and
-other operating systems that support Python 3 and Qt 5.
-
 Homepage: http://icanblink.com
+Copyright: AG Projects https://ag-projects.com
+
+Blink Qt is a state of the art, easy to use SIP client for Linux, Mac and
+Windows.
+
+Python3 and Qt5 are required to run the software.
 
 
 Features
@@ -24,6 +27,12 @@ Installation instructions can be found at:
 http://icanblink.com/download/
 
 
+Building
+--------
+
+Building instructions for Mac are available in macos/ folder.
+
+
 Support
 -------
 
@@ -39,8 +48,14 @@ The changelog is available at http://icanblink.com/changelog/
 Credits
 -------
 
- * AG Projects: http://ag-projects.com
- * NLnet foundation: http://nlnet.nl
- * IETF Community: http://www.ietf.org
- * SIP SIMPLE client SDK: http://sipsimpleclient.org
+ * NLnet foundation: http://nlnet.nl - main project sponsor
 
+
+Authors
+-------
+
+Dan Pascu
+Lucian Stănescu
+Adrian Georgescu
+Saúl Ibarra Corretgé
+Tijmen de Mes
