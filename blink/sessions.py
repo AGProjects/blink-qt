@@ -111,7 +111,7 @@ class RTPStreamInfo(object, metaclass=ABCMeta):
             self.remote_address = stream.remote_rtp_address
             self.encryption = stream.encryption.type if stream.encryption.active else None
             self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
-            if self.encryption == 'ZRTP':
+            if self.encryption == 'ZRTP' and stream.encryption.zrtp and stream.encryption.zrtp.sas:
                 self.zrtp_sas = stream.encryption.zrtp.sas.decode()
                 self.zrtp_verified = stream.encryption.zrtp.verified
                 self.zrtp_peer_name = stream.encryption.zrtp.peer_name
