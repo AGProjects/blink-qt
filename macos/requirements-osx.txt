@@ -1,0 +1,22 @@
+python3-application
+python3-eventlib
+python3-gnutls
+python3-msrplib
+python3-otr
+python3-xcaplib
+python3-application
+python3-eventlib
+lxml
+lxml_html_clean
+oauth2client
+pgpy
+PyQt5
+PyQtWebEngine
+requests
+python3-sipsimple (>=5.3.0)
+sqlobject
+twisted
+zope.interface
+google-api-python-client
+pyobjc
+pyinstaller

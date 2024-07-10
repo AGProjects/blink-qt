@@ -1,6 +1,27 @@
-Install pyinstaller from https://pyinstaller.org
+Dependencies
+------------
 
-and optional upx utility to compact the image.
+Blink Qt mainly depends on python3-sipsimple. 
+
+Follow the instructions to install it from: 
+
+https://github.com/AGProjects/python3-sipsimple/blob/master/install_osx_user.sh
+
+Once python3-sipsimple is installed:
+
+pip3 install --user -r macos/requirements-osx.txt
+sudo port install libvncserver upx
+export CFLAGS="-I/opt/local/include"
+export LDFLAGS="-L/opt/local/lib"
+./build_inplace
+
+Running Blink in place:
+
+./run
+
+
+Making an app
+-------------
 
 Generate a spec file used by pyinstaller using make_spec.sh script. The
 resulting file must be tweaked, see the modified blink.specs file.
@@ -11,6 +32,4 @@ identity, then go there and run:
 pyinstaller blink.spec
 
 The generated MacOS app can then be found in dist/ folder.
-
-
 
