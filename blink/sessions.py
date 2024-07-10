@@ -1704,8 +1704,8 @@ class AudioSessionWidget(base_class, ui_class):
             def blended_pixmap(pixmap, color):
                 blended_pixmap = QPixmap(pixmap)
                 painter = QPainter(blended_pixmap)
-                painter.setRenderHint(QPainter.Antialiasing, True)
-                painter.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
                 painter.fillRect(blended_pixmap.rect(), color)
                 painter.end()
                 return blended_pixmap
@@ -1776,7 +1776,7 @@ class AudioSessionWidget(base_class, ui_class):
             session.zrtp_widget.sas = stream_info.zrtp_sas
             session.zrtp_widget.setGeometry(rect)
             session.zrtp_widget.show()
-            session.zrtp_widget.peer_name_value.setFocus(Qt.OtherFocusReason)
+            session.zrtp_widget.peer_name_value.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def update_rtp_encryption_icon(self):
         stream = self.session.audio_stream
@@ -1792,15 +1792,15 @@ class AudioSessionWidget(base_class, ui_class):
     def eventFilter(self, watched, event):
         event_type = event.type()
         if watched is self.srtp_label:
-            if event_type == QEvent.Enter:
+            if event_type == QEvent.Type.Enter:
                 watched.hovered = True
                 self.update_rtp_encryption_icon()
-            elif event_type == QEvent.Leave:
+            elif event_type == QEvent.Type.Leave:
                 watched.hovered = False
                 self.update_rtp_encryption_icon()
-            elif event_type == QEvent.EnabledChange and not watched.isEnabled():
+            elif event_type == QEvent.Type.EnabledChange and not watched.isEnabled():
                 watched.setPixmap(self.pixmaps.grey_lock)
-            elif event_type in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick) and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and watched.isEnabled():
+            elif event_type in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick) and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier and watched.isEnabled():
                 self._EH_RTPEncryptionLabelClicked()
                 event.accept()
                 return True
@@ -1808,7 +1808,7 @@ class AudioSessionWidget(base_class, ui_class):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         rect = self.rect()
 
@@ -1840,7 +1840,7 @@ class AudioSessionWidget(base_class, ui_class):
         # for conferences extend the left marker over the whole conference
         #
         if self.position_in_conference is not None:
-            painter.setPen(Qt.NoPen)
+            painter.setPen(Qt.PenStyle.NoPen)
             left_rect = rect.adjusted(0, 0, 10-rect.width(), 0)
             if self.position_in_conference is Top:
                 painter.drawRect(left_rect.adjusted(2, 5, 0, 5))
@@ -1852,7 +1852,7 @@ class AudioSessionWidget(base_class, ui_class):
         # draw outer border
         #
         if self.selected or self.drop_indicator:
-            painter.setBrush(Qt.NoBrush)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             if self.drop_indicator:
                 painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             elif self.selected:
@@ -1871,7 +1871,7 @@ class AudioSessionWidget(base_class, ui_class):
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
         elif self.position_in_conference is not None:
-            painter.setBrush(Qt.NoBrush)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QBrush(QColor('#309030')), 2.0))  # or 237523, #2b8f2b
             if self.position_in_conference is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
@@ -1906,7 +1906,7 @@ class DraggedAudioSessionWidget(base_class, ui_class):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         if self.in_conference:
             background = QLinearGradient(0, 0, 10, 0)
             background.setColorAt(0.00, QColor('#95ff95'))
@@ -2332,7 +2332,7 @@ class AudioSessionDelegate(QStyledItemDelegate):
         super(AudioSessionDelegate, self).__init__(parent)
 
     def createEditor(self, parent, options, index):
-        session = index.data(Qt.UserRole)
+        session = index.data(Qt.ItemDataRole.UserRole)
         session.widget = AudioSessionWidget(session, parent)
         session.widget.hold_button.clicked.connect(self._SH_HoldButtonClicked)
         return session.widget
@@ -2341,7 +2341,7 @@ class AudioSessionDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
     def paint(self, painter, option, index):
-        session = index.data(Qt.UserRole)
+        session = index.data(Qt.ItemDataRole.UserRole)
         if session.widget.size() != option.rect.size():
             # For some reason updateEditorGeometry only receives the peak value
             # of the size that the widget ever had, so it will never shrink it.
@@ -2357,7 +2357,7 @@ class AudioSessionDelegate(QStyledItemDelegate):
             session_list = self.parent()
             model = session_list.model()
             selection_model = session_list.selectionModel()
-            selection_model.select(model.index(model.sessions.index(session)), selection_model.ClearAndSelect)
+            selection_model.select(model.index(model.sessions.index(session)), selection_model.SelectionFlag.ClearAndSelect)
 
 
 @implementer(IObserver)
@@ -2395,25 +2395,25 @@ class AudioSessionModel(QAbstractListModel):
 
     def flags(self, index):
         if index.isValid():
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled | Qt.ItemIsEditable
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsEditable
         else:
             return QAbstractListModel.flags(self, index)
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.sessions)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         item = self.sessions[index.row()]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
+        return Qt.DropAction.CopyAction | Qt.DropAction.MoveAction | Qt.DropAction.LinkAction
 
     def mimeTypes(self):
         return ['application/x-blink-session-list']
@@ -2432,7 +2432,7 @@ class AudioSessionModel(QAbstractListModel):
         return False
 
     def handleDroppedData(self, mime_data, action, index):
-        if action == Qt.IgnoreAction:
+        if action == Qt.DropAction.IgnoreAction:
             return True
 
         for mime_type in self.accepted_mime_types:
@@ -2449,7 +2449,7 @@ class AudioSessionModel(QAbstractListModel):
         source = session_list.dragged_session
         target = self.sessions[index.row()] if index.isValid() else None
 
-        if action == Qt.LinkAction:  # call transfer
+        if action == Qt.DropAction.LinkAction:  # call transfer
             source.blink_session.transfer(target.blink_session.contact_uri, replaced_session=target.blink_session)
         elif source.client_conference is None:  # the dragged session is not in a conference yet
             if target.client_conference is not None:
@@ -2487,7 +2487,7 @@ class AudioSessionModel(QAbstractListModel):
             dragged = source
             sibling = next(session.items.audio for session in dragged.client_conference.sessions if session.items.audio is not dragged)
             if selection_model.isSelected(self.index(self.sessions.index(dragged))):
-                selection_model.select(self.index(self.sessions.index(sibling)), selection_model.ClearAndSelect)
+                selection_model.select(self.index(self.sessions.index(sibling)), selection_model.SelectionFlag.ClearAndSelect)
             if len(dragged.client_conference.sessions) == 2:
                 dragged.client_conference = None
                 sibling.client_conference = None
@@ -2571,7 +2571,7 @@ class AudioSessionModel(QAbstractListModel):
         self._add_session(session)
         # not the right place to do this. the list should do it (else the model needs a back-reference to the list), however in addSessionAndConference we can't avoid doing it -Dan
         selection_model = self.session_list.selectionModel()
-        selection_model.select(self.index(self.rowCount()-1), selection_model.ClearAndSelect)
+        selection_model.select(self.index(self.rowCount()-1), selection_model.SelectionFlag.ClearAndSelect)
         self.sessionAdded.emit(session)
         self.structureChanged.emit()
 
@@ -2617,14 +2617,14 @@ class AudioSessionModel(QAbstractListModel):
         self.sessionAboutToBeRemoved.emit(session)
         session_list = self.session_list
         selection_mode = session_list.selectionMode()
-        session_list.setSelectionMode(session_list.NoSelection)
+        session_list.setSelectionMode(session_list.SelectionMode.NoSelection)
         if session.client_conference is not None:
             sibling = next(s.items.audio for s in session.client_conference.sessions if s.items.audio is not session)
             session_index = self.index(self.sessions.index(session))
             sibling_index = self.index(self.sessions.index(sibling))
             selection_model = session_list.selectionModel()
             if selection_model.isSelected(session_index):
-                selection_model.select(sibling_index, selection_model.ClearAndSelect)
+                selection_model.select(sibling_index, selection_model.SelectionFlag.ClearAndSelect)
         self._remove_session(session)
         session_list.setSelectionMode(selection_mode)
         if session.client_conference is not None:
@@ -2664,7 +2664,7 @@ class AudioSessionModel(QAbstractListModel):
         session_list = self.session_list
         selection_model = session_list.selectionModel()
         selection = selection_model.selection()
-        selected_session = selection[0].topLeft().data(Qt.UserRole) if selection else None
+        selected_session = selection[0].topLeft().data(Qt.ItemDataRole.UserRole) if selection else None
         move_point = len(self.sessions)
         for index, session in enumerate(reversed(sessions)):
             session_row = self.sessions.index(session)
@@ -2792,10 +2792,10 @@ class AudioSessionListView(QListView):
         self._pressed_position = None
         self._pressed_index = None
         self._hangup_shortcuts = []
-        self._hangup_shortcuts.append(QShortcut('Ctrl+Esc', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
-        self._hangup_shortcuts.append(QShortcut('Ctrl+Delete', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
-        self._hangup_shortcuts.append(QShortcut('Ctrl+Backspace', self, member=self._SH_HangupShortcutActivated, context=Qt.ApplicationShortcut))
-        self._hold_shortcut = QShortcut('Ctrl+Space', self, member=self._SH_HoldShortcutActivated, context=Qt.ApplicationShortcut)
+        self._hangup_shortcuts.append(QShortcut('Ctrl+Esc', self, member=self._SH_HangupShortcutActivated, context=Qt.ShortcutContext.ApplicationShortcut))
+        self._hangup_shortcuts.append(QShortcut('Ctrl+Delete', self, member=self._SH_HangupShortcutActivated, context=Qt.ShortcutContext.ApplicationShortcut))
+        self._hangup_shortcuts.append(QShortcut('Ctrl+Backspace', self, member=self._SH_HangupShortcutActivated, context=Qt.ShortcutContext.ApplicationShortcut))
+        self._hold_shortcut = QShortcut('Ctrl+Space', self, member=self._SH_HoldShortcutActivated, context=Qt.ShortcutContext.ApplicationShortcut)
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BlinkActiveSessionDidChange')
 
@@ -2851,17 +2851,17 @@ class AudioSessionListView(QListView):
             letter_map = {letter: digit for digit, letter_group in digit_map.items() for letter in letter_group}
             for session in (s for s in self.model().sessions if s.active):
                 session.send_dtmf(letter_map.get(char, char))
-        elif event.key() in (Qt.Key_Up, Qt.Key_Down):
+        elif event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
             selection_model = self.selectionModel()
             current_index = selection_model.currentIndex()
             if current_index.isValid():
-                step = 1 if event.key() == Qt.Key_Down else -1
-                conference = current_index.data(Qt.UserRole).client_conference
+                step = 1 if event.key() == Qt.Key.Key_Down else -1
+                conference = current_index.data(Qt.ItemDataRole.UserRole).client_conference
                 new_index = current_index.sibling(current_index.row()+step, current_index.column())
-                while conference is not None and new_index.isValid() and new_index.data(Qt.UserRole).client_conference is conference:
+                while conference is not None and new_index.isValid() and new_index.data(Qt.ItemDataRole.UserRole).client_conference is conference:
                     new_index = new_index.sibling(new_index.row()+step, new_index.column())
                 if new_index.isValid():
-                    selection_model.select(new_index, selection_model.ClearAndSelect)
+                    selection_model.select(new_index, selection_model.SelectionFlag.ClearAndSelect)
         else:
             super(AudioSessionListView, self).keyPressEvent(event)
 
@@ -2872,9 +2872,9 @@ class AudioSessionListView(QListView):
         selection_model = self.selectionModel()
         selected_indexes = selection_model.selectedIndexes()
         if selected_indexes:
-            selection_model.setCurrentIndex(selected_indexes[0], selection_model.Select)
+            selection_model.setCurrentIndex(selected_indexes[0], selection_model.SelectionFlag.Select)
         else:
-            selection_model.setCurrentIndex(self.model().index(-1), selection_model.Select)
+            selection_model.setCurrentIndex(self.model().index(-1), selection_model.SelectionFlag.Select)
 
     def mouseReleaseEvent(self, event):
         self._pressed_position = None
@@ -2883,16 +2883,16 @@ class AudioSessionListView(QListView):
 
     def selectionCommand(self, index, event=None):
         selection_model = self.selectionModel()
-        if self.selectionMode() == self.NoSelection:
-            return selection_model.NoUpdate
+        if self.selectionMode() == self.SelectionMode.NoSelection:
+            return selection_model.SelectionFlag.NoUpdate
         elif not index.isValid() or event is None:
-            return selection_model.NoUpdate
-        elif event.type() == QEvent.MouseButtonPress and not selection_model.selection():
-            return selection_model.ClearAndSelect
-        elif event.type() in (QEvent.MouseButtonPress, QEvent.MouseMove):
-            return selection_model.NoUpdate
-        elif event.type() == QEvent.MouseButtonRelease:
-            return selection_model.ClearAndSelect
+            return selection_model.SelectionFlag.NoUpdate
+        elif event.type() == QEvent.Type.MouseButtonPress and not selection_model.selection():
+            return selection_model.SelectionFlag.ClearAndSelect
+        elif event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseMove):
+            return selection_model.SelectionFlag.NoUpdate
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            return selection_model.SelectionFlag.ClearAndSelect
         else:
             return super(AudioSessionListView, self).selectionCommand(index, event)
 
@@ -2900,13 +2900,13 @@ class AudioSessionListView(QListView):
         super(AudioSessionListView, self).selectionChanged(selected, deselected)
         selected_indexes = selected.indexes()
         deselected_indexes = deselected.indexes()
-        for session in (index.data(Qt.UserRole) for index in deselected_indexes):
+        for session in (index.data(Qt.ItemDataRole.UserRole) for index in deselected_indexes):
             if session.client_conference is not None:
                 for sibling in session.client_conference.sessions:
                     sibling.items.audio.widget.selected = False
             else:
                 session.widget.selected = False
-        for session in (index.data(Qt.UserRole) for index in selected_indexes):
+        for session in (index.data(Qt.ItemDataRole.UserRole) for index in selected_indexes):
             if session.client_conference is not None:
                 for sibling in session.client_conference.sessions:
                     sibling.items.audio.widget.selected = True
@@ -2921,18 +2921,20 @@ class AudioSessionListView(QListView):
         if self.ignore_selection_changes:
             return
         notification_center = NotificationCenter()
-        selected_blink_session = selected[0].topLeft().data(Qt.UserRole).blink_session if selected else None
-        deselected_blink_session = deselected[0].topLeft().data(Qt.UserRole).blink_session if deselected else None
+        selected_blink_session = selected[0].topLeft().data(Qt.ItemDataRole.UserRole).blink_session if selected else None
+        deselected_blink_session = deselected[0].topLeft().data(Qt.ItemDataRole.UserRole).blink_session if deselected else None
         notification_data = NotificationData(selected_session=selected_blink_session, deselected_session=deselected_blink_session)
         notification_center.post_notification('BlinkSessionListSelectionChanged', sender=self, data=notification_data)
+        if selected_blink_session is not None:
+            self._update_control_menu(selected[0].topLeft().data(Qt.ItemDataRole.UserRole))
 
     def startDrag(self, supported_actions):
         if self._pressed_index is not None and self._pressed_index.isValid():
-            self.dragged_session = self._pressed_index.data(Qt.UserRole)
+            self.dragged_session = self._pressed_index.data(Qt.ItemDataRole.UserRole)
             rect = self.visualRect(self._pressed_index)
             rect.adjust(1, 1, -1, -1)
             pixmap = QPixmap(rect.size())
-            pixmap.fill(Qt.transparent)
+            pixmap.fill(Qt.GlobalColor.transparent)
             widget = DraggedAudioSessionWidget(self.dragged_session.widget, None)
             widget.setFixedSize(rect.size())
             widget.render(pixmap)
@@ -2940,7 +2942,7 @@ class AudioSessionListView(QListView):
             drag.setPixmap(pixmap)
             drag.setMimeData(self.model().mimeData([self._pressed_index]))
             drag.setHotSpot(self._pressed_position - rect.topLeft())
-            drag.exec_(supported_actions, Qt.CopyAction)
+            drag.exec(supported_actions, Qt.DropAction.CopyAction)
             self.dragged_session = None
             self._pressed_position = None
             self._pressed_index = None
@@ -2973,9 +2975,9 @@ class AudioSessionListView(QListView):
 
         for mime_type in model.accepted_mime_types:
             if mime_data.hasFormat(mime_type):
-                index = self.indexAt(event.pos())
+                index = self.indexAt(event.position().toPoint())
                 rect = self.visualRect(index)
-                session = index.data(Qt.UserRole)
+                session = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, session)
@@ -2986,13 +2988,13 @@ class AudioSessionListView(QListView):
     def dropEvent(self, event):
         model = self.model()
         if event.source() is self:
-            if event.keyboardModifiers() & Qt.AltModifier:
-                event.setDropAction(Qt.LinkAction)
+            if event.modifiers() & Qt.KeyboardModifier.AltModifier:
+                event.setDropAction(Qt.DropAction.LinkAction)
             else:
-                event.setDropAction(Qt.MoveAction)
+                event.setDropAction(Qt.DropAction.MoveAction)
         for session in self.model().sessions:
             session.widget.drop_indicator = False
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         super(AudioSessionListView, self).dropEvent(event)
 
@@ -3003,18 +3005,18 @@ class AudioSessionListView(QListView):
             rect = self.viewport().rect()
             rect.setTop(self.visualRect(model.index(len(model.sessions)-1)).bottom())
             if dragged_session.client_conference is not None:
-                event.setDropAction(Qt.MoveAction)
+                event.setDropAction(Qt.DropAction.MoveAction)
                 event.accept(rect)
             else:
                 event.ignore(rect)
-        elif event.keyboardModifiers() & Qt.AltModifier and dragged_session.client_conference is None:
+        elif event.modifiers() & Qt.KeyboardModifier.AltModifier and dragged_session.client_conference is None:
             if dragged_session is session or session.client_conference is not None or session.blink_session.state != 'connected':
                 event.ignore(rect)
             elif dragged_session.blink_session.transfer_state in ('active', 'completed') or session.blink_session.transfer_state in ('active', 'completed'):
                 event.ignore(rect)
             else:
                 session.widget.drop_indicator = True
-                event.setDropAction(Qt.LinkAction)  # it might not be LinkAction if other keyboard modifiers are active
+                event.setDropAction(Qt.DropAction.LinkAction)  # it might not be LinkAction if other keyboard modifiers are active
                 event.accept(rect)
         else:
             conference = dragged_session.client_conference or Null
@@ -3027,7 +3029,7 @@ class AudioSessionListView(QListView):
                             sibling.items.audio.widget.drop_indicator = True
                     else:
                         session.widget.drop_indicator = True
-                event.setDropAction(Qt.MoveAction)
+                event.setDropAction(Qt.DropAction.MoveAction)
                 event.accept(rect)
 
     def _DH_ApplicationXBlinkContactList(self, event, index, rect, session):
@@ -3137,14 +3139,14 @@ class AudioSessionListView(QListView):
     def _SH_HangupShortcutActivated(self):
         selected_indexes = self.selectedIndexes()
         if selected_indexes:
-            session = selected_indexes[0].data(Qt.UserRole)
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
             if session.client_conference is None:
                 session.widget.hangup_button.click()
 
     def _SH_HoldShortcutActivated(self):
         selected_indexes = self.selectedIndexes()
         if selected_indexes:
-            session = selected_indexes[0].data(Qt.UserRole)
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
             if session.client_conference is None:
                 session.widget.hold_button.click()
 
@@ -3158,7 +3160,7 @@ class AudioSessionListView(QListView):
         if notification.data.active_session is None:
             selection = selection_model.selection()
             # check the code in this if branch if it's needed -Dan
-            # selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
+            # selected_blink_session = selection[0].topLeft().data(Qt.ItemDataRole.UserRole).blink_session if selection else None
             # if notification.data.previous_active_session is selected_blink_session:
             #    print "-- audio session list updating selection to None None"
             #    selection_model.clearSelection()
@@ -3166,7 +3168,7 @@ class AudioSessionListView(QListView):
             model = self.model()
             position = model.sessions.index(notification.data.active_session.items.audio)
             # print "-- audio session list updating selection to", position, notification.data.active_session
-            selection_model.select(model.index(position), selection_model.ClearAndSelect)
+            selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
         self.ignore_selection_changes = False
 
 
@@ -3182,15 +3184,15 @@ class ChatSessionIconLabel(QLabel):
         self.pixmaps = Container()
         self.icon = None
         self.icon_size = 12
-        self.selectedCompositionColor = Qt.transparent
+        self.selectedCompositionColor = Qt.GlobalColor.transparent
 
     def event(self, event):
-        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() in ('icon', 'selectedCompositionColor') and self.icon is not None:
+        if event.type() == QEvent.Type.DynamicPropertyChange and event.propertyName() in ('icon', 'selectedCompositionColor') and self.icon is not None:
             self.pixmaps.standard = self.icon.pixmap(self.icon_size)
             self.pixmaps.selected = QPixmap(self.pixmaps.standard)
             painter = QPainter(self.pixmaps.selected)
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
             painter.fillRect(self.pixmaps.selected.rect(), self.selectedCompositionColor)
             painter.end()
         return super(ChatSessionIconLabel, self).event(event)
@@ -3206,7 +3208,7 @@ class ChatSessionIconLabel(QLabel):
         if not self.isEnabled():
             option = QStyleOption()
             option.initFrom(self)
-            pixmap = style.generatedIconPixmap(QIcon.Disabled, self.pixmaps.standard, option)
+            pixmap = style.generatedIconPixmap(QIcon.Mode.Disabled, self.pixmaps.standard, option)
         elif session_widget.display_mode is session_widget.SelectedDisplayMode:
             pixmap = self.pixmaps.selected
         else:
@@ -3231,10 +3233,10 @@ class ChatSessionWidget(base_class, ui_class):
         self.palettes.standard = self.palette()
         self.palettes.alternate = self.palette()
         self.palettes.selected = self.palette()
-        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
-        self.setBackgroundRole(QPalette.Window)
+        self.palettes.standard.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.ColorRole.Window, self.palettes.standard.color(QPalette.ColorRole.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.setBackgroundRole(QPalette.ColorRole.Window)
         self.display_mode = self.StandardDisplayMode
         self.hold_icon.installEventFilter(self)
         self.composing_icon.installEventFilter(self)
@@ -3244,7 +3246,7 @@ class ChatSessionWidget(base_class, ui_class):
         self.screen_sharing_icon.installEventFilter(self)
         self.widget_layout.invalidate()
         self.widget_layout.activate()
-        # self.setAttribute(103) # Qt.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
+        # self.setAttribute(103) # Qt.WidgetAttribute.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
         # self.show()
 
     def _get_display_mode(self):
@@ -3259,25 +3261,25 @@ class ChatSessionWidget(base_class, ui_class):
             return
         if new_mode is self.StandardDisplayMode:
             self.setPalette(self.palettes.standard)
-            self.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.WindowText)
-            self.info_label.setForegroundRole(QPalette.Dark)
+            self.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.AlternateDisplayMode:
             self.setPalette(self.palettes.alternate)
-            self.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.WindowText)
-            self.info_label.setForegroundRole(QPalette.Dark)
+            self.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.SelectedDisplayMode:
             self.setPalette(self.palettes.selected)
-            self.setForegroundRole(QPalette.HighlightedText)
-            self.name_label.setForegroundRole(QPalette.HighlightedText)
-            self.info_label.setForegroundRole(QPalette.HighlightedText)
+            self.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.info_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
 
     display_mode = property(_get_display_mode, _set_display_mode)
     del _get_display_mode, _set_display_mode
 
     def eventFilter(self, watched, event):
-        if event.type() in (QEvent.ShowToParent, QEvent.HideToParent):
+        if event.type() in (QEvent.Type.ShowToParent, QEvent.Type.HideToParent):
             self.widget_layout.invalidate()
             self.widget_layout.activate()
         return False
@@ -3288,11 +3290,11 @@ class ChatSessionWidget(base_class, ui_class):
             rect = self.state_label.geometry()
             rect.setWidth(self.width() - rect.x())
             gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, Qt.transparent)
-            gradient.setColorAt(1.0, Qt.white)
+            gradient.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
+            gradient.setColorAt(0.0, Qt.GlobalColor.transparent)
+            gradient.setColorAt(1.0, Qt.GlobalColor.white)
             painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.fillRect(rect, QBrush(gradient))
             painter.end()
 
@@ -3487,23 +3489,23 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         super(ChatSessionDelegate, self).__init__(parent)
 
     def editorEvent(self, event, model, option, index):
-        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
+        if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
             arrow_rect = option.rect.adjusted(int(option.rect.width()-14), int(option.rect.height()/2), 0, 0)   # bottom half of the rightmost 14 pixels
             cross_rect = option.rect.adjusted(int(option.rect.width()-14), 0, 0, int(-option.rect.height()/2))  # top half of the rightmost 14 pixels
             if arrow_rect.contains(event.pos()):
                 session_list = self.parent()
-                session_list.animation.setDirection(QPropertyAnimation.Backward)
+                session_list.animation.setDirection(QPropertyAnimation.Direction.Backward)
                 session_list.animation.start()
                 return True
             elif cross_rect.contains(event.pos()):
-                session = index.data(Qt.UserRole)
+                session = index.data(Qt.ItemDataRole.UserRole)
                 session.end(delete=True)
                 return True
         return super(ChatSessionDelegate, self).editorEvent(event, model, option, index)
 
     def paint(self, painter, option, index):
-        session = index.data(Qt.UserRole)
-        if option.state & QStyle.State_Selected:
+        session = index.data(Qt.ItemDataRole.UserRole)
+        if option.state & QStyle.StateFlag.State_Selected:
             session.widget.display_mode = session.widget.SelectedDisplayMode
         elif index.row() % 2 == 0:
             session.widget.display_mode = session.widget.StandardDisplayMode
@@ -3513,14 +3515,14 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
 
         painter.save()
         painter.drawPixmap(option.rect, session.widget.grab())
-        if option.state & QStyle.State_MouseOver:
+        if option.state & QStyle.StateFlag.State_MouseOver:
             self.drawSessionIndicators(session, option, painter, session.widget)
-        if 0 and (option.state & QStyle.State_MouseOver):
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            if option.state & QStyle.State_Selected:
+        if 0 and (option.state & QStyle.StateFlag.State_MouseOver):
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            if option.state & QStyle.StateFlag.State_Selected:
                 painter.fillRect(option.rect, QColor(240, 244, 255, 40))
             else:
-                painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
                 painter.fillRect(option.rect, QColor(240, 244, 255, 230))
         painter.restore()
 
@@ -3528,24 +3530,24 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         pen_thickness = 1.6
 
         if widget.state_label.state is not None:
-            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            foreground_color = option.palette.color(QPalette.ColorGroup.Normal, QPalette.ColorRole.WindowText)
             background_color = widget.state_label.state_colors[widget.state_label.state]
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
             gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3*255))
             gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8*255))
             contrast_color = QBrush(gradient)
         else:
-            # foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-            # background_color = option.palette.color(QPalette.Window)
-            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            # foreground_color = option.palette.color(QPalette.ColorGroup.Normal, QPalette.ColorRole.WindowText)
+            # background_color = option.palette.color(QPalette.ColorRole.Window)
+            foreground_color = widget.palette().color(QPalette.ColorGroup.Normal, widget.foregroundRole())
             background_color = widget.palette().color(widget.backgroundRole())
             contrast_color = self.calc_light_color(background_color)
         line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
 
         # draw the expansion indicator at the bottom (works best with a state_label of width 14)
         arrow_rect = QRect(0, 0, 14, 14)
@@ -3556,8 +3558,8 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         arrow.translate(1, 1)
 
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.translate(arrow_rect.center())
         painter.translate(0, +1)
         painter.setPen(contrast_pen)
@@ -3573,8 +3575,8 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         cross_rect.translate(option.rect.topLeft())
 
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.translate(cross_rect.center())
         painter.translate(+1.5, +1)
         painter.translate(0, +1)
@@ -3588,7 +3590,7 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.restore()
 
     def sizeHint(self, option, index):
-        return index.data(Qt.SizeHintRole)
+        return index.data(Qt.ItemDataRole.SizeHintRole)
 
 
 @implementer(IObserver)
@@ -3614,27 +3616,27 @@ class ChatSessionModel(QAbstractListModel):
 
     def flags(self, index):
         if index.isValid():
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled
         else:
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.sessions)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         item = self.sessions[index.row()]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.SizeHintRole:
+        elif role == Qt.ItemDataRole.SizeHintRole:
             return item.size_hint
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction  # | Qt.MoveAction
+        return Qt.DropAction.CopyAction  # | Qt.DropAction.MoveAction
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
         # this is here just to keep the default Qt DnD API happy
@@ -3642,7 +3644,7 @@ class ChatSessionModel(QAbstractListModel):
         return False
 
     def handleDroppedData(self, mime_data, action, index):
-        if action == Qt.IgnoreAction:
+        if action == Qt.DropAction.IgnoreAction:
             return True
 
         for mime_type in self.accepted_mime_types:
@@ -3723,18 +3725,18 @@ class ChatSessionListView(QListView):
         self.setMouseTracking(True)
         self.setAlternatingRowColors(True)
         self.setAutoFillBackground(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # default
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)  # default
         self.setDragEnabled(False) # default
         # self.setDropIndicatorShown(True)
-        self.setDragDropMode(QListView.DropOnly)
-        self.setSelectionMode(QListView.SingleSelection)  # default
+        self.setDragDropMode(QListView.DragDropMode.DropOnly)
+        self.setSelectionMode(QListView.SelectionMode.SingleSelection)  # default
 
         self.setStyleSheet("""QListView { border: 1px inset palette(dark); border-radius: 3px; }""")
         self.animation = QPropertyAnimation(self, b'geometry')
         self.animation.setDuration(250)
-        self.animation.setEasingCurve(QEasingCurve.Linear)
+        #self.animation.setEasingCurve(QEasingCurve.Type.Linear)
         self.animation.finished.connect(self._SH_AnimationFinished)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
@@ -3752,13 +3754,13 @@ class ChatSessionListView(QListView):
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
             index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
+            selection_model.setCurrentIndex(index, selection_model.SelectionFlag.Select)
         self.context_menu.hide()
         if self.ignore_selection_changes:
             return
         notification_center = NotificationCenter()
-        selected_blink_session = selected[0].topLeft().data(Qt.UserRole).blink_session if selected else None
-        deselected_blink_session = deselected[0].topLeft().data(Qt.UserRole).blink_session if deselected else None
+        selected_blink_session = selected[0].topLeft().data(Qt.ItemDataRole.UserRole).blink_session if selected else None
+        deselected_blink_session = deselected[0].topLeft().data(Qt.ItemDataRole.UserRole).blink_session if deselected else None
         notification_data = NotificationData(selected_session=selected_blink_session, deselected_session=deselected_blink_session)
         notification_center.post_notification('BlinkSessionListSelectionChanged', sender=self, data=notification_data)
 
@@ -3766,24 +3768,24 @@ class ChatSessionListView(QListView):
         # in case we implement DnD later, we might consider selecting the item on mouse press if there is nothing else selected (except maybe if mouse press was on the buttons area?)
         # this would allow the dragged item to be selected before DnD starts, in case it is needed for the session to be active when dragged -Dan
         selection_model = self.selectionModel()
-        if self.selectionMode() == self.NoSelection:
-            return selection_model.NoUpdate
+        if self.selectionMode() == self.SelectionMode.NoSelection:
+            return selection_model.SelectionFlag.NoUpdate
         elif not index.isValid() or event is None:
-            return selection_model.NoUpdate
-        elif event.type() in (QEvent.MouseButtonPress, QEvent.MouseMove):
-            return selection_model.NoUpdate
-        elif event.type() == QEvent.MouseButtonRelease:
+            return selection_model.SelectionFlag.NoUpdate
+        elif event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseMove):
+            return selection_model.SelectionFlag.NoUpdate
+        elif event.type() == QEvent.Type.MouseButtonRelease:
             index_rect = self.visualRect(index)
             cross_rect = index_rect.adjusted(int(index_rect.width()-14), 0, 0, int(-index_rect.height()/2))  # the top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
-                return selection_model.NoUpdate
+                return selection_model.SelectionFlag.NoUpdate
             else:
-                return selection_model.ClearAndSelect
+                return selection_model.SelectionFlag.ClearAndSelect
         else:
             return super(ChatSessionListView, self).selectionCommand(index, event)
 
     def eventFilter(self, watched, event):
-        if event.type() == QEvent.Resize:
+        if event.type() == QEvent.Type.Resize:
             new_size = event.size()
             geometry = self.animation.endValue() if self.animation else None
             if geometry is not None:
@@ -3803,7 +3805,7 @@ class ChatSessionListView(QListView):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Escape and self.selectionModel().selection():
+        if event.key() == Qt.Key.Key_Escape and self.selectionModel().selection():
             self.animation.setDirection(QPropertyAnimation.Backward)
             self.animation.start()
         else:
@@ -3814,8 +3816,8 @@ class ChatSessionListView(QListView):
         if self.drop_indicator_index.isValid():
             rect = self.visualRect(self.drop_indicator_index)
             painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setBrush(Qt.NoBrush)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
             painter.end()
@@ -3847,7 +3849,7 @@ class ChatSessionListView(QListView):
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
-                item = index.data(Qt.UserRole)
+                item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
@@ -3876,20 +3878,20 @@ class ChatSessionListView(QListView):
         self.drop_indicator_index = index
 
     def _SH_AnimationFinished(self):
-        if self.animation.direction() == QPropertyAnimation.Forward:
+        if self.animation.direction() == QPropertyAnimation.Direction.Forward:
             try:
-                self.scrollTo(self.selectedIndexes()[0], self.EnsureVisible)
+                self.scrollTo(self.selectedIndexes()[0], self.ScrollHint.EnsureVisible)
             except IndexError:
                 pass
-            self.setFocus(Qt.OtherFocusReason)
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
         else:
             current_tab = self.chat_window.tab_widget.currentWidget()
-            current_tab.chat_input.setFocus(Qt.OtherFocusReason)
+            current_tab.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
             self.hide()
 
 
     def _SH_DoubleClicked(self, index):
-        self.animation.setDirection(QPropertyAnimation.Backward)
+        self.animation.setDirection(QPropertyAnimation.Direction.Backward)
         self.animation.start()
 
     def handle_notification(self, notification):
@@ -3902,7 +3904,7 @@ class ChatSessionListView(QListView):
         if notification.data.active_session is None:
             selection = selection_model.selection()
             # check the code in this if branch if it's needed -Dan (if not also remove previous_active_session maybe)
-            # selected_blink_session = selection[0].topLeft().data(Qt.UserRole).blink_session if selection else None
+            # selected_blink_session = selection[0].topLeft().data(Qt.ItemDataRole.UserRole).blink_session if selection else None
             # if notification.data.previous_active_session is selected_blink_session:
             #    print "-- chat session list updating selection to None None"
             #    selection_model.clearSelection()
@@ -3910,7 +3912,7 @@ class ChatSessionListView(QListView):
             model = self.model()
             position = model.sessions.index(notification.data.active_session.items.chat)
             # print "-- chat session list updating selection to", position, notification.data.active_session
-            selection_model.select(model.index(position), selection_model.ClearAndSelect)
+            selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
         self.ignore_selection_changes = False
 
 
@@ -3960,7 +3962,7 @@ class VNCServerProcess(QProcess):
             match = re.search(r'^PORT\s*=\s*(?P<port>\d+)\s*$', server_output, re.IGNORECASE | re.MULTILINE)
             if match:
                 self.server_port = int(match.group('port'))
-                if self.state() == QProcess.Running:
+                if self.state() == QProcess.ProcessState.Running:
                     self.ready.emit()
 
     def _SH_ReadyReadStandardError(self):
@@ -4540,9 +4542,9 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
         rect.moveCenter(contents_rect.center())
         palette = self.palette()
         if self.display_mode is self.ProgressDisplayMode:
-            is_selected = self.foregroundRole() == QPalette.HighlightedText
+            is_selected = self.foregroundRole() == QPalette.ColorRole.HighlightedText
             inner_pen_color = self.color_with_alpha(palette.color(self.foregroundRole()), 70)
-            outer_pen_color = palette.color(QPalette.HighlightedText if is_selected else QPalette.Highlight)
+            outer_pen_color = palette.color(QPalette.ColorRole.HighlightedText if is_selected else QPalette.ColorRole.Highlight)
             inner_pen_width = 1.4 * size/20
             outer_pen_width = 2.3 * size/20
             inner_rect_adjust = outer_pen_width - inner_pen_width / 2
@@ -4550,10 +4552,10 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
             inner_rect = rect.adjusted(inner_rect_adjust, inner_rect_adjust, -inner_rect_adjust, -inner_rect_adjust)
             outer_rect = rect.adjusted(outer_rect_adjust, outer_rect_adjust, -outer_rect_adjust, -outer_rect_adjust)
             painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setPen(QPen(inner_pen_color, inner_pen_width, style=Qt.SolidLine, cap=Qt.FlatCap, join=Qt.RoundJoin))
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(QPen(inner_pen_color, inner_pen_width, style=Qt.PenStyle.SolidLine, cap=Qt.PenCapStyle.FlatCap, join=Qt.PenJoinStyle.RoundJoin))
             painter.drawEllipse(inner_rect)
-            painter.setPen(QPen(outer_pen_color, outer_pen_width, style=Qt.SolidLine, cap=Qt.FlatCap, join=Qt.RoundJoin))
+            painter.setPen(QPen(outer_pen_color, outer_pen_width, style=Qt.PenStyle.SolidLine, cap=Qt.PenCapStyle.FlatCap, join=Qt.PenJoinStyle.RoundJoin))
             painter.drawArc(outer_rect, 90 * 16, int(-self.progress * 3.6 * 16))
             if self.show_cancel_button:
                 foreground_color = palette.color(self.foregroundRole())
@@ -4564,7 +4566,7 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
                 cross_rect.moveCenter(QPointF(0, 0))
                 painter.save()
                 painter.translate(rect.center())
-                painter.setPen(QPen(cross_pen_color, cross_pen_width, style=Qt.SolidLine, cap=Qt.RoundCap, join=Qt.RoundJoin))
+                painter.setPen(QPen(cross_pen_color, cross_pen_width, style=Qt.PenStyle.SolidLine, cap=Qt.PenCapStyle.RoundCap, join=Qt.PenJoinStyle.RoundJoin))
                 painter.drawLine(cross_rect.topLeft(), cross_rect.bottomRight())
                 painter.drawLine(cross_rect.topRight(), cross_rect.bottomLeft())
                 painter.restore()
@@ -4586,8 +4588,8 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
             polygon.translate(path.currentPosition())
             path.addPolygon(polygon)
             painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setPen(QPen(retry_pen_color, retry_pen_width, style=Qt.SolidLine, cap=Qt.RoundCap, join=Qt.MiterJoin))
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(QPen(retry_pen_color, retry_pen_width, style=Qt.PenStyle.SolidLine, cap=Qt.PenCapStyle.RoundCap, join=Qt.PenJoinStyle.MiterJoin))
             painter.drawPath(path)
             painter.end()
 
@@ -4620,9 +4622,9 @@ class FileTransferItemWidget(base_class, ui_class):
         self.palettes.standard = self.palette()
         self.palettes.alternate = self.palette()
         self.palettes.selected = self.palette()
-        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.palettes.standard.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.ColorRole.Window, self.palettes.standard.color(QPalette.ColorRole.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
 
         self.pixmaps = Container()
         self.pixmaps.incoming_transfer = QPixmap(Resources.get('icons/folder-downloads.png'))
@@ -4646,22 +4648,22 @@ class FileTransferItemWidget(base_class, ui_class):
             return
         if new_mode is self.StandardDisplayMode:
             self.setPalette(self.palettes.standard)
-            self.state_indicator.setForegroundRole(QPalette.WindowText)
-            self.filename_label.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.Dark)
-            self.status_label.setForegroundRole(QPalette.Dark)
+            self.state_indicator.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.filename_label.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.status_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.AlternateDisplayMode:
             self.setPalette(self.palettes.alternate)
-            self.state_indicator.setForegroundRole(QPalette.WindowText)
-            self.filename_label.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.Dark)
-            self.status_label.setForegroundRole(QPalette.Dark)
+            self.state_indicator.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.filename_label.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.status_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.SelectedDisplayMode:
             self.setPalette(self.palettes.selected)
-            self.state_indicator.setForegroundRole(QPalette.HighlightedText)
-            self.filename_label.setForegroundRole(QPalette.HighlightedText)
-            self.name_label.setForegroundRole(QPalette.HighlightedText)
-            self.status_label.setForegroundRole(QPalette.HighlightedText)
+            self.state_indicator.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.filename_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.status_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
 
     display_mode = property(_get_display_mode, _set_display_mode)
     del _get_display_mode, _set_display_mode
@@ -4840,13 +4842,13 @@ class FileTransferDelegate(QStyledItemDelegate):
         super(FileTransferDelegate, self).__init__(parent)
 
     def editorEvent(self, event, model, option, index):
-        if event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
-            item = index.data(Qt.UserRole)
+        if event.type() == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            item = index.data(Qt.ItemDataRole.UserRole)
             if item.ended and not item.failed:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
                 return True
             elif item.direction == 'outgoing' and not item.ended:
-                item = index.data(Qt.UserRole)
+                item = index.data(Qt.ItemDataRole.UserRole)
                 indicator = item.widget.state_indicator
                 margin = indicator.margin()
                 indicator_rect = indicator.contentsRect().adjusted(margin, margin, -margin, -margin)
@@ -4857,8 +4859,8 @@ class FileTransferDelegate(QStyledItemDelegate):
                 if not rect.contains(event.pos()):
                     QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
                     return True
-        elif event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
-            item = index.data(Qt.UserRole)
+        elif event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            item = index.data(Qt.ItemDataRole.UserRole)
             indicator = item.widget.state_indicator
             margin = indicator.margin()
             indicator_rect = indicator.contentsRect().adjusted(margin, margin, -margin, -margin)
@@ -4876,15 +4878,15 @@ class FileTransferDelegate(QStyledItemDelegate):
         return super(FileTransferDelegate, self).editorEvent(event, model, option, index)
 
     def paint(self, painter, option, index):
-        item = index.data(Qt.UserRole)
-        if option.state & QStyle.State_Selected:
+        item = index.data(Qt.ItemDataRole.UserRole)
+        if option.state & QStyle.StateFlag.State_Selected:
             item.widget.display_mode = item.widget.SelectedDisplayMode
         elif index.row() % 2 == 0:
             item.widget.display_mode = item.widget.StandardDisplayMode
         else:
             item.widget.display_mode = item.widget.AlternateDisplayMode
 
-        if not item.ended and (option.state & QStyle.State_MouseOver):
+        if not item.ended and (option.state & QStyle.StateFlag.State_MouseOver):
             item.widget.state_indicator.show_cancel_button = True
         else:
             item.widget.state_indicator.show_cancel_button = False
@@ -4893,7 +4895,7 @@ class FileTransferDelegate(QStyledItemDelegate):
         painter.drawPixmap(option.rect, item.widget.grab())
 
     def sizeHint(self, option, index):
-        return index.data(Qt.SizeHintRole)
+        return index.data(Qt.ItemDataRole.SizeHintRole)
 
 
 class TransferHistory(object):
@@ -4969,15 +4971,15 @@ class FileTransferModel(QAbstractListModel):
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         item = self.items[index.row()]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.SizeHintRole:
+        elif role == Qt.ItemDataRole.SizeHintRole:
             return item.widget.sizeHint()
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
         return None
 
@@ -5049,9 +5051,9 @@ class FileListItemWidget(base_class, ui_class):
         self.palettes.standard = self.palette()
         self.palettes.alternate = self.palette()
         self.palettes.selected = self.palette()
-        self.palettes.standard.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.Window, self.palettes.standard.color(QPalette.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.Window,  self.palettes.standard.color(QPalette.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.palettes.standard.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
+        self.palettes.alternate.setColor(QPalette.ColorRole.Window, self.palettes.standard.color(QPalette.ColorRole.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
+        self.palettes.selected.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
 
         self.pixmaps = Container()
         self.pixmaps.encrypted_transfer = QPixmap(Resources.get('icons/lock-green-18.svg'))
@@ -5073,25 +5075,25 @@ class FileListItemWidget(base_class, ui_class):
             return
         if new_mode is self.StandardDisplayMode:
             self.setPalette(self.palettes.standard)
-            self.state_indicator.setForegroundRole(QPalette.WindowText)
-            self.filename_label.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.Dark)
-            self.status_label.setForegroundRole(QPalette.Dark)
-            self.filesize_label.setForegroundRole(QPalette.Dark)
+            self.state_indicator.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.filename_label.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.status_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.filesize_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.AlternateDisplayMode:
             self.setPalette(self.palettes.alternate)
-            self.state_indicator.setForegroundRole(QPalette.WindowText)
-            self.filename_label.setForegroundRole(QPalette.WindowText)
-            self.name_label.setForegroundRole(QPalette.Dark)
-            self.status_label.setForegroundRole(QPalette.Dark)
-            self.filesize_label.setForegroundRole(QPalette.Dark)
+            self.state_indicator.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.filename_label.setForegroundRole(QPalette.ColorRole.WindowText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.status_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.filesize_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.SelectedDisplayMode:
             self.setPalette(self.palettes.selected)
-            self.state_indicator.setForegroundRole(QPalette.HighlightedText)
-            self.filename_label.setForegroundRole(QPalette.HighlightedText)
-            self.name_label.setForegroundRole(QPalette.HighlightedText)
-            self.status_label.setForegroundRole(QPalette.HighlightedText)
-            self.filesize_label.setForegroundRole(QPalette.HighlightedText)
+            self.state_indicator.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.filename_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.name_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.status_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.filesize_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
 
     display_mode = property(_get_display_mode, _set_display_mode)
     del _get_display_mode, _set_display_mode
@@ -5242,15 +5244,15 @@ class FileListModel(QAbstractListModel):
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         item = self.items[index.row()]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.SizeHintRole:
+        elif role == Qt.ItemDataRole.SizeHintRole:
             return item.widget.sizeHint()
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
         return None
 
@@ -5350,8 +5352,8 @@ class FileListDelegate(QStyledItemDelegate):
         super(FileListDelegate, self).__init__(parent)
 
     def editorEvent(self, event, model, option, index):
-        if event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
-            item = index.data(Qt.UserRole)
+        if event.type() == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            item = index.data(Qt.ItemDataRole.UserRole)
             if item.already_exists:
                 directory = SIPSimpleSettings().file_transfer.directory.normalized
                 link = copy_transfer_file(QUrl.fromLocalFile(item.decrypted_filename), directory)
@@ -5369,8 +5371,8 @@ class FileListDelegate(QStyledItemDelegate):
         return super(FileListDelegate, self).editorEvent(event, model, option, index)
 
     def paint(self, painter, option, index):
-        item = index.data(Qt.UserRole)
-        if option.state & QStyle.State_Selected:
+        item = index.data(Qt.ItemDataRole.UserRole)
+        if option.state & QStyle.StateFlag.State_Selected:
             item.widget.display_mode = item.widget.SelectedDisplayMode
         elif index.row() % 2 == 0:
             item.widget.display_mode = item.widget.StandardDisplayMode
@@ -5381,14 +5383,15 @@ class FileListDelegate(QStyledItemDelegate):
         painter.drawPixmap(option.rect, item.widget.grab())
 
     def sizeHint(self, option, index):
-        return index.data(Qt.SizeHintRole)
+        return index.data(Qt.ItemDataRole.SizeHintRole)
+
 
 class FileListView(QListView, ColorHelperMixin):
     def __init__(self, parent=None):
         super(FileListView, self).__init__(parent)
         self.setItemDelegate(FileListDelegate(self))
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.actions.open_file = QAction(translate('filelist_view', "Open"), self, triggered=self._AH_OpenFile)
@@ -5406,7 +5409,7 @@ class FileListView(QListView, ColorHelperMixin):
         menu = self.context_menu
         index = self.indexAt(event.pos())
         if index.isValid():
-            item = index.data(Qt.UserRole)
+            item = index.data(Qt.ItemDataRole.UserRole)
             menu.addAction(self.actions.open_file)
             menu.addAction(self.actions.open_downloads_folder)
             if not item.in_conference:
@@ -5430,7 +5433,7 @@ class FileListView(QListView, ColorHelperMixin):
             pen_color = self.color_with_alpha(color, 120)
             brush_color = self.color_with_alpha(color, 10)
             painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setBrush(brush_color)
             painter.setPen(QPen(pen_color, 1.6))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
@@ -5488,7 +5491,7 @@ class FileListView(QListView, ColorHelperMixin):
         # self.paint_drop_indicator = True
 
     def _AH_OpenFile(self):
-        item = self.selectedIndexes()[0].data(Qt.UserRole)
+        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         model = self.model()
         if item.already_exists:
             directory = SIPSimpleSettings().file_transfer.directory.normalized
@@ -5505,8 +5508,8 @@ class FileListView(QListView, ColorHelperMixin):
         SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
 
     def _AH_RemoveFile(self):
-        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
-        self.model.removeItem(item)
+        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        self.model().deleteItem(item)
 
     def _AH_OpenTransfersFolder(self):
         settings = BlinkSettings()
@@ -5600,17 +5603,17 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         super(ConferenceParticipantDelegate, self).__init__(parent)
 
     def editorEvent(self, event, model, option, index):
-        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
+        if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
             cross_rect = option.rect.adjusted(int(option.rect.width()) - 14, 0, 0, int(-option.rect.height() / 2))  # top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
-                item = index.data(Qt.UserRole)
+                item = index.data(Qt.ItemDataRole.UserRole)
                 model.session.server_conference.remove_participant(item.participant)
                 return True
         return super(ConferenceParticipantDelegate, self).editorEvent(event, model, option, index)
 
     def paint(self, painter, option, index):
-        participant = index.data(Qt.UserRole)
-        if option.state & QStyle.State_Selected:
+        participant = index.data(Qt.ItemDataRole.UserRole)
+        if option.state & QStyle.StateFlag.State_Selected:
             participant.widget.display_mode = participant.widget.SelectedDisplayMode
         elif index.row() % 2 == 0:
             participant.widget.display_mode = participant.widget.StandardDisplayMode
@@ -5620,14 +5623,14 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
 
         painter.save()
         painter.drawPixmap(option.rect, participant.widget.grab())
-        if (option.state & QStyle.State_MouseOver) and participant.widget.isEnabled():
+        if (option.state & QStyle.StateFlag.State_MouseOver) and participant.widget.isEnabled():
             self.drawRemoveIndicator(participant, option, painter, participant.widget)
-        if 0 and (option.state & QStyle.State_MouseOver):
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            if option.state & QStyle.State_Selected:
+        if 0 and (option.state & QStyle.StateFlag.State_MouseOver):
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            if option.state & QStyle.StateFlag.State_Selected:
                 painter.fillRect(option.rect, QColor(240, 244, 255, 40))
             else:
-                painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
                 painter.fillRect(option.rect, QColor(240, 244, 255, 230))
         painter.restore()
 
@@ -5635,22 +5638,22 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         pen_thickness = 1.6
 
         if widget.state_label.state is not None:
-            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            foreground_color = option.palette.color(QPalette.ColorGroup.Normal, QPalette.ColorRole.WindowText)
             background_color = widget.state_label.state_colors[widget.state_label.state]
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
             gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3 * 255))
             gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
-            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            foreground_color = widget.palette().color(QPalette.ColorGroup.Normal, widget.foregroundRole())
             background_color = widget.palette().color(widget.backgroundRole())
             contrast_color = self.calc_light_color(background_color)
         line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
 
         # draw the remove indicator at the top (works best with a state_label of width 14)
         cross_rect = QRect(0, 0, 14, 14)
@@ -5658,8 +5661,8 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         cross_rect.translate(option.rect.topLeft())
 
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.translate(cross_rect.center())
         painter.translate(+1.5, +1)
         painter.translate(0, +1)
@@ -5673,7 +5676,7 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.restore()
 
     def sizeHint(self, option, index):
-        return index.data(Qt.SizeHintRole)
+        return index.data(Qt.ItemDataRole.SizeHintRole)
 
 
 @implementer(IObserver)
@@ -5697,27 +5700,27 @@ class ConferenceParticipantModel(QAbstractListModel):
 
     def flags(self, index):
         if index.isValid():
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled
         else:
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.participants)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         item = self.participants[index.row()]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.SizeHintRole:
+        elif role == Qt.ItemDataRole.SizeHintRole:
             return item.size_hint
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction  # | Qt.MoveAction
+        return Qt.DropAction.CopyAction  # | Qt.DropAction.MoveAction
 
     def dropMimeData(self, mime_data, action, row, column, parent_index):
         # this is here just to keep the default Qt DnD API happy
@@ -5725,7 +5728,7 @@ class ConferenceParticipantModel(QAbstractListModel):
         return False
 
     def handleDroppedData(self, mime_data, action, index):
-        if action == Qt.IgnoreAction:
+        if action == Qt.DropAction.IgnoreAction:
             return True
 
         for mime_type in self.accepted_mime_types:
@@ -5837,8 +5840,8 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
     def __init__(self, parent=None):
         super(ConferenceParticipantListView, self).__init__(parent)
         self.setItemDelegate(ConferenceParticipantDelegate(self))
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.paint_drop_indicator = False
@@ -5869,7 +5872,7 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
             pen_color = self.color_with_alpha(color, 120)
             brush_color = self.color_with_alpha(color, 10)
             painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setBrush(brush_color)
             painter.setPen(QPen(pen_color, 1.6))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
@@ -5996,8 +5999,8 @@ ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
 class IncomingDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingDialog, self).__init__(parent)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
         default_font_size = self.uri_label.fontInfo().pointSizeF()
@@ -6026,7 +6029,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self.auto_answer_confirmed = False
 
     def show(self, activate=True):
-        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(IncomingDialog, self).show()
 
     @property
@@ -6219,16 +6222,16 @@ class IncomingRequest(QObject):
         return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream) if stream is not None}
 
     def _auto_answer(self):
-        self._SH_DialogFinished(QDialog.Accepted)
+        self._SH_DialogFinished(QDialog.DialogCode.Accepted)
 
     def _SH_DialogFinished(self, result):
         if self._auto_answer_timer and self._auto_answer_timer.isActive():
             self._auto_answer_timer.stop()
 
         self.finished.emit(self)
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             self.accepted.emit(self)
-        elif result == QDialog.Rejected:
+        elif result == QDialog.DialogCode.Rejected:
             self.rejected.emit(self, self.dialog.reject_mode)
 
 
@@ -6238,8 +6241,8 @@ ui_class, base_class = uic.loadUiType(Resources.get('incoming_filetransfer_dialo
 class IncomingFileTransferDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingFileTransferDialog, self).__init__(parent)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
         default_font_size = self.uri_label.fontInfo().pointSizeF()
@@ -6252,7 +6255,7 @@ class IncomingFileTransferDialog(IncomingDialogBase, ui_class):
         self.reject_button.released.connect(self._set_reject_mode)
 
     def show(self, activate=True):
-        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(IncomingFileTransferDialog, self).show()
 
     def _set_reject_mode(self):
@@ -6310,9 +6313,9 @@ class IncomingFileTransferRequest(QObject):
 
     def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             self.accepted.emit(self)
-        elif result == QDialog.Rejected:
+        elif result == QDialog.DialogCode.Rejected:
             self.rejected.emit(self, self.dialog.reject_mode)
 
 
@@ -6322,8 +6325,8 @@ ui_class, base_class = uic.loadUiType(Resources.get('incoming_calltransfer_dialo
 class IncomingCallTransferDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(IncomingCallTransferDialog, self).__init__(parent)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
         default_font_size = self.uri_label.fontInfo().pointSizeF()
@@ -6335,7 +6338,7 @@ class IncomingCallTransferDialog(IncomingDialogBase, ui_class):
         self.reject_mode = 'reject'
 
     def show(self, activate=True):
-        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(IncomingCallTransferDialog, self).show()
 
 del ui_class, base_class
@@ -6383,9 +6386,9 @@ class IncomingCallTransferRequest(QObject):
 
     def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             self.accepted.emit(self)
-        elif result == QDialog.Rejected:
+        elif result == QDialog.DialogCode.Rejected:
             self.rejected.emit(self, self.dialog.reject_mode)
 
 

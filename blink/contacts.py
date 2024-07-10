@@ -1575,14 +1575,14 @@ class Contact(object):
             size = 32
             if self.stylish_icons:
                 pixmap = QPixmap(size, size)
-                pixmap.fill(Qt.transparent)
+                pixmap.fill(Qt.GlobalColor.transparent)
                 path = QPainterPath()
                 path.addRoundedRect(0, 0, size, size, 3.7, 3.7)
                 painter = QPainter(pixmap)
-                painter.setRenderHint(QPainter.Antialiasing, True)
-                painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
                 painter.setClipPath(path)
-                self.icon.paint(painter, pixmap.rect(), Qt.AlignCenter)
+                self.icon.paint(painter, pixmap.rect(), Qt.AlignmentFlag.AlignCenter)
                 painter.end()
             else:
                 pixmap = self.icon.pixmap(size)
@@ -1731,14 +1731,14 @@ class ContactDetail(object):
             size = 32
             if self.stylish_icons:
                 pixmap = QPixmap(size, size)
-                pixmap.fill(Qt.transparent)
+                pixmap.fill(Qt.GlobalColor.transparent)
                 path = QPainterPath()
                 path.addRoundedRect(0, 0, size, size, 3.7, 3.7)
                 painter = QPainter(pixmap)
-                painter.setRenderHint(QPainter.Antialiasing, True)
-                painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
                 painter.setClipPath(path)
-                self.icon.paint(painter, pixmap.rect(), Qt.AlignCenter)
+                self.icon.paint(painter, pixmap.rect(), Qt.AlignmentFlag.AlignCenter)
                 painter.end()
             else:
                 pixmap = self.icon.pixmap(size)
@@ -1825,20 +1825,20 @@ class ContactWidget(base_class, ui_class):
         super(ContactWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.info_label.setForegroundRole(QPalette.Dark)
+        self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
         # AlternateBase set to #f0f4ff or #e0e9ff
 
     def paintEvent(self, event):
         super(ContactWidget, self).paintEvent(event)
-        if self.backgroundRole() == QPalette.Highlight and self.state_label.state is not None:
+        if self.backgroundRole() == QPalette.ColorRole.Highlight and self.state_label.state is not None:
             rect = self.state_label.geometry()
             rect.setWidth(self.width() - rect.x())
             gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, Qt.transparent)
-            gradient.setColorAt(1.0, Qt.white)
+            gradient.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
+            gradient.setColorAt(0.0, Qt.GlobalColor.transparent)
+            gradient.setColorAt(1.0, Qt.GlobalColor.white)
             painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.fillRect(rect, QBrush(gradient))
             painter.end()
 
@@ -1890,7 +1890,7 @@ class GroupWidget(base_class, ui_class):
             return
         self.__dict__['selected'] = value
         self.name_label.setStyleSheet("color: #ffffff; font-weight: bold;" if value else "color: #000000;")
-        # self.name_label.setForegroundRole(QPalette.BrightText if value else QPalette.WindowText)
+        # self.name_label.setForegroundRole(QPalette.ColorRole.BrightText if value else QPalette.ColorRole.WindowText)
         self.update()
 
     selected = property(_get_selected, _set_selected)
@@ -1957,25 +1957,25 @@ class GroupWidget(base_class, ui_class):
         painter.setPen(lower_color)
         painter.drawLine(rect.bottomLeft(), rect.bottomRight())
 
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
-        if self.drop_indicator is ContactListView.AboveItem:
+        if self.drop_indicator is ContactListView.DropIndicatorPosition.AboveItem:
             line_rect = QRectF(rect.adjusted(18, 0, 0, 5 - rect.height()))
             arc_rect = line_rect.adjusted(-5, -3, -line_rect.width(), -3)
             path = QPainterPath(line_rect.topRight())
             path.lineTo(line_rect.topLeft())
             path.arcTo(arc_rect, 0, -180)
             painter.drawPath(path)
-        elif self.drop_indicator is ContactListView.BelowItem:
+        elif self.drop_indicator is ContactListView.DropIndicatorPosition.BelowItem:
             line_rect = QRectF(rect.adjusted(18, rect.height() - 5, 0, 0))
             arc_rect = line_rect.adjusted(-5, 2, -line_rect.width(), 2)
             path = QPainterPath(line_rect.bottomRight())
             path.lineTo(line_rect.bottomLeft())
             path.arcTo(arc_rect, 0, 180)
             painter.drawPath(path)
-        elif self.drop_indicator is ContactListView.OnItem:
-            painter.setBrush(Qt.NoBrush)
+        elif self.drop_indicator is ContactListView.DropIndicatorPosition.OnItem:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
 
         if self.collapse_button.isChecked():
@@ -1985,7 +1985,7 @@ class GroupWidget(base_class, ui_class):
             arrow = QPolygonF([QPointF(0, 0), QPointF(9, 0), QPointF(4.5, 8)])
             arrow.translate(QPointF(5, 5))
         painter.setBrush(foreground)
-        painter.setPen(QPen(painter.brush(), 0, Qt.NoPen))
+        painter.setPen(QPen(painter.brush(), 0, Qt.PenStyle.NoPen))
         painter.drawPolygon(arrow)
 
         painter.end()
@@ -1993,7 +1993,7 @@ class GroupWidget(base_class, ui_class):
     def event(self, event):
         if type(event) is QKeyEvent and self.editing:
             return True  # do not propagate keyboard events while editing
-        elif type(event) is QMouseEvent and event.type() == QEvent.MouseButtonDblClick and event.button() == Qt.LeftButton:
+        elif type(event) is QMouseEvent and event.type() == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton:
             self._start_editing()
         return super(GroupWidget, self).event(event)
 
@@ -2009,26 +2009,26 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         self.contact_evenline_widget = ContactWidget(None)
         self.contact_selected_widget = ContactWidget(None)
 
-        self.contact_oddline_widget.setBackgroundRole(QPalette.Base)
-        self.contact_oddline_widget.setForegroundRole(QPalette.WindowText)
-        self.contact_evenline_widget.setBackgroundRole(QPalette.AlternateBase)
-        self.contact_evenline_widget.setForegroundRole(QPalette.WindowText)
-        self.contact_selected_widget.setBackgroundRole(QPalette.Highlight)
-        self.contact_selected_widget.setForegroundRole(QPalette.HighlightedText)
-        self.contact_selected_widget.name_label.setForegroundRole(QPalette.HighlightedText)
-        self.contact_selected_widget.info_label.setForegroundRole(QPalette.HighlightedText)
+        self.contact_oddline_widget.setBackgroundRole(QPalette.ColorRole.Base)
+        self.contact_oddline_widget.setForegroundRole(QPalette.ColorRole.WindowText)
+        self.contact_evenline_widget.setBackgroundRole(QPalette.ColorRole.AlternateBase)
+        self.contact_evenline_widget.setForegroundRole(QPalette.ColorRole.WindowText)
+        self.contact_selected_widget.setBackgroundRole(QPalette.ColorRole.Highlight)
+        self.contact_selected_widget.setForegroundRole(QPalette.ColorRole.HighlightedText)
+        self.contact_selected_widget.name_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+        self.contact_selected_widget.info_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
 
         # No theme except Oxygen honors the BackgroundRole
         palette = self.contact_oddline_widget.palette()
-        palette.setColor(QPalette.Window, palette.color(QPalette.Base))
+        palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.Base))
         self.contact_oddline_widget.setPalette(palette)
 
         palette = self.contact_evenline_widget.palette()
-        palette.setColor(QPalette.Window, palette.color(QPalette.AlternateBase))
+        palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.AlternateBase))
         self.contact_evenline_widget.setPalette(palette)
 
         palette = self.contact_selected_widget.palette()
-        palette.setColor(QPalette.Window, palette.color(QPalette.Highlight))
+        palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.Highlight))
         self.contact_selected_widget.setPalette(palette)
 
     def _update_list_view(self, group, collapsed):
@@ -2040,7 +2040,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
             list_view.setRowHidden(position, collapsed)
 
     def createEditor(self, parent, options, index):
-        item = index.data(Qt.UserRole)
+        item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Group):
             item.widget = GroupWidget(parent)
             item.widget.collapse_button.toggled.connect(partial(self._update_list_view, item))  # the partial still creates a memory cycle -Dan
@@ -2051,10 +2051,10 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
     def editorEvent(self, event, model, option, index):
         arrow_rect = QRect(0, 0, 14, option.rect.height())
         arrow_rect.moveTopRight(option.rect.topRight())
-        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and arrow_rect.contains(event.pos()):
-            model.contact_list.detail_model.contact = index.data(Qt.UserRole).settings
+        if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier and arrow_rect.contains(event.pos()):
+            model.contact_list.detail_model.contact = index.data(Qt.ItemDataRole.UserRole).settings
             detail_view = model.contact_list.detail_view
-            detail_view.animation.setDirection(QPropertyAnimation.Forward)
+            detail_view.animation.setDirection(QPropertyAnimation.Direction.Forward)
             detail_view.animation.setStartValue(option.rect)
             detail_view.animation.setEndValue(model.contact_list.geometry())
             detail_view.raise_()
@@ -2067,7 +2067,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         editor.setGeometry(option.rect)
 
     def paintContact(self, contact, painter, option, index):
-        if option.state & QStyle.State_Selected:
+        if option.state & QStyle.StateFlag.State_Selected:
             widget = self.contact_selected_widget
         elif index.row() % 2 == 1:
             widget = self.contact_evenline_widget
@@ -2082,15 +2082,15 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         widget.render(pixmap)
         painter.drawPixmap(option.rect, pixmap)
 
-        if option.state & QStyle.State_MouseOver:
+        if option.state & QStyle.StateFlag.State_MouseOver:
             self.drawExpansionIndicator(contact, option, painter, widget)
 
-        if 0 and (option.state & QStyle.State_MouseOver):
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            if option.state & QStyle.State_Selected:
+        if 0 and (option.state & QStyle.StateFlag.State_MouseOver):
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            if option.state & QStyle.StateFlag.State_Selected:
                 painter.fillRect(option.rect, QColor(240, 244, 255, 40))
             else:
-                painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
                 painter.fillRect(option.rect, QColor(240, 244, 255, 230))
 
         painter.restore()
@@ -2099,24 +2099,24 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         pen_thickness = 1.6
 
         if contact.state is not None:
-            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            foreground_color = option.palette.color(QPalette.ColorGroup.Normal, QPalette.ColorRole.WindowText)
             background_color = widget.state_label.state_colors[contact.state]
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
-            gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+            gradient.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
             gradient.setColorAt(0.0, self.color_with_alpha(base_contrast_color, 0.3 * 255))
             gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
-            # foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
-            # background_color = option.palette.color(QPalette.Window)
-            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            # foreground_color = option.palette.color(QPalette.ColorGroup.Normal, QPalette.ColorRole.WindowText)
+            # background_color = option.palette.color(QPalette.ColorRole.Window)
+            foreground_color = widget.palette().color(QPalette.ColorGroup.Normal, widget.foregroundRole())
             background_color = widget.palette().color(widget.backgroundRole())
             contrast_color = self.calc_light_color(background_color)
         line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        contrast_pen = QPen(QBrush(contrast_color), pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
 
         # this fits best with a state_label of width 14
         arrow_rect = QRect(0, 0, 14, 14)
@@ -2127,8 +2127,8 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         arrow.translate(1, 1)
 
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.translate(arrow_rect.center())
         painter.translate(0, +1)
         painter.setPen(contrast_pen)
@@ -2143,9 +2143,9 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
             # For some reason updateEditorGeometry only receives the peak value
             # of the size that the widget ever had, so it will never shrink it.
             group.widget.resize(option.rect.size())
-        group.widget.selected = bool(option.state & QStyle.State_Selected)
+        group.widget.selected = bool(option.state & QStyle.StateFlag.State_Selected)
 
-        if option.state & QStyle.State_Selected and not option.state & QStyle.State_HasFocus:
+        if option.state & QStyle.StateFlag.State_Selected and not option.state & QStyle.StateFlag.State_HasFocus:
             # This condition is met when dragging is started on this group.
             # We use this to to draw the dragged item image.
             painter.save()
@@ -2155,30 +2155,30 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
             painter.restore()
 
     def paint(self, painter, option, index):
-        item = index.data(Qt.UserRole)
+        item = index.data(Qt.ItemDataRole.UserRole)
         handler = getattr(self, 'paint%s' % item.__class__.__name__, Null)
         handler(item, painter, option, index)
 
     def sizeHint(self, option, index):
-        return index.data(Qt.SizeHintRole)
+        return index.data(Qt.ItemDataRole.SizeHintRole)
 
 
 class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
     def __init__(self, parent=None):
         super(ContactDetailDelegate, self).__init__(parent)
         self.widget = ContactWidget(None)
-        self.widget.setBackgroundRole(QPalette.Base)
+        self.widget.setBackgroundRole(QPalette.ColorRole.Base)
         # No theme except Oxygen honors the BackgroundRole
         palette = self.widget.palette()
-        palette.setColor(QPalette.Window, palette.color(QPalette.Base))
+        palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.Base))
         self.widget.setPalette(palette)
 
     def editorEvent(self, event, model, option, index):
         arrow_rect = QRect(0, 0, 14, option.rect.height())
         arrow_rect.moveTopRight(option.rect.topRight())
-        if index.row() == 0 and event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier and arrow_rect.contains(event.pos()):
+        if index.row() == 0 and event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier and arrow_rect.contains(event.pos()):
             detail_view = self.parent()
-            detail_view.animation.setDirection(QPropertyAnimation.Backward)
+            detail_view.animation.setDirection(QPropertyAnimation.Direction.Backward)
             detail_view.animation.start()
             return True
         return super(ContactDetailDelegate, self).editorEvent(event, model, option, index)
@@ -2206,39 +2206,39 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.setClipRect(option.rect)
 
         # draw the background
-        style.proxy().drawPrimitive(QStyle.PE_PanelItemViewItem, option, painter, widget)
+        style.proxy().drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, widget)
 
         # draw the check mark
-        if option.features & option.HasCheckIndicator:
+        if option.features & option.ViewItemFeature.HasCheckIndicator:
             self.drawCheckMark(option, painter, widget)
 
         # draw the icon
-        mode = QIcon.Disabled if not option.state & QStyle.State_Enabled else QIcon.Selected if option.state & QStyle.State_Selected else QIcon.Normal
-        state = QIcon.On if option.state & QStyle.State_Open else QIcon.Off
-        icon_rect = style.subElementRect(QStyle.SE_ItemViewItemDecoration, option, widget)
+        mode = QIcon.Mode.Disabled if not option.state & QStyle.StateFlag.State_Enabled else QIcon.Mode.Selected if option.state & QStyle.StateFlag.State_Selected else QIcon.Mode.Normal
+        state = QIcon.State.On if option.state & QStyle.StateFlag.State_Open else QIcon.State.Off
+        icon_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemDecoration, option, widget)
         option.icon.paint(painter, icon_rect, option.decorationAlignment, mode, state)
 
         # draw the text
         if contact_uri.uri.uri:
-            color_group = QPalette.Disabled if not option.state & QStyle.State_Enabled else QPalette.Normal if option.state & QStyle.State_Active else QPalette.Inactive
-            text_rect = style.subElementRect(QStyle.SE_ItemViewItemText, option, widget)
+            color_group = QPalette.ColorGroup.Disabled if not option.state & QStyle.StateFlag.State_Enabled else QPalette.ColorGroup.Normal if option.state & QStyle.StateFlag.State_Active else QPalette.ColorGroup.Inactive
+            text_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, option, widget)
             text_rect.setRight(option.rect.right() - 5)
             if contact_uri.uri.type:
-                painter.setPen(option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Dark))
-                painter.drawText(text_rect, Qt.TextSingleLine | Qt.AlignRight | Qt.AlignVCenter, contact_uri.uri.type)
-                text_rect.adjust(0, 0, -option.fontMetrics.width(contact_uri.uri.type) - 5, 0)
-            text_color = option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text)
+                painter.setPen(option.palette.color(color_group, QPalette.ColorRole.HighlightedText if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Dark))
+                painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, contact_uri.uri.type)
+                text_rect.adjust(0, 0, -option.fontMetrics.size(Qt.TextFlag.TextSingleLine, contact_uri.uri.type).width() - 5, 0)
+            text_color = option.palette.color(color_group, QPalette.ColorRole.HighlightedText if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Text)
             text_width = text_rect.width()
-            if option.fontMetrics.width(contact_uri.uri.uri) > text_width:
+            if option.fontMetrics.size(Qt.TextFlag.TextSingleLine, contact_uri.uri.uri).width() > text_width:
                 fade_start = 1 - 50.0 / text_width if text_width > 50 else 0.0
                 gradient = QLinearGradient(text_rect.x(), 0, text_rect.right(), 0)
                 gradient.setColorAt(fade_start, text_color)
-                gradient.setColorAt(1.0, Qt.transparent)
+                gradient.setColorAt(1.0, Qt.GlobalColor.transparent)
                 painter.setClipRect(text_rect)
                 painter.setPen(QPen(QBrush(gradient), 1.0))
             else:
                 painter.setPen(text_color)
-            painter.drawText(text_rect, Qt.TextSingleLine | Qt.AlignLeft | Qt.AlignVCenter, contact_uri.uri.uri)
+            painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, contact_uri.uri.uri)
 
         painter.restore()
 
@@ -2246,7 +2246,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         pen_thickness = 1.6
 
         if contact.state is not None:
-            foreground_color = option.palette.color(QPalette.Normal, QPalette.WindowText)
+            foreground_color = option.palette.color(QPalette.ColorGroup.Normal, QPalette.ColorRole.WindowText)
             background_color = widget.state_label.state_colors[contact.state]
             base_contrast_color = self.calc_light_color(background_color)
             gradient = QLinearGradient(0, 0, 1, 0)
@@ -2255,13 +2255,13 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
             gradient.setColorAt(1.0, self.color_with_alpha(base_contrast_color, 0.8 * 255))
             contrast_color = QBrush(gradient)
         else:
-            foreground_color = widget.palette().color(QPalette.Normal, widget.foregroundRole())
+            foreground_color = widget.palette().color(QPalette.ColorGroup.Normal, widget.foregroundRole())
             background_color = widget.palette().color(widget.backgroundRole())
             contrast_color = self.calc_light_color(background_color)
         line_color = self.deco_color(background_color, foreground_color)
 
-        pen = QPen(line_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(contrast_color, pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(line_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        contrast_pen = QPen(contrast_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
 
         # this fits best with a state_label of width 14
         arrow_rect = QRect(0, 0, 14, 14)
@@ -2272,8 +2272,8 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         arrow.translate(2, 1)
 
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.translate(arrow_rect.center())
         painter.translate(0, +1)
         painter.setPen(contrast_pen)
@@ -2284,22 +2284,22 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         painter.restore()
 
     def drawCheckMark(self, option, painter, widget):
-        if option.checkState == Qt.Unchecked:
+        if option.checkState == Qt.CheckState.Unchecked:
             return
 
         palette = option.palette
-        rect = widget.style().subElementRect(QStyle.SE_ItemViewItemCheckIndicator, option, widget)
+        rect = widget.style().subElementRect(QStyle.SubElement.SE_ItemViewItemCheckIndicator, option, widget)
 
         x = int(rect.center().x() - 3.5)
         y = int(rect.center().y() - 2.5)
 
         pen_thickness = 2.0
-        color = palette.color(QPalette.WindowText)
-        background = palette.color(QPalette.Highlight if option.state & QStyle.State_Selected else QPalette.Window)
-        pen = QPen(self.deco_color(background, color), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-        contrast_pen = QPen(self.calc_light_color(background), pen_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        color = palette.color(QPalette.ColorRole.WindowText)
+        background = palette.color(QPalette.ColorRole.Highlight if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Window)
+        pen = QPen(self.deco_color(background, color), pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        contrast_pen = QPen(self.calc_light_color(background), pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
 
-        if option.checkState == Qt.PartiallyChecked:
+        if option.checkState == Qt.CheckState.PartiallyChecked:
             dashes = [1.0, 2.0]
             pen_thickness = 1.3
             pen.setWidthF(pen_thickness)
@@ -2311,7 +2311,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
 
         painter.save()
         painter.translate(0, -1)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(contrast_pen)
         painter.translate(0, offset)
         painter.drawLine(x + 9, y, x + 3, y + 7)
@@ -2324,12 +2324,12 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
 
     def paint(self, painter, option, index):
         self.initStyleOption(option, index)
-        item = index.data(Qt.UserRole)
+        item = index.data(Qt.ItemDataRole.UserRole)
         handler = getattr(self, 'paint%s' % item.__class__.__name__, Null)
         handler(item, painter, option, index)
 
     def sizeHint(self, option, index):
-        return index.data(Qt.SizeHintRole)
+        return index.data(Qt.ItemDataRole.SizeHintRole)
 
 
 class Operation(object):
@@ -2526,27 +2526,27 @@ class ContactModel(QAbstractListModel):
 
     def flags(self, index):
         if index.isValid():
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled | Qt.ItemIsEditable
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsEditable
         else:
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         item = self.items[index.row()]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.SizeHintRole:
+        elif role == Qt.ItemDataRole.SizeHintRole:
             return item.size_hint
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction | Qt.MoveAction
+        return Qt.DropAction.CopyAction | Qt.DropAction.MoveAction
 
     def mimeTypes(self):
         return ['application/x-blink-contact-list']
@@ -2567,7 +2567,7 @@ class ContactModel(QAbstractListModel):
         return False
 
     def handleDroppedData(self, mime_data, action, index):
-        if action == Qt.IgnoreAction:
+        if action == Qt.DropAction.IgnoreAction:
             return True
 
         for mime_type in self.accepted_mime_types:
@@ -2588,24 +2588,24 @@ class ContactModel(QAbstractListModel):
         moved_groups = set(self.items[index.row()] for index in selected_indexes if index.isValid() and self.items[index.row()].movable)
         if group is groups[0] and group in moved_groups:
             drop_group = next(group for group in groups if group not in moved_groups)
-            drop_position = self.contact_list.AboveItem
+            drop_position = self.contact_list.DropIndicatorPosition.AboveItem
         elif group is groups[-1] and group in moved_groups:
             drop_group = next(group for group in reversed(groups) if group not in moved_groups)
-            drop_position = self.contact_list.BelowItem
+            drop_position = self.contact_list.DropIndicatorPosition.BelowItem
         elif group in moved_groups:
             position = groups.index(group)
-            if drop_indicator is self.contact_list.AboveItem:
+            if drop_indicator is self.contact_list.DropIndicatorPosition.AboveItem:
                 drop_group = next(group for group in reversed(groups[:position]) if group not in moved_groups)
                 drop_position = self.contact_list.BelowItem
             else:
                 drop_group = next(group for group in groups[position:] if group not in moved_groups)
-                drop_position = self.contact_list.AboveItem
+                drop_position = self.contact_list.DropIndicatorPosition.AboveItem
         else:
             drop_group = group
             drop_position = drop_indicator
         items = self._pop_items(selected_indexes)
         groups = self.items[GroupList]  # get group list again as it changed
-        if drop_position is self.contact_list.AboveItem:
+        if drop_position is self.contact_list.DropIndicatorPosition.AboveItem:
             position = self.items.index(drop_group)
         else:
             position = len(self.items) if drop_group is groups[-1] else self.items.index(groups[groups.index(drop_group) + 1])
@@ -3068,14 +3068,14 @@ class ContactSearchModel(QSortFilterProxyModel):
 
     def flags(self, index):
         if index.isValid():
-            return QSortFilterProxyModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled
+            return QSortFilterProxyModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsDragEnabled
         else:
-            return QSortFilterProxyModel.flags(self, index) | Qt.ItemIsDropEnabled
+            return QSortFilterProxyModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled
 
     def filterAcceptsRow(self, source_row, source_parent):
         source_model = self.sourceModel()
         source_index = source_model.index(source_row, 0, source_parent)
-        item = source_index.data(Qt.UserRole)
+        item = source_index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Group) or not item.group.virtual:
             return False
         search_tokens = self.filterRegExp().pattern().lower().split()
@@ -3083,17 +3083,17 @@ class ContactSearchModel(QSortFilterProxyModel):
         return all(token in searched_item for token in search_tokens)
 
     def lessThan(self, left_index, right_index):
-        return left_index.data(Qt.DisplayRole) < right_index.data(Qt.DisplayRole)
+        return left_index.data(Qt.ItemDataRole.DisplayRole) < right_index.data(Qt.ItemDataRole.DisplayRole)
 
     def supportedDropActions(self):
-        return Qt.CopyAction
+        return Qt.DropAction.CopyAction
 
     def mimeTypes(self):
         return ['application/x-blink-contact-list']
 
     def mimeData(self, indexes):
         mime_data = QMimeData()
-        contacts = [index.data(Qt.UserRole) for index in indexes if index.isValid()]
+        contacts = [index.data(Qt.ItemDataRole.UserRole) for index in indexes if index.isValid()]
         if contacts:
             mime_data.setData('application/x-blink-contact-list', QByteArray(pickle.dumps(contacts)))
         return mime_data
@@ -3104,7 +3104,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         return False
 
     def handleDroppedData(self, mime_data, action, index):
-        if action == Qt.IgnoreAction:
+        if action == Qt.DropAction.IgnoreAction:
             return True
 
         for mime_type in self.accepted_mime_types:
@@ -3124,7 +3124,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         if not files:
             return False
 
-        contact = index.data(Qt.UserRole)
+        contact = index.data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         for filename in files:
             session_manager.send_file(contact, contact.uri, filename)
@@ -3178,34 +3178,34 @@ class ContactDetailModel(QAbstractListModel):
 
     def flags(self, index):
         if index.isValid():
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsDragEnabled
         else:
-            return QAbstractListModel.flags(self, index) | Qt.ItemIsDropEnabled
+            return QAbstractListModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.items)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         row = index.row()
         item = self.items[row]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
-        elif role == Qt.SizeHintRole:
+        elif role == Qt.ItemDataRole.SizeHintRole:
             return item.size_hint
-        elif role == Qt.CheckStateRole and row > 0:
+        elif role == Qt.ItemDataRole.CheckStateRole and row > 0:
             if item.uri is self.contact.uris.default:
-                return Qt.Checked
+                return Qt.CheckState.Checked
             elif self.contact.uris.default is None and row == 1:
-                return Qt.PartiallyChecked
-            return Qt.Unchecked
+                return Qt.CheckState.PartiallyChecked
+            return Qt.CheckState.Unchecked
         return None
 
     def supportedDropActions(self):
-        return Qt.CopyAction
+        return Qt.DropAction.CopyAction
 
     def mimeTypes(self):
         return ['application/x-blink-contact-list', 'application/x-blink-contact-uri-list']
@@ -3227,7 +3227,7 @@ class ContactDetailModel(QAbstractListModel):
         return False
 
     def handleDroppedData(self, mime_data, action, index):
-        if action == Qt.IgnoreAction:
+        if action == Qt.DropAction.IgnoreAction:
             return True
 
         for mime_type in self.accepted_mime_types:
@@ -3358,12 +3358,12 @@ class ContactListView(QListView):
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
             index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
+            selection_model.setCurrentIndex(index, selection_model.SelectionFlag.Select)
         self.context_menu.hide()
 
     def contextMenuEvent(self, event):
         model = self.model()
-        selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+        selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
         if not model.deleted_items:
             undo_delete_text = translate("contact_list", "Undo Delete")
         elif len(model.deleted_items[-1]) == 1:
@@ -3523,9 +3523,9 @@ class ContactListView(QListView):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
+        if event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
+            item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
                 if item.group.settings is MessageContactsGroup():
                     session_manager = MessageManager()
@@ -3535,7 +3535,7 @@ class ContactListView(QListView):
                     session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
         elif event.key() == Qt.Key.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
+            item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
                 self.detail_model.contact = item.settings
                 self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
@@ -3552,8 +3552,8 @@ class ContactListView(QListView):
         if self.drop_indicator_index.isValid():
             rect = self.visualRect(self.drop_indicator_index)
             painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setBrush(Qt.NoBrush)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
             painter.end()
@@ -3562,7 +3562,7 @@ class ContactListView(QListView):
             last_group = model.items[GroupList][-1]
         except IndexError:
             last_group = Null
-        if last_group.widget.drop_indicator is self.BelowItem:
+        if last_group.widget.drop_indicator is self.DropIndicatorPosition.BelowItem:
             # draw the bottom part of the drop indicator for the last group if we have one
             rect = self.visualRect(model.index(model.items.index(last_group)))
             line_rect = QRectF(rect.adjusted(18, rect.height(), 0, 5))
@@ -3571,7 +3571,7 @@ class ContactListView(QListView):
             path.lineTo(line_rect.topLeft())
             path.arcTo(arc_rect, 0, -180)
             painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             painter.drawPath(path)
             painter.end()
@@ -3603,7 +3603,7 @@ class ContactListView(QListView):
             event.ignore()  # we don't handle drops for blink contacts or groups from other sources
         else:
             if event_source is self:
-                event.setDropAction(Qt.MoveAction)
+                event.setDropAction(Qt.DropAction.MoveAction)
             if has_blink_contacts or has_blink_groups:
                 if not self.needs_restore:
                     for group in model.items[GroupList]:
@@ -3624,7 +3624,7 @@ class ContactListView(QListView):
     def dragMoveEvent(self, event):
         super(ContactListView, self).dragMoveEvent(event)
         if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
+            event.setDropAction(Qt.DropAction.MoveAction)
 
         model = self.model()
         mime_data = event.mimeData()
@@ -3633,9 +3633,9 @@ class ContactListView(QListView):
             if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
-                index = self.indexAt(event.pos())
+                index = self.indexAt(event.position().toPoint())
                 rect = self.visualRect(index)
-                item = index.data(Qt.UserRole)
+                item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
@@ -3647,8 +3647,8 @@ class ContactListView(QListView):
     def dropEvent(self, event):
         model = self.model()
         if event.source() is self:
-            event.setDropAction(Qt.MoveAction)
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+            event.setDropAction(Qt.DropAction.MoveAction)
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         for group in model.items[GroupList]:
             group.widget.drop_indicator = None
@@ -3664,12 +3664,12 @@ class ContactListView(QListView):
         model.addGroup(group)
         self.scrollToTop()
         group.widget.edit()
-        selection_model.select(model.index(model.items.index(group)), selection_model.ClearAndSelect)
+        selection_model.select(model.index(model.items.index(group)), selection_model.SelectionFlag.ClearAndSelect)
 
     def _AH_AddContact(self):
         groups = set()
         for index in self.selectionModel().selectedIndexes():
-            item = index.data(Qt.UserRole)
+            item = index.data(Qt.ItemDataRole.UserRole)
             if isinstance(item, Group) and not item.virtual:
                 groups.add(item)
             elif isinstance(item, Contact) and not item.group.virtual:
@@ -3689,7 +3689,7 @@ class ContactListView(QListView):
 
     def _AH_EditItem(self):
         index = self.selectionModel().selectedIndexes()[0]
-        item = index.data(Qt.UserRole)
+        item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Group):
             self.scrollTo(index)
             item.widget.edit()
@@ -3738,22 +3738,22 @@ class ContactListView(QListView):
         model._atomic_update(save=modified_settings)
 
     def _AH_StartAudioCall(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio')])
 
     def _AH_StartVideoCall(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio'), StreamDescription('video')])
 
     def _AH_StartChatSession(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = MessageManager()
         try:
             uri = uri.uri
@@ -3763,22 +3763,22 @@ class ContactListView(QListView):
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         for filename in QFileDialog.getOpenFileNames(self, 'Select File(s)', session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, uri or contact.uri, filename)
 
     def _AH_RequestScreen(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
     def _AH_ShareMyScreen(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _AH_TransferCall(self):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.active_session.transfer(contact.uri)
 
@@ -3813,8 +3813,8 @@ class ContactListView(QListView):
             overlapping_groups = 0
         allowed_overlapping = 0 if contiguous_selection else 1
         if event.source() is not self or overlapping_groups <= allowed_overlapping:
-            drop_groups[0].widget.drop_indicator = self.BelowItem
-            drop_groups[1].widget.drop_indicator = self.AboveItem
+            drop_groups[0].widget.drop_indicator = self.DropIndicatorPosition.BelowItem
+            drop_groups[1].widget.drop_indicator = self.DropIndicatorPosition.AboveItem
         if groups[-1] in drop_groups:
             self.viewport().update()
         event.accept(rect)
@@ -3835,7 +3835,7 @@ class ContactListView(QListView):
             group = item
         selected_groups = set(model.items[index.row()].group for index in self.selectionModel().selectedIndexes() if model.items[index.row()].movable)
         if not group.virtual and (event.source() is not self or len(selected_groups) > 1 or group not in selected_groups):
-            group.widget.drop_indicator = self.OnItem
+            group.widget.drop_indicator = self.DropIndicatorPosition.OnItem
         event.accept(rect)
 
     def _DH_TextUriList(self, event, index, rect, item):
@@ -3850,7 +3850,7 @@ class ContactListView(QListView):
             event.ignore(rect)
 
     def _SH_DoubleClicked(self, index):
-        item = index.data(Qt.UserRole)
+        item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Contact):
             if item.group.settings is MessageContactsGroup():
                 session_manager = MessageManager()
@@ -3867,7 +3867,7 @@ class ContactListView(QListView):
     def _NH_BlinkSessionDidChangeState(self, notification):
         session_manager = SessionManager()
         if notification.sender is session_manager.active_session and self.context_menu.isVisible():
-            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
             if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
                 contact = selected_items[0]
                 self.actions.transfer_call.setEnabled(contact.uri is not None and notification.sender.state == 'connected')
@@ -3875,14 +3875,14 @@ class ContactListView(QListView):
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         session_manager = SessionManager()
         if notification.sender is session_manager.active_session and self.context_menu.isVisible():
-            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
             if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
                 contact = selected_items[0]
                 self.actions.transfer_call.setEnabled(contact.uri is not None and 'audio' in notification.sender.streams)
 
     def _NH_BlinkActiveSessionDidChange(self, notification):
         if self.context_menu.isVisible():
-            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
             if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
                 contact = selected_items[0]
                 active_session = notification.data.active_session
@@ -3928,13 +3928,13 @@ class ContactSearchListView(QListView):
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
             index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
+            selection_model.setCurrentIndex(index, selection_model.SelectionFlag.Select)
         self.context_menu.hide()
 
     def contextMenuEvent(self, event):
         model = self.model()
         source_model = model.sourceModel()
-        selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+        selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
         if not source_model.deleted_items:
             undo_delete_text = "Undo Delete"
         elif len(source_model.deleted_items[-1]) == 1:
@@ -4008,15 +4008,15 @@ class ContactSearchListView(QListView):
         model = self.model()
         selection_model = self.selectionModel()
         if not selection_model.selectedIndexes() and model.rowCount() > 0:
-            selection_model.setCurrentIndex(model.index(-1, -1), selection_model.NoUpdate)
+            selection_model.setCurrentIndex(model.index(-1, -1), selection_model.SelectionFlag.NoUpdate)
 
     def hideEvent(self, event):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
+        if event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
+            item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
                 if item.group.settings is MessageContactsGroup():
                     session_manager = MessageManager()
@@ -4024,11 +4024,11 @@ class ContactSearchListView(QListView):
                 else:
                     session_manager = SessionManager()
                     session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
-        elif event.key() == Qt.Key_Escape:
+        elif event.key() == Qt.Key.Key_Escape:
             QApplication.instance().main_window.search_box.clear()
-        elif event.key() == Qt.Key_Space:
+        elif event.key() == Qt.Key.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if len(selected_indexes) == 1 else None
+            item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
                 self.detail_model.contact = item.settings
                 self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
@@ -4045,8 +4045,8 @@ class ContactSearchListView(QListView):
         if self.drop_indicator_index.isValid():
             rect = self.visualRect(self.drop_indicator_index)
             painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setBrush(Qt.NoBrush)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
             painter.end()
@@ -4086,7 +4086,7 @@ class ContactSearchListView(QListView):
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
-                item = index.data(Qt.UserRole)
+                item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
@@ -4108,7 +4108,7 @@ class ContactSearchListView(QListView):
         QApplication.instance().main_window.contact_editor_dialog.open_for_add(contact.uri.uri)
 
     def _AH_EditItem(self):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         QApplication.instance().main_window.contact_editor_dialog.open_for_edit(contact.settings)
 
     def _AH_DeleteSelection(self):
@@ -4153,43 +4153,43 @@ class ContactSearchListView(QListView):
         model._atomic_update(save=modified_settings)
 
     def _AH_StartAudioCall(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio')])
 
     def _AH_StartVideoCall(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio'), StreamDescription('video')])
 
     def _AH_StartChatSession(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = MessageManager()
         session_manager.create_message_session(uri or contact.uri.uri)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         for filename in QFileDialog.getOpenFileNames(self, translate('contact_list', 'Select File(s)'), session_manager.send_file_directory, 'Any file (*.*)')[0]:
             session_manager.send_file(contact, uri or contact.uri, filename)
 
     def _AH_RequestScreen(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
     def _AH_ShareMyScreen(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _AH_TransferCall(self, uri=None):
-        contact = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
         session_manager.active_session.transfer(uri or contact.uri)
 
@@ -4204,7 +4204,7 @@ class ContactSearchListView(QListView):
             event.ignore(rect)
 
     def _SH_DoubleClicked(self, index):
-        item = index.data(Qt.UserRole)
+        item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Contact):
             if item.group.settings is MessageContactsGroup():
                 session_manager = MessageManager()
@@ -4221,7 +4221,7 @@ class ContactSearchListView(QListView):
     def _NH_BlinkSessionDidChangeState(self, notification):
         session_manager = SessionManager()
         if notification.sender is session_manager.active_session and self.context_menu.isVisible():
-            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
             if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
                 contact = selected_items[0]
                 self.actions.transfer_call.setEnabled(contact.uri is not None and notification.sender.state == 'connected')
@@ -4229,14 +4229,14 @@ class ContactSearchListView(QListView):
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         session_manager = SessionManager()
         if notification.sender is session_manager.active_session and self.context_menu.isVisible():
-            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
             if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
                 contact = selected_items[0]
                 self.actions.transfer_call.setEnabled(contact.uri is not None and 'audio' in notification.sender.streams)
 
     def _NH_BlinkActiveSessionDidChange(self, notification):
         if self.context_menu.isVisible():
-            selected_items = [index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()]
+            selected_items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
             if len(selected_items) == 1 and isinstance(selected_items[0], Contact):
                 contact = selected_items[0]
                 active_session = notification.data.active_session
@@ -4249,20 +4249,20 @@ class ContactDetailView(QListView):
     def __init__(self, contact_list):
         super(ContactDetailView, self).__init__(contact_list.parent())
         palette = self.palette()
-        palette.setColor(QPalette.AlternateBase, QColor('#eeeeee'))
+        palette.setColor(QPalette.ColorRole.AlternateBase, QColor('#eeeeee'))
         self.setPalette(palette)
         self.contact_list = contact_list
         self.setItemDelegate(ContactDetailDelegate(self))
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setDragEnabled(True)
-        self.setDragDropMode(QListView.DragDrop)
+        self.setDragDropMode(QListView.DragDropMode.DragDrop)
         self.setAlternatingRowColors(True)
-        self.setSelectionMode(QListView.SingleSelection)
+        self.setSelectionMode(QListView.SelectionMode.SingleSelection)
         self.setDropIndicatorShown(False)
         self.animation = QPropertyAnimation(self, b'geometry')
         self.animation.setDuration(250)
-        self.animation.setEasingCurve(QEasingCurve.Linear)
+        self.animation.setEasingCurve(QEasingCurve.Type.Linear)
         self.animation.finished.connect(self._SH_AnimationFinished)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
@@ -4297,10 +4297,10 @@ class ContactDetailView(QListView):
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
             index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
+            selection_model.setCurrentIndex(index, selection_model.SelectionFlag.Select)
 
     def eventFilter(self, watched, event):
-        if event.type() == QEvent.Resize:
+        if event.type() == QEvent.Type.Resize:
             new_size = event.size()
             geometry = self.animation.endValue()
             if geometry is not None:
@@ -4318,7 +4318,7 @@ class ContactDetailView(QListView):
         session_manager = SessionManager()
         model = self.model()
         selected_indexes = self.selectionModel().selectedIndexes()
-        selected_item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        selected_item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         contact_has_uris = model.rowCount() > 1
         menu = self.context_menu
         menu.clear()
@@ -4354,10 +4354,10 @@ class ContactDetailView(QListView):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Enter, Qt.Key_Return):
-            contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        if event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+            contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
             selected_indexes = self.selectionModel().selectedIndexes()
-            item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+            item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
             if isinstance(item, ContactURI):
                 selected_uri = item.uri
             else:
@@ -4368,7 +4368,7 @@ class ContactDetailView(QListView):
             else:
                 session_manager = SessionManager()
                 session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
-        elif event.key() == Qt.Key_Escape:
+        elif event.key() == Qt.Key.Key_Escape:
             self.animation.setDirection(QPropertyAnimation.Backward)
             self.animation.start()
         else:
@@ -4379,8 +4379,8 @@ class ContactDetailView(QListView):
         if self.drop_indicator_index.isValid():
             rect = self.visualRect(self.drop_indicator_index)
             painter = QPainter(self.viewport())
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setBrush(Qt.NoBrush)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
             painter.end()
@@ -4417,7 +4417,7 @@ class ContactDetailView(QListView):
                 self.drop_indicator_index = QModelIndex()
                 index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
-                item = index.data(Qt.UserRole)
+                item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
                 handler = getattr(self, '_DH_%s' % name)
                 handler(event, index, rect, item)
@@ -4442,14 +4442,14 @@ class ContactDetailView(QListView):
 
     def _AH_MakeURIDefault(self):
         model = self.model()
-        contact_uri = self.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact_uri = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         model.contact.uris.default = contact_uri.uri
         model.contact.save()
 
     def _AH_StartAudioCall(self, uri=None):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4458,9 +4458,9 @@ class ContactDetailView(QListView):
         session_manager.create_session(contact, selected_uri, [StreamDescription('audio')])
 
     def _AH_StartVideoCall(self, uri=None):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4469,9 +4469,9 @@ class ContactDetailView(QListView):
         session_manager.create_session(contact, selected_uri, [StreamDescription('audio'), StreamDescription('video')])
 
     def _AH_StartChatSession(self, uri=None):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4480,9 +4480,9 @@ class ContactDetailView(QListView):
         session_manager.create_session(contact, selected_uri, [StreamDescription('chat')], connect=False)
 
     def _AH_SendSMS(self, uri=None):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4492,9 +4492,9 @@ class ContactDetailView(QListView):
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4503,9 +4503,9 @@ class ContactDetailView(QListView):
             session_manager.send_file(contact, selected_uri, filename)
 
     def _AH_RequestScreen(self, uri=None):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4514,9 +4514,9 @@ class ContactDetailView(QListView):
         session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='viewer'), StreamDescription('audio')])
 
     def _AH_ShareMyScreen(self, uri=None):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4525,9 +4525,9 @@ class ContactDetailView(QListView):
         session_manager.create_session(contact, selected_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _AH_TransferCall(self, uri=None):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         selected_indexes = self.selectionModel().selectedIndexes()
-        item = selected_indexes[0].data(Qt.UserRole) if selected_indexes else None
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4549,25 +4549,25 @@ class ContactDetailView(QListView):
             event.accept(rect)
 
     def _SH_AnimationFinished(self):
-        if self.animation.direction() == QPropertyAnimation.Forward:
-            self.setFocus(Qt.OtherFocusReason)
+        if self.animation.direction() == QPropertyAnimation.Direction.Forward:
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
         else:
             self.hide()
-            self.contact_list.setFocus(Qt.OtherFocusReason)
+            self.contact_list.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _SH_ModelContactDeleted(self):
         if self.isVisible():
-            if self.animation.state() == QPropertyAnimation.Running:
+            if self.animation.state() == QPropertyAnimation.State.Running:
                 self.animation.pause()
-                self.animation.setDirection(QPropertyAnimation.Backward)
+                self.animation.setDirection(QPropertyAnimation.Direction.Backward)
                 self.animation.resume()
             else:
-                self.animation.setDirection(QPropertyAnimation.Backward)
+                self.animation.setDirection(QPropertyAnimation.Direction.Backward)
                 self.animation.start()
 
     def _SH_DoubleClicked(self, index):
-        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
-        item = index.data(Qt.UserRole)
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, ContactURI):
             selected_uri = item.uri
         else:
@@ -4657,12 +4657,12 @@ class DefaultURIButton(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
         self.layout.addWidget(self.button)
-        self.layout.setAlignment(self.button, Qt.AlignCenter)
+        self.layout.setAlignment(self.button, Qt.AlignmentFlag.AlignCenter)
         button_group.addButton(self.button)
 
     def eventFilter(self, watched, event):
-        if event.type() == QEvent.FocusIn:
-            self.setFocus(Qt.OtherFocusReason)
+        if event.type() == QEvent.Type.FocusIn:
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
         return False
 
     def isChecked(self):
@@ -4684,18 +4684,18 @@ class ContactURIDelegate(QItemDelegate):
     def setEditorData(self, widget, index):
         column = index.column()
         if column == ContactURIModel.TypeColumn:
-            widget.setCurrentIndex(widget.findText(index.data(Qt.EditRole)))
+            widget.setCurrentIndex(widget.findText(index.data(Qt.ItemDataRole.EditRole)))
         elif column == ContactURIModel.DefaultColumn:
-            widget.setChecked(index.data(Qt.EditRole))
+            widget.setChecked(index.data(Qt.ItemDataRole.EditRole))
         else:
             super(ContactURIDelegate, self).setEditorData(widget, index)
 
     def setModelData(self, widget, model, index):
         column = index.column()
         if column == ContactURIModel.TypeColumn:
-            model.setData(index, widget.currentText(), Qt.EditRole)
+            model.setData(index, widget.currentText(), Qt.ItemDataRole.EditRole)
         elif column == ContactURIModel.DefaultColumn:
-            model.setData(index, widget.isChecked(), Qt.EditRole)
+            model.setData(index, widget.isChecked(), Qt.ItemDataRole.EditRole)
         else:
             super(ContactURIDelegate, self).setModelData(widget, model, index)
 
@@ -4705,18 +4705,18 @@ class ContactURIDelegate(QItemDelegate):
     def drawDisplay(self, painter, option, rect, text):
         if option.fontMetrics.width(text) > rect.width():
             # draw elided text using a fading gradient
-            color_group = QPalette.Disabled if not option.state & QStyle.State_Enabled else QPalette.Normal if option.state & QStyle.State_Active else QPalette.Inactive
-            text_margin = option.widget.style().pixelMetric(QStyle.PM_FocusFrameHMargin, None, option.widget) + 1
+            color_group = QPalette.ColorGroup.Disabled if not option.state & QStyle.StateFlag.State_Enabled else QPalette.ColorGroup.Normal if option.state & QStyle.StateFlag.State_Active else QPalette.ColorGroup.Inactive
+            text_margin = option.widget.style().pixelMetric(QStyle.PixelMetric.PM_FocusFrameHMargin, None, option.widget) + 1
             text_rect = rect.adjusted(text_margin, 0, -text_margin, 0)  # remove width padding
             width = text_rect.width()
             fade_start = 1 - 50.0 / width if width > 50 else 0.0
             gradient = QLinearGradient(0, 0, width, 0)
-            gradient.setColorAt(fade_start, option.palette.color(color_group, QPalette.HighlightedText if option.state & QStyle.State_Selected else QPalette.Text))
-            gradient.setColorAt(1.0, Qt.transparent)
+            gradient.setColorAt(fade_start, option.palette.color(color_group, QPalette.ColorRole.HighlightedText if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Text))
+            gradient.setColorAt(1.0, Qt.GlobalColor.transparent)
             painter.save()
             painter.setPen(QPen(QBrush(gradient), 1.0))
             painter.setClipRect(text_rect)
-            painter.drawText(text_rect, Qt.TextSingleLine | int(option.displayAlignment), text)
+            painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | int(option.displayAlignment), text)
             painter.restore()
         else:
             super(ContactURIDelegate, self).drawDisplay(painter, option, rect, text)
@@ -4742,7 +4742,7 @@ class ContactURIModel(QAbstractTableModel):
 
     def flags(self, index):
         if index.isValid():
-            return QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable
+            return QAbstractTableModel.flags(self, index) | Qt.ItemFlag.ItemIsEditable
         else:
             return QAbstractTableModel.flags(self, index)
 
@@ -4752,30 +4752,30 @@ class ContactURIModel(QAbstractTableModel):
     def columnCount(self, parent=QModelIndex()):
         return len(self.columns)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         row, column = index.row(), index.column()
         item = self.items[row]
-        if role == Qt.UserRole:
+        if role == Qt.ItemDataRole.UserRole:
             return item
-        elif role == Qt.DisplayRole:
+        elif role == Qt.ItemDataRole.DisplayRole:
             if column == ContactURIModel.AddressColumn:
                 return translate('contact_list', 'Edit to add address') if item.ghost else str(item.uri or '')
-        elif role == Qt.EditRole:
+        elif role == Qt.ItemDataRole.EditRole:
             if column == ContactURIModel.AddressColumn:
                 return str(item.uri or '')
             elif column == ContactURIModel.TypeColumn:
                 return item.type or ''
             elif column == ContactURIModel.DefaultColumn:
                 return item.default
-        elif role == Qt.ForegroundRole:
+        elif role == Qt.ItemDataRole.ForegroundRole:
             if column == ContactURIModel.AddressColumn and item.ghost:
-                return self.table_view.palette().brush(QPalette.Disabled, QPalette.Text).color()
+                return self.table_view.palette().brush(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text).color()
         return None
 
-    def setData(self, index, value, role=Qt.EditRole):
-        if not index.isValid() or role != Qt.EditRole:
+    def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
+        if not index.isValid() or role != Qt.ItemDataRole.EditRole:
             return False
         row, column = index.row(), index.column()
         if column == ContactURIModel.AddressColumn:
@@ -4796,8 +4796,8 @@ class ContactURIModel(QAbstractTableModel):
             return False
         return True
 
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return translate('contact_editor', self.columns[section])
         return super(ContactURIModel, self).headerData(section, orientation, role)
 
@@ -4812,7 +4812,7 @@ class ContactURIModel(QAbstractTableModel):
         for row in range(len(items)):
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
-        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().ResizeMode.Stretch)
 
     def init_with_contact(self, contact):
         items = [ContactURIItem(uri.id, uri.uri, uri.type, default=uri is contact.uris.default) for uri in contact.uris]
@@ -4825,7 +4825,7 @@ class ContactURIModel(QAbstractTableModel):
         for row in range(len(items)):
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
-        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().ResizeMode.Stretch)
 
     def update_from_contact(self, contact):
         added_items = [item for item in self.items if item.id is None and not item.ghost]
@@ -4847,7 +4847,7 @@ class ContactURIModel(QAbstractTableModel):
         for row in range(len(items)):
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.TypeColumn))
             self.table_view.openPersistentEditor(self.index(row, ContactURIModel.DefaultColumn))
-        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(ContactURIModel.AddressColumn, self.table_view.horizontalHeader().ResizeMode.Stretch)
 
     def reset(self):
         self.beginResetModel()
@@ -4877,7 +4877,7 @@ class ContactURITableView(QTableView):
         self.setItemDelegate(ContactURIDelegate(self))
         self.context_menu = QMenu(self)
         self.context_menu.addAction(translate('contact_editor', "Delete"), self._AH_DeleteSelection)
-        self.horizontalHeader().setSectionResizeMode(self.horizontalHeader().ResizeToContents)
+        self.horizontalHeader().setSectionResizeMode(self.horizontalHeader().ResizeMode.ResizeToContents)
 
     def selectionChanged(self, selected, deselected):
         super(ContactURITableView, self).selectionChanged(selected, deselected)
@@ -4885,16 +4885,16 @@ class ContactURITableView(QTableView):
         selection = selection_model.selection()
         if selection_model.currentIndex() not in selection:
             index = selection.indexes()[0] if not selection.isEmpty() else self.model().index(-1, -1)
-            selection_model.setCurrentIndex(index, selection_model.Select)
+            selection_model.setCurrentIndex(index, selection_model.SelectionFlag.Select)
 
     def contextMenuEvent(self, event):
-        selected_items = [item for item in (index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
+        selected_items = [item for item in (index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
         if selected_items:
             self.context_menu.exec(event.globalPos())
 
     def keyPressEvent(self, event):
-        if event.key() in (Qt.Key_Backspace, Qt.Key_Delete):
-            selected_items = [item for item in (index.data(Qt.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
+        if event.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            selected_items = [item for item in (index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()) if not item.ghost]
             if selected_items:
                 self._AH_DeleteSelection()
         else:
@@ -4902,7 +4902,7 @@ class ContactURITableView(QTableView):
 
     def _AH_DeleteSelection(self):
         model = self.model()
-        model._remove_items([index for index in self.selectionModel().selectedIndexes() if not index.data(Qt.UserRole).ghost])
+        model._remove_items([index for index in self.selectionModel().selectedIndexes() if not index.data(Qt.ItemDataRole.UserRole).ghost])
         self.selectionModel().clearSelection()
 
 

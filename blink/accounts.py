@@ -622,10 +622,10 @@ del ui_class, base_class
 class WebPage(QWebEnginePage):
     def __init__(self, parent=None):
         super(WebPage, self).__init__(parent)
-        disable_actions = {QWebEnginePage.OpenLinkInNewBackgroundTab, QWebEnginePage.OpenLinkInNewWindow, QWebEnginePage.OpenLinkInThisWindow,
-                           QWebEnginePage.OpenLinkInNewTab,
-                           QWebEnginePage.DownloadLinkToDisk, QWebEnginePage.DownloadImageToDisk,
-                           QWebEnginePage.DownloadMediaToDisk}
+        disable_actions = {QWebEnginePage.WebAction.OpenLinkInNewBackgroundTab, QWebEnginePage.WebAction.OpenLinkInNewWindow, QWebEnginePage.WebAction.OpenLinkInThisWindow,
+                           QWebEnginePage.WebAction.OpenLinkInNewTab,
+                           QWebEnginePage.WebAction.DownloadLinkToDisk, QWebEnginePage.WebAction.DownloadImageToDisk,
+                           QWebEnginePage.WebAction.DownloadMediaToDisk}
         for action in (self.action(action) for action in disable_actions):
             action.setVisible(False)
         self.call_link_clicked = False
@@ -634,7 +634,7 @@ class WebPage(QWebEnginePage):
         return self
 
     def acceptNavigationRequest(self, url, navigation_type, frame):
-        if navigation_type == QWebEnginePage.NavigationTypeLinkClicked and url.scheme() in ('sip', 'sips'):
+        if navigation_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked and url.scheme() in ('sip', 'sips'):
             blink = QApplication.instance()
             contact, contact_uri = URIUtils.find_contact(url.toString())
             session_manager = SessionManager()
@@ -656,7 +656,7 @@ class ServerToolsAccountModel(QSortFilterProxyModel):
     def filterAcceptsRow(self, source_row, source_parent):
         source_model = self.sourceModel()
         source_index = source_model.index(source_row, 0, source_parent)
-        account_info = source_model.data(source_index, Qt.UserRole)
+        account_info = source_model.data(source_index, Qt.ItemDataRole.UserRole)
         return bool(account_info.account is not BonjourAccount() and account_info.account.enabled and account_info.account.server.settings_url)
 
 
@@ -676,8 +676,6 @@ class ServerToolsWebView(QWebEngineView):
         self.realm = None
         self.homepage = None
         self.urlChanged.connect(self._SH_URLChanged)
-        self.settings().setAttribute(QWebEngineSettings.JavascriptEnabled, True)
-        self.settings().setAttribute(QWebEngineSettings.JavascriptCanOpenWindows, True)
 
     @property
     def query_items(self):
@@ -852,7 +850,7 @@ class ServerToolsWindow(base_class, ui_class, metaclass=QSingleton):
         menu = self.account_button.menu()
         menu.clear()
         for row in range(self.model.rowCount()):
-            account_info = self.model.data(self.model.index(row, 0), Qt.UserRole)
+            account_info = self.model.data(self.model.index(row, 0), Qt.ItemDataRole.UserRole)
             action = menu.addAction(account_info.name)
             action.setData(account_info.account)
 
