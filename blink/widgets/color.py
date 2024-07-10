@@ -277,9 +277,9 @@ class ColorHelperMixin(object):
     @cache_result(color_key)
     def calc_shadow_color(self, color):
         if self.low_threshold(color):
-            shadow_color = ColorUtils.mix(Qt.black, color, color.alphaF())
+            shadow_color = ColorUtils.mix(Qt.GlobalColor.black, color, color.alphaF())
         else:
-            shadow_color = ColorScheme.shade(ColorUtils.mix(Qt.black, color, color.alphaF()), ColorScheme.ShadowShade, self._contrast)
+            shadow_color = ColorScheme.shade(ColorUtils.mix(Qt.GlobalColor.black, color, color.alphaF()), ColorScheme.ShadowShade, self._contrast)
         shadow_color.setAlpha(color.alpha())  # make sure shadow color has the same alpha channel as the input
         return shadow_color
 

@@ -111,8 +111,8 @@ class OTRWidget(base_class, ui_class):
         option = QStyleOption()
         option.initFrom(self)
         painter = QStylePainter(self)
-        painter.setRenderHint(QStylePainter.Antialiasing, True)
-        painter.drawPrimitive(QStyle.PE_Widget if self.testAttribute(Qt.WA_NoSystemBackground) else QStyle.PE_Frame, option)
+        painter.setRenderHint(QStylePainter.RenderHint.Antialiasing, True)
+        painter.drawPrimitive(QStyle.PrimitiveElement.PE_Widget if self.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) else QStyle.PrimitiveElement.PE_Frame, option)
 
     @staticmethod
     def _encode_fingerprint(fingerprint):

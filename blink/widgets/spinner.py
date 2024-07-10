@@ -29,7 +29,7 @@ class Spinner(QSvgWidget):
         self._update_viewbox(self.size())
 
     def event(self, event):
-        if event.type() == QEvent.DynamicPropertyChange:
+        if event.type() == QEvent.Type.DynamicPropertyChange:
             if event.propertyName() == 'icon_crop':
                 self._update_viewbox(self.size())
             elif event.propertyName() == 'icon_file':

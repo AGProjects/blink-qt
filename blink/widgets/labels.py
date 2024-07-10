@@ -83,23 +83,23 @@ class IconSelector(QLabel):
             self.contact_icon = icon_manager.get(contact.id)
 
     def event(self, event):
-        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() == 'icon_size':
+        if event.type() == QEvent.Type.DynamicPropertyChange and event.propertyName() == 'icon_size':
             self.setFixedSize(self.icon_size+12, self.icon_size+12)
             self.update()
         return super(IconSelector, self).event(event)
 
     def enterEvent(self, event):
         icon = self.icon or self.default_icon or QIcon()
-        self.setPixmap(icon.pixmap(self.icon_size, mode=QIcon.Selected))
+        self.setPixmap(icon.pixmap(self.icon_size, mode=QIcon.Mode.Selected))
         super(IconSelector, self).enterEvent(event)
 
     def leaveEvent(self, event):
         icon = self.icon or self.default_icon or QIcon()
-        self.setPixmap(icon.pixmap(self.icon_size, mode=QIcon.Normal))
+        self.setPixmap(icon.pixmap(self.icon_size, mode=QIcon.Mode.Normal))
         super(IconSelector, self).leaveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton and self.rect().contains(event.pos()):
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.pos()):
             self.actions.remove_icon.setEnabled(self.icon is not self.contact_icon)
             menu = QMenu(self)
             menu.addAction(self.actions.select_icon)
@@ -252,10 +252,10 @@ class StatusLabel(QLabel):
         if value is not None:
             color = QColor(value.color)
             palette = self.palette()
-            palette.setColor(QPalette.Active, QPalette.WindowText, color)
-            palette.setColor(QPalette.Active, QPalette.Text, color)
-            palette.setColor(QPalette.Inactive, QPalette.WindowText, color)
-            palette.setColor(QPalette.Inactive, QPalette.Text, color)
+            palette.setColor(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText, color)
+            palette.setColor(QPalette.ColorGroup.Active, QPalette.ColorRole.Text, color)
+            palette.setColor(QPalette.ColorGroup.Inactive, QPalette.ColorRole.WindowText, color)
+            palette.setColor(QPalette.ColorGroup.Inactive, QPalette.ColorRole.Text, color)
             self.setPalette(palette)
             self.setText(str(value))
         else:
@@ -276,9 +276,9 @@ class ElidedLabel(QLabel):
             fade_start = 1 - 50.0/label_width if label_width > 50 else 0.0
             gradient = QLinearGradient(0, 0, label_width, 0)
             gradient.setColorAt(fade_start, self.palette().color(self.foregroundRole()))
-            gradient.setColorAt(1.0, Qt.transparent)
+            gradient.setColorAt(1.0, Qt.GlobalColor.transparent)
             painter.setPen(QPen(QBrush(gradient), 1.0))
-        painter.drawText(self.contentsRect(), Qt.TextSingleLine | int(self.alignment()), self.text())
+        painter.drawText(self.contentsRect(), Qt.TextFlag.TextSingleLine | int(self.alignment()), self.text())
 
 
 class StateColor(QColor):
@@ -298,7 +298,7 @@ class StateColorMapping(dict):
         elif key == 'busy':
             return self.setdefault(key, StateColor('#ff0000'))
         else:
-            return StateColor(Qt.transparent)  # StateColor('#d0d0d0')
+            return StateColor(Qt.GlobalColor.transparent)  # StateColor('#d0d0d0')
 
 
 class ContactState(QLabel, ColorHelperMixin):
@@ -310,17 +310,17 @@ class ContactState(QLabel, ColorHelperMixin):
         self.state = None
 
     def event(self, event):
-        if event.type() == QEvent.DynamicPropertyChange and event.propertyName() == 'state':
+        if event.type() == QEvent.Type.DynamicPropertyChange and event.propertyName() == 'state':
             self.update()
         return super(ContactState, self).event(event)
 
     def paintEvent(self, event):
         color = self.state_colors[self.state]
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         gradient = QLinearGradient(0, 0, self.width(), 0)
-        gradient.setColorAt(0.0, Qt.transparent)
+        gradient.setColorAt(0.0, Qt.GlobalColor.transparent)
         gradient.setColorAt(1.0, color)
         painter.setBrush(QBrush(gradient))
         gradient.setColorAt(1.0, color.stroke)

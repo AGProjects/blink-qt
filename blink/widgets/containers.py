@@ -9,7 +9,7 @@ __all__ = ['SlidingStackedWidget']
 
 
 class SlidingStackedWidget(QStackedWidget):
-    animationEasingCurve = QtDynamicProperty('animationEasingCurve', int)
+    animationEasingCurve = QtDynamicProperty('animationEasingCurve', QEasingCurve.Type)
     animationDuration = QtDynamicProperty('animationDuration', int)
     verticalMode = QtDynamicProperty('verticalMode', bool)
     wrap = QtDynamicProperty('wrap', bool)
@@ -20,7 +20,7 @@ class SlidingStackedWidget(QStackedWidget):
 
     def __init__(self, parent=None):
         super(SlidingStackedWidget, self).__init__(parent)
-        self.animationEasingCurve = QEasingCurve.Linear
+        self.animationEasingCurve = QEasingCurve.Type.Linear
         self.animationDuration = 250
         self.verticalMode = False
         self.wrap = False

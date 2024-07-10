@@ -118,15 +118,15 @@ class AccountModel(QAbstractListModel):
     def rowCount(self, parent=QModelIndex()):
         return len(self.accounts)
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
         account_info = self.accounts[index.row()]
-        if role == Qt.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole:
             return account_info.name
-        elif role == Qt.DecorationRole:
+        elif role == Qt.ItemDataRole.DecorationRole:
             return account_info.icon
-        elif role == Qt.UserRole:
+        elif role == Qt.ItemDataRole.UserRole:
             return account_info
         return None
 
@@ -227,7 +227,7 @@ class ActiveAccountModel(QSortFilterProxyModel):
     def filterAcceptsRow(self, source_row, source_parent):
         source_model = self.sourceModel()
         source_index = source_model.index(source_row, 0, source_parent)
-        account_info = source_model.data(source_index, Qt.UserRole)
+        account_info = source_model.data(source_index, Qt.ItemDataRole.UserRole)
         return account_info.account.enabled
 
 

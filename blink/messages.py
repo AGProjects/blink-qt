@@ -54,17 +54,17 @@ class GeneratePGPKeyDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(GeneratePGPKeyDialog, self).__init__(parent)
 
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
 
         self.slot = None
-        self.generate_button = self.dialog_button_box.addButton(translate("generate_pgp_key_dialog", "Generate"), QDialogButtonBox.AcceptRole)
-        self.generate_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
+        self.generate_button = self.dialog_button_box.addButton(translate("generate_pgp_key_dialog", "Generate"), QDialogButtonBox.ButtonRole.AcceptRole)
+        self.generate_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
 
     def show(self, activate=True):
-        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(GeneratePGPKeyDialog, self).show()
 
 
@@ -116,9 +116,9 @@ class GeneratePGPKeyRequest(QObject):
 
     def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             self.accepted.emit(self)
-        elif result == QDialog.Rejected:
+        elif result == QDialog.DialogCode.Rejected:
             self.rejected.emit(self)
 
 
@@ -130,18 +130,18 @@ class ImportDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(ImportDialog, self).__init__(parent)
 
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
 
         self.slot = None
-        self.import_button = self.dialog_button_box.addButton(translate("import_key_dialog", "Import"), QDialogButtonBox.AcceptRole)
-        self.import_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
+        self.import_button = self.dialog_button_box.addButton(translate("import_key_dialog", "Import"), QDialogButtonBox.ButtonRole.AcceptRole)
+        self.import_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
         self.import_button.setEnabled(False)
 
     def show(self, activate=True):
-        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(ImportDialog, self).show()
 
 
@@ -212,9 +212,9 @@ class ImportPrivateKeyRequest(QObject):
 
     def _SH_DialogFinished(self, result):
         self.finished.emit(self)
-        if result == QDialog.Accepted:
+        if result == QDialog.DialogCode.Accepted:
             self.accepted.emit(self, f'{self.before}{self.private_key}{self.after}')
-        elif result == QDialog.Rejected:
+        elif result == QDialog.DialogCode.Rejected:
             self.rejected.emit(self)
 
 
@@ -226,21 +226,21 @@ class ExportDialog(IncomingDialogBase, ui_class):
     def __init__(self, parent=None):
         super(ExportDialog, self).__init__(parent)
 
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
 
         self.slot = None
-        self.export_button = self.dialog_button_box.addButton(translate("export_key_dialog", "Export"), QDialogButtonBox.AcceptRole)
-        self.export_button.setIcon(QApplication.style().standardIcon(QStyle.SP_DialogApplyButton))
+        self.export_button = self.dialog_button_box.addButton(translate("export_key_dialog", "Export"), QDialogButtonBox.ButtonRole.AcceptRole)
+        self.export_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
         self.export_button.setEnabled(False)
 
     def accept(self):
         pass
 
     def show(self, activate=True):
-        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(ExportDialog, self).show()
 
 

@@ -140,7 +140,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
         option = QStyleOption()
         option.initFrom(self)
 
-        contents_rect = self.style().subElementRect(QStyle.SE_FrameContents, option, self) or self.contentsRect()  # the SE_FrameContents rect is Null unless the stylesheet defines decorations
+        contents_rect = self.style().subElementRect(QStyle.SubElement.SE_FrameContents, option, self) or self.contentsRect()  # the SE_FrameContents rect is Null unless the stylesheet defines decorations
 
         if self.graphStyle == self.BarStyle:
             graph_width = self.__dict__['graph_width'] = int(ceil(float(contents_rect.width()) / self.horizontalPixelsPerUnit))
@@ -160,7 +160,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
             height_scaling = float(contents_rect.height() - self.lineThickness) / graph_height
 
         painter = QStylePainter(self)
-        painter.drawPrimitive(QStyle.PE_Widget, option)
+        painter.drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option)
 
         painter.setClipRect(contents_rect)
 
@@ -168,7 +168,7 @@ class GraphWidget(QWidget, ColorHelperMixin):
         painter.translate(contents_rect.x() + contents_rect.width() - 1, contents_rect.y() + contents_rect.height() - 1)
         painter.scale(-1, -1)
 
-        painter.setRenderHint(QStylePainter.Antialiasing, self.graphStyle != self.BarStyle)
+        painter.setRenderHint(QStylePainter.RenderHint.Antialiasing, self.graphStyle != self.BarStyle)
 
         for graph in (graph for graph in self.graphs if graph.enabled and graph.data):
             if self.boundary is not None and 0 < self.boundary < graph_height:
@@ -225,19 +225,19 @@ class GraphWidget(QWidget, ColorHelperMixin):
                     fill_path.connectPath(envelope)
                     painter.fillPath(fill_path, brush_color)
 
-                painter.strokePath(envelope, QPen(pen_color, self.lineThickness, join=Qt.RoundJoin))
+                painter.strokePath(envelope, QPen(pen_color, self.lineThickness, join=Qt.PenJoinStyle.RoundJoin))
 
                 painter.translate(0, -self.lineThickness/2 + 1)
 
         if self.boundary is not None and self.boundaryColor:
-            painter.setRenderHint(QStylePainter.Antialiasing, False)
+            painter.setRenderHint(QStylePainter.RenderHint.Antialiasing, False)
             painter.setPen(QPen(self.boundaryColor, 1.0))
             painter.drawLine(0, self.boundary*height_scaling, contents_rect.width(), self.boundary*height_scaling)
 
         painter.restore()
 
         # queue the 'updated' signal to be emitted after returning to the main loop
-        QMetaObject.invokeMethod(self, 'updated', Qt.QueuedConnection)
+        QMetaObject.invokeMethod(self, 'updated', Qt.ConnectionType.QueuedConnection)
 
     def add_graph(self, graph):
         if not isinstance(graph, Graph):

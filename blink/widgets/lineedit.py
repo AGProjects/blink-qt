@@ -20,7 +20,7 @@ class SideWidget(QWidget):
         super(SideWidget, self).__init__(parent)
 
     def event(self, event):
-        if event.type() == QEvent.LayoutRequest:
+        if event.type() == QEvent.Type.LayoutRequest:
             self.sizeHintChanged.emit()
         return QWidget.event(self, event)
 
@@ -31,20 +31,20 @@ class LineEdit(QLineEdit):
 
     def __init__(self, parent=None, contents=""):
         super(LineEdit, self).__init__(contents, parent)
-        box_direction = QBoxLayout.RightToLeft if self.isRightToLeft() else QBoxLayout.LeftToRight
+        box_direction = QBoxLayout.Direction.RightToLeft if self.isRightToLeft() else QBoxLayout.Direction.LeftToRight
         self.inactiveText = ""
         self.left_widget = SideWidget(self)
         self.left_widget.resize(0, 0)
         self.left_layout = QHBoxLayout(self.left_widget)
         self.left_layout.setContentsMargins(0, 0, 0, 0)
         self.left_layout.setDirection(box_direction)
-        self.left_layout.setSizeConstraint(QLayout.SetFixedSize)
+        self.left_layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
         self.right_widget = SideWidget(self)
         self.right_widget.resize(0, 0)
         self.right_layout = QHBoxLayout(self.right_widget)
         self.right_layout.setContentsMargins(0, 0, 0, 0)
         self.right_layout.setDirection(box_direction)
-        self.right_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.right_layout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
         self.widgetSpacing = 2
         self.left_widget.sizeHintChanged.connect(self._update_text_margins)
         self.right_widget.sizeHintChanged.connect(self._update_text_margins)
@@ -65,7 +65,7 @@ class LineEdit(QLineEdit):
         option = QStyleOptionFrame()
         self.initStyleOption(option)
         spacing = self.right_layout.spacing()
-        text_rect = self.style().subElementRect(QStyle.SE_LineEditContents, option, self)
+        text_rect = self.style().subElementRect(QStyle.SubElement.SE_LineEditContents, option, self)
         text_rect.adjust(spacing, 0, -spacing, 0)
         mid_height = text_rect.center().y() + 1 - (text_rect.height() % 2)  # need -1 correction for odd heights -Dan
         if self.left_layout.count() > 0:
@@ -81,11 +81,11 @@ class LineEdit(QLineEdit):
 
     def event(self, event):
         event_type = event.type()
-        if event_type == QEvent.LayoutDirectionChange:
-            box_direction = QBoxLayout.RightToLeft if self.isRightToLeft() else QBoxLayout.LeftToRight
+        if event_type == QEvent.Type.LayoutDirectionChange:
+            box_direction = QBoxLayout.Direction.RightToLeft if self.isRightToLeft() else QBoxLayout.Direction.LeftToRight
             self.left_layout.setDirection(box_direction)
             self.right_layout.setDirection(box_direction)
-        elif event_type == QEvent.DynamicPropertyChange:
+        elif event_type == QEvent.Type.DynamicPropertyChange:
             property_name = event.propertyName()
             if property_name == 'widgetSpacing':
                 self.left_layout.setSpacing(self.widgetSpacing)
@@ -104,11 +104,11 @@ class LineEdit(QLineEdit):
         if not self.hasFocus() and not self.text() and self.inactiveText:
             options = QStyleOptionFrame()
             self.initStyleOption(options)
-            text_rect = self.style().subElementRect(QStyle.SE_LineEditContents, options, self)
+            text_rect = self.style().subElementRect(QStyle.SubElement.SE_LineEditContents, options, self)
             text_rect.adjust(self.left_margin+2, 0, -self.right_margin, 0)
             painter = QPainter(self)
-            painter.setPen(self.palette().brush(QPalette.Disabled, QPalette.Text).color())
-            painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, self.inactiveText)
+            painter.setPen(self.palette().brush(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text).color())
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.inactiveText)
 
     def addHeadWidget(self, widget):
         if self.isRightToLeft():
@@ -137,13 +137,13 @@ class ValidatingLineEdit(LineEdit):
         self.invalid_entry_label.setFixedSize(18, 16)
         self.invalid_entry_label.setPixmap(QPixmap(Resources.get('icons/invalid16.png')))
         self.invalid_entry_label.setScaledContents(False)
-        self.invalid_entry_label.setAlignment(Qt.AlignCenter)
+        self.invalid_entry_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.invalid_entry_label.setObjectName('invalid_entry_label')
         self.invalid_entry_label.hide()
         self.addTailWidget(self.invalid_entry_label)
         option = QStyleOptionFrame()
         self.initStyleOption(option)
-        frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
+        frame_width = self.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth, option, self)
         self.setMinimumHeight(self.invalid_entry_label.minimumHeight() + 2 + 2*frame_width)
         self.textChanged.connect(self._SH_TextChanged)
         self.text_correct = True
@@ -190,12 +190,12 @@ class ValidatingLineEdit(LineEdit):
 class SearchIcon(QWidget):
     def __init__(self, parent=None, size=16):
         super(SearchIcon, self).__init__(parent)
-        self.setFocusPolicy(Qt.NoFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setVisible(True)
         self.setMinimumSize(size+2, size+2)
         pixmap = QPixmap()
         if pixmap.load(Resources.get("icons/search.svg")):
-            self.icon = pixmap.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         else:
             self.icon = None
 
@@ -210,19 +210,19 @@ class SearchIcon(QWidget):
 class ClearButton(QAbstractButton):
     def __init__(self, parent=None, size=16):
         super(ClearButton, self).__init__(parent)
-        self.setCursor(Qt.ArrowCursor)
-        self.setFocusPolicy(Qt.NoFocus)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setToolTip("Clear")
         self.setVisible(False)
         self.setMinimumSize(size+2, size+2)
         pixmap = QPixmap()
         if pixmap.load(Resources.get("icons/delete.svg")):
-            self.icon = pixmap.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             # Use QImage because QPainter using a QPixmap does not support CompositionMode_Multiply -Dan
             image = self.icon.toImage()
             painter = QPainter(image)
-            painter.setRenderHint(QPainter.Antialiasing, True)
-            painter.setCompositionMode(QPainter.CompositionMode_Multiply)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
             painter.drawPixmap(0, 0, self.icon)
             painter.end()
             self.icon_pressed = QPixmap(image)
@@ -246,10 +246,10 @@ class ClearButton(QAbstractButton):
             palette = self.palette()
 
             # Mid is darker than Dark. Go figure... -Dan
-            bg_color = palette.color(QPalette.Mid) if self.isDown() else palette.color(QPalette.Dark)
-            fg_color = palette.color(QPalette.Window)  # or QPalette.Base for white
+            bg_color = palette.color(QPalette.ColorRole.Mid) if self.isDown() else palette.color(QPalette.ColorRole.Dark)
+            fg_color = palette.color(QPalette.ColorRole.Window)  # or QPalette.ColorRole.Base for white
 
-            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setBrush(bg_color)
             painter.setPen(bg_color)
             painter.drawEllipse(padding, padding, radius, radius)
@@ -269,7 +269,7 @@ class SearchBox(LineEdit):
         self.addTailWidget(self.clear_button)
         option = QStyleOptionFrame()
         self.initStyleOption(option)
-        frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
+        frame_width = self.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth, option, self)
         widgets_height = max(self.search_icon.minimumHeight(), self.clear_button.minimumHeight())
         self.setMinimumHeight(widgets_height + 2 + 2*frame_width)
         self.clear_button.hide()
@@ -278,7 +278,7 @@ class SearchBox(LineEdit):
         self.inactiveText = translate('search_box', "Search")
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Escape:
+        if event.key() == Qt.Key.Key_Escape:
             self.clear()
         else:
             super(SearchBox, self).keyPressEvent(event)
@@ -296,7 +296,7 @@ class LocationBar(LineEdit):
         self.addTailWidget(self.clear_button)
         option = QStyleOptionFrame()
         self.initStyleOption(option)
-        frame_width = self.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, self)
+        frame_width = self.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth, option, self)
         widgets_height = self.clear_button.minimumHeight()
         self.setMinimumHeight(widgets_height + 2 + 2*frame_width)
         self.clear_button.hide()

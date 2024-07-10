@@ -58,7 +58,7 @@ class FileTransferWindow(base_class, ui_class):
     def show(self, activate=True):
         settings = BlinkSettings()
         makedirs(settings.transfers_directory.normalized)
-        self.setAttribute(Qt.WA_ShowWithoutActivating, not activate)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(FileTransferWindow, self).show()
         self.raise_()
         if activate:
@@ -87,7 +87,7 @@ class FileTransferWindow(base_class, ui_class):
         menu.clear()
         index = self.listview.indexAt(pos)
         if index.isValid():
-            item = index.data(Qt.UserRole)
+            item = index.data(Qt.ItemDataRole.UserRole)
             if item.ended:
                 if not item.failed:
                     menu.addAction(self.actions.open_file)
@@ -111,23 +111,23 @@ class FileTransferWindow(base_class, ui_class):
         menu.exec_(self.mapToGlobal(pos))
 
     def _AH_OpenFile(self):
-        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
+        item = self.listview.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename))
 
     def _AH_OpenFileFolder(self):
-        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
+        item = self.listview.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(item.filename)))
 
     def _AH_CancelTransfer(self):
-        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
+        item = self.listview.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         item.end()
 
     def _AH_RetryTransfer(self):
-        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
+        item = self.listview.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         item.retry()
 
     def _AH_RemoveEntry(self):
-        item = self.listview.selectedIndexes()[0].data(Qt.UserRole)
+        item = self.listview.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         self.model.removeItem(item)
 
     def _AH_OpenTransfersFolder(self):

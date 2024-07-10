@@ -104,7 +104,7 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
-        self.setAttribute(Qt.AA_DontShowIconsInMenus, False)
+        self.setAttribute(Qt.ApplicationAttribute.AA_DontShowIconsInMenus, False)
         self.sip_application = SIPApplication()
         self.first_run = False
         self.reinit = False
@@ -198,9 +198,9 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def eventFilter(self, watched, event):
         if watched in (self.main_window, self.chat_window):
-            if event.type() == QEvent.Show:
+            if event.type() == QEvent.Type.Show:
                 watched.__closed__ = False
-            elif event.type() == QEvent.Close:
+            elif event.type() == QEvent.Type.Close:
                 watched.__closed__ = True
                 if self.main_window.__closed__ and self.chat_window.__closed__:
                     # close auxiliary windows
@@ -208,7 +208,7 @@ class Blink(QApplication, metaclass=QSingleton):
                     self.main_window.filetransfer_window.close()
                     self.main_window.preferences_window.close()
         if watched is self.chat_window:
-            if event.type() == QEvent.WindowActivate:
+            if event.type() == QEvent.Type.WindowActivate:
                 try:
                     watched.send_pending_imdn_messages(watched.selected_session)
                 except KeyError:

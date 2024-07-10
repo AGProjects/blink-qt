@@ -49,7 +49,7 @@ class VideoSurface(QWidget):
 
     def __init__(self, parent=None, framerate=None):
         super(VideoSurface, self).__init__(parent)
-        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
         self.setMouseTracking(True)
         self.cursors = Container()
         self.cursors.resize_top    = QCursor(QIcon(Resources.get('icons/resize-top.svg')).pixmap(16),    hotX=8,  hotY=0)
@@ -102,9 +102,9 @@ class VideoSurface(QWidget):
         del self._renderer
 
     def _handle_frame(self, frame):
-        self._image = QImage(frame.data, frame.width, frame.height, QImage.Format_ARGB32)
+        self._image = QImage(frame.data, frame.width, frame.height, QImage.Format.Format_ARGB32)
         if self._clock is None:
-            QMetaObject.invokeMethod(self, 'update', Qt.QueuedConnection)
+            QMetaObject.invokeMethod(self, 'update', Qt.ConnectionType.QueuedConnection)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -121,7 +121,7 @@ class VideoSurface(QWidget):
                 else:
                     fast_scaler.scale(scale, scale)
                 rect = event.rect()
-                painter.drawPixmap(rect, QPixmap.fromImage(image.transformed(fast_scaler)).scaledToHeight(self.height(), Qt.SmoothTransformation), rect)
+                painter.drawPixmap(rect, QPixmap.fromImage(image.transformed(fast_scaler)).scaledToHeight(self.height(), Qt.TransformationMode.SmoothTransformation), rect)
             else:
                 transform = QTransform()
                 scale = min(self.width()/image.width(), self.height()/image.height())
@@ -145,7 +145,7 @@ class VideoSurface(QWidget):
         painter.end()
 
     def mousePressEvent(self, event):
-        if self.interactive and event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier:
+        if self.interactive and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
             if self.rect().adjusted(0, 10, 0, -10).contains(event.pos()):
                 self._interaction.moving = True
             else:
@@ -215,7 +215,7 @@ class VideoSurface(QWidget):
             topbar_rect = QRect(0, 0, self.width(), 10)
 
             if self.rect().adjusted(0, 10, 0, -10).contains(mouse_position):
-                self.setCursor(Qt.ArrowCursor)
+                self.setCursor(Qt.CursorShape.ArrowCursor)
             elif topbar_rect.contains(mouse_position):
                 self.setCursor(self.cursors.resize_top)
             else:

@@ -233,14 +233,14 @@ class MainWindow(base_class, ui_class):
         search_box = self.search_box
         option = QStyleOptionFrame()
         search_box.initStyleOption(option)
-        frame_width = search_box.style().pixelMetric(QStyle.PM_DefaultFrameWidth, option, search_box)
+        frame_width = search_box.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth, option, search_box)
         if frame_width < 4:
             search_box.setMinimumHeight(20 + 2 * frame_width)
 
         # adjust the combo boxes for themes with too much padding (like the default theme on Ubuntu 10.04)
         option = QStyleOptionComboBox()
         self.identity.initStyleOption(option)
-        wide_padding = self.identity.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, self.identity).height() < 10
+        wide_padding = self.identity.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option, QStyle.SubControl.SC_ComboBoxEditField, self.identity).height() < 10
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
     def closeEvent(self, event):
@@ -552,7 +552,7 @@ class MainWindow(base_class, ui_class):
         else:
             selected_indexes = list_view.selectionModel().selectedIndexes()
             if selected_indexes:
-                contact = selected_indexes[0].data(Qt.UserRole)
+                contact = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
                 contact_uri = contact.uri
             else:
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
@@ -566,7 +566,7 @@ class MainWindow(base_class, ui_class):
         else:
             selected_indexes = list_view.selectionModel().selectedIndexes()
             if selected_indexes:
-                contact = selected_indexes[0].data(Qt.UserRole)
+                contact = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
                 contact_uri = contact.uri
             else:
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
@@ -580,7 +580,7 @@ class MainWindow(base_class, ui_class):
         else:
             selected_indexes = list_view.selectionModel().selectedIndexes()
             if selected_indexes:
-                contact = selected_indexes[0].data(Qt.UserRole)
+                contact = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
                 contact_uri = contact.uri
             else:
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
@@ -594,7 +594,7 @@ class MainWindow(base_class, ui_class):
         else:
             selected_indexes = list_view.selectionModel().selectedIndexes()
             if selected_indexes:
-                contact = selected_indexes[0].data(Qt.UserRole)
+                contact = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
                 contact_uri = contact.uri
             else:
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
@@ -608,7 +608,7 @@ class MainWindow(base_class, ui_class):
         else:
             selected_indexes = list_view.selectionModel().selectedIndexes()
             if selected_indexes:
-                contact = selected_indexes[0].data(Qt.UserRole)
+                contact = selected_indexes[0].data(Qt.ItemDataRole.UserRole)
                 contact_uri = contact.uri
             else:
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
@@ -616,13 +616,13 @@ class MainWindow(base_class, ui_class):
             session_manager.create_session(contact, contact_uri, [StreamDescription('screen-sharing', mode='server'), StreamDescription('audio')])
 
     def _SH_BreakConference(self):
-        active_session = self.session_list.selectionModel().selectedIndexes()[0].data(Qt.UserRole)
+        active_session = self.session_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         self.session_model.breakConference(active_session.client_conference)
 
     def _SH_ContactListSelectionChanged(self, selected, deselected):
         account_manager = AccountManager()
         selected_items = self.contact_list.selectionModel().selectedIndexes()
-        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
+        self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.ItemDataRole.UserRole), Contact))
 
     def _SH_ContactModelAddedItems(self, items):
         if not self.search_box.text():
@@ -705,7 +705,7 @@ class MainWindow(base_class, ui_class):
         else:
             self.contacts_view.setCurrentWidget(self.contact_list_panel)
             selected_items = self.contact_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and type(selected_items[0].data(Qt.UserRole)) is Contact)
+            self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and type(selected_items[0].data(Qt.ItemDataRole.UserRole)) is Contact)
         self.search_list.detail_model.contact = None
         self.search_list.detail_view.hide()
 
@@ -722,7 +722,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         selected_indexes = selected.indexes()
-        active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
+        active_session = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else Null
         if active_session.client_conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
@@ -744,7 +744,7 @@ class MainWindow(base_class, ui_class):
         self.active_sessions_label.setVisible(any(active_sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
-        active_session = selected_indexes[0].data(Qt.UserRole) if selected_indexes else Null
+        active_session = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else Null
         if active_session.client_conference:
             self.conference_button.setEnabled(True)
             self.conference_button.setChecked(True)
@@ -778,7 +778,7 @@ class MainWindow(base_class, ui_class):
         self.pending_watcher_dialogs.remove(self.sender())
 
     def _SH_SystemTrayIconActivated(self, reason):
-        if reason == QSystemTrayIcon.Trigger:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.show()
             self.raise_()
             self.activateWindow()
@@ -933,7 +933,7 @@ class MainWindow(base_class, ui_class):
             self.enable_call_buttons(False)
         else:
             selected_items = self.contact_list.selectionModel().selectedIndexes()
-            self.enable_call_buttons(len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.UserRole), Contact))
+            self.enable_call_buttons(len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.ItemDataRole.UserRole), Contact))
 
     def _NH_SIPAccountGotMessageSummary(self, notification):
         account = notification.sender

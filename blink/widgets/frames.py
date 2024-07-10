@@ -45,23 +45,23 @@ class BackgroundFrame(QFrame):
             return QSize(0, 0)
 
     def event(self, event):
-        if event.type() == QEvent.DynamicPropertyChange:
+        if event.type() == QEvent.Type.DynamicPropertyChange:
             if event.propertyName() == 'backgroundImage':
                 self.pixmap = QPixmap()
                 if self.backgroundImage and self.pixmap.load(Resources.get(self.backgroundImage)):
-                    self.scaled_pixmap = self.pixmap.scaled(self.image_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    self.scaled_pixmap = self.pixmap.scaled(self.image_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 else:
                     self.pixmap = self.scaled_pixmap = None
                 self.update()
             elif event.propertyName() == 'imageGeometry' and self.pixmap:
-                self.scaled_pixmap = self.pixmap.scaled(self.image_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.scaled_pixmap = self.pixmap.scaled(self.image_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.update()
             elif event.propertyName() == 'backgroundColor':
                 self.update()
         return super(BackgroundFrame, self).event(event)
 
     def resizeEvent(self, event):
-        self.scaled_pixmap = self.pixmap and self.pixmap.scaled(self.image_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.scaled_pixmap = self.pixmap and self.pixmap.scaled(self.image_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
     def paintEvent(self, event):
         super(BackgroundFrame, self).paintEvent(event)
