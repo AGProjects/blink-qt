@@ -262,13 +262,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.always_use_my_proxy_button.clicked.connect(self._SH_AlwaysUseMyProxyButtonClicked)
         self.outbound_proxy_host_editor.editingFinished.connect(self._SH_OutboundProxyHostEditorEditingFinished)
         self.outbound_proxy_port.valueChanged[int].connect(self._SH_OutboundProxyPortValueChanged)
-        self.outbound_proxy_transport_button.activated[str].connect(self._SH_OutboundProxyTransportButtonActivated)
+        self.outbound_proxy_transport_button.activated[int].connect(self._SH_OutboundProxyTransportButtonActivated)
         self.auth_username_editor.editingFinished.connect(self._SH_AuthUsernameEditorEditingFinished)
         self.always_use_my_msrp_relay_button.clicked.connect(self._SH_AlwaysUseMyMSRPRelayButtonClicked)
         self.msrp_relay_host_editor.editingFinished.connect(self._SH_MSRPRelayHostEditorEditingFinished)
         self.stun_server_list_editor.editingFinished.connect(self._SH_StunServerListEditorEditingFinished)
         self.msrp_relay_port.valueChanged[int].connect(self._SH_MSRPRelayPortValueChanged)
-        self.msrp_relay_transport_button.activated[str].connect(self._SH_MSRPRelayTransportButtonActivated)
+        self.msrp_relay_transport_button.activated[int].connect(self._SH_MSRPRelayTransportButtonActivated)
         self.voicemail_uri_editor.editingFinished.connect(self._SH_VoicemailURIEditorEditingFinished)
         self.xcap_root_editor.editingFinished.connect(self._SH_XCAPRootEditorEditingFinished)
         self.server_tools_url_editor.editingFinished.connect(self._SH_ServerToolsURLEditorEditingFinished)
@@ -277,15 +277,15 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # Account NAT traversal settings
         self.use_ice_button.clicked.connect(self._SH_UseICEButtonClicked)
-        self.msrp_transport_button.activated[str].connect(self._SH_MSRPTransportButtonActivated)
+        self.msrp_transport_button.activated[int].connect(self._SH_MSRPTransportButtonActivated)
 
         # Account advanced settings
         self.register_interval.valueChanged[int].connect(self._SH_RegisterIntervalValueChanged)
         self.publish_interval.valueChanged[int].connect(self._SH_PublishIntervalValueChanged)
         self.subscribe_interval.valueChanged[int].connect(self._SH_SubscribeIntervalValueChanged)
         self.reregister_button.clicked.connect(self._SH_ReregisterButtonClicked)
-        self.idd_prefix_button.activated[str].connect(self._SH_IDDPrefixButtonActivated)
-        self.prefix_button.activated[str].connect(self._SH_PrefixButtonActivated)
+        self.idd_prefix_button.activated[int].connect(self._SH_IDDPrefixButtonActivated)
+        self.prefix_button.activated[int].connect(self._SH_PrefixButtonActivated)
         self.account_tls_name_editor.editingFinished.connect(self._SH_TLSPeerNameEditorEditingFinished)
 
         # Account sms settings
@@ -302,7 +302,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.audio_alert_device_button.activated[int].connect(self._SH_AudioAlertDeviceButtonActivated)
         self.audio_input_device_button.activated[int].connect(self._SH_AudioInputDeviceButtonActivated)
         self.audio_output_device_button.activated[int].connect(self._SH_AudioOutputDeviceButtonActivated)
-        self.audio_sample_rate_button.activated[str].connect(self._SH_AudioSampleRateButtonActivated)
+        self.audio_sample_rate_button.activated[int].connect(self._SH_AudioSampleRateButtonActivated)
         self.enable_echo_cancelling_button.clicked.connect(self._SH_EnableEchoCancellingButtonClicked)
         self.tail_length_slider.valueChanged.connect(self._SH_TailLengthSliderValueChanged)
 
@@ -331,10 +331,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.style_view.page().contentsSizeChanged.connect(self._SH_StyleViewFrameContentsSizeChanged)
 
         self.style_button.activated[int].connect(self._SH_StyleButtonActivated)
-        self.style_variant_button.activated[str].connect(self._SH_StyleVariantButtonActivated)
+        self.style_variant_button.activated[int].connect(self._SH_StyleVariantButtonActivated)
         self.style_show_icons_button.clicked.connect(self._SH_StyleShowIconsButtonClicked)
 
-        self.style_font_button.currentIndexChanged[str].connect(self._SH_StyleFontButtonCurrentIndexChanged)
+        self.style_font_button.currentIndexChanged[int].connect(self._SH_StyleFontButtonCurrentIndexChanged)
         self.style_font_size.valueChanged[int].connect(self._SH_StyleFontSizeValueChanged)
         self.style_default_font_button.clicked.connect(self._SH_StyleDefaultFontButtonClicked)
 
@@ -1333,7 +1333,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account.sip.outbound_proxy = outbound_proxy
             account.save()
 
-    def _SH_OutboundProxyTransportButtonActivated(self, text):
+    def _SH_OutboundProxyTransportButtonActivated(self, index):
         account = self.selected_account
         outbound_proxy = self.account_outbound_proxy
         if account.sip.outbound_proxy != outbound_proxy:
@@ -1397,14 +1397,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             except ValueError as e:
                 pass
 
-    def _SH_MSRPRelayPortValueChanged(self, value):
+    def _SH_MSRPRelayPortValueChanged(self, index):
         account = self.selected_account
         msrp_relay = self.account_msrp_relay
         if account.nat_traversal.msrp_relay != msrp_relay:
             account.nat_traversal.msrp_relay = msrp_relay
             account.save()
 
-    def _SH_MSRPRelayTransportButtonActivated(self, text):
+    def _SH_MSRPRelayTransportButtonActivated(self, index):
         account = self.selected_account
         msrp_relay = self.account_msrp_relay
         if account.nat_traversal.msrp_relay != msrp_relay:
@@ -1451,7 +1451,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account.nat_traversal.use_ice = checked
         account.save()
 
-    def _SH_MSRPTransportButtonActivated(self, text):
+    def _SH_MSRPTransportButtonActivated(self, index):
+        text = self.msrp_transport_button.itemText(index)
         account = self.selected_account
         account.msrp.transport = text.lower()
         account.save()
@@ -1476,7 +1477,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account = self.selected_account
         account.reregister()
 
-    def _SH_IDDPrefixButtonActivated(self, text):
+    def _SH_IDDPrefixButtonActivated(self, index):
+        text = self.idd_prefix_button.itemText(index)
         self._update_pstn_example_label()
         account = self.selected_account
         idd_prefix = None if text == '+' else text
@@ -1484,7 +1486,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account.pstn.idd_prefix = idd_prefix
             account.save()
 
-    def _SH_PrefixButtonActivated(self, text):
+    def _SH_PrefixButtonActivated(self, index):
+        text = self.idd_prefix_button.itemText(index)
         self._update_pstn_example_label()
         account = self.selected_account
         prefix = None if text == 'None' else text
@@ -1592,7 +1595,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.audio.output_device = device
         settings.save()
 
-    def _SH_AudioSampleRateButtonActivated(self, text):
+    def _SH_AudioSampleRateButtonActivated(self, index):
+        text = self.audio_sample_rate_button.itemData(index)
         settings = SIPSimpleSettings()
         settings.audio.sample_rate = text
         settings.save()
@@ -1711,8 +1715,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             settings.chat_window.style_variant = None
             settings.save()
 
-    def _SH_StyleVariantButtonActivated(self, style_variant):
+    def _SH_StyleVariantButtonActivated(self, index):
         style = self.style_button.itemData(self.style_button.currentIndex())
+        style_variant = self.style_variant_button.itemText(index)
         settings = BlinkSettings()
         current_variant = settings.chat_window.style_variant or style.default_variant
         if style_variant != current_variant:
@@ -1724,7 +1729,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.chat_window.show_user_icons = checked
         settings.save()
 
-    def _SH_StyleFontButtonCurrentIndexChanged(self, font):
+    def _SH_StyleFontButtonCurrentIndexChanged(self, index):
+        font = self.style_font_button.itemText(index)
         settings = BlinkSettings()
         settings.chat_window.font = font
         settings.save()
