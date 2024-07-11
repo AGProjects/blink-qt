@@ -440,7 +440,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 2
+    __version__ = 3
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -488,6 +488,14 @@ class MessageHistory(object, metaclass=Singleton):
                         pass
                     else:
                         self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+                else:
+                    self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+            elif db_table_version == 2:
+                query = "delete from messages where content_type='application/sylk-api-pgp-key-lookup'"
+                try:
+                    self.db.queryAll(query)
+                except (dberrors.IntegrityError, dberrors.DuplicateEntryError):
+                    pass
                 else:
                     self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
 
