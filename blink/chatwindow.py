@@ -2028,7 +2028,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.restoreGeometry(geometry)
 
         self.pending_displayed_notifications = {}
-        self.render_after_load = []
+        self.render_after_load = deque()
         self.fetch_after_load = deque()
 
         notification_center = NotificationCenter()
@@ -3311,8 +3311,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 session.chat_widget.update_message_encryption(message.message_id, True)
         session.chat_widget.history_loaded = True
 
-        while len(self.render_after_load) > 0:
-            (found_session, received_account, message) = self.render_after_load.pop()
+        while self.render_after_load:
+            (found_session, received_account, message) = self.render_after_load.popleft()
             if received_account is not None and received_account != last_account and received_account != session.blink_session.account:
                 last_account = received_account
             if found_session is session:
