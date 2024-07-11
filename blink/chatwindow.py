@@ -44,7 +44,7 @@ from sipsimple.streams.msrp.chat import OTRState
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
-from blink.accounts import AccountModel,ActiveAccountModel
+from blink.accounts import AccountModel, ActiveAccountModel
 from blink.configuration.datatypes import File, FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
@@ -3041,7 +3041,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.render_after_load.append((session, received_account, chat_message))
 
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
-            if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
+            if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                 MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed', received_account)
             else:
                 self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp, received_account))
@@ -3130,7 +3130,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if message.state != 'delivered' and 'positive-delivery' in message.disposition:
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
 
-                if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
+                if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
             session.chat_widget.update_message_encryption(message.message_id, True)
 
@@ -3301,7 +3301,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
                 if message.state != 'delivered' and 'positive-delivery' in message.disposition:
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
-                if self.selected_session.blink_session is blink_session and not self.isMinimized() and self.isActiveWindow():
+                if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
                 else:
                     self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp, account))
@@ -3595,7 +3595,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.selected_session.blink_session.account = account
                 NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
                 self._update_session_info_panel(elements='session')
-            except KeyError:
+            except (AttributeError, KeyError):
                 pass
 
     def _SH_SessionModelSessionAdded(self, session):
