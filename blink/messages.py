@@ -1174,6 +1174,8 @@ class MessageManager(object, metaclass=Singleton):
             else:
                 log.info(f"Create incoming message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
+                # TODO session should have direction incoming, right now there is no way to create it without an event. We set the direction manually. -- Tijmen
+                blink_session.direction = 'incoming'
         else:
             if blink_session.fake_streams.get('messages') is None:
                 stream = StreamDescription('messages')

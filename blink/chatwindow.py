@@ -3320,7 +3320,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 self.render_after_load.append((found_session, received_account, message))
 
-        if last_account is not None and last_account.enabled and last_account != blink_session.account:
+        if blink_session.direction == 'outgoing' and last_account is not None and last_account.enabled and last_account != blink_session.account:
+            print(f'History change {last_account} {blink_session.direction}')
             NotificationCenter().post_notification('BlinkSessionMessageAccountShouldChange', sender=session, data=NotificationData(account=last_account))
 
         while self.fetch_after_load:
