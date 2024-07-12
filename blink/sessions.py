@@ -22,6 +22,7 @@ from operator import attrgetter
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QAbstractListModel, QEasingCurve, QModelIndex, QObject, QProcess, QPropertyAnimation, pyqtSignal
 from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl, QFileInfo
+from PyQt5.QtCore import QSettings
 from PyQt5.QtGui import QBrush, QColor, QDesktopServices, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt5.QtWidgets import QApplication, QAction, QDialog, QLabel, QListView, QMenu, QShortcut, QStyle, QStyledItemDelegate, QStyleOption, QFileIconProvider, QFileDialog
 
@@ -6404,6 +6405,9 @@ class ConferenceDialog(base_class, ui_class):
         self.chat_button.clicked.connect(self._SH_MediaButtonClicked)
         self.room_button.editTextChanged.connect(self._SH_RoomButtonEditTextChanged)
         self.accepted.connect(self.join_conference)
+        geometry = QSettings().value("conference_dialog/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
 
     def _SH_MediaButtonClicked(self, checked):
         self.accept_button.setEnabled(self.room_button.currentText() != '' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
@@ -6411,7 +6415,15 @@ class ConferenceDialog(base_class, ui_class):
     def _SH_RoomButtonEditTextChanged(self, text):
         self.accept_button.setEnabled(text != '' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
 
+    def closeEvent(self, event):
+        QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
+        super(ConferenceDialog, self).closeEvent(event)
+        
     def show(self):
+        geometry = QSettings().value("conference_dialog/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+            
         self.room_button.setCurrentIndex(-1)
         self.audio_button.setChecked(True)
         self.chat_button.setChecked(True)
@@ -6419,6 +6431,7 @@ class ConferenceDialog(base_class, ui_class):
         super(ConferenceDialog, self).show()
 
     def join_conference(self):
+        QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
         from blink.contacts import URIUtils
 
         current_text = self.room_button.currentText()
