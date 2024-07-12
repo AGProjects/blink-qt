@@ -2975,7 +2975,7 @@ class AudioSessionListView(QListView):
 
         for mime_type in model.accepted_mime_types:
             if mime_data.hasFormat(mime_type):
-                index = self.indexAt(event.position().toPoint())
+                index = self.indexAt(event.pos())
                 rect = self.visualRect(index)
                 session = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
@@ -2994,7 +2994,7 @@ class AudioSessionListView(QListView):
                 event.setDropAction(Qt.DropAction.MoveAction)
         for session in self.model().sessions:
             session.widget.drop_indicator = False
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
             event.accept()
         super(AudioSessionListView, self).dropEvent(event)
 

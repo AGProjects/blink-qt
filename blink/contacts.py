@@ -3648,7 +3648,7 @@ class ContactListView(QListView):
         model = self.model()
         if event.source() is self:
             event.setDropAction(Qt.DropAction.MoveAction)
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
             event.accept()
         for group in model.items[GroupList]:
             group.widget.drop_indicator = None
