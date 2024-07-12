@@ -6,7 +6,7 @@ import sys
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QEvent, QRegExp, QUrl
-from PyQt5.QtGui import QFont, QRegExpValidator, QValidator
+from PyQt5.QtGui import QFont, QRegularExpressionValidator, QValidator
 from PyQt5.QtWidgets import QActionGroup, QApplication, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
@@ -66,30 +66,30 @@ class Language(object):
 
 # LineEdit and ComboBox validators
 #
-class IDDPrefixValidator(QRegExpValidator):
+class IDDPrefixValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(IDDPrefixValidator, self).__init__(QRegExp('[0-9+*#]+'), parent)
+        super(IDDPrefixValidator, self).__init__(QRegularExpression('[0-9+*#]+'), parent)
 
     def fixup(self, input):
         return super(IDDPrefixValidator, self).fixup(input or '+')
 
 
-class PrefixValidator(QRegExpValidator):
+class PrefixValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(PrefixValidator, self).__init__(QRegExp('(None|[0-9+*#]+)'), parent)
+        super(PrefixValidator, self).__init__(QRegularExpression('(None|[0-9+*#]+)'), parent)
 
     def fixup(self, input):
         return super(PrefixValidator, self).fixup(input or 'None')
 
 
-class HostnameValidator(QRegExpValidator):
+class HostnameValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(HostnameValidator, self).__init__(QRegExp('^([\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
+        super(HostnameValidator, self).__init__(QRegularExpression('^([\w\-_]+(\.[\w\-_]+)*)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
 
 
-class SIPAddressValidator(QRegExpValidator):
+class SIPAddressValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(SIPAddressValidator, self).__init__(QRegExp('^([\w\-_+%]+@[\w\-_]+(\.[\w\-_]+)*)?$', Qt.CaseInsensitive), parent)
+        super(SIPAddressValidator, self).__init__(QRegularExpression('^([\w\-_+%]+@[\w\-_]+(\.[\w\-_]+)*)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
 
     def fixup(self, input):
         if input and '@' not in input:
@@ -98,9 +98,9 @@ class SIPAddressValidator(QRegExpValidator):
         return super(SIPAddressValidator, self).fixup(input)
 
 
-class WebURLValidator(QRegExpValidator):
+class WebURLValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(WebURLValidator, self).__init__(QRegExp('^(https?://[\w\-_]+(\.[\w\-_]+)*(:\d+)?(/.*)?)?$', Qt.CaseInsensitive), parent)
+        super(WebURLValidator, self).__init__(QRegularExpression('^(https?://[\w\-_]+(\.[\w\-_]+)*(:\d+)?(/.*)?)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
 
 
 class XCAPRootValidator(WebURLValidator):
