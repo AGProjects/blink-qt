@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE TS><TS version="2.0" language="nl" sourcelanguage="en">
+<!DOCTYPE TS>
+<TS version="2.1" language="nl" sourcelanguage="en">
 <context>
     <name>about_panel</name>
     <message>
@@ -33,24 +34,18 @@ p, li { white-space: pre-wrap; }
         <translation></translation>
     </message>
     <message>
-        <location filename="../about_panel.ui" line="147"/>
-        <source>Copyright &#xa9; 2010-2022 AG Projects
-All rights reserved.</source>
-        <translation type="obsolete">Copyright © 2010-2022 AG Projects
-Alle rechten voorbehouden.</translation>
-    </message>
-    <message>
-        <location filename="../../blink/aboutpanel.py" line="43"/>
+        <location filename="../../blink/aboutpanel.py" line="49"/>
         <source>Version %s
 %s</source>
         <translation>Versie %s
 %s</translation>
     </message>
-    <message encoding="UTF-8">
+    <message>
         <location filename="../about_panel.ui" line="147"/>
-        <source>Copyright © 2010-2022 AG Projects
+        <source>Copyright © 2010-2024 AG Projects B.V.
 All rights reserved.</source>
-        <translation type="unfinished"></translation>
+        <translation>Copyright © 2010-2024 AG Projects B.V.
+Alle rechten voorbehouden.</translation>
     </message>
 </context>
 <context>
@@ -63,9 +58,9 @@ All rights reserved.</source>
     <message>
         <location filename="../add_account.ui" line="38"/>
         <source>QFrame#background_frame {
-<byte value="x9"/>background: url(icons/blink.png);
-<byte value="x9"/>background-repeat: no-repeat;
-<byte value="x9"/>background-position: center left;
+	background: url(icons/blink.png);
+	background-repeat: no-repeat;
+	background-position: center left;
 }
 </source>
         <translation></translation>
@@ -78,11 +73,11 @@ All rights reserved.</source>
     <message>
         <location filename="../add_account.ui" line="94"/>
         <source>QFrame#input_frame {
-<byte value="x9"/>border: 2px;
-<byte value="x9"/>border-radius: 4px;
-<byte value="x9"/>border-style: solid;
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>background-color: rgba(244, 244, 244, 228); /* 244, 244, 244, 228 or 248, 248, 248, 224 */
+	border: 2px;
+	border-radius: 4px;
+	border-style: solid;
+	border-color: #545454;
+	background-color: rgba(244, 244, 244, 228); /* 244, 244, 244, 228 or 248, 248, 248, 224 */
 }
 </source>
         <translation></translation>
@@ -163,69 +158,132 @@ All rights reserved.</source>
         <translation>Toevoegen</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="381"/>
+        <location filename="../../blink/accounts.py" line="444"/>
         <source>Creating account on server...</source>
         <translation>Account aanmaken op server...</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="399"/>
+        <location filename="../../blink/accounts.py" line="462"/>
         <source>Display name cannot be empty</source>
         <translation>Weergavenaam mag niet leeg zijn</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="401"/>
+        <location filename="../../blink/accounts.py" line="464"/>
         <source>SIP address should be specified as user@domain</source>
         <translation>SIP-adres moet worden opgegeven als gebruiker@domein</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="403"/>
+        <location filename="../../blink/accounts.py" line="466"/>
         <source>An account with this SIP address was already added</source>
         <translation>Er is al een account met dit SIP-adres toegevoegd</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="405"/>
+        <location filename="../../blink/accounts.py" line="468"/>
         <source>Password cannot be empty</source>
         <translation>Wachtwoord mag niet leeg zijn</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="410"/>
+        <location filename="../../blink/accounts.py" line="473"/>
         <source>Name cannot be empty</source>
         <translation>Naam mag niet leeg zijn</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="412"/>
+        <location filename="../../blink/accounts.py" line="475"/>
         <source>Username should have 5 to 32 characters, start with a letter or non-zero digit, contain only letters, digits or .-_ and end with a letter or digit</source>
         <translation>Gebruikersnaam moet 5 tot 32 tekens bevatten, beginnen met een letter of een cijfer dat niet nul is, alleen letters, cijfers of .-_ bevatten en eindigen met een letter of cijfer</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="414"/>
+        <location filename="../../blink/accounts.py" line="477"/>
         <source>The username you requested is already taken. Please choose another one and try again.</source>
         <translation>De door u gevraagde gebruikersnaam is al in gebruik. Kies een andere en probeer het opnieuw.</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="416"/>
+        <location filename="../../blink/accounts.py" line="479"/>
         <source>Password should contain at least 8 characters</source>
         <translation>Wachtwoord moet minimaal 8 tekens bevatten</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="418"/>
+        <location filename="../../blink/accounts.py" line="481"/>
         <source>Passwords do not match</source>
         <translation>Wachtwoorden komen niet overeen</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="420"/>
+        <location filename="../../blink/accounts.py" line="483"/>
         <source>E-mail address should be specified as user@domain</source>
         <translation>Het e-mailadres moet worden opgegeven als gebruiker@domein</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="490"/>
+        <location filename="../../blink/accounts.py" line="553"/>
         <source>Illegal server response</source>
         <translation>Illegale serverreactie</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="492"/>
+        <location filename="../../blink/accounts.py" line="555"/>
         <source>Failed to contact server: %s</source>
         <translation>Kan geen contact opnemen met server: %s</translation>
+    </message>
+</context>
+<context>
+    <name>audio_session</name>
+    <message>
+        <location filename="../../blink/sessions.py" line="2779"/>
+        <source>Add audio</source>
+        <translation>Audio toevoegen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2780"/>
+        <source>Remove audio</source>
+        <translation>Audio verwijderen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2781"/>
+        <source>Add video</source>
+        <translation>Video toevoegen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2782"/>
+        <source>Remove video</source>
+        <translation>Video verwijderen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2783"/>
+        <source>Add MSRP chat</source>
+        <translation>MSRP Chat toevoegen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2784"/>
+        <source>Remove MSRP chat</source>
+        <translation>MSRP chat verwijderen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2785"/>
+        <source>Share my screen</source>
+        <translation>Deel mijn scherm</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2786"/>
+        <source>Request screen</source>
+        <translation>Verzoek schermdeling</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2787"/>
+        <source>End screen sharing</source>
+        <translation>Stop scherm delen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2788"/>
+        <source>Send Messages</source>
+        <translation>Stuur berichten</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2789"/>
+        <source>Send File(s)...</source>
+        <translation>Stuur bestand(en)...</translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="3136"/>
+        <source>Select File(s)</source>
+        <translation>Selecteer bestand(en)</translation>
     </message>
 </context>
 <context>
@@ -259,17 +317,17 @@ All rights reserved.</source>
         <translation>Deelnemers</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1031"/>
+        <location filename="../chat_window.ui" line="1034"/>
         <source>Session Information</source>
         <translation>Sessie informatie</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1207"/>
+        <location filename="../chat_window.ui" line="1210"/>
         <source>Screen</source>
         <translation>Scherm</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2133"/>
+        <location filename="../../blink/chatwindow.py" line="2359"/>
         <source>Connected</source>
         <translation>Verbonden</translation>
     </message>
@@ -289,52 +347,52 @@ All rights reserved.</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1056"/>
+        <location filename="../chat_window.ui" line="1059"/>
         <source>Conference Files</source>
         <translation>Bestanden in het conferentiegesprek</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1105"/>
+        <location filename="../chat_window.ui" line="1108"/>
         <source>Conference Participants</source>
         <translation>Deelnemers in het conferentiegesprek</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1233"/>
+        <location filename="../chat_window.ui" line="1236"/>
         <source>Status</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1249"/>
+        <location filename="../chat_window.ui" line="1252"/>
         <source>01:27</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2290"/>
+        <location filename="../../blink/chatwindow.py" line="2516"/>
         <source>Using relay</source>
         <translation>Gebruikt relay</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2282"/>
+        <location filename="../../blink/chatwindow.py" line="2508"/>
         <source>Viewing remote</source>
         <translation>Bekijkt andere partij</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1434"/>
+        <location filename="../chat_window.ui" line="1437"/>
         <source>Audio</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1444"/>
+        <location filename="../chat_window.ui" line="1447"/>
         <source>Remote Agent</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1481"/>
+        <location filename="../chat_window.ui" line="1484"/>
         <source>Packet Loss: 0.0%, max=0.0%</source>
         <translation>Pakketverlies: 0.0%, max=0.0%</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1517"/>
+        <location filename="../chat_window.ui" line="1520"/>
         <source>Account</source>
         <translation></translation>
     </message>
@@ -344,302 +402,302 @@ All rights reserved.</source>
         <translation type="obsolete">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Verkeer: &lt;span style=&quot;font-family: sans-serif; color:#d70000;&quot;&gt;↓&lt;/span&gt; 0kbps &lt;span style=&quot;font-family: sans-serif; color:#0064d7;&quot;&gt;↑&lt;/span&gt; 0kbps&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1593"/>
+        <location filename="../chat_window.ui" line="1596"/>
         <source>user@domain</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1770"/>
+        <location filename="../chat_window.ui" line="1773"/>
         <source>Network Latency: 0ms, max=0ms</source>
         <translation>Netwerklatentie: 0ms, max=0ms</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1833"/>
+        <location filename="../chat_window.ui" line="1836"/>
         <source>opus 48kHz</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1884"/>
+        <location filename="../chat_window.ui" line="1887"/>
         <source>Duration</source>
         <translation>Duur</translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1894"/>
+        <location filename="../chat_window.ui" line="1897"/>
         <source>Chat</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1910"/>
+        <location filename="../chat_window.ui" line="1913"/>
         <source>Blink Qt 1.0.0</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1923"/>
+        <location filename="../chat_window.ui" line="1926"/>
         <source>Video</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="1960"/>
+        <location filename="../chat_window.ui" line="1963"/>
         <source>H264 25fps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="2235"/>
+        <location filename="../chat_window.ui" line="2248"/>
         <source>Page</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../chat_window.ui" line="2272"/>
+        <location filename="../chat_window.ui" line="2285"/>
         <source>about:blank</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1170"/>
+        <location filename="../../blink/chatwindow.py" line="1378"/>
         <source>Timeout in enabling OTR, recipient did not answer to OTR encryption request</source>
         <translation>Time-out bij inschakelen van OTR, de ontvanger heeft niet gereageerd op OTR encryptie verzoek</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1320"/>
+        <location filename="../../blink/chatwindow.py" line="1536"/>
         <source>Open screenshots folder</source>
         <translation>Map met schermafbeeldingen openen</translation>
     </message>
     <message>
         <location filename="../../blink/chatwindow.py" line="2850"/>
         <source>Delivery failed: {notification.data.data.code} - {notification.data.data.reason}</source>
-        <translation>Decryptie mislukt: {notification.data.data.code} - {notification.data.data.reason}</translation>
+        <translation type="obsolete">Decryptie mislukt: {notification.data.data.code} - {notification.data.data.reason}</translation>
     </message>
     <message>
         <location filename="../../blink/chatwindow.py" line="2897"/>
         <source>Decryption failed: {notification.data.error}</source>
-        <translation>Decryptie mislukt: {notification.data.error}</translation>
+        <translation type="obsolete">Decryptie mislukt: {notification.data.error}</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3152"/>
+        <location filename="../../blink/chatwindow.py" line="3471"/>
         <source>Encryption enabled</source>
         <translation>Encryptie ingeschakeld</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3154"/>
+        <location filename="../../blink/chatwindow.py" line="3473"/>
         <source>Encryption disabled</source>
         <translation>Encryptie uitgescahekeld</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3184"/>
+        <location filename="../../blink/chatwindow.py" line="3503"/>
         <source>Failed to initialize chat: %s</source>
         <translation>Kan chat niet initialiseren: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3201"/>
+        <location filename="../../blink/chatwindow.py" line="3520"/>
         <source>Disconnected: %s</source>
         <translation>Verbroken: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3203"/>
+        <location filename="../../blink/chatwindow.py" line="3522"/>
         <source>Disconnected</source>
         <translation>Verbroken</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3239"/>
+        <location filename="../../blink/chatwindow.py" line="3558"/>
         <source>Network Latency: %dms, max=%dms</source>
         <translation>Netwerklatentie: %dms, max=%dms</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3242"/>
+        <location filename="../../blink/chatwindow.py" line="3561"/>
         <source>Packet Loss: %.1f%%, max=%.1f%%</source>
         <translation>Pakketverlies: %.1f%%, max=%.1f%%</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1047"/>
+        <location filename="../../blink/chatwindow.py" line="1225"/>
         <source>Error sending image: %s</source>
         <translation>Fout bij verzenden van afbeelding: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1138"/>
+        <location filename="../../blink/chatwindow.py" line="1346"/>
         <source>Error sending message: %s</source>
         <translation>Fout bij verzenden van bericht: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1746"/>
+        <location filename="../../blink/chatwindow.py" line="1964"/>
         <source>No Sessions</source>
         <translation>Geen sessies</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1915"/>
+        <location filename="../../blink/chatwindow.py" line="2141"/>
         <source>Start MSRP chat</source>
         <translation>Realtime chatsessie starten</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1916"/>
+        <location filename="../../blink/chatwindow.py" line="2142"/>
         <source>Start audio call</source>
         <translation>Audiogesprek starten</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1917"/>
+        <location filename="../../blink/chatwindow.py" line="2143"/>
         <source>Start video call</source>
         <translation>Videogesprek starten</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1918"/>
+        <location filename="../../blink/chatwindow.py" line="2144"/>
         <source>Disconnect</source>
         <translation>Verbreek verbinding</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1919"/>
+        <location filename="../../blink/chatwindow.py" line="2145"/>
         <source>Add audio</source>
         <translation>Audio toevoegen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1920"/>
+        <location filename="../../blink/chatwindow.py" line="2146"/>
         <source>Remove audio</source>
         <translation>Audio verwijderen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1921"/>
+        <location filename="../../blink/chatwindow.py" line="2147"/>
         <source>Add video</source>
         <translation>Video toevoegen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1922"/>
+        <location filename="../../blink/chatwindow.py" line="2148"/>
         <source>Remove video</source>
         <translation>Video verwijderen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1923"/>
+        <location filename="../../blink/chatwindow.py" line="2149"/>
         <source>Add real time chat</source>
         <translation>Realtimechat toevoegen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1924"/>
+        <location filename="../../blink/chatwindow.py" line="2150"/>
         <source>Remove real time chat</source>
         <translation>Realtime chat verwijderen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1926"/>
+        <location filename="../../blink/chatwindow.py" line="2152"/>
         <source>Share my screen</source>
         <translation>Deel mijn scherm</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1927"/>
+        <location filename="../../blink/chatwindow.py" line="2153"/>
         <source>Request screen</source>
         <translation>Verzoek schermdeling</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1928"/>
+        <location filename="../../blink/chatwindow.py" line="2154"/>
         <source>End screen sharing</source>
         <translation>Stop scherm delen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1929"/>
+        <location filename="../../blink/chatwindow.py" line="2155"/>
         <source>Enable OTR for messaging</source>
         <translation>OTR inschakelen voor berichten</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1930"/>
+        <location filename="../../blink/chatwindow.py" line="2156"/>
         <source>Enabling OTR for messaging</source>
         <translation>OTR aan het inschakelen voor berichten</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1931"/>
+        <location filename="../../blink/chatwindow.py" line="2157"/>
         <source>Disable OTR for messaging</source>
         <translation>OTR uitschakelen voor berichten</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1932"/>
+        <location filename="../../blink/chatwindow.py" line="2158"/>
         <source>Main Window</source>
         <translation>Hoofdvenster</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2129"/>
+        <location filename="../../blink/chatwindow.py" line="2355"/>
         <source>Finding destination...</source>
         <translation>Bestemming vinden...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2130"/>
+        <location filename="../../blink/chatwindow.py" line="2356"/>
         <source>Connecting...</source>
         <translation>Verbinden...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2131"/>
+        <location filename="../../blink/chatwindow.py" line="2357"/>
         <source>Ringing</source>
         <translation>Gaat over</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2132"/>
+        <location filename="../../blink/chatwindow.py" line="2358"/>
         <source>Starting media...</source>
         <translation>Media starten...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2247"/>
+        <location filename="../../blink/chatwindow.py" line="2473"/>
         <source>Using SIP Message</source>
         <translation>Gebruikt SIP message</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2293"/>
+        <location filename="../../blink/chatwindow.py" line="2519"/>
         <source>Peer to peer</source>
         <translation>Peer to Peer</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2169"/>
+        <location filename="../../blink/chatwindow.py" line="2395"/>
         <source>Couldn&apos;t negotiate ICE</source>
         <translation>Kon ICE niet onderhandelen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2210"/>
+        <location filename="../../blink/chatwindow.py" line="2436"/>
         <source>ICE is disabled</source>
         <translation>ICE is uitgeschakeld</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2213"/>
+        <location filename="../../blink/chatwindow.py" line="2439"/>
         <source>ICE is unavailable</source>
         <translation>ICE is niet beschikbaar</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2216"/>
+        <location filename="../../blink/chatwindow.py" line="2442"/>
         <source>Negotiating ICE</source>
         <translation>Onderhandelen ICE</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2219"/>
+        <location filename="../../blink/chatwindow.py" line="2445"/>
         <source>Media is encrypted using %s (%s)</source>
         <translation>Media wordt versleuteld met %s (%s)</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2258"/>
+        <location filename="../../blink/chatwindow.py" line="2484"/>
         <source>Media is not encrypted</source>
         <translation>Media is niet versleuteld</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2286"/>
+        <location filename="../../blink/chatwindow.py" line="2512"/>
         <source>N/A</source>
         <translation>Nvt</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2252"/>
+        <location filename="../../blink/chatwindow.py" line="2478"/>
         <source>Media is encrypted using TLS and {0.encryption} ({0.encryption_cipher})</source>
         <translation>Media wordt versleuteld met TLS en {0.encryption} ({0.encryption_cipher})</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2263"/>
+        <location filename="../../blink/chatwindow.py" line="2489"/>
         <source>Media is encrypted using {0.encryption} ({0.encryption_cipher})</source>
         <translation>Media wordt versleuteld met {0.encryption} ({0.encryption_cipher})</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2295"/>
+        <location filename="../../blink/chatwindow.py" line="2521"/>
         <source>Media is encrypted using TLS</source>
         <translation>Media wordt versleuteld met TLS</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2261"/>
+        <location filename="../../blink/chatwindow.py" line="2487"/>
         <source>Media is encrypted using {0.encryption}</source>
         <translation>Media wordt versleuteld met {0.encryption}</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2284"/>
+        <location filename="../../blink/chatwindow.py" line="2510"/>
         <source>Sharing local</source>
         <translation>Deelt lokaal</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3252"/>
+        <location filename="../../blink/chatwindow.py" line="3571"/>
         <source>&lt;p&gt;Traffic: &lt;span style=&quot;font-family: sans-serif; color: #d70000;&quot;&gt;%s&lt;/span&gt; %s &lt;span style=&quot;font-family: sans-serif; color: #0064d7;&quot;&gt;%s&lt;/span&gt; %s&lt;/p&gt;</source>
         <translation>&lt;p&gt;Verkeer: &lt;span style=&quot;font-family: sans-serif; color: #d70000;&quot;&gt;%s&lt;/span&gt; %s &lt;span style=&quot;font-family: sans-serif; color: #0064d7;&quot;&gt;%s&lt;/span&gt; %s&lt;/p&gt;</translation>
     </message>
@@ -649,75 +707,110 @@ All rights reserved.</source>
         <translation>Bestanden</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1925"/>
+        <location filename="../../blink/chatwindow.py" line="2151"/>
         <source>Send File(s)...</source>
         <translation>Stuur bestand(en)...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2688"/>
+        <location filename="../../blink/chatwindow.py" line="2920"/>
         <source>You sent an audio message. Fetching and processing...</source>
         <translation>U stuurede een audio bericht. Bezig met downloaden en verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2693"/>
+        <location filename="../../blink/chatwindow.py" line="2925"/>
         <source>Sent you an audio message. Processing...</source>
         <translation>Stuurde U een audio bericht. Bezig met verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2724"/>
+        <location filename="../../blink/chatwindow.py" line="2958"/>
         <source>Error: image can not be rendered: %s</source>
         <translation>Fout: afbeelding kan niet worden weergegeven: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2952"/>
+        <location filename="../../blink/chatwindow.py" line="3192"/>
         <source>File decryption failed: {notification.data.error}</source>
         <translation>Decryptie van bestand is mislukt: {notification.data.error}</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3410"/>
+        <location filename="../../blink/chatwindow.py" line="3744"/>
         <source>Select File(s)</source>
         <translation>Selecteer bestand(en)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4980"/>
+        <location filename="../../blink/sessions.py" line="5117"/>
         <source>Item still available in cache or local</source>
         <translation>Item is nog beschikbaar in de cache of op deze computer</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2695"/>
+        <location filename="../../blink/chatwindow.py" line="2927"/>
         <source>Sent you an image: %s. Processing...</source>
         <translation>Stuurde U een afbeelding: %s. Bezig met verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2690"/>
+        <location filename="../../blink/chatwindow.py" line="2922"/>
         <source>You sent an image: %s. Fetching and processing...</source>
         <translation>U stuurde een afbeelding: %s. Bezig met downloaden en verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2701"/>
+        <location filename="../../blink/chatwindow.py" line="2933"/>
         <source>%s can&apos;t be decrypted. PGP is disabled</source>
         <translation>%s kan niet worden ontsleuteld, PGP is uitgeschakeld</translation>
     </message>
     <message>
         <location filename="../chat_window.ui" line="20"/>
         <source>Messages</source>
-        <translation type="unfinished">Berichten</translation>
+        <translation>Berichten</translation>
     </message>
-    <message encoding="UTF-8">
-        <location filename="../chat_window.ui" line="1554"/>
+    <message>
+        <location filename="../chat_window.ui" line="1557"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Traffic: &lt;span style=&quot;font-family: sans-serif; color:#d70000;&quot;&gt;↓&lt;/span&gt; 0kbps &lt;span style=&quot;font-family: sans-serif; color:#0064d7;&quot;&gt;↑&lt;/span&gt; 0kbps&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Verkeer: &lt;span style=&quot;font-family: sans-serif; color:#d70000;&quot;&gt;↓&lt;/span&gt; 0kbps &lt;span style=&quot;font-family: sans-serif; color:#0064d7;&quot;&gt;↑&lt;/span&gt; 0kbps&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <location filename="../chat_window.ui" line="2024"/>
+        <source>Select the SIP account used for this chat</source>
+        <translation>Selecteer de SIP account voor deze chat</translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3107"/>
+        <source>Delivery failed: {notification.data.data.code} - {reason}</source>
+        <translation>Afleveren mislukt: {notification.data.data.code} - {reason}</translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3377"/>
+        <source>audio</source>
+        <translation>audio</translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3378"/>
+        <source>video</source>
+        <translation>video</translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3379"/>
+        <source>file-transfer</source>
+        <translation>bestandsoverdracht</translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3384"/>
+        <source>call</source>
+        <translation>oproep</translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3390"/>
+        <source>%s %s %s failed (%s)</source>
+        <translation>%s %s %s mislukt (%s)</translation>
     </message>
 </context>
 <context>
     <name>conference_button</name>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="32"/>
+        <location filename="../../blink/widgets/buttons.py" line="34"/>
         <source>Conference all single sessions</source>
         <translation>Conferentiegesprek met alle losse sessies</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="33"/>
+        <location filename="../../blink/widgets/buttons.py" line="35"/>
         <source>Break selected conference</source>
         <translation>Geselecteerd conferentiegesprek onderbreken</translation>
     </message>
@@ -757,7 +850,7 @@ All rights reserved.</source>
     <message>
         <location filename="../conference_dialog.ui" line="20"/>
         <source>Join MSRP Conference</source>
-        <translation type="unfinished"></translation>
+        <translation>Deelnemen aan MSRP conferentie</translation>
     </message>
 </context>
 <context>
@@ -801,7 +894,7 @@ All rights reserved.</source>
         <translation>Annuleren</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4700"/>
+        <location filename="../../blink/contacts.py" line="4944"/>
         <source>Add</source>
         <translation>Toevoegen</translation>
     </message>
@@ -841,82 +934,82 @@ All rights reserved.</source>
         <translation>Automatisch beantwoorden</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4685"/>
+        <location filename="../../blink/contacts.py" line="4929"/>
         <source>audio</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4686"/>
+        <location filename="../../blink/contacts.py" line="4930"/>
         <source>video</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4687"/>
+        <location filename="../../blink/contacts.py" line="4931"/>
         <source>chat</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4688"/>
+        <location filename="../../blink/contacts.py" line="4932"/>
         <source>audio+chat</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4689"/>
+        <location filename="../../blink/contacts.py" line="4933"/>
         <source>messages</source>
         <translation>berichten</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4714"/>
+        <location filename="../../blink/contacts.py" line="4958"/>
         <source>Ok</source>
         <translation>OK</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4377"/>
+        <location filename="../../blink/contacts.py" line="4621"/>
         <source>Mobile</source>
         <translation>Mobiel</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4377"/>
+        <location filename="../../blink/contacts.py" line="4621"/>
         <source>Home</source>
         <translation>Thuis</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4377"/>
+        <location filename="../../blink/contacts.py" line="4621"/>
         <source>Work</source>
         <translation>Werk</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4377"/>
+        <location filename="../../blink/contacts.py" line="4621"/>
         <source>SIP</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4377"/>
+        <location filename="../../blink/contacts.py" line="4621"/>
         <source>XMPP</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4377"/>
+        <location filename="../../blink/contacts.py" line="4621"/>
         <source>Other</source>
         <translation>Ander</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4481"/>
+        <location filename="../../blink/contacts.py" line="4725"/>
         <source>Address</source>
         <translation>Adres</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4481"/>
+        <location filename="../../blink/contacts.py" line="4725"/>
         <source>Type</source>
         <translation>Type</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4481"/>
+        <location filename="../../blink/contacts.py" line="4725"/>
         <source>Default</source>
         <translation>Standaard</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4634"/>
+        <location filename="../../blink/contacts.py" line="4878"/>
         <source>Delete</source>
         <translation>Verwijder</translation>
     </message>
@@ -926,40 +1019,40 @@ All rights reserved.</source>
     <message>
         <location filename="../../blink/contacts.py" line="3138"/>
         <source>Add Group</source>
-        <translation>Groep toevoegen</translation>
+        <translation type="obsolete">Groep toevoegen</translation>
     </message>
     <message>
         <location filename="../../blink/contacts.py" line="3139"/>
         <source>Add Contact</source>
-        <translation>Contact toevoegen</translation>
+        <translation type="obsolete">Contact toevoegen</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3684"/>
+        <location filename="../../blink/contacts.py" line="3905"/>
         <source>Edit</source>
         <translation>Bewerk</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3685"/>
+        <location filename="../../blink/contacts.py" line="3906"/>
         <source>Delete</source>
         <translation>Verwijder</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3686"/>
+        <location filename="../../blink/contacts.py" line="3907"/>
         <source>Delete Selection</source>
         <translation>Verwijder selectie</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3687"/>
+        <location filename="../../blink/contacts.py" line="3908"/>
         <source>Undo Last Delete</source>
         <translation>Laatste verwijdering ongedaan maken</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4035"/>
+        <location filename="../../blink/contacts.py" line="4271"/>
         <source>Start Audio Call</source>
         <translation>Audiogesprek starten</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4036"/>
+        <location filename="../../blink/contacts.py" line="4272"/>
         <source>Start Video Call</source>
         <translation>Videogesprek starten</translation>
     </message>
@@ -969,89 +1062,117 @@ All rights reserved.</source>
         <translation type="obsolete">Realtime chatsessie starten</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4038"/>
+        <location filename="../../blink/contacts.py" line="4274"/>
         <source>Send Messages</source>
         <translation>Stuur berichten</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4039"/>
+        <location filename="../../blink/contacts.py" line="4275"/>
         <source>Send File(s)...</source>
         <translation>Stuur bestand(en)...</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4040"/>
+        <location filename="../../blink/contacts.py" line="4276"/>
         <source>Request Screen</source>
         <translation>Verzoek schermdeling</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4041"/>
+        <location filename="../../blink/contacts.py" line="4277"/>
         <source>Share My Screen</source>
         <translation>Deel mijn scherm</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4042"/>
+        <location filename="../../blink/contacts.py" line="4278"/>
         <source>Transfer Active Call</source>
         <translation>Actieve oproep doorverbinden</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4032"/>
+        <location filename="../../blink/contacts.py" line="4268"/>
         <source>Delete Contact</source>
         <translation>Verwijder contact</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4033"/>
+        <location filename="../../blink/contacts.py" line="4269"/>
         <source>Edit Contact</source>
         <translation>Bewerk contact</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4034"/>
+        <location filename="../../blink/contacts.py" line="4270"/>
         <source>Set Address As Default</source>
         <translation>Adres instellen als standaard</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3173"/>
+        <location filename="../../blink/contacts.py" line="3367"/>
         <source>Undo Delete</source>
         <translation>Verwijderen ongedaan maken</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3734"/>
+        <location filename="../../blink/contacts.py" line="3955"/>
         <source>Undo Delete &quot;%s&quot;</source>
         <translation>Verwijderen ongedaan maken &quot;%s&quot;</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3736"/>
+        <location filename="../../blink/contacts.py" line="3957"/>
         <source>Undo Delete (%d items)</source>
         <translation>Verwijderen ongedaan maken (%d items)</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3294"/>
+        <location filename="../../blink/contacts.py" line="3490"/>
         <source>Transfer Call</source>
         <translation>Gesprek doorverbinden</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3733"/>
+        <location filename="../../blink/contacts.py" line="3954"/>
         <source>Contact</source>
         <translation>Contact</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4519"/>
+        <location filename="../../blink/contacts.py" line="4763"/>
         <source>Edit to add address</source>
         <translation>Bewerk om adres toe te voegen</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="645"/>
+        <location filename="../../blink/contacts.py" line="838"/>
         <source>Unknown</source>
         <translation>Onbekend</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4261"/>
+        <location filename="../../blink/contacts.py" line="4501"/>
         <source>Select File(s)</source>
         <translation>Selecteer bestand(en)</translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4037"/>
+        <location filename="../../blink/contacts.py" line="4273"/>
         <source>Start MSRP Chat</source>
-        <translation type="unfinished"></translation>
+        <translation>MSRP chat starten</translation>
+    </message>
+    <message>
+        <location filename="../../blink/contacts.py" line="3331"/>
+        <source>Add new group</source>
+        <translation>Nieuwe groep toevoegen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/contacts.py" line="3332"/>
+        <source>Add new contact</source>
+        <translation>Nieuw contact toevoegen</translation>
+    </message>
+    <message>
+        <location filename="../../blink/contacts.py" line="3904"/>
+        <source>Add</source>
+        <translation>Toevoegen</translation>
+    </message>
+</context>
+<context>
+    <name>delete_message_dialog</name>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="830"/>
+        <source>Delete</source>
+        <translation>Verwijder</translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="880"/>
+        <source>file</source>
+        <translation>bestand</translation>
     </message>
 </context>
 <context>
@@ -1064,38 +1185,48 @@ All rights reserved.</source>
     <message>
         <location filename="../export_private_key_dialog.ui" line="106"/>
         <source>Press **Export** and enter this pincode when prompted on your other device:</source>
-        <translation>Druk op **Export** en voer deze pincode in wanneer daarom wordt gevraagd op uw andere apparaat:</translation>
+        <translation type="obsolete">Druk op **Export** en voer deze pincode in wanneer daarom wordt gevraagd op uw andere apparaat:</translation>
     </message>
     <message>
-        <location filename="../export_private_key_dialog.ui" line="143"/>
+        <location filename="../export_private_key_dialog.ui" line="137"/>
         <source>PINCODE</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/messages.py" line="237"/>
+        <location filename="../../blink/messages.py" line="235"/>
         <source>Export</source>
         <translation>Exporteer</translation>
     </message>
     <message>
         <location filename="../export_private_key_dialog.ui" line="90"/>
         <source>Blink uses end-to-end encryption for messaging to contacts that support this. To replicate messages on multiple devices you need the same prive key on all of them.</source>
+        <translation type="obsolete">Blink gebruikt end-to-end encryptie voor berichten naar contacten die dit ondersteunen. Om berichten op meerdere apparaten te synchroniseren, hebt u op alle apparaten dezelfde privésleutel nodig.</translation>
+    </message>
+    <message>
+        <location filename="../export_private_key_dialog.ui" line="90"/>
+        <source>Blink uses PGP end-to-end encryption for messages to contacts that support this feature. To replicate messages on multiple devices using the same account you need the same private key on all of them.</source>
         <translation>Blink gebruikt end-to-end encryptie voor berichten naar contacten die dit ondersteunen. Om berichten op meerdere apparaten te synchroniseren, hebt u op alle apparaten dezelfde privésleutel nodig.</translation>
+    </message>
+    <message>
+        <location filename="../export_private_key_dialog.ui" line="106"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Press &lt;span style=&quot; font-weight:600;&quot;&gt;Export&lt;/span&gt; and enter this pincode when prompted on your other device:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Press &lt;span style=&quot; font-weight:600;&quot;&gt;Exporteer&lt;/span&gt; en voer deze pincode in als er om wordt gevraagd op uw andere apparaat:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
 <context>
     <name>filelist_view</name>
     <message>
-        <location filename="../../blink/sessions.py" line="5244"/>
+        <location filename="../../blink/sessions.py" line="5397"/>
         <source>Open</source>
         <translation>Open</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5245"/>
+        <location filename="../../blink/sessions.py" line="5398"/>
         <source>Open Transfers Folder</source>
         <translation>Bestandsoverdracht map openen</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5246"/>
+        <location filename="../../blink/sessions.py" line="5399"/>
         <source>Remove File</source>
         <translation>Verwijder bestand</translation>
     </message>
@@ -1272,7 +1403,7 @@ All rights reserved.</source>
 <context>
     <name>generate_pgp_key_dialog</name>
     <message>
-        <location filename="../../blink/messages.py" line="65"/>
+        <location filename="../../blink/messages.py" line="63"/>
         <source>Generate</source>
         <translation>Genereren</translation>
     </message>
@@ -1341,27 +1472,27 @@ border-color: #3278c8;
 <context>
     <name>history</name>
     <message>
-        <location filename="../../blink/history.py" line="733"/>
+        <location filename="../../blink/history.py" line="879"/>
         <source> at %H:%M</source>
         <translation> om %H:%M</translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="735"/>
+        <location filename="../../blink/history.py" line="881"/>
         <source> Yesterday at %H:%M</source>
         <translation> gisteren om %H:%M</translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="737"/>
+        <location filename="../../blink/history.py" line="883"/>
         <source> on %A</source>
         <translation> op %A</translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="739"/>
+        <location filename="../../blink/history.py" line="885"/>
         <source> on %B %d</source>
         <translation> op %B %d</translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="741"/>
+        <location filename="../../blink/history.py" line="887"/>
         <source> on %Y-%m-%d</source>
         <translation> op %Y-%m-%d</translation>
     </message>
@@ -1397,12 +1528,12 @@ border-color: #3278c8;
         <translation>Blink gebruikt end-to-end-encryptie voor berichten waarvoor het een privésleutel nodig heeft.</translation>
     </message>
     <message>
-        <location filename="../../blink/messages.py" line="141"/>
+        <location filename="../../blink/messages.py" line="139"/>
         <source>Import</source>
         <translation>Importeer</translation>
     </message>
     <message>
-        <location filename="../import_private_key_dialog.ui" line="176"/>
+        <location filename="../import_private_key_dialog.ui" line="173"/>
         <source>A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</source>
         <translation>Er is een privésleutel verzonden vanaf een van uw andere apparaten. Voer de code in die wordt weergegeven op het verzendende apparaat om de sleutel te importeren.</translation>
     </message>
@@ -1410,7 +1541,7 @@ border-color: #3278c8;
 <context>
     <name>incoming_calltransfer_dialog</name>
     <message>
-        <location filename="../../blink/sessions.py" line="6212"/>
+        <location filename="../../blink/sessions.py" line="6365"/>
         <source>transfer requested by {}</source>
         <translation>doorschakelen aangevraagd door {}</translation>
     </message>
@@ -1422,11 +1553,11 @@ border-color: #3278c8;
     <message>
         <location filename="../incoming_calltransfer_dialog.ui" line="51"/>
         <source>QFrame#frame {
-<byte value="x9"/>background-color: #f8f8f8;
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>border-radius: 4px;
-<byte value="x9"/>border-width: 2px;
-<byte value="x9"/>border-style: solid;
+	background-color: #f8f8f8;
+	border-color: #545454;
+	border-radius: 4px;
+	border-width: 2px;
+	border-style: solid;
 }
 
 
@@ -1462,57 +1593,57 @@ border-color: #3278c8;
 <context>
     <name>incoming_dialog</name>
     <message>
-        <location filename="../../blink/sessions.py" line="5872"/>
+        <location filename="../../blink/sessions.py" line="6025"/>
         <source>Auto-answer is inactive</source>
         <translation>Automatisch beantwoorden is inactief</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5913"/>
+        <location filename="../../blink/sessions.py" line="6066"/>
         <source>Auto answer in %d seconds</source>
         <translation>Automatisch beantwoorden in %d seconden</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5924"/>
+        <location filename="../../blink/sessions.py" line="6077"/>
         <source>To refuse a media type click its icon</source>
         <translation>Klik op het pictogram om een mediatype te weigeren</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5931"/>
+        <location filename="../../blink/sessions.py" line="6084"/>
         <source>Audio call</source>
         <translation>Audio-oproep</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5933"/>
+        <location filename="../../blink/sessions.py" line="6086"/>
         <source>Chat session</source>
         <translation>Chatsessie</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5935"/>
+        <location filename="../../blink/sessions.py" line="6088"/>
         <source>Video call</source>
         <translation>Video-oproep</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5937"/>
+        <location filename="../../blink/sessions.py" line="6090"/>
         <source>Screen sharing request</source>
         <translation>Verzoek voor scherm delen</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5965"/>
+        <location filename="../../blink/sessions.py" line="6118"/>
         <source>Incoming Session Update</source>
         <translation>Inkomende sessie-update</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5968"/>
+        <location filename="../../blink/sessions.py" line="6121"/>
         <source>Incoming Session Request</source>
         <translation>Inkomend sessieverzoek</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5999"/>
+        <location filename="../../blink/sessions.py" line="6152"/>
         <source>is offering screen sharing</source>
         <translation>biedt schermdeling aan</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6001"/>
+        <location filename="../../blink/sessions.py" line="6154"/>
         <source>is asking to share your screen</source>
         <translation>vraagt om je scherm te delen</translation>
     </message>
@@ -1524,11 +1655,11 @@ border-color: #3278c8;
     <message>
         <location filename="../incoming_dialog.ui" line="48"/>
         <source>QFrame#frame {
-<byte value="x9"/>background-color: #f8f8f8;
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>border-radius: 4px;
-<byte value="x9"/>border-width: 2px;
-<byte value="x9"/>border-style: solid;
+	background-color: #f8f8f8;
+	border-color: #545454;
+	border-radius: 4px;
+	border-width: 2px;
+	border-style: solid;
 }
 
 
@@ -1585,12 +1716,12 @@ border-color: #3278c8;
 <context>
     <name>incoming_filetransfer_dialog</name>
     <message>
-        <location filename="../../blink/sessions.py" line="6137"/>
+        <location filename="../../blink/sessions.py" line="6290"/>
         <source>File: %s (%s)</source>
         <translation>Bestand: %s (%s)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6139"/>
+        <location filename="../../blink/sessions.py" line="6292"/>
         <source>File: %s</source>
         <translation>Bestand: %s</translation>
     </message>
@@ -1602,11 +1733,11 @@ border-color: #3278c8;
     <message>
         <location filename="../incoming_filetransfer_dialog.ui" line="51"/>
         <source>QFrame#frame {
-<byte value="x9"/>background-color: #f8f8f8;
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>border-radius: 4px;
-<byte value="x9"/>border-width: 2px;
-<byte value="x9"/>border-style: solid;
+	background-color: #f8f8f8;
+	border-color: #545454;
+	border-radius: 4px;
+	border-width: 2px;
+	border-style: solid;
 }
 
 
@@ -1670,17 +1801,17 @@ border-color: #3278c8;
         <translation>&amp;Geschiedenis</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1231"/>
+        <location filename="../blink.ui" line="1232"/>
         <source>About &amp;Blink</source>
         <translation>Over &amp;Blink</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1243"/>
+        <location filename="../blink.ui" line="1244"/>
         <source>&amp;Preferences</source>
         <translation>&amp;Voorkeuren</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1373"/>
+        <location filename="../blink.ui" line="1377"/>
         <source>&amp;Manage accounts</source>
         <translation>&amp;Beheer accounts</translation>
     </message>
@@ -1702,7 +1833,7 @@ border-color: #3278c8;
     <message>
         <location filename="../blink.ui" line="274"/>
         <source>QLineEdit {
-<byte value="x9"/>background-color: transparent;
+	background-color: transparent;
 }
 </source>
         <translation></translation>
@@ -1832,117 +1963,117 @@ padding: 2px;</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1141"/>
+        <location filename="../blink.ui" line="1142"/>
         <source>&amp;Devices</source>
         <translation>&amp;Apparaten</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1145"/>
+        <location filename="../blink.ui" line="1146"/>
         <source>Audio &amp;output device</source>
         <translation>Audio-&amp;uitvoerapparaat</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1154"/>
+        <location filename="../blink.ui" line="1155"/>
         <source>&amp;Audio input device</source>
         <translation>&amp;Audio-invoerapparaat</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1163"/>
+        <location filename="../blink.ui" line="1164"/>
         <source>Audio alert &amp;device</source>
         <translation>Audio-notificatie&amp;apparaat</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1172"/>
+        <location filename="../blink.ui" line="1173"/>
         <source>&amp;Video camera</source>
         <translation>&amp;Videocamera</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1189"/>
+        <location filename="../blink.ui" line="1190"/>
         <source>&amp;Window</source>
         <translation>&amp;Venster</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1213"/>
+        <location filename="../blink.ui" line="1214"/>
         <source>&amp;Quit</source>
         <translation>&amp;Stop Blink</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1216"/>
+        <location filename="../blink.ui" line="1217"/>
         <source>Ctrl+Q</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1246"/>
+        <location filename="../blink.ui" line="1247"/>
         <source>Ctrl+P</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1257"/>
+        <location filename="../blink.ui" line="1258"/>
         <source>Check for &amp;updates...</source>
         <translation>Controleren op &amp;updates...</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1262"/>
+        <location filename="../blink.ui" line="1263"/>
         <source>&amp;Logs</source>
         <translation>&amp;Logs</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1265"/>
+        <location filename="../blink.ui" line="1266"/>
         <source>Ctrl+L</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1273"/>
+        <location filename="../blink.ui" line="1274"/>
         <source>File &amp;Transfers</source>
         <translation>Bestands&amp;overdrachten</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1276"/>
+        <location filename="../blink.ui" line="1277"/>
         <source>Ctrl+T</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1287"/>
+        <location filename="../blink.ui" line="1288"/>
         <source>Enable &amp;answering machine</source>
         <translation>&amp;Antwoordapparaat inschakelen</translation>
     </message>
     <message>
         <location filename="../blink.ui" line="1295"/>
         <source>Settings &amp;on SIP server</source>
-        <translation>Instellingen &amp;op SIP server</translation>
+        <translation type="obsolete">Instellingen &amp;op SIP server</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1300"/>
+        <location filename="../blink.ui" line="1304"/>
         <source>&amp;Redial</source>
         <translation>&amp;Opnieuw kiezen</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1303"/>
+        <location filename="../blink.ui" line="1307"/>
         <source>Ctrl+R</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1314"/>
+        <location filename="../blink.ui" line="1318"/>
         <source>&amp;Mute microphone</source>
         <translation>&amp;Demp microfoon</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1317"/>
+        <location filename="../blink.ui" line="1321"/>
         <source>Ctrl+M</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1328"/>
+        <location filename="../blink.ui" line="1332"/>
         <source>&amp;Silence alerts</source>
         <translation>Maak meldingen &amp;stil</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1331"/>
+        <location filename="../blink.ui" line="1335"/>
         <source>Ctrl+S</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1339"/>
+        <location filename="../blink.ui" line="1343"/>
         <source>Search for &amp;people</source>
         <translation>Zoek naar &amp;mensen</translation>
     </message>
@@ -1952,22 +2083,22 @@ padding: 2px;</source>
         <translation type="obsolete">&amp;Chat automatisch accepteren van mijn contacten</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1352"/>
+        <location filename="../blink.ui" line="1356"/>
         <source>&amp;Add account...</source>
         <translation>&amp;Account toevoegen...</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1357"/>
+        <location filename="../blink.ui" line="1361"/>
         <source>&amp;Help</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1360"/>
+        <location filename="../blink.ui" line="1364"/>
         <source>F1</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1368"/>
+        <location filename="../blink.ui" line="1372"/>
         <source>&amp;Release notes</source>
         <translation>&amp;Release-opmerkingen</translation>
     </message>
@@ -1977,7 +2108,7 @@ padding: 2px;</source>
         <translation>Activeer &amp;Google Contacts...</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1383"/>
+        <location filename="../blink.ui" line="1387"/>
         <source>Call &amp;history on server</source>
         <translation>&amp;Gespreksgeschiedenis op de server</translation>
     </message>
@@ -1987,42 +2118,42 @@ padding: 2px;</source>
         <translation type="obsolete">&amp;Deelnemen aan conferentiegesprek...</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1391"/>
+        <location filename="../blink.ui" line="1395"/>
         <source>Ctrl+J</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1402"/>
+        <location filename="../blink.ui" line="1406"/>
         <source>Ctrl+G</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1413"/>
+        <location filename="../blink.ui" line="1417"/>
         <source>Play a sound for &amp;received messages</source>
         <translation>Een geluid afspelen voor &amp;ontvangen berichten</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1418"/>
+        <location filename="../blink.ui" line="1422"/>
         <source>Received &amp;Files</source>
         <translation>Ontvangen &amp;bestanden</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1421"/>
+        <location filename="../blink.ui" line="1425"/>
         <source>Ctrl+D</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1429"/>
+        <location filename="../blink.ui" line="1433"/>
         <source>&amp;Screenshots</source>
         <translation>&amp;Screenshots</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1432"/>
+        <location filename="../blink.ui" line="1436"/>
         <source>Ctrl+E</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1446"/>
+        <location filename="../blink.ui" line="1450"/>
         <source>&amp;Auto-answer</source>
         <translation>&amp;Automatisch beantwoorden</translation>
     </message>
@@ -2032,12 +2163,12 @@ padding: 2px;</source>
         <translation type="obsolete">&amp;Toon laatste gesprekken</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1454"/>
+        <location filename="../blink.ui" line="1458"/>
         <source>Ctrl+O</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1462"/>
+        <location filename="../blink.ui" line="1466"/>
         <source>&amp;Export PGP key to my other devices</source>
         <translation>PGP-privésleutel &amp;exporteren aan mijn andere toestelen</translation>
     </message>
@@ -2107,24 +2238,29 @@ padding: 2px;</source>
         <translation>In gesprek</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1399"/>
+        <location filename="../blink.ui" line="1403"/>
         <source>&amp;Messages</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Berichten</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1347"/>
+        <location filename="../blink.ui" line="1351"/>
         <source>Auto-accept MSRP chat from my contacts</source>
-        <translation type="unfinished"></translation>
+        <translation>Chat automatisch accepteren van mijn contacten</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1388"/>
+        <location filename="../blink.ui" line="1392"/>
         <source>&amp;Join MSRP Conference...</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Deelnemen aan MSRP conferentiegesprek...</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1451"/>
-        <source>&amp;Show Messages</source>
-        <translation type="unfinished"></translation>
+        <location filename="../blink.ui" line="1296"/>
+        <source>Account settings on server</source>
+        <translation>Instellingen op SIP server</translation>
+    </message>
+    <message>
+        <location filename="../blink.ui" line="1455"/>
+        <source>&amp;Recent conversations</source>
+        <translation>&amp;Laatste gesprekken</translation>
     </message>
 </context>
 <context>
@@ -2224,11 +2360,11 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
     <message>
         <location filename="../pending_watcher.ui" line="51"/>
         <source>QFrame#frame {
-<byte value="x9"/>background-color: #f8f8f8;
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>border-radius: 4px;
-<byte value="x9"/>border-width: 2px;
-<byte value="x9"/>border-style: solid;
+	background-color: #f8f8f8;
+	border-color: #545454;
+	border-radius: 4px;
+	border-width: 2px;
+	border-style: solid;
 }
 
 
@@ -2279,7 +2415,7 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
         <translation>Account Informatie</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2580"/>
+        <location filename="../preferences.ui" line="2558"/>
         <source>Resolution:</source>
         <translation>Resolutie:</translation>
     </message>
@@ -2309,632 +2445,632 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
         <translation>Indicator voor wachtend bericht inschakelen (MWI)</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1146"/>
+        <location filename="../../blink/preferences.py" line="1150"/>
         <source>Server Settings</source>
         <translation>Serverinstellingen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="310"/>
+        <location filename="../preferences.ui" line="934"/>
         <source>SIP Proxy server</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="324"/>
+        <location filename="../preferences.ui" line="1118"/>
         <source>Always use the proxy server for outgoing sessions</source>
         <translation>Gebruik altijd de proxyserver voor uitgaande sessies</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="337"/>
+        <location filename="../preferences.ui" line="1056"/>
         <source>Outbound Proxy:</source>
         <translation>Uitgaande proxy:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="798"/>
+        <location filename="../preferences.ui" line="1272"/>
         <source>Port:</source>
         <translation>Poort:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="715"/>
+        <location filename="../preferences.ui" line="1259"/>
         <source>Transport:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="384"/>
+        <location filename="../preferences.ui" line="1100"/>
         <source>UDP</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="948"/>
+        <location filename="../preferences.ui" line="1251"/>
         <source>TCP</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="943"/>
+        <location filename="../preferences.ui" line="1246"/>
         <source>TLS</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="402"/>
+        <location filename="../preferences.ui" line="980"/>
         <source>Auth Username:</source>
         <translation>Auth-gebruikersnaam:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="424"/>
+        <location filename="../preferences.ui" line="973"/>
         <source>Other Servers</source>
         <translation>Andere servers</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="438"/>
+        <location filename="../preferences.ui" line="918"/>
         <source>Voicemail URI:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="448"/>
+        <location filename="../preferences.ui" line="1040"/>
         <source>Discovered by subscribing to myself</source>
         <translation>Ontdekt door mezelf te abonneren</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="458"/>
+        <location filename="../preferences.ui" line="908"/>
         <source>XCAP Root URL:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="468"/>
+        <location filename="../preferences.ui" line="1089"/>
         <source>Taken from the DNS TXT record for xcap.domain</source>
         <translation>Gebruikt het DNS TXT-record voor xcap.domain</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="481"/>
+        <location filename="../preferences.ui" line="1079"/>
         <source>Server Setting URL:</source>
         <translation>Serverinstellingen URL:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="504"/>
+        <location filename="../preferences.ui" line="1010"/>
         <source>Conference Server:</source>
         <translation>Conferentieserver:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="517"/>
+        <location filename="../preferences.ui" line="954"/>
         <source>conference.sip2sip.info</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1148"/>
+        <location filename="../../blink/preferences.py" line="1152"/>
         <source>NAT Traversal</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="568"/>
+        <location filename="../preferences.ui" line="1387"/>
         <source>Audio and Video</source>
         <translation>Audio en Video</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="581"/>
+        <location filename="../preferences.ui" line="1358"/>
         <source>Enable ICE</source>
         <translation>ICE inschakelen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="600"/>
+        <location filename="../preferences.ui" line="1371"/>
         <source>server1.com:3566, server2.com:3456</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="613"/>
+        <location filename="../preferences.ui" line="1348"/>
         <source>STUN servers:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="661"/>
+        <location filename="../preferences.ui" line="1294"/>
         <source>Chat and File transfers</source>
         <translation>Chat en bestandsoverdracht</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="683"/>
+        <location filename="../preferences.ui" line="1229"/>
         <source>Relay address is learned from DNS</source>
         <translation>Relay-adres wordt geleerd van DNS</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="699"/>
+        <location filename="../preferences.ui" line="1175"/>
         <source>MSRP Relay:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="731"/>
+        <location filename="../preferences.ui" line="1191"/>
         <source>2855</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="779"/>
+        <location filename="../preferences.ui" line="1207"/>
         <source>Normally the realy is used only for incoming sessions</source>
         <translation>Normaal gesproken wordt de relay alleen gebruikt voor inkomende sessies</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="785"/>
+        <location filename="../preferences.ui" line="1213"/>
         <source>Always use the relay for outgoing sessions</source>
         <translation>Gebruik altijd de relay voor uitgaande sessies</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="808"/>
+        <location filename="../preferences.ui" line="283"/>
         <source>Media</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="835"/>
+        <location filename="../preferences.ui" line="546"/>
         <source>Send inband DTMF</source>
         <translation>Stuur inband DTMF</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="398"/>
+        <location filename="../../blink/preferences.py" line="399"/>
         <source>Opportunistic</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="399"/>
+        <location filename="../../blink/preferences.py" line="400"/>
         <source>ZRTP</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="400"/>
+        <location filename="../../blink/preferences.py" line="401"/>
         <source>SDES optional</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="401"/>
+        <location filename="../../blink/preferences.py" line="402"/>
         <source>SDES mandatory</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="883"/>
+        <location filename="../preferences.ui" line="589"/>
         <source>Audio/Video Encryption:</source>
         <translation>Audio/Video encryptie:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="900"/>
+        <location filename="../preferences.ui" line="606"/>
         <source>Encrypt audio and video</source>
         <translation>Gebruik encryptie voor audio/video</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="906"/>
+        <location filename="../../blink/preferences.py" line="907"/>
         <source>Auto answer from allowed contacts</source>
         <translation>Automatisch beantwoorden voor alle toegestane contacten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="920"/>
+        <location filename="../preferences.ui" line="620"/>
         <source>MSRP transport:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2082"/>
+        <location filename="../preferences.ui" line="2060"/>
         <source>Audio Codecs</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2410"/>
+        <location filename="../preferences.ui" line="2388"/>
         <source>Video Codecs</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2104"/>
+        <location filename="../preferences.ui" line="2082"/>
         <source>opus</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2112"/>
+        <location filename="../preferences.ui" line="2090"/>
         <source>speex</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2120"/>
+        <location filename="../preferences.ui" line="2098"/>
         <source>G722</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2128"/>
+        <location filename="../preferences.ui" line="2106"/>
         <source>GSM</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2136"/>
+        <location filename="../preferences.ui" line="2114"/>
         <source>iLBC</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2144"/>
+        <location filename="../preferences.ui" line="2122"/>
         <source>PCMU</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2152"/>
+        <location filename="../preferences.ui" line="2130"/>
         <source>PCMA</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2432"/>
+        <location filename="../preferences.ui" line="2410"/>
         <source>H264</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2440"/>
+        <location filename="../preferences.ui" line="2418"/>
         <source>VP8</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2448"/>
+        <location filename="../preferences.ui" line="2426"/>
         <source>VP9</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2517"/>
+        <location filename="../preferences.ui" line="2495"/>
         <source>Drag codecs to change their order</source>
         <translation>Versleep codecs om hun volgorde te wijzigen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1217"/>
+        <location filename="../preferences.ui" line="330"/>
         <source>Reset</source>
         <translation>Reset</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1236"/>
+        <location filename="../preferences.ui" line="482"/>
         <source>Options</source>
         <translation>Opties</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1150"/>
+        <location filename="../../blink/preferences.py" line="1154"/>
         <source>Advanced</source>
         <translation>Geavanceerd</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1668"/>
+        <location filename="../preferences.ui" line="1646"/>
         <source>TLS Settings</source>
         <translation>TLS Instellingen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1472"/>
+        <location filename="../preferences.ui" line="1450"/>
         <source>SIP Settings</source>
         <translation>SIP Instellingen</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1625"/>
+        <location filename="../../blink/preferences.py" line="1639"/>
         <source>seconds</source>
         <translation>seconden</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1541"/>
+        <location filename="../preferences.ui" line="1519"/>
         <source>Publish interval:</source>
         <translation>Publicatie interval:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1551"/>
+        <location filename="../preferences.ui" line="1529"/>
         <source>Subscribe interval:</source>
         <translation>Abonneer interval:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1567"/>
+        <location filename="../preferences.ui" line="1545"/>
         <source>Register interval:</source>
         <translation>Registratie interval:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1600"/>
+        <location filename="../preferences.ui" line="1578"/>
         <source>Re-register</source>
         <translation>Opnieuw registreren</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1728"/>
+        <location filename="../preferences.ui" line="1706"/>
         <source>When calling to phone numbers</source>
         <translation>Bij het bellen naar telefoonnummers</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1748"/>
+        <location filename="../preferences.ui" line="1726"/>
         <source>Replace preceding + with:</source>
         <translation>Vervang voorafgaande + door:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1762"/>
+        <location filename="../preferences.ui" line="1740"/>
         <source>+</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1767"/>
+        <location filename="../preferences.ui" line="1745"/>
         <source>00</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1772"/>
+        <location filename="../preferences.ui" line="1750"/>
         <source>011</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1780"/>
+        <location filename="../preferences.ui" line="1758"/>
         <source>External line prefix:</source>
         <translation>Externe lijn keuze:</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="955"/>
+        <location filename="../../blink/preferences.py" line="959"/>
         <source>None</source>
         <translation>Geen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1799"/>
+        <location filename="../preferences.ui" line="1777"/>
         <source>0</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1804"/>
+        <location filename="../preferences.ui" line="1782"/>
         <source>9</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1853"/>
+        <location filename="../preferences.ui" line="1831"/>
         <source>+442079460000</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1687"/>
+        <location filename="../preferences.ui" line="1665"/>
         <source>Peer name:</source>
         <translation>Peer naam:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1885"/>
+        <location filename="../preferences.ui" line="1863"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Verify the remote TLS certifcate Common Name against this name&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Controleer de &apos;common name&apos; van het ontvangen TLS-certificaat met deze naam&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1928"/>
+        <location filename="../preferences.ui" line="1906"/>
         <source>Audio Devices</source>
         <translation>Audio apparaten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1940"/>
+        <location filename="../preferences.ui" line="1918"/>
         <source>Input Device:</source>
         <translation>Invoerapparaat:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1966"/>
+        <location filename="../preferences.ui" line="1944"/>
         <source>Output Device:</source>
         <translation>Uitvoerapparaat:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1979"/>
+        <location filename="../preferences.ui" line="1957"/>
         <source>Alert Device:</source>
         <translation>Notificatieapparaat:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1992"/>
+        <location filename="../preferences.ui" line="1970"/>
         <source>Sample Rate:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2003"/>
+        <location filename="../preferences.ui" line="1981"/>
         <source>16000</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2008"/>
+        <location filename="../preferences.ui" line="1986"/>
         <source>32000</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2013"/>
+        <location filename="../preferences.ui" line="1991"/>
         <source>44100</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2018"/>
+        <location filename="../preferences.ui" line="1996"/>
         <source>48000</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2055"/>
+        <location filename="../preferences.ui" line="2033"/>
         <source>1</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2062"/>
+        <location filename="../preferences.ui" line="2040"/>
         <source>Enable Echo Cancelling</source>
         <translation>Echo-onderdrukking inschakelen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2069"/>
+        <location filename="../preferences.ui" line="2047"/>
         <source>Tail Length:</source>
         <translation>Staartlengte:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2186"/>
+        <location filename="../preferences.ui" line="2164"/>
         <source>Answering Machine</source>
         <translation>Antwoordapparaat</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2192"/>
+        <location filename="../preferences.ui" line="2170"/>
         <source>Enable Answering Machine</source>
         <translation>Antwoordapparaat inschakelen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2199"/>
+        <location filename="../preferences.ui" line="2177"/>
         <source>Answer Delay:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2242"/>
+        <location filename="../preferences.ui" line="2220"/>
         <source>Maximum Recording:</source>
         <translation>Maximale opname:</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1632"/>
+        <location filename="../../blink/preferences.py" line="1646"/>
         <source>minutes</source>
         <translation>minuten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2272"/>
+        <location filename="../preferences.ui" line="2250"/>
         <source>Unavailable Message:</source>
         <translation>Niet beschikbaar bericht:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2283"/>
+        <location filename="../preferences.ui" line="2261"/>
         <source>Built-in</source>
         <translation>Ingebouwd</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2288"/>
+        <location filename="../preferences.ui" line="2266"/>
         <source>Custom</source>
         <translation>Aangepast</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2368"/>
+        <location filename="../preferences.ui" line="2346"/>
         <source>Record</source>
         <translation>Opnemen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2472"/>
+        <location filename="../preferences.ui" line="2450"/>
         <source>H264 profile:</source>
         <translation>H264 profiel:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2483"/>
+        <location filename="../preferences.ui" line="2461"/>
         <source>baseline</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2488"/>
+        <location filename="../preferences.ui" line="2466"/>
         <source>main</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2493"/>
+        <location filename="../preferences.ui" line="2471"/>
         <source>high</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="430"/>
+        <location filename="../../blink/preferences.py" line="431"/>
         <source>automatic</source>
         <translation>automatisch</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2530"/>
+        <location filename="../preferences.ui" line="2508"/>
         <source>1 Mbps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2535"/>
+        <location filename="../preferences.ui" line="2513"/>
         <source>2 Mbps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2540"/>
+        <location filename="../preferences.ui" line="2518"/>
         <source>4 Mbps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2548"/>
+        <location filename="../preferences.ui" line="2526"/>
         <source>Bitrate:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2561"/>
+        <location filename="../preferences.ui" line="2539"/>
         <source>Video Camera</source>
         <translation>Videocamera</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2600"/>
+        <location filename="../preferences.ui" line="2578"/>
         <source>Camera:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2634"/>
+        <location filename="../preferences.ui" line="2612"/>
         <source>HD 720p</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2639"/>
+        <location filename="../preferences.ui" line="2617"/>
         <source>VGA</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2647"/>
+        <location filename="../preferences.ui" line="2625"/>
         <source>Framerate:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2674"/>
+        <location filename="../preferences.ui" line="2652"/>
         <source>10 fps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2679"/>
+        <location filename="../preferences.ui" line="2657"/>
         <source>15 fps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2684"/>
+        <location filename="../preferences.ui" line="2662"/>
         <source>20 fps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2689"/>
+        <location filename="../preferences.ui" line="2667"/>
         <source>25 fps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2694"/>
+        <location filename="../preferences.ui" line="2672"/>
         <source>30 fps</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3957"/>
+        <location filename="../preferences.ui" line="3971"/>
         <source>Messages</source>
         <translation>Berichten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2728"/>
+        <location filename="../preferences.ui" line="2706"/>
         <source>Smooth Operator</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2733"/>
+        <location filename="../preferences.ui" line="2711"/>
         <source>Stockholm</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2761"/>
+        <location filename="../preferences.ui" line="2739"/>
         <source>Blue - Grey</source>
         <translation>Blauw - Grijs</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2772"/>
+        <location filename="../preferences.ui" line="2750"/>
         <source> px</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2791"/>
+        <location filename="../preferences.ui" line="2769"/>
         <source>Style:</source>
         <translation>Stijl:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2802"/>
+        <location filename="../preferences.ui" line="2780"/>
         <source>about:blank</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2810"/>
+        <location filename="../preferences.ui" line="2788"/>
         <source>Default</source>
         <translation>Standaard</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2817"/>
+        <location filename="../preferences.ui" line="2795"/>
         <source>Font:</source>
         <translation>Lettertype:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2827"/>
+        <location filename="../preferences.ui" line="2805"/>
         <source>Style changes take effect for new sessions</source>
         <translation>Stijlwijzigingen worden van kracht voor nieuwe sessies</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2837"/>
+        <location filename="../preferences.ui" line="2815"/>
         <source>Show user icons</source>
         <translation>Toon gebruikers iconen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2844"/>
+        <location filename="../preferences.ui" line="2822"/>
         <source>Variant:</source>
         <translation></translation>
     </message>
@@ -2949,7 +3085,7 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
         <translation type="obsolete">Accepteer automatisch chat verzoeken van bekende contacten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2870"/>
+        <location filename="../preferences.ui" line="2848"/>
         <source>Replicate sent SMS messages on my other Blink instances</source>
         <translation>Verzonden sms-berichten repliceren op mijn andere Blink-exemplaren</translation>
     </message>
@@ -2964,490 +3100,525 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
         <translation type="obsolete">Chat venster</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2906"/>
+        <location filename="../preferences.ui" line="2884"/>
         <source>Use alternate style for the session information panel</source>
         <translation>Alternatieve stijl gebruiken voor het sessie-informatiepaneel</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2913"/>
+        <location filename="../preferences.ui" line="2891"/>
         <source>Show traffic in bytes per second</source>
         <translation>Toon verkeer in bytes per seconde</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2952"/>
+        <location filename="../preferences.ui" line="2930"/>
         <source>Screen Sharing Settings</source>
         <translation>Instellingen scherm delen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2958"/>
+        <location filename="../preferences.ui" line="2936"/>
         <source>Open the viewer window in fullscreen mode</source>
         <translation>Open het weergavevenster in volledig scherm</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2978"/>
+        <location filename="../preferences.ui" line="2956"/>
         <source>Scale the remote screen to fit the viewer window</source>
         <translation>Schaal het ontvangen scherm zodat het in het kijkvenster past</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2985"/>
+        <location filename="../preferences.ui" line="2963"/>
         <source>Open the viewer window in view only mode</source>
         <translation>Open het weergavevenster als alleen bekijken</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3011"/>
+        <location filename="../preferences.ui" line="2989"/>
         <source>File Logging Settings</source>
         <translation>Instellingen voor loggen naar bestanden</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3017"/>
+        <location filename="../preferences.ui" line="2995"/>
         <source>Trace SIP</source>
         <translation>Traceer SIP</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3031"/>
+        <location filename="../preferences.ui" line="3009"/>
         <source>Trace MSRP (used for chat, file transfer and screen sharing)</source>
         <translation>Traceer MSRP (gebruikt voor chat, bestandsoverdracht en schermdeling)</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3038"/>
+        <location filename="../preferences.ui" line="3016"/>
         <source>Trace XCAP (used by presence and for storing contacts)</source>
         <translation>Traceer XCAP (gebruikt voor aanwezigheid en voor het opslaan van contacten)</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3045"/>
+        <location filename="../preferences.ui" line="3023"/>
         <source>Trace Notifications</source>
         <translation>Traceer notificaties</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3075"/>
+        <location filename="../preferences.ui" line="3053"/>
         <source>Level:</source>
         <translation>Niveau:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3052"/>
+        <location filename="../preferences.ui" line="3030"/>
         <source>Trace Core Library</source>
         <translation>Traceer Core Library</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3118"/>
+        <location filename="../preferences.ui" line="3096"/>
         <source>Clear log files</source>
         <translation>Logbestanden wissen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3141"/>
+        <location filename="../preferences.ui" line="3119"/>
         <source>There are currently 0Mb of log files</source>
         <translation>Er zijn momenteel 0Mb aan logbestanden</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3652"/>
+        <location filename="../preferences.ui" line="3630"/>
         <source>Browse</source>
         <translation>Blader</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3546"/>
+        <location filename="../preferences.ui" line="3524"/>
         <source>Save received files to:</source>
         <translation>Bewaar ontvangen bestanden in:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3378"/>
+        <location filename="../preferences.ui" line="3356"/>
         <source>TCP port:</source>
         <translation>TCP poort:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3302"/>
+        <location filename="../preferences.ui" line="3280"/>
         <source>TLS port:</source>
         <translation>TLS poort:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3210"/>
+        <location filename="../preferences.ui" line="3188"/>
         <source>Enable UDP</source>
         <translation>UDP inschakelen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3273"/>
+        <location filename="../preferences.ui" line="3251"/>
         <source>UDP port:</source>
         <translation>UDP poort:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3426"/>
+        <location filename="../preferences.ui" line="3404"/>
         <source>starting at:</source>
         <translation>beginnend bij:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3635"/>
+        <location filename="../preferences.ui" line="3613"/>
         <source>The cerfiticate authority used to validate TLS connections</source>
         <translation>De &apos;cerfiticate authority&apos; die wordt gebruikt om TLS-verbindingen te valideren</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3184"/>
+        <location filename="../preferences.ui" line="3162"/>
         <source>SIP and RTP</source>
         <translation>SIP en RTP</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3475"/>
+        <location filename="../preferences.ui" line="3453"/>
         <source>Enable TLS</source>
         <translation>TLS inschakelen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3570"/>
+        <location filename="../preferences.ui" line="3548"/>
         <source>Save screenshots to:</source>
         <translation>Bewaar schermafbeeldingen in:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3536"/>
+        <location filename="../preferences.ui" line="3514"/>
         <source>Where to save received files</source>
         <translation>Locatie voor oplsag van ontvangen bestanden</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3362"/>
+        <location filename="../preferences.ui" line="3340"/>
         <source>Auto</source>
         <translation>Automatisch</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3468"/>
+        <location filename="../preferences.ui" line="3446"/>
         <source>Enable TCP</source>
         <translation>TCP inschakelen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3685"/>
+        <location filename="../preferences.ui" line="3663"/>
         <source>Certificate Authority:</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3455"/>
+        <location filename="../preferences.ui" line="3433"/>
         <source>How many media ports to use and starting from what address</source>
         <translation>Hoeveel mediapoorten te gebruiken en vanaf welke poort</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3604"/>
+        <location filename="../preferences.ui" line="3582"/>
         <source>TLS settings</source>
         <translation>TLS Instellingen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3515"/>
+        <location filename="../preferences.ui" line="3493"/>
         <source>Files and directories</source>
         <translation>Bestanden en mappen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3580"/>
+        <location filename="../preferences.ui" line="3558"/>
         <source>Where to save screenshots taken from video or screen sharing sessions</source>
         <translation>Locatie voor screenshots die zijn gemaakt van video- of schermdeelsessies</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3501"/>
+        <location filename="../preferences.ui" line="3479"/>
         <source>Set ports to 0 for automatic allocation</source>
         <translation>Zet poorten op 0 voor automatische toewijzing</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3628"/>
+        <location filename="../preferences.ui" line="3606"/>
         <source>Verify server</source>
         <translation>Server verifiëren</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3665"/>
+        <location filename="../preferences.ui" line="3643"/>
         <source>Certificate File:</source>
         <translation>Certificaatbestand:</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3675"/>
+        <location filename="../preferences.ui" line="3653"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Certificate and private key in PEM format used by TLS transport&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Certificaat en privésleutel in PEM formaat gebruikt door TLS-transport&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3921"/>
+        <location filename="../preferences.ui" line="3935"/>
         <source>Accounts</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3933"/>
+        <location filename="../preferences.ui" line="3947"/>
         <source>Audio</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3945"/>
+        <location filename="../preferences.ui" line="3959"/>
         <source>Video</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3969"/>
+        <location filename="../preferences.ui" line="3983"/>
         <source>Screen Sharing</source>
         <translation>Scherm delen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3981"/>
+        <location filename="../preferences.ui" line="3995"/>
         <source>Logging</source>
         <translation>Logs</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1257"/>
+        <location filename="../preferences.ui" line="718"/>
         <source>Enable Is-Composing</source>
         <translation>Is-Composing inschakelen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1271"/>
+        <location filename="../preferences.ui" line="732"/>
         <source>Use CPIM envelope</source>
         <translation>Gebruik CPIM-envelop</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1284"/>
+        <location filename="../preferences.ui" line="745"/>
         <source>When sending messages</source>
         <translation>Bij het verzenden van berichten</translation>
     </message>
     <message>
         <location filename="../preferences.ui" line="1294"/>
         <source>Handle server replicated messages</source>
-        <translation>Door server gerepliceerde berichten verwerken</translation>
+        <translation type="obsolete">Door server gerepliceerde berichten verwerken</translation>
     </message>
     <message>
         <location filename="../preferences.ui" line="1311"/>
         <source>Add unknown contacts to &apos;Messages&apos; group in your contacts</source>
-        <translation>Voeg onbekende contacten toe aan de groep &apos;Berichten&apos; in je contacten</translation>
+        <translation type="obsolete">Voeg onbekende contacten toe aan de groep &apos;Berichten&apos; in je contacten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1324"/>
+        <location filename="../preferences.ui" line="781"/>
         <source>History and synchronization</source>
         <translation>Geschiedenis en synchronisatie</translation>
     </message>
     <message>
         <location filename="../preferences.ui" line="1331"/>
         <source>History URL</source>
-        <translation>Geschiedenis-URL</translation>
+        <translation type="obsolete">Geschiedenis-URL</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1338"/>
+        <location filename="../preferences.ui" line="795"/>
         <source>Enable message encryption with OpenPGP (if supported by receiver)</source>
         <translation>Schakel berichtversleuteling in met OpenPGP (indien ondersteund door ontvanger)</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1352"/>
+        <location filename="../preferences.ui" line="809"/>
         <source>Enable IMDN (Read receipts)</source>
         <translation>IMDN inschakelen (leesbevestigingen)</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1365"/>
+        <location filename="../preferences.ui" line="825"/>
         <source>When sending and receiving messages</source>
         <translation>Bij het verzenden en ontvangen van berichten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1375"/>
+        <location filename="../preferences.ui" line="835"/>
         <source>If you turn off IMDN you won&apos;t be able to see receipts from other people</source>
         <translation>Als je IMDN uitschakelt, kun je geen leesbevestigingen zien van andere mensen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1396"/>
+        <location filename="../preferences.ui" line="856"/>
         <source>Last fetched ID</source>
         <translation>Laatst opgehaalde ID</translation>
     </message>
     <message>
         <location filename="../preferences.ui" line="1403"/>
         <source>Enable history synchronization  (Requires Sylkserver and server support)</source>
-        <translation>Geschiedenissynchronisatie inschakelen (vereist Sylkserver en serverondersteuning)</translation>
+        <translation type="obsolete">Geschiedenissynchronisatie inschakelen (vereist Sylkserver en serverondersteuning)</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3024"/>
+        <location filename="../preferences.ui" line="3002"/>
         <source>Trace SIP Messaging and PGP Encryption</source>
         <translation>Traceer SIP-berichten en PGP encryptie</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3237"/>
+        <location filename="../preferences.ui" line="3215"/>
         <source>Transports</source>
         <translation>Transporten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3341"/>
+        <location filename="../preferences.ui" line="3319"/>
         <source>Auto answer</source>
         <translation>Automatisch beantwoorden</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3458"/>
+        <location filename="../preferences.ui" line="3436"/>
         <source>RTP Ports</source>
         <translation>RTP poorten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3482"/>
+        <location filename="../preferences.ui" line="3460"/>
         <source>Interval</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3709"/>
+        <location filename="../preferences.ui" line="3687"/>
         <source>Interface</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3749"/>
+        <location filename="../preferences.ui" line="3770"/>
         <source>History menu</source>
         <translation>Geschiedenis menu</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3848"/>
+        <location filename="../preferences.ui" line="3721"/>
         <source>Show both name and URI</source>
         <translation>Toon naam en URI</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3770"/>
+        <location filename="../preferences.ui" line="3814"/>
         <source>Interface Language:</source>
         <translation>Interfacetaal:</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="695"/>
+        <location filename="../../blink/preferences.py" line="696"/>
         <source>System Default</source>
         <translation>Standaardapparaat</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3861"/>
+        <location filename="../preferences.ui" line="3786"/>
         <source>Localization</source>
         <translation>Lokalisatie</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="862"/>
+        <location filename="../../blink/preferences.py" line="864"/>
         <source>Registered at %s</source>
         <translation>Geregistreerd op %s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1167"/>
+        <location filename="../../blink/preferences.py" line="1171"/>
         <source>Registration %s</source>
         <translation>Registratie %s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1169"/>
+        <location filename="../../blink/preferences.py" line="1173"/>
         <source>Not Registered</source>
         <translation>Niet geregistreerd</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="978"/>
+        <location filename="../../blink/preferences.py" line="982"/>
         <source>Auto answer from all neighbours</source>
         <translation>Automatisch beantwoorden voor alle &apos;buren&apos;</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1083"/>
+        <location filename="../../blink/preferences.py" line="1087"/>
         <source>There are currently %s of log files</source>
         <translation>Er wordt momenteel %s gebruikt door logbestanden</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1153"/>
+        <location filename="../../blink/preferences.py" line="1157"/>
         <source>Discovered by subscribing to %s</source>
         <translation>Ontdekt door je te abonneren op %s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1154"/>
+        <location filename="../../blink/preferences.py" line="1158"/>
         <source>Taken from the DNS TXT record for xcap.%s</source>
         <translation>Gebruikt het DNS TXT-record voor xcap.%s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1177"/>
+        <location filename="../../blink/preferences.py" line="1181"/>
         <source>Remove Account</source>
         <translation>Verwijder account</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1177"/>
+        <location filename="../../blink/preferences.py" line="1181"/>
         <source>Permanently remove account %s?</source>
         <translation>Account %s definitief verwijderen?</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1915"/>
+        <location filename="../../blink/preferences.py" line="1931"/>
         <source>TLS Certificate Error</source>
         <translation>TLS-certificaatfout</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1502"/>
+        <location filename="../../blink/preferences.py" line="1515"/>
         <source>The certificate file could not be opened: %s</source>
         <translation>Het certificaatbestand kan niet worden geopend: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1504"/>
+        <location filename="../../blink/preferences.py" line="1517"/>
         <source>The certificate file is invalid: %s</source>
         <translation>Het certificaatbestand is ongeldig: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1623"/>
+        <location filename="../../blink/preferences.py" line="1637"/>
         <source>second</source>
         <translation>seconde</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1632"/>
+        <location filename="../../blink/preferences.py" line="1646"/>
         <source>minute</source>
         <translation>minuut</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1766"/>
+        <location filename="../../blink/preferences.py" line="1782"/>
         <source>Select Screenshots Directory</source>
         <translation>Selecteer Schermafbeeldingen Directory</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1793"/>
+        <location filename="../../blink/preferences.py" line="1809"/>
         <source>Select Transfers Directory</source>
         <translation>Selecteer map voor bestandsoverdrachten</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1913"/>
+        <location filename="../../blink/preferences.py" line="1929"/>
         <source>The certificate authority file could not be opened: %s</source>
         <translation>Het certificaatautoriteitbestand kan niet worden geopend: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1915"/>
+        <location filename="../../blink/preferences.py" line="1931"/>
         <source>The certificate authority file is invalid: %s</source>
         <translation>Het certificate authority bestand is ongeldig: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1932"/>
+        <location filename="../../blink/preferences.py" line="1948"/>
         <source>Restart required</source>
         <translation>Herstart vereist</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="1933"/>
+        <location filename="../../blink/preferences.py" line="1949"/>
         <source>The application language was changed. A restart is required to apply the change. Would you like to restart now?</source>
         <translation>De applicatie taal is gewijzigd. Een herstart is vereist om de wijziging toe te passen. Wilt u nu opnieuw opstarten?</translation>
     </message>
     <message>
-        <location filename="../../blink/preferences.py" line="476"/>
+        <location filename="../../blink/preferences.py" line="477"/>
         <source>Automatic (Default)</source>
         <translation>Automatisch (standaard)</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="3625"/>
+        <location filename="../preferences.ui" line="3603"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Click to enable verification of peer certificate. You can set the name to be verified in Advanced SIP account settings&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Klik om verificatie van peer-certificaat in te schakelen. U kunt de naam instellen die moet worden geverifieerd in Geavanceerde SIP-accountinstellingen&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2857"/>
+        <location filename="../preferences.ui" line="2835"/>
         <source>MSRP chat</source>
-        <translation type="unfinished"></translation>
+        <translation>MSRP chat</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2863"/>
+        <location filename="../preferences.ui" line="2841"/>
         <source>Automatically accept requests from known contacts</source>
-        <translation type="unfinished"></translation>
+        <translation>Accepteer automatisch chat verzoeken van bekende contacten</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2877"/>
+        <location filename="../preferences.ui" line="2855"/>
         <source>Play a sound when a message is received</source>
-        <translation type="unfinished"></translation>
+        <translation>Speel een geluid af wanneer een chatbericht wordt ontvangen</translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="2900"/>
+        <location filename="../preferences.ui" line="2878"/>
         <source>Messages Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Berichtenvenster</translation>
+    </message>
+    <message>
+        <location filename="../preferences.ui" line="755"/>
+        <source>Handle replicated messages from other devices</source>
+        <translation>Door server gerepliceerde berichten verwerken</translation>
+    </message>
+    <message>
+        <location filename="../preferences.ui" line="788"/>
+        <source>Server URL</source>
+        <translation>Server URL</translation>
+    </message>
+    <message>
+        <location filename="../preferences.ui" line="863"/>
+        <source>Enable offline messaging (requires SylkServer)</source>
+        <translation>Geschiedenissynchronisatie inschakelen (vereist Sylkserver en serverondersteuning)</translation>
+    </message>
+    <message>
+        <location filename="../preferences.ui" line="1128"/>
+        <source>Enable XCAP storage</source>
+        <translation></translation>
+    </message>
+    <message>
+        <location filename="../preferences.ui" line="3737"/>
+        <source>Contacts</source>
+        <translation>Contacten</translation>
+    </message>
+    <message>
+        <location filename="../preferences.ui" line="3872"/>
+        <source>Show virtual messages group containing all contacts with messages</source>
+        <translation>Toon virtuele groep van alle contacten met berichten</translation>
+    </message>
+    <message>
+        <location filename="../preferences.ui" line="3875"/>
+        <source>Show Messages group</source>
+        <translation>Toon &apos;berichten&apos; groep</translation>
     </message>
 </context>
 <context>
     <name>presence_state</name>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="666"/>
+        <location filename="../../blink/widgets/buttons.py" line="677"/>
         <source>Invisible</source>
         <translation>Onzichtbaar</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="667"/>
+        <location filename="../../blink/widgets/buttons.py" line="678"/>
         <source>Available</source>
         <translation>Beschikbaar</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="668"/>
+        <location filename="../../blink/widgets/buttons.py" line="679"/>
         <source>Away</source>
         <translation>Afwezig</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="669"/>
+        <location filename="../../blink/widgets/buttons.py" line="680"/>
         <source>Busy</source>
         <translation>Bezig</translation>
     </message>
@@ -3574,7 +3745,7 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
         <translation>Start</translation>
     </message>
     <message>
-        <location filename="../../blink/accounts.py" line="785"/>
+        <location filename="../../blink/accounts.py" line="846"/>
         <source>Blink Server Tools: {}</source>
         <translation>Blink-servertools: {}</translation>
     </message>
@@ -3629,17 +3800,17 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
     <message>
         <location filename="../audio_session.ui" line="435"/>
         <source>QToolButton#mute_button {
-<byte value="x9"/>background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>border-top-left-radius: 4px;
-<byte value="x9"/>border-bottom-left-radius: 4px;
-<byte value="x9"/>border-width: 1px;
-<byte value="x9"/>border-style: solid;
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
+	border-color: #545454;
+	border-top-left-radius: 4px;
+	border-bottom-left-radius: 4px;
+	border-width: 1px;
+	border-style: solid;
 }
 
 QToolButton#mute_button:pressed {
-<byte value="x9"/>background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-<byte value="x9"/>border-style: inset;
+	background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
+	border-style: inset;
 }
 </source>
         <translation></translation>
@@ -3652,16 +3823,16 @@ QToolButton#mute_button:pressed {
     <message>
         <location filename="../audio_session.ui" line="538"/>
         <source>QToolButton {
-<byte value="x9"/>background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>border-width: 1px;
-<byte value="x9"/>border-left-width: 0px;
-<byte value="x9"/>border-style: solid;
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
+	border-color: #545454;
+	border-width: 1px;
+	border-left-width: 0px;
+	border-style: solid;
 }
 
 QToolButton:pressed {
-<byte value="x9"/>background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-<byte value="x9"/>border-style: inset;
+	background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
+	border-style: inset;
 }
 </source>
         <translation></translation>
@@ -3679,18 +3850,18 @@ QToolButton:pressed {
     <message>
         <location filename="../audio_session.ui" line="589"/>
         <source>QToolButton {
-<byte value="x9"/>background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
-<byte value="x9"/>border-color: #545454;
-<byte value="x9"/>border-top-right-radius: 4px;
-<byte value="x9"/>border-bottom-right-radius: 4px;
-<byte value="x9"/>border-width: 1px;
-<byte value="x9"/>border-left-width: 0px;
-<byte value="x9"/>border-style: solid;
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
+	border-color: #545454;
+	border-top-right-radius: 4px;
+	border-bottom-right-radius: 4px;
+	border-width: 1px;
+	border-left-width: 0px;
+	border-style: solid;
 }
 
 QToolButton:pressed {
-<byte value="x9"/>background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-<byte value="x9"/>border-style: inset;
+	background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
+	border-style: inset;
 }
 </source>
         <translation></translation>
@@ -3704,177 +3875,177 @@ QToolButton:pressed {
 <context>
     <name>sessions</name>
     <message>
-        <location filename="../../blink/sessions.py" line="1898"/>
+        <location filename="../../blink/sessions.py" line="1903"/>
         <source>Drop outside the conference to detach</source>
         <translation>Zet buiten de het conferentiegesprek neer om te verwijderen</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1900"/>
+        <location filename="../../blink/sessions.py" line="1905"/>
         <source>&lt;p&gt;&lt;b&gt;Drop&lt;/b&gt;:&amp;nbsp;Conference&amp;nbsp; &lt;b&gt;Alt+Drop&lt;/b&gt;:&amp;nbsp;Transfer&lt;/p&gt;</source>
         <translation>&lt;p&gt;&lt;b&gt;Drop&lt;/span&gt;:&amp;nbsp;Conferentiegesprek&amp;nbsp; &lt;b&gt;Alt+Drop&lt;/b&gt;:&amp;nbsp;Doorschakelen&lt;/p&gt;</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1973"/>
+        <location filename="../../blink/sessions.py" line="1978"/>
         <source>{0.type} call with {0.name} ({0.status})</source>
         <translation>{0.type} gesprek met {0.name} ({0.status})</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1975"/>
+        <location filename="../../blink/sessions.py" line="1980"/>
         <source>{0.type} call with {0.name} using {0.codec_info} ({0.duration!s})</source>
         <translation>{0.type} gesprek met {0.name} {0.codec_info} ({0.duration!s})</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1977"/>
+        <location filename="../../blink/sessions.py" line="1982"/>
         <source>{0.type} call with {0.name}</source>
         <translation>{0.type} gesprek met {0.name}</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2196"/>
+        <location filename="../../blink/sessions.py" line="2201"/>
         <source>Initializing...</source>
         <translation>Initialiseren...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4625"/>
+        <location filename="../../blink/sessions.py" line="4762"/>
         <source>Looking up destination...</source>
         <translation>Bestemming opzoeken...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2203"/>
+        <location filename="../../blink/sessions.py" line="2208"/>
         <source>Trying %s</source>
         <translation>Proberen %s</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4629"/>
+        <location filename="../../blink/sessions.py" line="4766"/>
         <source>Ringing...</source>
         <translation>Gaat over...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2207"/>
+        <location filename="../../blink/sessions.py" line="2212"/>
         <source>Starting media...</source>
         <translation>Media starten...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2214"/>
+        <location filename="../../blink/sessions.py" line="2219"/>
         <source>HD Audio</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2214"/>
+        <location filename="../../blink/sessions.py" line="2219"/>
         <source>Audio</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2217"/>
+        <location filename="../../blink/sessions.py" line="2222"/>
         <source>Media is encrypted using %s (%s)</source>
         <translation>Media wordt versleuteld met %s (%s)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2219"/>
+        <location filename="../../blink/sessions.py" line="2224"/>
         <source>Media is not encrypted</source>
         <translation>Media is niet versleuteld</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2230"/>
+        <location filename="../../blink/sessions.py" line="2235"/>
         <source>On hold</source>
         <translation>In de wacht</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2232"/>
+        <location filename="../../blink/sessions.py" line="2237"/>
         <source>Hold by remote</source>
         <translation>In de wacht bij andere partij</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2264"/>
+        <location filename="../../blink/sessions.py" line="2269"/>
         <source>Audio refused</source>
         <translation>Audio geweigerd</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2297"/>
+        <location filename="../../blink/sessions.py" line="2302"/>
         <source>Transfer: Trying</source>
         <translation>Doorschakelen: Proberen</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2301"/>
+        <location filename="../../blink/sessions.py" line="2306"/>
         <source>Transfer: Succeeded</source>
         <translation>Doorschakelen: Succesvol</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2315"/>
+        <location filename="../../blink/sessions.py" line="2320"/>
         <source>Transfer: {}</source>
         <translation>Doorschakelen: {}</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4191"/>
+        <location filename="../../blink/sessions.py" line="4328"/>
         <source>Completed (%s)</source>
         <translation>Voltooid (%s)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4212"/>
+        <location filename="../../blink/sessions.py" line="4349"/>
         <source>Destination not found</source>
         <translation>Bestemming niet gevonden</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4234"/>
+        <location filename="../../blink/sessions.py" line="4371"/>
         <source>DNS Lookup failed</source>
         <translation>DNS-lookup mislukt</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4650"/>
+        <location filename="../../blink/sessions.py" line="4787"/>
         <source>Connecting...</source>
         <translation>Verbinden...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4631"/>
+        <location filename="../../blink/sessions.py" line="4768"/>
         <source>Starting...</source>
         <translation>Starten...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4633"/>
+        <location filename="../../blink/sessions.py" line="4770"/>
         <source>Connected</source>
         <translation>Verbonden</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4635"/>
+        <location filename="../../blink/sessions.py" line="4772"/>
         <source>Ending...</source>
         <translation>Beëindigen...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4658"/>
+        <location filename="../../blink/sessions.py" line="4795"/>
         <source>Computing hash (%s%%)</source>
         <translation>Hash berekenen (%s%%)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4666"/>
+        <location filename="../../blink/sessions.py" line="4803"/>
         <source>Transferring: %s/%s (%s%%)</source>
         <translation>Bestandsoverdracht: %s/%s (%s%%)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2308"/>
+        <location filename="../../blink/sessions.py" line="2313"/>
         <source>Failed</source>
         <translation>Mislukt</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1064"/>
+        <location filename="../../blink/sessions.py" line="1069"/>
         <source>Call ended</source>
         <translation>Gesprek beëindigd</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1064"/>
+        <location filename="../../blink/sessions.py" line="1069"/>
         <source>Call ended by remote</source>
         <translation>Gesprek beëindigd door andere partij</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4637"/>
+        <location filename="../../blink/sessions.py" line="4774"/>
         <source>Decrypting...</source>
         <translation>Ontsleutelen...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4639"/>
+        <location filename="../../blink/sessions.py" line="4776"/>
         <source>Encrypting...</source>
         <translation>Versleutelen...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4641"/>
+        <location filename="../../blink/sessions.py" line="4778"/>
         <source>Encrypted...</source>
         <translation>Versleuteld...</translation>
     </message>
@@ -3882,22 +4053,22 @@ QToolButton:pressed {
 <context>
     <name>switch_view_button</name>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="263"/>
+        <location filename="../../blink/widgets/buttons.py" line="265"/>
         <source>Switch to Calls</source>
         <translation>Ga naar gesprekken</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="263"/>
+        <location filename="../../blink/widgets/buttons.py" line="265"/>
         <source>Switch to Contacts</source>
         <translation>Ga naar contacten</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="264"/>
+        <location filename="../../blink/widgets/buttons.py" line="266"/>
         <source>Drag here to add to a conference</source>
         <translation>Sleep hier om toe te voegen aan een conferentiegesprek</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="264"/>
+        <location filename="../../blink/widgets/buttons.py" line="266"/>
         <source>Drag here to go back to contacts</source>
         <translation>Sleep hier om terug te gaan naar contacten</translation>
     </message>
@@ -3981,7 +4152,7 @@ QToolButton:pressed {
         <translation>Bevestigen</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1283"/>
+        <location filename="../../blink/sessions.py" line="1288"/>
         <source>What is the ZRTP authentication string?</source>
         <translation>Wat is de ZRTP-authenticatiereeks?</translation>
     </message>
