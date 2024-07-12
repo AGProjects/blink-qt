@@ -3536,7 +3536,7 @@ class ContactListView(QListView):
         elif event.key() == Qt.Key.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
-            if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
+            if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.State.Stopped:
                 self.detail_model.contact = item.settings
                 self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
                 self.detail_view.animation.setStartValue(self.visualRect(selected_indexes[0]))
@@ -4029,7 +4029,7 @@ class ContactSearchListView(QListView):
         elif event.key() == Qt.Key.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
-            if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.Stopped:
+            if isinstance(item, Contact) and self.detail_view.isHidden() and self.detail_view.animation.state() == QPropertyAnimation.State.Stopped:
                 self.detail_model.contact = item.settings
                 self.detail_view.animation.setDirection(QPropertyAnimation.Forward)
                 self.detail_view.animation.setStartValue(self.visualRect(selected_indexes[0]))
