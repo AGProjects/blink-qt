@@ -3605,7 +3605,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _SH_IdentityCurrentIndexChanged(self, index):
         if index != -1:
-            self._update_session_info_panel(elements='session')
+            try:
+                self._update_session_info_panel(elements='session')
+            except (AttributeError, KeyError):
+                pass
 
     def _SH_SessionModelSessionAdded(self, session):
         model = self.session_model
