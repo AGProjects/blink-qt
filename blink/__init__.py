@@ -46,7 +46,7 @@ from blink.util import QSingleton, run_in_gui_thread
 
 __all__ = ['Blink']
 
-# Handle high resolution displays:
+# Handle high resolution displays, can be removed for QT6:
 if hasattr(Qt, 'AA_EnableHighDpiScaling'):
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 if hasattr(Qt, 'AA_UseHighDpiPixmaps'):

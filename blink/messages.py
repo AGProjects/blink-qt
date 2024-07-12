@@ -460,7 +460,7 @@ class OutgoingMessage(object):
                 self._send(routes)
                 return
 
-            # TODO: Figure out how now to send a public when required, not always on start of the first message in the session
+            # TODO: Figure out how now to send a public key when required, not always on start of the first message in the session -Tijmen
             if self.content_type != 'text/pgp-public-key' and not self.session.routes:
                 stream = self.session.fake_streams.get('messages')
                 if stream and self.session.account.sms.enable_pgp and stream.can_decrypt:
