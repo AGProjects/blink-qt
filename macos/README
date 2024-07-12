@@ -33,3 +33,11 @@ pyinstaller blink.spec
 
 The generated MacOS app can then be found in dist/ folder.
 
+
+Local storage
+-------------
+
+Blink Qt configuration and stored data folder on Mac:
+
+~/Library/Application\ Support/Blink-Qt/
+
