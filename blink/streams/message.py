@@ -268,7 +268,7 @@ class MessageStream(object, metaclass=MediaStreamType):
                 decrypted_message = key.decrypt(pgpMessage)
             except (PGPDecryptionError, PGPError) as e:
                 error = e
-                log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} to {account.id} : {error}')
+                log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} with {account.id} : {error}')
                 continue
             else:
                 message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message
