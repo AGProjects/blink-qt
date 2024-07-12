@@ -1293,7 +1293,10 @@ padding: 2px;</string>
   </action>
   <action name="sip_server_settings_action">
    <property name="text">
-    <string>Settings &amp;on SIP server</string>
+    <string>Account settings on server</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::NoRole</enum>
    </property>
   </action>
   <action name="redial_action">
