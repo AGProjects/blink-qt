@@ -1765,7 +1765,7 @@ class AudioSessionWidget(base_class, ui_class):
             rect = QRect(0, 0, 230, 320)
             rect.moveTopRight(self.srtp_label.mapToGlobal(self.srtp_label.rect().bottomRight()))
             rect.translate(0, 3)
-            screen_area = QApplication.desktop().screenGeometry(self.srtp_label)
+            screen_area = QApplication.screenAt(self.srtp_label.pos()).geometry()
             if rect.bottom() > screen_area.bottom():
                 rect.moveBottom(self.srtp_label.mapToGlobal(self.srtp_label.rect().topRight()).y() - 3)
             if rect.left() < screen_area.left():

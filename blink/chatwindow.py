@@ -1841,8 +1841,10 @@ class VideoWidget(VideoSurface, ui_class):
             if self.isFullScreen():
                 self.showNormal()
 
-            desktop = QApplication.desktop()
-            screen_area = desktop.availableGeometry(self)
+            blink = QApplication.instance()
+            main_screen = blink.screenAt(blink.main_window.pos())
+
+            screen_area = main_screen.availableGeometry()
 
             start_rect = self.rect()
             final_rect = QRect(0, 0, self.width_for_height(261), 261)
