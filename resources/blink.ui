@@ -1449,7 +1449,7 @@ padding: 2px;</string>
   </action>
   <action name="show_last_messages_action">
    <property name="text">
-    <string>&amp;Show Messages</string>
+    <string>&amp;Recent conversations</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
