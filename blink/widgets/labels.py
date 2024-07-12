@@ -149,7 +149,7 @@ class StreamInfoLabel(QLabel):
     def update_content(self):
         if self.session_type and self.codec_info:
             text = '%s (%s)' % (self.session_type, self.codec_info)
-            if self.width() < QFontMetrics(self.font()).width(text):
+            if self.width() < QFontMetrics(self.font()).size(Qt.TextFlag.TextSingleLine, text).width():
                 text = self.session_type
         else:
             text = self.session_type or ''
@@ -271,7 +271,7 @@ class ElidedLabel(QLabel):
     def paintEvent(self, event):
         painter = QPainter(self)
         font_metrics = QFontMetrics(self.font())
-        if font_metrics.width(self.text()) > self.contentsRect().width():
+        if font_metrics.size(Qt.TextFlag.TextSingleLine, self.text()).width() > self.contentsRect().width():
             label_width = self.size().width()
             fade_start = 1 - 50.0/label_width if label_width > 50 else 0.0
             gradient = QLinearGradient(0, 0, label_width, 0)

@@ -4703,7 +4703,7 @@ class ContactURIDelegate(QItemDelegate):
         editor.setGeometry(option.rect)
 
     def drawDisplay(self, painter, option, rect, text):
-        if option.fontMetrics.width(text) > rect.width():
+        if option.fontMetrics.size(Qt.TextFlag.TextSingleLine, text).width() > rect.width():
             # draw elided text using a fading gradient
             color_group = QPalette.ColorGroup.Disabled if not option.state & QStyle.StateFlag.State_Enabled else QPalette.ColorGroup.Normal if option.state & QStyle.StateFlag.State_Active else QPalette.ColorGroup.Inactive
             text_margin = option.widget.style().pixelMetric(QStyle.PixelMetric.PM_FocusFrameHMargin, None, option.widget) + 1

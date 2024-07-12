@@ -346,7 +346,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         font_metrics = self.create_status_label.fontMetrics()
         self.create_status_label.setMinimumHeight(font_metrics.height() + 2 * (font_metrics.height() + font_metrics.leading()))   # reserve space for 3 lines
         font_metrics = self.email_note_label.fontMetrics()
-        self.email_note_label.setMinimumWidth(font_metrics.width('The E-mail address is used when sending voicemail'))  # hack to make text justification look nice everywhere
+        self.email_note_label.setMinimumWidth(font_metrics.size(Qt.TextFlag.TextSingleLine, 'The E-mail address is used when sending voicemail').width())  # hack to make text justification look nice everywhere
         self.add_account_button.setChecked(True)
         self.panel_view.setCurrentWidget(self.add_account_panel)
         self.new_password_editor.textChanged.connect(self._SH_PasswordTextChanged)

@@ -507,7 +507,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         labels = (self.outbound_proxy_label, self.auth_username_label, self.msrp_relay_label,
                   self.voicemail_uri_label, self.xcap_root_label, self.server_tools_url_label,
                   self.conference_server_label, self.msrp_transport_label)
-        text_width = max(font_metrics.width(label.text()) for label in labels) + 15
+        text_width = max(font_metrics.size(Qt.TextFlag.TextSingleLine, label.text()).width() for label in labels) + 15
         self.outbound_proxy_label.setMinimumWidth(text_width)
         self.msrp_transport_label.setMinimumWidth(text_width)
 
@@ -515,7 +515,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         font_metrics = self.register_interval_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.register_interval_label, self.publish_interval_label, self.subscribe_interval_label,
                   self.idd_prefix_label, self.prefix_label)
-        text_width = max(font_metrics.width(label.text()) for label in labels) + 15
+        text_width = max(font_metrics.size(Qt.TextFlag.TextSingleLine, label.text()).width() for label in labels) + 15
         self.register_interval_label.setMinimumWidth(text_width)
         self.idd_prefix_label.setMinimumWidth(text_width)
         self.tls_cert_file_label.setMinimumWidth(text_width)
@@ -524,7 +524,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         font_metrics = self.answer_delay_label.fontMetrics()  # we assume all labels have the same font
         labels = (self.audio_input_device_label, self.audio_output_device_label, self.audio_alert_device_label, self.audio_sample_rate_label,
                   self.answer_delay_label, self.max_recording_label, self.unavailable_message_label)
-        text_width = max(font_metrics.width(label.text()) for label in labels)
+        text_width = max(font_metrics.size(Qt.TextFlag.TextSingleLine, label.text()).width() for label in labels)
         self.audio_input_device_label.setMinimumWidth(text_width)
         self.answer_delay_label.setMinimumWidth(text_width)
 
