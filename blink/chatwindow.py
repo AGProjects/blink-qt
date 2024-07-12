@@ -491,7 +491,7 @@ class ChatTextInput(QTextEdit):
 
     def __init__(self, parent=None):
         super(ChatTextInput, self).__init__(parent)
-        self.setTabStopWidth(22)
+        self.setTabStopDistance(22)
         self.lock_widget = ChatInputLock(self)
         self.lock_widget.hide()
         self.lock_widget.confirm_button.clicked.connect(self._SH_LockWidgetConfirmButtonClicked)
@@ -1621,7 +1621,7 @@ class VideoWidget(VideoSurface, ui_class):
         new_height = int(limit((new_size.height() + 117) / 6 * self.camera_preview.scale_factor, min=self.camera_preview.minimumHeight(), max=self.camera_preview.maximumHeight()))
         preview_geometry = QRect(0, 0, self.width_for_height(new_height), new_height)
 
-        quadrant = QRectF(QPointF(0, 0), int(new_size / 3))
+        quadrant = QRectF(QPointF(0, 0), new_size / 3)
 
         if quadrant.translated(0, 0).contains(preview_center):                                      # top left gravity
             preview_geometry.moveTopLeft(ideal_geometry.topLeft())
