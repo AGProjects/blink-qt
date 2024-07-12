@@ -2023,6 +2023,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.zrtp_widget.nameChanged.connect(self._SH_ZRTPWidgetNameChanged)
         self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
 
+        self.identity.activated[int].connect(self._SH_IdentityChanged)
         self.identity.currentIndexChanged[int].connect(self._SH_IdentityCurrentIndexChanged)
 
         geometry = QSettings().value("chat_window/geometry")
@@ -3038,7 +3039,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 session.chat_widget.add_message(chat_message)
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
             if received_account is not None and received_account.enabled and received_account != blink_session.account:
-                NotificationCenter().post_notification('BlinkSessionMessageAccountShouldChange', sender=session, data=NotificationData(account=received_account))
+                blink_session.account = received_account
+                NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
+                NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
         else:
             self.render_after_load.append((session, received_account, chat_message))
 
@@ -3324,7 +3327,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if blink_session.direction == 'outgoing' and last_account is not None and last_account.enabled and last_account != blink_session.account:
             print(f'History change {last_account} {blink_session.direction}')
-            NotificationCenter().post_notification('BlinkSessionMessageAccountShouldChange', sender=session, data=NotificationData(account=last_account))
+            blink_session.account = last_account
+            NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
+            NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
 
         while self.fetch_after_load:
             (blink_session, file, message, info) = self.fetch_after_load.popleft()
@@ -3590,15 +3595,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             self.selected_session.end()
 
+    def _SH_IdentityChanged(self, index):
+        account = self.identity.itemData(index).account
+        try:
+            self.selected_session.blink_session.account = account
+            NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
+        except (AttributeError, KeyError):
+            pass
+
     def _SH_IdentityCurrentIndexChanged(self, index):
         if index != -1:
-            account = self.identity.itemData(index).account
-            try:
-                self.selected_session.blink_session.account = account
-                NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
-                self._update_session_info_panel(elements='session')
-            except (AttributeError, KeyError):
-                pass
+            self._update_session_info_panel(elements='session')
 
     def _SH_SessionModelSessionAdded(self, session):
         model = self.session_model

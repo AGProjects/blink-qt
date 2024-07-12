@@ -275,7 +275,7 @@ class ChatAccountSelector(QComboBox):
         notification_center.add_observer(self, name="SIPAccountManagerDidChangeDefaultAccount")
         notification_center.add_observer(self, name="SIPAccountManagerDidStart")
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
-        notification_center.add_observer(self, name='BlinkSessionMessageAccountShouldChange')
+        notification_center.add_observer(self, name='BlinkSessionMessageAccountChanged')
 
 
     @run_in_gui_thread
@@ -314,8 +314,8 @@ class ChatAccountSelector(QComboBox):
             account_index = source_model.accounts.index(account)
             self.setCurrentIndex(model.mapFromSource(source_model.index(account_index)).row())
 
-    def _NH_BlinkSessionMessageAccountShouldChange(self, notification):
-        account = notification.data.account
+    def _NH_BlinkSessionMessageAccountChanged(self, notification):
+        account = notification.sender.account
         if account is not None:
             model = self.model()
             source_model = model.sourceModel()
