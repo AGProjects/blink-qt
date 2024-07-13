@@ -243,6 +243,13 @@
             </property>
            </widget>
           </item>
+      <item>
+       <widget class="QLabel" name="unread_label">
+        <property name="text">
+         <string>0</string>
+        </property>
+       </widget>
+      </item>
          </layout>
         </widget>
        </item>

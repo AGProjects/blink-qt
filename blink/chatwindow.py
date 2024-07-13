@@ -2044,6 +2044,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='ChatStreamGotMessage')
         notification_center.add_observer(self, name='ChatStreamGotComposingIndication')
         notification_center.add_observer(self, name='ChatStreamDidSendMessage')
+        notification_center.add_observer(self, name='ChatUnreadMessagesCountChanged')
         notification_center.add_observer(self, name='ChatStreamDidDeliverMessage')
         notification_center.add_observer(self, name='ChatStreamDidNotDeliverMessage')
         notification_center.add_observer(self, name='ChatStreamOTREncryptionStateChanged')
@@ -2703,7 +2704,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         painter.drawLine(-3, 3, 3, -3)
         painter.restore()
 
-    def send_pending_imdn_messages(self, session):
+    def confirm_read_messages(self, session):
+        if self.selected_session:
+            self.selected_session.blink_session.reset_unread_messages()
+
         if session and session.blink_session in self.pending_displayed_notifications:
             item = self.pending_displayed_notifications.pop(self.selected_session.blink_session)
             for (id, timestamp, account) in item:
@@ -3050,6 +3054,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed', received_account)
             else:
                 self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp, received_account))
+
+        if direction != 'outgoing':
+            if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
+                pass
+            else:
+                blink_session.add_unread_message()
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
@@ -3449,6 +3459,25 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.update_message_status(id=notification.data.message.message_id, status='accepted')
         # TODO: do we want to use this? Play the message sent tone? -Saul
 
+    def _NH_ChatUnreadMessagesCountChanged(self, notification):
+        total_count = 0
+        for session in self.session_model.sessions:
+            total_count = total_count + session.blink_session.unread_messages
+
+        if total_count == 0:
+            label = translate('chat_window', 'No new messages')
+        elif total_count == 1:
+            label = translate('chat_window', 'There is 1 new message')
+        else:
+            label = translate('chat_window', 'There are %d new messages') % total_count
+
+        self.new_messages_button.setText(label)
+
+        if total_count:
+            self.new_messages_button.show()
+        else:
+            self.new_messages_button.hide()
+
     def _NH_ChatStreamDidDeliverMessage(self, notification):
         session = notification.sender.blink_session.items.chat
         if session is None:
@@ -3659,7 +3688,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.files_list.setModel(self.selected_session.files_model)
             self.control_button.setEnabled(True)
             if not self.isMinimized():
-                self.send_pending_imdn_messages(self.selected_session)
+                self.confirm_read_messages(self.selected_session)
         else:
             self.tab_widget.setCurrentWidget(self.dummy_tab)
             self.session_details.setCurrentWidget(self.info_panel)

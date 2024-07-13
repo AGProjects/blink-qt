@@ -541,6 +541,15 @@ class BlinkSession(BlinkSessionBase):
         self._smp_handler = Null
         self.routes = None
         self.chat_type = None
+        self.unread_messages = 0
+
+    def add_unread_message(self, count=1):
+        self.unread_messages = self.unread_messages + count
+        NotificationCenter().post_notification('ChatUnreadMessagesCountChanged', sender=self, data=NotificationData(count=self.unread_messages))
+
+    def reset_unread_messages(self):
+        self.unread_messages = 0
+        NotificationCenter().post_notification('ChatUnreadMessagesCountChanged', sender=self, data=NotificationData(count=self.unread_messages))
 
     def _get_state(self):
         return self.__dict__['state']
@@ -3310,7 +3319,8 @@ class ChatSessionWidget(base_class, ui_class):
         self.audio_icon.setVisible('audio' in session.blink_session.streams)
         self.video_icon.setVisible('video' in session.blink_session.streams)
         self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
-
+        self.unread_label.setVisible(bool(session.blink_session.unread_messages))
+        self.unread_label.setText(str(session.blink_session.unread_messages))
 
 del ui_class, base_class
 
@@ -3397,6 +3407,9 @@ class ChatSessionItem(object):
         self.blink_session = None
         self.widget = None
 
+    def update_unread_messages(self):
+        self.widget.update_content(self)
+
     def update_composing_indication(self, data):
         if data.state == 'active':
             self.remote_composing = True
@@ -3421,6 +3434,10 @@ class ChatSessionItem(object):
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
+        self.widget.update_content(self)
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_ChatUnreadMessagesCountChanged(self, notification):
         self.widget.update_content(self)
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
 
