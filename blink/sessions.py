@@ -2786,17 +2786,18 @@ class AudioSessionListView(QListView):
         self.setDropIndicatorShown(False)
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
+        self.actions.send_messages = QAction(translate('audio_session', "Send Messages"), self, triggered=self._AH_SendSMS)
+        self.actions.send_files = QAction(translate('audio_session', "Send File(s)..."), self, triggered=self._AH_SendFiles)
         self.actions.add_audio = QAction(translate('audio_session', "Add audio"), self, triggered=self._AH_AddAudio)
         self.actions.remove_audio = QAction(translate('audio_session', "Remove audio"), self, triggered=self._AH_RemoveAudio)
         self.actions.add_video = QAction(translate('audio_session', "Add video"), self, triggered=self._AH_AddVideo)
         self.actions.remove_video = QAction(translate('audio_session', "Remove video"), self, triggered=self._AH_RemoveVideo)
-        self.actions.add_chat = QAction(translate('audio_session', "Add MSRP chat"), self, triggered=self._AH_AddChat)
-        self.actions.remove_chat = QAction(translate('audio_session', "Remove MSRP chat"), self, triggered=self._AH_RemoveChat)
         self.actions.share_my_screen = QAction(translate('audio_session', "Share my screen"), self, triggered=self._AH_ShareMyScreen)
         self.actions.request_screen = QAction(translate('audio_session', "Request screen"), self, triggered=self._AH_RequestScreen)
         self.actions.end_screen_sharing = QAction(translate('audio_session', "End screen sharing"), self, triggered=self._AH_EndScreenSharing)
-        self.actions.send_messages = QAction(translate('audio_session', "Send Messages"), self, triggered=self._AH_SendSMS)
-        self.actions.send_files = QAction(translate('audio_session', "Send File(s)..."), self, triggered=self._AH_SendFiles)
+        self.actions.add_chat = QAction(translate('audio_session', "Add MSRP chat"), self, triggered=self._AH_AddChat)
+        self.actions.remove_chat = QAction(translate('audio_session', "Remove MSRP chat"), self, triggered=self._AH_RemoveChat)
+        self.actions.session_info = QAction(translate('audio_session', "Show session info"), self, triggered=self._AH_ShowSessionInfo)
         self.dragged_session = None
         self.ignore_selection_changes = False
         self._pressed_position = None
@@ -2825,8 +2826,8 @@ class AudioSessionListView(QListView):
             elif stream_types != {'video'}:
                 menu.addAction(self.actions.remove_video)
             if 'chat' not in stream_types:
-                menu.addAction(self.actions.add_chat)
                 menu.addAction(self.actions.send_messages)
+                menu.addAction(self.actions.add_chat)
             elif stream_types != {'chat'}:
                 menu.addAction(self.actions.remove_chat)
             if 'screen-sharing' not in stream_types:
@@ -2835,6 +2836,8 @@ class AudioSessionListView(QListView):
             elif stream_types != {'screen-sharing'}:
                 menu.addAction(self.actions.end_screen_sharing)
             menu.addAction(self.actions.send_files)
+            menu.addSeparator()
+        menu.addAction(self.actions.session_info)
 
     def contextMenuEvent(self, event):
         menu = self.context_menu
@@ -2843,9 +2846,7 @@ class AudioSessionListView(QListView):
             item = index.data(Qt.ItemDataRole.UserRole)
             blink_session = item.blink_session
             state = blink_session.state
-            if state == 'connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
-                return
-            elif state == 'connected/received_proposal':
+            if state == 'connected/received_proposal':
                 return
             menu.clear()
             self._update_control_menu(item)
@@ -3136,6 +3137,10 @@ class AudioSessionListView(QListView):
     def _AH_SendSMS(self):
         blink = QApplication.instance()
         blink.chat_window.show()
+
+    def _AH_ShowSessionInfo(self):
+        blink = QApplication.instance()
+        blink.chat_window.show_session_info()
 
     def _AH_SendFiles(self, uri=None):
         selected_indexes = self.selectedIndexes()
@@ -3739,7 +3744,6 @@ class ChatSessionListView(QListView):
         super(ChatSessionListView, self).__init__(chat_window.session_panel)
         self.chat_window = chat_window
         self.setItemDelegate(ChatSessionDelegate(self))
-
         self.setMouseTracking(True)
         self.setAlternatingRowColors(True)
         self.setAutoFillBackground(True)

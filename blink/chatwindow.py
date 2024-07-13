@@ -2567,6 +2567,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.raise_()
         self.activateWindow()
 
+    def show_session_info(self):
+        self.show()
+        # TODO show info panel
+        print('Must show info panel')
+
     def show_with_messages(self):
         super(ChatWindow, self).show()
         self.raise_()
