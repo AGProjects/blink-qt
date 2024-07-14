@@ -1130,6 +1130,7 @@ padding: 2px;</string>
     <property name="title">
      <string>&amp;Messages</string>
     </property>
+    <addaction name="show_unread_messages_action"/>
     <addaction name="show_last_messages_action"/>
     <addaction name="export_pgp_key_action"/>
     <addaction name="auto_accept_chat_action"/>
@@ -1448,6 +1449,17 @@ padding: 2px;</string>
    </property>
    <property name="text">
     <string>&amp;Auto-answer</string>
+   </property>
+  </action>
+  <action name="show_unread_messages_action">
+   <property name="text">
+    <string>&amp;Unread messages</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+U</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
    </property>
   </action>
   <action name="show_last_messages_action">
