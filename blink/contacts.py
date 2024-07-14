@@ -3336,10 +3336,10 @@ class ContactListView(QListView):
         self.actions.delete_item = QAction(translate("contact_list", "Delete"), self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction(translate("contact_list", "Delete Selection"), self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction(translate("contact_list", "Undo Last Delete"), self, triggered=self._AH_UndoLastDelete)
+        self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
         self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction(translate("contact_list", "Start MSRP Chat"), self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction(translate("contact_list", "Send File(s)..."), self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction(translate("contact_list", "Request Screen"), self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction(translate("contact_list", "Share My Screen"), self, triggered=self._AH_ShareMyScreen)
@@ -3421,6 +3421,13 @@ class ContactListView(QListView):
             can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
 
             if len(contact.uris) > 1 and can_call:
+                call_submenu = menu.addMenu(translate('contact_list', 'Send Messages'))
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_SendSMS, uri))
+                    call_submenu.addAction(call_item)
+
                 call_submenu = menu.addMenu(translate('contact_list', 'Start Audio Call'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
@@ -3433,20 +3440,6 @@ class ContactListView(QListView):
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_StartVideoCall, uri))
-                    call_submenu.addAction(call_item)
-
-                call_submenu = menu.addMenu(translate('contact_list', 'Send Messages'))
-                for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
-                    call_item = QAction(uri_text, self)
-                    call_item.triggered.connect(partial(self._AH_SendSMS, uri))
-                    call_submenu.addAction(call_item)
-
-                call_submenu = menu.addMenu(translate('contact_list', 'Start MSRP Chat'))
-                for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
-                    call_item = QAction(uri_text, self)
-                    call_item.triggered.connect(partial(self._AH_StartChatSession, uri))
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Send File(s)...'))
@@ -3470,14 +3463,21 @@ class ContactListView(QListView):
                     call_item.triggered.connect(partial(self._AH_ShareMyScreen, uri))
                     call_submenu.addAction(call_item)
 
+                call_submenu = menu.addMenu(translate('contact_list', 'Start MSRP Chat'))
+                for uri in contact.uris:
+                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    call_item = QAction(uri_text, self)
+                    call_item.triggered.connect(partial(self._AH_StartChatSession, uri))
+                    call_submenu.addAction(call_item)
+
             else:
+                menu.addAction(self.actions.send_sms)
                 menu.addAction(self.actions.start_audio_call)
                 menu.addAction(self.actions.start_video_call)
-                menu.addAction(self.actions.start_chat_session)
-                menu.addAction(self.actions.send_sms)
                 menu.addAction(self.actions.send_files)
                 menu.addAction(self.actions.request_screen)
                 menu.addAction(self.actions.share_my_screen)
+                menu.addAction(self.actions.start_chat_session)
 
                 self.actions.start_audio_call.setEnabled(can_call)
                 self.actions.start_video_call.setEnabled(can_call)
@@ -4269,10 +4269,10 @@ class ContactDetailView(QListView):
         self.actions.delete_contact = QAction(translate("contact_list", "Delete Contact"), self, triggered=self._AH_DeleteContact)
         self.actions.edit_contact = QAction(translate("contact_list", "Edit Contact"), self, triggered=self._AH_EditContact)
         self.actions.make_uri_default = QAction(translate("contact_list", "Set Address As Default"), self, triggered=self._AH_MakeURIDefault)
+        self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
         self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction(translate("contact_list", "Start MSRP Chat"), self, triggered=self._AH_StartChatSession)
-        self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
         self.actions.send_files = QAction(translate("contact_list", "Send File(s)..."), self, triggered=self._AH_SendFiles)
         self.actions.request_screen = QAction(translate("contact_list", "Request Screen"), self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction(translate("contact_list", "Share My Screen"), self, triggered=self._AH_ShareMyScreen)
@@ -4322,14 +4322,14 @@ class ContactDetailView(QListView):
         contact_has_uris = model.rowCount() > 1
         menu = self.context_menu
         menu.clear()
+        menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.start_audio_call)
         menu.addAction(self.actions.start_video_call)
-        menu.addAction(self.actions.start_chat_session)
-        menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.send_files)
         menu.addAction(self.actions.request_screen)
         menu.addAction(self.actions.share_my_screen)
         menu.addAction(self.actions.transfer_call)
+        menu.addAction(self.actions.start_chat_session)
         menu.addSeparator()
         if isinstance(selected_item, ContactURI) and model.contact_detail.editable:
             menu.addAction(self.actions.make_uri_default)
