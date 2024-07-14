@@ -82,11 +82,11 @@ class HistoryManager(object, metaclass=Singleton):
         with open(ApplicationData.get('calls_history'), 'wb+') as history_file:
             pickle.dump(self.calls, history_file)
 
-    def load(self, uri, session):
-        return self.message_history.load(uri, session)
+    def load(self, uri, session, entries=100):
+        return self.message_history.load(uri, session, entries=entries)
 
-    def get_last_contacts(self, number=10):
-        return self.message_history.get_last_contacts(number)
+    def get_last_contacts(self, number=10, unread=False):
+        return self.message_history.get_last_contacts(number, unread=unread)
 
     def get_decrypted_filename(self, file):
         return self.download_history.get_decrypted_filename(file)
@@ -108,6 +108,7 @@ class HistoryManager(object, metaclass=Singleton):
         else:
             self.calls = data[-self.history_size:]
         self.message_history._retry_failed_messages()
+        self.message_history.get_unread_messages()
 
     def _NH_SIPSessionDidEnd(self, notification):
         if notification.sender.account is BonjourAccount():
@@ -708,6 +709,16 @@ class MessageHistory(object, metaclass=Singleton):
                 message.state = state
 
     @run_in_thread('db')
+    def update_displayed_for_uri(self, remote_uri):
+        query = f"""update messages set state = 'displayed' where direction = 'incoming'
+        and remote_uri = {Message.sqlrepr(remote_uri)} and state != 'displayed'
+        """
+        try:
+            result = self.db.queryAll(query)
+        except Exception as e:
+            pass
+
+    @run_in_thread('db')
     def update_encryption(self, notification):
         message = notification.data.message
         session = notification.sender
@@ -722,11 +733,11 @@ class MessageHistory(object, metaclass=Singleton):
                     db_message.encryption_type = encryption_type
 
     @run_in_thread('db')
-    def load(self, uri, session):
+    def load(self, uri, session, entries=100):
         notification_center = NotificationCenter()
         remote_uri = '%s@local' % session.remote_instance_id if session.remote_instance_id else uri
         try:
-            result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted')).orderBy('timestamp')[-100:]
+            result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted')).orderBy('timestamp')[-entries:]
         except Exception as e:
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
@@ -734,20 +745,32 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
 
     @run_in_thread('db')
-    def get_last_contacts(self, number=10):
-        log.debug(f'== Getting last {number} contacts with messages')
+    def get_last_contacts(self, number=10, unread=False):
+        log.info(f'== Getting last {number} contacts with messages unread={unread}')
+        if unread:
+            query = f"""
+                select im.display_name, am.remote_uri, max(am.timestamp), am.state from messages as am
+                left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
+                on am.remote_uri = im.remote_uri
+                where
+                am.content_type not like "%pgp%"
+                and am.direction="incoming"
+                and am.content_type not like "%sylk-api%"
+                and am.content_type != "application/blink-call-history"
+                and am.state not in ('deleted', 'displayed')
+                group by am.remote_uri order by am.timestamp desc"""
+        else:
+            query = f"""
+                select im.display_name, am.remote_uri, max(am.timestamp), am.state from messages as am
+                left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
+                on am.remote_uri = im.remote_uri
+                where
+                am.content_type not like "%pgp%"
+                and am.content_type not like "%sylk-api%"
+                and am.content_type != "application/blink-call-history"
+                and am.state != 'deleted'
+                group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
 
-        query = f"""
-            select im.display_name, am.remote_uri, max(am.timestamp) from messages as am
-            left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
-            on am.remote_uri = im.remote_uri
-            where
-            am.content_type not like "%pgp%"
-            and am.content_type not like "%sylk-api%"
-            and am.content_type != "application/blink-call-history"
-            and am.state != 'deleted'
-            group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
-        print(query)
         notification_center = NotificationCenter()
         try:
             result = self.db.queryAll(query)
@@ -755,8 +778,23 @@ class MessageHistory(object, metaclass=Singleton):
             return
 
         log.debug(f"== Contacts fetched: {len(list(result))}")
-        result = [(display_name, uri) for (display_name, uri, timestamp) in result]
+        result = [(display_name, uri) for (display_name, uri, timestamp, state) in result]
         notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=list(result)))
+
+    @run_in_thread('db')
+    def get_unread_messages(self):
+        query = """select remote_uri, count(*) as c from messages where state != 'displayed' and direction='incoming' group by remote_uri"""
+        try:
+            result = self.db.queryAll(query)
+        except Exception as e:
+            return
+
+        unread_messages = {}
+        for (remote_uri, c) in result:
+            unread_messages[remote_uri] = c
+        
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkMessageHistoryUnreadMessagesDidLoad', data=NotificationData(unread_messages=unread_messages))
 
     @run_in_thread('db')
     def get_all_contacts(self):
