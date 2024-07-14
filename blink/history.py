@@ -548,7 +548,7 @@ class MessageHistory(object, metaclass=Singleton):
                               direction=entry.direction,
                               timestamp=timestamp,
                               disposition='',
-                              state='failed' if entry.failed else '')
+                              state='displayed')
         except dberrors.DuplicateEntryError:
             pass
         else:

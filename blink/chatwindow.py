@@ -2033,6 +2033,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.pending_displayed_notifications = {}
         self.render_after_load = deque()
         self.fetch_after_load = deque()
+        self.history_loaded = False
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -2142,6 +2143,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions = ContextMenuActions()
         self.control_button.actions.connect = QAction(translate('chat_window', "Start MSRP chat"), self, triggered=self._AH_Connect)
         self.control_button.actions.connect_with_audio = QAction(translate('chat_window', "Start audio call"), self, triggered=self._AH_ConnectWithAudio)
+        self.control_button.actions.mark_messages_read = QAction(translate('chat_window', "Mark as read"), self, triggered=self._AH_MarkMessagesRead)
         self.control_button.actions.connect_with_video = QAction(translate('chat_window', "Start video call"), self, triggered=self._AH_ConnectWithVideo)
         self.control_button.actions.disconnect = QAction(translate('chat_window', "Disconnect"), self, triggered=self._AH_Disconnect)
         self.control_button.actions.add_audio = QAction(translate('chat_window', "Add audio"), self, triggered=self._AH_AddAudio)
@@ -2215,7 +2217,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_widget.hovered = False
 
     def _get_selected_session(self):
-        return self.__dict__['selected_session']
+        try:
+            return self.__dict__['selected_session']
+        except KeyError:
+            return None
 
     def _set_selected_session(self, session):
         old_session = self.__dict__.get('selected_session', None)
@@ -2278,6 +2283,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.control_button.setEnabled(True)
             self.control_button.setIcon(self.control_icon)
             menu.clear()
+            menu.addAction(self.control_button.actions.mark_messages_read)
             if state not in ('connecting/*', 'connected/*'):
                 if messages_info.encryption != 'OTR':
                     if self.selected_session.chat_widget.otr_timer.isActive():
@@ -2579,6 +2585,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         history = HistoryManager()
         history.get_last_contacts()
 
+    def show_unread_messages(self):
+        super(ChatWindow, self).show()
+        self.raise_()
+        self.activateWindow()
+        history = HistoryManager()
+        history.get_last_contacts(unread=True)
+
     def closeEvent(self, event):
         QSettings().setValue("chat_window/geometry", self.saveGeometry())
         super(ChatWindow, self).closeEvent(event)
@@ -2785,7 +2798,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
-            self.show()
+            pass
+            #self.show()
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         model = self.session_model
@@ -2985,7 +2999,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
 
         if not self.isVisible():
-            self.show()
+            #self.show_with_messages()
+            pass #show now or allow the user to bring up the window?
 
         message = notification.data.message
         direction = notification.data.message.direction
@@ -3315,16 +3330,22 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             if message.direction == "outgoing":
                 session.chat_widget.update_message_status(id=message.message_id, status=message.state)
-            elif message.state != 'displayed' and 'display' in message.disposition and not encrypted:
-                if account_manager.has_account(message.account_id):
-                    account = account_manager.get_account(message.account_id)
+            elif message.state != 'displayed':
+                if 'display' in message.disposition:
+                    if not encrypted:
+                        if account_manager.has_account(message.account_id):
+                            account = account_manager.get_account(message.account_id)
 
-                if message.state != 'delivered' and 'positive-delivery' in message.disposition:
-                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
-                if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
-                    MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
+                        if message.state != 'delivered' and 'positive-delivery' in message.disposition:
+                            MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'delivered', account)
+
+                        if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
+                            MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
+                        else:
+                            self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp, account))
                 else:
-                    self.pending_displayed_notifications.setdefault(blink_session, []).append((message.message_id, message.timestamp, account))
+                    HistoryManager().message_history.update(message.message_id, 'displayed')
+
             if 'OpenPGP' in message.encryption_type:
                 session.chat_widget.update_message_encryption(message.message_id, True)
             elif 'OTR' in message.encryption_type:
@@ -3366,7 +3387,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         contacts = notification.data.contacts
         message_manager = MessageManager()
         for display_name, contact in contacts[::-1]:
-            message_manager.create_message_session(contact, display_name)
+            # allow the user to select the 1st session
+            message_manager.create_message_session(contact, display_name, selected=False)
+        self.history_loaded = True
 
     def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
         message = notification.data.message
@@ -3653,11 +3676,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.tab_widget.insertTab(position, session.chat_widget, session.name)
         self.no_sessions_label.hide()
         selection_model = self.session_list.selectionModel()
-        selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        # allow user select the contact
+        #selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.show()
         session.chat_widget.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.show()
         history = HistoryManager()
         history.load(session.blink_session.contact.uri.uri, session.blink_session)
 
@@ -3726,6 +3751,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session = self.selected_session.blink_session
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=stream_descriptions, reinitialize=True)
         blink_session.connect()
+
+    def _AH_MarkMessagesRead(self):
+        blink_session = self.selected_session.blink_session
+        uri = str(blink_session.uri).partition(':')[2]
+        HistoryManager().message_history.update_displayed_for_uri(uri)
 
     def _AH_ConnectWithVideo(self):
         stream_descriptions = [StreamDescription('audio'), StreamDescription('video')]

@@ -758,6 +758,7 @@ class MessageManager(object, metaclass=Singleton):
     def _process_server_history_messages(self, account, messages):
         notification_center = NotificationCenter()
         last_id = None
+        new_messages = 0
 
         log.debug(f'-- {len(messages)} messages fetched from server for {account.id}')
         while messages:
@@ -878,6 +879,7 @@ class MessageManager(object, metaclass=Singleton):
 
                 from blink.contacts import URIUtils
                 contact, contact_uri = URIUtils.find_contact(message['contact'])
+                new_messages = new_messages + 1
 
                 sender = account
                 if message['direction'] == 'incoming':
@@ -927,6 +929,10 @@ class MessageManager(object, metaclass=Singleton):
             account.sms.history_synchronization_id = last_id
         account.sms.history_synchronization_timestamp = ISOTimestamp.now()
         account.save()
+
+        if new_messages:
+            notification_center.post_notification('BlinkServerHistoryGotMessages', data=new_messages)
+
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -1471,7 +1477,7 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id, blink_session)
         self._send_message(outgoing_message)
 
-    def create_message_session(self, uri, display_name=None):
+    def create_message_session(self, uri, display_name=None, selected=True):
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(uri)
         session_manager = SessionManager()
@@ -1492,4 +1498,5 @@ class MessageManager(object, metaclass=Singleton):
                 if blink_session.account.sms.enable_pgp:
                     blink_session.fake_streams.get('messages').enable_pgp()
             else:
-                NotificationCenter().post_notification('BlinkSessionIsSelected', sender=blink_session)
+                if selected:
+                    NotificationCenter().post_notification('BlinkSessionIsSelected', sender=blink_session)

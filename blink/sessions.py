@@ -545,11 +545,11 @@ class BlinkSession(BlinkSessionBase):
 
     def add_unread_message(self, count=1):
         self.unread_messages = self.unread_messages + count
-        NotificationCenter().post_notification('ChatUnreadMessagesCountChanged', sender=self, data=NotificationData(count=self.unread_messages))
+        NotificationCenter().post_notification('ChatSessionUnreadMessagesCountChanged', sender=self, data=NotificationData(count=count))
 
     def reset_unread_messages(self):
         self.unread_messages = 0
-        NotificationCenter().post_notification('ChatUnreadMessagesCountChanged', sender=self, data=NotificationData(count=self.unread_messages))
+        NotificationCenter().post_notification('ChatSessionUnreadMessagesCountChanged', sender=self, data=NotificationData(count=0))
 
     def _get_state(self):
         return self.__dict__['state']
@@ -3442,7 +3442,7 @@ class ChatSessionItem(object):
         self.widget.update_content(self)
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
 
-    def _NH_ChatUnreadMessagesCountChanged(self, notification):
+    def _NH_ChatSessionUnreadMessagesCountChanged(self, notification):
         self.widget.update_content(self)
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
 

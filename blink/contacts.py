@@ -1516,6 +1516,14 @@ class Contact(object):
             return self.settings.name
 
     @property
+    def unread_messages(self):
+        main_window = QApplication.instance().main_window
+        try:
+            return main_window.unread_messages[self.uri.uri]
+        except KeyError:
+            return 0
+
+    @property
     def location(self):
         if self.type == 'bonjour':
             return self.settings.hostname
@@ -1847,6 +1855,8 @@ class ContactWidget(base_class, ui_class):
         self.info_label.setText(contact.info)
         self.icon_label.setPixmap(contact.pixmap)
         self.state_label.state = contact.state
+        self.unread_label.setText(str(contact.unread_messages))
+        self.unread_label.setVisible(bool(contact.unread_messages))
 
 
 del ui_class, base_class

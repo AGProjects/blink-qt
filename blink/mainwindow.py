@@ -58,11 +58,16 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkSessionTransferNewOutgoing')
         notification_center.add_observer(self, name='BlinkFileTransferNewIncoming')
         notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
+        notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
+        notification_center.add_observer(self, name='ChatSessionUnreadMessagesCountChanged')
+        notification_center.add_observer(self, name='BlinkMessageHistoryUnreadMessagesDidLoad')
+        
         notification_center.add_observer(self, sender=AccountManager())
 
         icon_manager = IconManager()
 
         self.pending_watcher_dialogs = []
+        self.unread_messages = {}
 
         self.mwi_icons = [QIcon(Resources.get('icons/mwi-%d.png' % i)) for i in range(0, 11)]
         self.mwi_icons.append(QIcon(Resources.get('icons/mwi-many.png')))
@@ -205,7 +210,8 @@ class MainWindow(base_class, ui_class):
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
 
-        self.show_last_messages_action.triggered.connect(self._AH_ShowLastMessagesActionTriggered)  # This will load messages from 5 last contacts used in messages/chat
+        self.show_unread_messages_action.triggered.connect(self._AH_ShowUnreadMessagesActionTriggered)
+        self.show_last_messages_action.triggered.connect(self._AH_ShowLastMessagesActionTriggered)
         self.export_pgp_key_action.triggered.connect(self._AH_ExportPGPkeyActionTriggered)
 
         # Window menu actions
@@ -437,6 +443,10 @@ class MainWindow(base_class, ui_class):
     def _AH_ShowLastMessagesActionTriggered(self, checked):
         blink = QApplication.instance()
         blink.chat_window.show_with_messages()
+
+    def _AH_ShowUnreadMessagesActionTriggered(self, checked):
+        blink = QApplication.instance()
+        blink.chat_window.show_unread_messages()
 
     def _AH_ExportPGPkeyActionTriggered(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
@@ -737,6 +747,57 @@ class MainWindow(base_class, ui_class):
     def _SH_AudioSessionModelRemovedSession(self, session_item):
         if self.session_model.rowCount() == 0:
             self.switch_view_button.view = SwitchViewButton.ContactView
+
+    @property
+    def total_unread_messages(self):
+        new_messages = 0
+        for k in self.unread_messages.copy().keys():
+            new_messages = new_messages + self.unread_messages[k]
+        return new_messages
+
+    @run_in_gui_thread
+    def _NH_BlinkUnreadMessagesChanged(self, notification):
+        self.active_sessions_label.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
+        self.active_sessions_label.setVisible(bool(self.total_unread_messages))
+        blink = QApplication.instance()
+
+        self.show_unread_messages_action.setEnabled(bool(self.total_unread_messages))
+
+        if not blink.chat_window.isVisible():
+            pass # allow the user to open the window
+            #blink.chat_window.show_with_messages()
+
+    def _NH_ChatSessionUnreadMessagesCountChanged(self, notification):
+        uri = str(notification.sender.uri).partition(':')[2]
+        unread_messages = notification.data.count
+        try:
+            self.unread_messages[uri]
+        except KeyError:
+            self.unread_messages[uri] = unread_messages
+        else:
+            if unread_messages == 0:
+                self.unread_messages[uri] = 0
+            else:
+                self.unread_messages[uri] = self.unread_messages[uri] + unread_messages
+
+        NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
+
+    def _NH_BlinkMessageHistoryUnreadMessagesDidLoad(self, notification):
+        unread_messages = notification.data.unread_messages
+        total = 0
+        for k in unread_messages.keys():
+            try:
+                um = self.unread_messages[k]
+            except KeyError:
+                self.unread_messages[k] = unread_messages[k]
+            else:
+                self.unread_messages[k] = self.unread_messages[k] + unread_messages[k]
+            total = total + self.unread_messages[k]
+
+        NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
+
+    def hide_new_messages_label(self):
+        self.active_sessions_label.setVisible(False)
 
     def _SH_AudioSessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
