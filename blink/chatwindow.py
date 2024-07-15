@@ -7,6 +7,7 @@ import re
 import uuid
 import sys
 import json
+import platform
 
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QObject, QFileInfo, pyqtSlot
@@ -31,6 +32,7 @@ from functools import partial
 from itertools import count
 from lxml import etree, html
 from lxml.html.clean import autolink
+
 from weakref import proxy
 from zope.interface import implementer
 
@@ -59,6 +61,12 @@ from blink.widgets.otr import OTRWidget
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.video import VideoSurface
 from blink.widgets.zrtp import ZRTPWidget
+
+if platform.system() == 'Darwin':
+    try:
+        from blink.macos_notification import mac_notify as desktop_notification
+    except ImportError:
+        desktop_notification = Null
 
 
 __all__ = ['ChatWindow']
@@ -3078,6 +3086,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 pass
             else:
                 blink_session.add_unread_message()
+                self.desktop_notify(uri)
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
@@ -3086,6 +3095,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             SIPApplication.alert_audio_bridge.add(player)
             player.start()
 
+    def desktop_notify(self, from_uri):
+        notification_title = 'Blink Qt'  
+        notification_message = translate('chat_window', f"New message from {from_uri}")
+        icon = QIcon(Resources.get('icons/blink.png'))
+        if platform.system() == 'Darwin':
+            desktop_notification(notification_title, notification_message, '', sound=True)
+    
     def _NH_BlinkGotComposingIndication(self, notification):
         session = notification.sender.items.chat
         if session is None:
