@@ -1520,7 +1520,7 @@ class Contact(object):
         main_window = QApplication.instance().main_window
         try:
             return main_window.unread_messages[self.uri.uri]
-        except KeyError:
+        except (KeyError, AttributeError):
             return 0
 
     @property
@@ -1855,8 +1855,11 @@ class ContactWidget(base_class, ui_class):
         self.info_label.setText(contact.info)
         self.icon_label.setPixmap(contact.pixmap)
         self.state_label.state = contact.state
-        self.unread_label.setText(str(contact.unread_messages))
-        self.unread_label.setVisible(bool(contact.unread_messages))
+        try:
+            self.unread_label.setText(str(contact.unread_messages))
+            self.unread_label.setVisible(bool(contact.unread_messages))
+        except AttributeError:
+            self.unread_label.setVisible(False)
 
 
 del ui_class, base_class
