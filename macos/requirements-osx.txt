@@ -20,3 +20,5 @@ zope.interface
 google-api-python-client
 pyobjc
 pyinstaller
+plyer
+pyobjus
