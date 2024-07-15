@@ -778,8 +778,10 @@ class MessageHistory(object, metaclass=Singleton):
             return
 
         log.debug(f"== Contacts fetched: {len(list(result))}")
-        result = [(display_name, uri) for (display_name, uri, timestamp, state) in result]
-        notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=list(result)))
+        result = [(display_name, uri) for (display_name, uri, timestamp) in result]
+        results = list(result)
+        results.reverse()
+        notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=results))
 
     @run_in_thread('db')
     def get_unread_messages(self):
