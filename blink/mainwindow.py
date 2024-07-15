@@ -768,6 +768,12 @@ class MainWindow(base_class, ui_class):
             #blink.chat_window.show_with_messages()
 
     def _NH_ChatSessionUnreadMessagesCountChanged(self, notification):
+        try:
+            if notification.data.from_history:
+                return
+        except AttributeError:
+            pass
+
         uri = str(notification.sender.uri).partition(':')[2]
         unread_messages = notification.data.count
         try:

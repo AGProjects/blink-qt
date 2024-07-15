@@ -543,9 +543,9 @@ class BlinkSession(BlinkSessionBase):
         self.chat_type = None
         self.unread_messages = 0
 
-    def add_unread_message(self, count=1):
+    def add_unread_message(self, count=1, from_history=False):
         self.unread_messages = self.unread_messages + count
-        NotificationCenter().post_notification('ChatSessionUnreadMessagesCountChanged', sender=self, data=NotificationData(count=count))
+        NotificationCenter().post_notification('ChatSessionUnreadMessagesCountChanged', sender=self, data=NotificationData(count=count, from_history=from_history))
 
     def reset_unread_messages(self):
         self.unread_messages = 0

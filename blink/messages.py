@@ -1492,6 +1492,15 @@ class MessageManager(object, metaclass=Singleton):
             blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
             blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
+            blink = QApplication.instance()
+            uri_text = str(uri).partition(':')[2]
+            try:
+                count = blink.main_window.unread_messages[contact_uri.uri]
+            except KeyError:
+                pass
+            else:
+                blink_session.add_unread_message(count, from_history=True)
+                
         else:
             if blink_session.fake_streams.get('messages') is None:
                 blink_session.add_stream(StreamDescription('messages'))
