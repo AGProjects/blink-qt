@@ -3360,10 +3360,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.render_after_load.append((found_session, received_account, message))
 
         if blink_session.direction == 'outgoing' and last_account is not None and last_account.enabled and last_account != blink_session.account:
-            print(f'History change {last_account} {blink_session.direction}')
             blink_session.account = last_account
             NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
-            NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
+            NotificationCenter().post_notification('PGPKeysShouldReload', sender=blink_session)
 
         while self.fetch_after_load:
             (blink_session, file, message, info) = self.fetch_after_load.popleft()
