@@ -2731,8 +2731,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def confirm_read_messages(self, session):
         if self.selected_session:
-            self.selected_session.blink_session.reset_unread_messages()
-
+            NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=session.blink_session)
+                                                           
         if session and session.blink_session in self.pending_displayed_notifications:
             item = self.pending_displayed_notifications.pop(self.selected_session.blink_session)
             for (id, timestamp, account) in item:
