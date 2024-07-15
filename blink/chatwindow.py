@@ -2575,8 +2575,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def show_session_info(self):
         self.show()
-        # TODO show info panel
-        print('Must show info panel')
+        self.session_list.hide()
 
     def show_with_messages(self):
         super(ChatWindow, self).show()
