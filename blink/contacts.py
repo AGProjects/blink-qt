@@ -1857,9 +1857,13 @@ class ContactWidget(base_class, ui_class):
         self.state_label.state = contact.state
         try:
             self.unread_label.setText(str(contact.unread_messages))
+            # self.unread_label.setToolTip(translate('contact_list', '%s unread messages') % str(contact.unread_messages))
             self.unread_label.setVisible(bool(contact.unread_messages))
         except AttributeError:
             self.unread_label.setVisible(False)
+        else:
+            background_color = self.state_label.state_colors['available'].stroke
+            self.unread_label.setStyleSheet(f'color: #ffffff; padding: 4px; font-weight: bold; background-color: {background_color.name()}; border-radius: 4px;')
 
 
 del ui_class, base_class
