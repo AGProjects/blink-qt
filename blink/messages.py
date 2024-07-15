@@ -879,7 +879,6 @@ class MessageManager(object, metaclass=Singleton):
 
                 from blink.contacts import URIUtils
                 contact, contact_uri = URIUtils.find_contact(message['contact'])
-                new_messages = new_messages + 1
 
                 sender = account
                 if message['direction'] == 'incoming':
@@ -929,9 +928,6 @@ class MessageManager(object, metaclass=Singleton):
             account.sms.history_synchronization_id = last_id
         account.sms.history_synchronization_timestamp = ISOTimestamp.now()
         account.save()
-
-        if new_messages:
-            notification_center.post_notification('BlinkServerHistoryGotMessages', data=new_messages)
 
 
     @run_in_gui_thread
@@ -1499,7 +1495,8 @@ class MessageManager(object, metaclass=Singleton):
             except KeyError:
                 pass
             else:
-                blink_session.add_unread_message(count, from_history=True)
+                pass
+                #blink_session.update_unread_messages()
                 
         else:
             if blink_session.fake_streams.get('messages') is None:

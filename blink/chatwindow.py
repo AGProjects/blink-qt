@@ -3085,7 +3085,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                 pass
             else:
-                blink_session.add_unread_message()
                 self.desktop_notify(uri)
 
         session.remote_composing = False

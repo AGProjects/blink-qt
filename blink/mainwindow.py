@@ -61,6 +61,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
         notification_center.add_observer(self, name='ChatSessionUnreadMessagesCountChanged')
         notification_center.add_observer(self, name='BlinkMessageHistoryUnreadMessagesDidLoad')
+        notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         
         notification_center.add_observer(self, sender=AccountManager())
 
@@ -767,24 +768,23 @@ class MainWindow(base_class, ui_class):
             pass # allow the user to open the window
             #blink.chat_window.show_with_messages()
 
-    def _NH_ChatSessionUnreadMessagesCountChanged(self, notification):
-        try:
-            if notification.data.from_history:
-                return
-        except AttributeError:
-            pass
+    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        direction = notification.data.direction
 
-        uri = str(notification.sender.uri).partition(':')[2]
-        unread_messages = notification.data.count
+        if direction != 'incoming':
+            return
+
+        if direction == 'displayed':
+            return
+
+        uri = notification.data.remote_uri
+
         try:
             self.unread_messages[uri]
         except KeyError:
-            self.unread_messages[uri] = unread_messages
+            self.unread_messages[uri] = 1
         else:
-            if unread_messages == 0:
-                self.unread_messages[uri] = 0
-            else:
-                self.unread_messages[uri] = self.unread_messages[uri] + unread_messages
+            self.unread_messages[uri] = self.unread_messages[uri] + 1
 
         NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
 

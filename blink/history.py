@@ -151,10 +151,10 @@ class HistoryManager(object, metaclass=Singleton):
         is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
         if not is_status_message:
             blink_message = BlinkMessage(**{slot: getattr(message, slot) for slot in message.__slots__})
-            self.message_history.add_with_session(notification.sender.blink_session, blink_message, 'incoming', 'delivered')
+            self.message_history.add_from_session(notification.sender.blink_session, blink_message, 'incoming', 'delivered')
 
     def _NH_ChatStreamWillSendMessage(self, notification):
-        self.message_history.add_with_session(notification.sender, notification.data, 'outgoing')
+        self.message_history.add_from_session(notification.sender, notification.data, 'outgoing')
 
     def _NH_ChatStreamDidSendMessage(self, notification):
         self.message_history.update(notification.data.message.message_id, 'accepted')
@@ -169,17 +169,17 @@ class HistoryManager(object, metaclass=Singleton):
         session = notification.sender
         message = notification.data
 
-        self.message_history.add_with_session(session, message, 'incoming')
+        self.message_history.add_from_session(session, message, 'incoming')
 
     def _NH_BlinkMessageIsPending(self, notification):
         session = notification.sender
         data = notification.data
 
-        self.message_history.add_with_session(session, data.message, 'outgoing')
+        self.message_history.add_from_session(session, data.message, 'outgoing')
 
     def _NH_BlinkGotHistoryMessage(self, notification):
         account = notification.sender
-        self.message_history.add_from_history(account, **notification.data.__dict__)
+        self.message_history.add_from_server_history(account, **notification.data.__dict__)
 
     def _NH_BlinkGotHistoryMessageDelete(self, notification):
         self.message_history.remove_message(notification.data)
@@ -556,7 +556,7 @@ class MessageHistory(object, metaclass=Singleton):
 
     @classmethod
     @run_in_thread('db')
-    def add_from_history(cls, account, remote_uri, message, state=None, encryption=None):
+    def add_from_server_history(cls, account, remote_uri, message, state=None, encryption=None):
         if message.content.startswith('?OTRv'):
             return
 
@@ -609,11 +609,11 @@ class MessageHistory(object, metaclass=Singleton):
         else:
             if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
-                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri))
+                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction))
 
     @classmethod
     @run_in_thread('db')
-    def add_with_session(cls, session, message, direction, state=None):
+    def add_from_session(cls, session, message, direction, state=None):
         if message.content.startswith('?OTRv'):
             return
 
@@ -687,7 +687,7 @@ class MessageHistory(object, metaclass=Singleton):
         else:
             if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
-                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=session.account, data=NotificationData(remote_uri=remote_uri))
+                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=session.account, data=NotificationData(remote_uri=remote_uri, state=state, direction=direction))
 
     @run_in_thread('db')
     def update_message(self, notification):
@@ -749,7 +749,7 @@ class MessageHistory(object, metaclass=Singleton):
         log.info(f'== Getting last {number} contacts with messages unread={unread}')
         if unread:
             query = f"""
-                select im.display_name, am.remote_uri, max(am.timestamp), am.state from messages as am
+                select im.display_name, am.remote_uri, max(am.timestamp) from messages as am
                 left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
                 on am.remote_uri = im.remote_uri
                 where
@@ -761,7 +761,7 @@ class MessageHistory(object, metaclass=Singleton):
                 group by am.remote_uri order by am.timestamp desc"""
         else:
             query = f"""
-                select im.display_name, am.remote_uri, max(am.timestamp), am.state from messages as am
+                select im.display_name, am.remote_uri, max(am.timestamp) from messages as am
                 left join (select display_name, remote_uri from messages where direction="incoming" group by remote_uri) as im
                 on am.remote_uri = im.remote_uri
                 where

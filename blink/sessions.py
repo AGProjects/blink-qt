@@ -541,15 +541,6 @@ class BlinkSession(BlinkSessionBase):
         self._smp_handler = Null
         self.routes = None
         self.chat_type = None
-        self.unread_messages = 0
-
-    def add_unread_message(self, count=1, from_history=False):
-        self.unread_messages = self.unread_messages + count
-        NotificationCenter().post_notification('ChatSessionUnreadMessagesCountChanged', sender=self, data=NotificationData(count=count, from_history=from_history))
-
-    def reset_unread_messages(self):
-        self.unread_messages = 0
-        NotificationCenter().post_notification('ChatSessionUnreadMessagesCountChanged', sender=self, data=NotificationData(count=0))
 
     def _get_state(self):
         return self.__dict__['state']
@@ -3324,8 +3315,8 @@ class ChatSessionWidget(base_class, ui_class):
         self.audio_icon.setVisible('audio' in session.blink_session.streams)
         self.video_icon.setVisible('video' in session.blink_session.streams)
         self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
-        self.unread_label.setVisible(bool(session.blink_session.unread_messages))
-        self.unread_label.setText(str(session.blink_session.unread_messages))
+        self.unread_label.setVisible(bool(session.blink_session.contact.unread_messages))
+        self.unread_label.setText(str(session.blink_session.contact.unread_messages))
         background_color = StateColor('#00ff00').stroke
         self.unread_label.setStyleSheet(f'color: #ffffff; padding: 4px; font-weight: bold; background-color: {background_color.name()}; border-radius: 4px;')
 
