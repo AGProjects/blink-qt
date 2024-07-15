@@ -1,32 +1,30 @@
 blink (5.9.0) UNRELEASED; urgency=medium
 
+  * Migrate code for QT6 compatibilty
+  * Refactored web views to use latest QWebEngine
+  * Chat window only opens on user interactions
+  * Improved MacOS compatibilty
+  * Implemented persistent Bonjour messaging
+  * Added account selection for outgoing messages
+  * Added audio/video call entries to messages
+  * Added dialog to remove messages
+  * Added option to start a random conference
+  * Added menu item to show session info panel on audio calls
+  * Added right-click contextual menu to calls
+  * Added unread counter to contact and menu to show unread messages
+  * Added virtual messages group to show all contacts that have messages
+  * Reorganized contact menu structure
+  * Fix retrying sending locally failed messages
+  * Fixed wrongly stored Sylk API messages
+  * Fixed only deleting filetranfer files from cache
+  * Send images by file transfers in messages/MSRP chat
+  * Improved message rendering themes
   * Bugfixes for drag/drop
   * Bugfixes for filetransfers
   * Bugfixes for messages
   * Bugfixes for messages with Bonjour account
   * Bugfixes for PGP message handling
   * Bugfixes for sending IMDN messages
-  * Added account selection for conversations
-  * Added audio/video call entries to messages
-  * Added dialog to remove messages
-  * Added option to start a random conference
-  * Added menu item to show session info panel on audio calls
-  * Added right-click menu to calls
-  * Added unread counter to contact and menu to show unread messages
-  * Added virtual messages group to show all contacts that have messages
-  * Increased unread conversations to 10
-  * Moved chat view to QWebEngine
-  * Moved Google Authentication to QWebEngine
-  * Moved Server view to QWebEngine
-  * Reorganized contact menu structure
-  * Retry sending of locally failed messages
-  * Fixed wrongly stored API messages
-  * Fixed only deleting filetranfer files from cache
-  * Send images by filetransfer in messages/MSRP chat
-  * Improved message rendering themes
-  * Improved MacOS compatibilty
-  * Changed all ENUM types to fully qualified ENUMS (for QT6 compatibilty)
-  * Changed behaviour of chat window for messages so it only opens on user interactions
 
  -- Tijmen de Mes <tijmen@ag-projects.com>  Mon, 15 Jul 2024 15:32:44 +0200
 
