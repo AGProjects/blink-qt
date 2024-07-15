@@ -1979,7 +1979,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     sliding_panels = True
 
-    __streamtypes__ = {'chat', 'screen-sharing', 'video', 'messages'}  # the stream types for which we show the chat window
+    __streamtypes__ = {'chat', 'screen-sharing', 'video'}  # the stream types for which we show the chat window
 
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)
@@ -2034,7 +2034,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.pending_displayed_notifications = {}
         self.render_after_load = deque()
         self.fetch_after_load = deque()
-        self.history_loaded = False
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -2799,8 +2798,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
-            pass
-            #self.show()
+            self._NH_BlinkSessionIsSelected(notification)
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         model = self.session_model
@@ -3390,7 +3388,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         for display_name, contact in contacts[::-1]:
             # allow the user to select the 1st session
             message_manager.create_message_session(contact, display_name, selected=False)
-        self.history_loaded = True
 
     def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
         message = notification.data.message
@@ -3683,7 +3680,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.show()
         session.chat_widget.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
-        self.show()
         history = HistoryManager()
         history.load(session.blink_session.contact.uri.uri, session.blink_session)
 
@@ -3710,7 +3706,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         pass
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
-        # print("-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()]))
+        #print("-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()]))
         self.selected_session = selected[0].topLeft().data(Qt.ItemDataRole.UserRole) if selected else None
         if self.selected_session is not None:
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan

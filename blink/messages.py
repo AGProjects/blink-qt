@@ -1491,12 +1491,12 @@ class MessageManager(object, metaclass=Singleton):
         try:
             blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
-            session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
+            blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
         else:
             if blink_session.fake_streams.get('messages') is None:
                 blink_session.add_stream(StreamDescription('messages'))
                 if blink_session.account.sms.enable_pgp:
                     blink_session.fake_streams.get('messages').enable_pgp()
-            else:
-                if selected:
-                    NotificationCenter().post_notification('BlinkSessionIsSelected', sender=blink_session)
+
+        if selected:
+            NotificationCenter().post_notification('BlinkSessionIsSelected', sender=blink_session)

@@ -209,7 +209,7 @@ class Blink(QApplication, metaclass=QSingleton):
                     self.main_window.preferences_window.close()
         if watched is self.chat_window:
             if event.type() == QEvent.Type.WindowActivate:
-                self.main_window.hide_new_messages_label()
+                #self.main_window.hide_new_messages_label()
                 try:
                     watched.confirm_read_messages(watched.selected_session)
                 except KeyError:
