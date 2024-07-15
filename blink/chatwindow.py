@@ -2737,6 +2737,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             item = self.pending_displayed_notifications.pop(self.selected_session.blink_session)
             for (id, timestamp, account) in item:
                 MessageManager().send_imdn_message(session.blink_session, id, timestamp, 'displayed', account)
+        else:
+            self.mark_read()
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -3763,6 +3765,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session.connect()
 
     def _AH_MarkMessagesRead(self):
+        self.mark_read()
+
+    def mark_read(self):
+        if not self.selected_session:
+            return
+
         blink_session = self.selected_session.blink_session
         uri = str(blink_session.uri).partition(':')[2]
         HistoryManager().message_history.update_displayed_for_uri(uri)

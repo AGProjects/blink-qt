@@ -717,6 +717,8 @@ class MessageHistory(object, metaclass=Singleton):
             result = self.db.queryAll(query)
         except Exception as e:
             pass
+        else:
+            log.info('Conversation with %s read saved to history' % remote_uri)
 
     @run_in_thread('db')
     def update_encryption(self, notification):

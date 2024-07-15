@@ -771,13 +771,7 @@ class MainWindow(base_class, ui_class):
     def _NH_BlinkUnreadMessagesChanged(self, notification):
         self.active_sessions_label.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
         self.active_sessions_label.setVisible(bool(self.total_unread_messages))
-        blink = QApplication.instance()
-
         self.show_unread_messages_action.setEnabled(bool(self.total_unread_messages))
-
-        if not blink.chat_window.isVisible():
-            pass # allow the user to open the window
-            #blink.chat_window.show_with_messages()
 
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
         direction = notification.data.direction

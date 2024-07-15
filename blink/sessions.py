@@ -3340,6 +3340,7 @@ class ChatSessionItem(object):
         self.widget.update_content(self)
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=blink_session)
+        notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
 
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, self.blink_session)
@@ -3405,9 +3406,6 @@ class ChatSessionItem(object):
         self.blink_session = None
         self.widget = None
 
-    def update_unread_messages(self):
-        self.widget.update_content(self)
-
     def update_composing_indication(self, data):
         if data.state == 'active':
             self.remote_composing = True
@@ -3438,6 +3436,9 @@ class ChatSessionItem(object):
     def _NH_ChatSessionUnreadMessagesCountChanged(self, notification):
         self.widget.update_content(self)
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkUnreadMessagesChanged(self, notification):
+        self.widget.update_content(self)
 
     def _NH_BlinkSessionDidReinitializeForOutgoing(self, notification):
         self.widget.update_content(self)
