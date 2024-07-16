@@ -3154,7 +3154,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         except AttributeError:
             status = 'failed'
         if status == 'failed':
-            session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
+            # session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
+            pass
         call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status=status)
 
 
