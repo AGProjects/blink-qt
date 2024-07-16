@@ -13,6 +13,7 @@ blink (5.9.0) UNRELEASED; urgency=medium
   * Added right-click contextual menu to calls
   * Added unread counter to contact and menu to show unread messages
   * Added virtual messages group to show all contacts that have messages
+  * Added info button to audio sessions
   * Reorganized contact menu structure
   * Fix retrying sending locally failed messages
   * Fixed wrongly stored Sylk API messages
