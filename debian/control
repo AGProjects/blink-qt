@@ -3,7 +3,7 @@ Section: python
 Priority: optional
 Maintainer: Adrian Georgescu <ag@ag-projects.com>
 Uploaders: Tijmen de Mes <tijmen@ag-projects.com>
-Build-Depends: debhelper (>= 13),
+Build-Depends: debhelper (>= 12),
                dh-python,
                python3-all-dev,
                python3-all-dbg,
