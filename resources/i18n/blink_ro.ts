@@ -224,63 +224,68 @@ All rights reserved.</source>
 <context>
     <name>audio_session</name>
     <message>
-        <location filename="../../blink/sessions.py" line="2779"/>
+        <location filename="../../blink/sessions.py" line="2789"/>
         <source>Add audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2780"/>
+        <location filename="../../blink/sessions.py" line="2790"/>
         <source>Remove audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2781"/>
+        <location filename="../../blink/sessions.py" line="2791"/>
         <source>Add video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2782"/>
+        <location filename="../../blink/sessions.py" line="2792"/>
         <source>Remove video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2783"/>
+        <location filename="../../blink/sessions.py" line="2796"/>
         <source>Add MSRP chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2784"/>
+        <location filename="../../blink/sessions.py" line="2797"/>
         <source>Remove MSRP chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2785"/>
+        <location filename="../../blink/sessions.py" line="2793"/>
         <source>Share my screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2786"/>
+        <location filename="../../blink/sessions.py" line="2794"/>
         <source>Request screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2787"/>
+        <location filename="../../blink/sessions.py" line="2795"/>
         <source>End screen sharing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2788"/>
+        <location filename="../../blink/sessions.py" line="2787"/>
         <source>Send Messages</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2789"/>
+        <location filename="../../blink/sessions.py" line="2788"/>
         <source>Send File(s)...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="3136"/>
+        <location filename="../../blink/sessions.py" line="3149"/>
         <source>Select File(s)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/sessions.py" line="2798"/>
+        <source>Show session info</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -292,13 +297,18 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../chat_session.ui" line="161"/>
+        <location filename="../chat_session.ui" line="188"/>
         <source>Display Name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../chat_session.ui" line="268"/>
+        <location filename="../chat_session.ui" line="313"/>
         <source>Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../chat_session.ui" line="482"/>
+        <source>0</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -355,12 +365,12 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2516"/>
+        <location filename="../../blink/chatwindow.py" line="2535"/>
         <source>Using relay</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2508"/>
+        <location filename="../../blink/chatwindow.py" line="2527"/>
         <source>Viewing remote</source>
         <translation type="unfinished"></translation>
     </message>
@@ -390,7 +400,7 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2359"/>
+        <location filename="../../blink/chatwindow.py" line="2378"/>
         <source>Connected</source>
         <translation type="unfinished"></translation>
     </message>
@@ -440,242 +450,242 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1225"/>
+        <location filename="../../blink/chatwindow.py" line="1233"/>
         <source>Error sending image: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1346"/>
+        <location filename="../../blink/chatwindow.py" line="1354"/>
         <source>Error sending message: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1378"/>
+        <location filename="../../blink/chatwindow.py" line="1386"/>
         <source>Timeout in enabling OTR, recipient did not answer to OTR encryption request</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1536"/>
+        <location filename="../../blink/chatwindow.py" line="1544"/>
         <source>Open screenshots folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="1964"/>
+        <location filename="../../blink/chatwindow.py" line="1972"/>
         <source>No Sessions</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2141"/>
+        <location filename="../../blink/chatwindow.py" line="2155"/>
         <source>Start MSRP chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2142"/>
+        <location filename="../../blink/chatwindow.py" line="2156"/>
         <source>Start audio call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2143"/>
+        <location filename="../../blink/chatwindow.py" line="2158"/>
         <source>Start video call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2144"/>
+        <location filename="../../blink/chatwindow.py" line="2159"/>
         <source>Disconnect</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2145"/>
+        <location filename="../../blink/chatwindow.py" line="2160"/>
         <source>Add audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2146"/>
+        <location filename="../../blink/chatwindow.py" line="2161"/>
         <source>Remove audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2147"/>
+        <location filename="../../blink/chatwindow.py" line="2162"/>
         <source>Add video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2148"/>
+        <location filename="../../blink/chatwindow.py" line="2163"/>
         <source>Remove video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2149"/>
+        <location filename="../../blink/chatwindow.py" line="2164"/>
         <source>Add real time chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2150"/>
+        <location filename="../../blink/chatwindow.py" line="2165"/>
         <source>Remove real time chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2152"/>
+        <location filename="../../blink/chatwindow.py" line="2167"/>
         <source>Share my screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2153"/>
+        <location filename="../../blink/chatwindow.py" line="2168"/>
         <source>Request screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2154"/>
+        <location filename="../../blink/chatwindow.py" line="2169"/>
         <source>End screen sharing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2155"/>
+        <location filename="../../blink/chatwindow.py" line="2170"/>
         <source>Enable OTR for messaging</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2156"/>
+        <location filename="../../blink/chatwindow.py" line="2171"/>
         <source>Enabling OTR for messaging</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2157"/>
+        <location filename="../../blink/chatwindow.py" line="2172"/>
         <source>Disable OTR for messaging</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2158"/>
+        <location filename="../../blink/chatwindow.py" line="2173"/>
         <source>Main Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3522"/>
+        <location filename="../../blink/chatwindow.py" line="3598"/>
         <source>Disconnected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2355"/>
+        <location filename="../../blink/chatwindow.py" line="2374"/>
         <source>Finding destination...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2356"/>
+        <location filename="../../blink/chatwindow.py" line="2375"/>
         <source>Connecting...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2357"/>
+        <location filename="../../blink/chatwindow.py" line="2376"/>
         <source>Ringing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2358"/>
+        <location filename="../../blink/chatwindow.py" line="2377"/>
         <source>Starting media...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2473"/>
+        <location filename="../../blink/chatwindow.py" line="2492"/>
         <source>Using SIP Message</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2519"/>
+        <location filename="../../blink/chatwindow.py" line="2538"/>
         <source>Peer to peer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2395"/>
+        <location filename="../../blink/chatwindow.py" line="2414"/>
         <source>Couldn&apos;t negotiate ICE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2436"/>
+        <location filename="../../blink/chatwindow.py" line="2455"/>
         <source>ICE is disabled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2439"/>
+        <location filename="../../blink/chatwindow.py" line="2458"/>
         <source>ICE is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2442"/>
+        <location filename="../../blink/chatwindow.py" line="2461"/>
         <source>Negotiating ICE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2445"/>
+        <location filename="../../blink/chatwindow.py" line="2464"/>
         <source>Media is encrypted using %s (%s)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2484"/>
+        <location filename="../../blink/chatwindow.py" line="2503"/>
         <source>Media is not encrypted</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2512"/>
+        <location filename="../../blink/chatwindow.py" line="2531"/>
         <source>N/A</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2478"/>
+        <location filename="../../blink/chatwindow.py" line="2497"/>
         <source>Media is encrypted using TLS and {0.encryption} ({0.encryption_cipher})</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2489"/>
+        <location filename="../../blink/chatwindow.py" line="2508"/>
         <source>Media is encrypted using {0.encryption} ({0.encryption_cipher})</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2521"/>
+        <location filename="../../blink/chatwindow.py" line="2540"/>
         <source>Media is encrypted using TLS</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2487"/>
+        <location filename="../../blink/chatwindow.py" line="2506"/>
         <source>Media is encrypted using {0.encryption}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2510"/>
+        <location filename="../../blink/chatwindow.py" line="2529"/>
         <source>Sharing local</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3471"/>
+        <location filename="../../blink/chatwindow.py" line="3547"/>
         <source>Encryption enabled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3473"/>
+        <location filename="../../blink/chatwindow.py" line="3549"/>
         <source>Encryption disabled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3503"/>
+        <location filename="../../blink/chatwindow.py" line="3579"/>
         <source>Failed to initialize chat: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3520"/>
+        <location filename="../../blink/chatwindow.py" line="3596"/>
         <source>Disconnected: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3558"/>
+        <location filename="../../blink/chatwindow.py" line="3634"/>
         <source>Network Latency: %dms, max=%dms</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3561"/>
+        <location filename="../../blink/chatwindow.py" line="3637"/>
         <source>Packet Loss: %.1f%%, max=%.1f%%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3571"/>
+        <location filename="../../blink/chatwindow.py" line="3647"/>
         <source>&lt;p&gt;Traffic: &lt;span style=&quot;font-family: sans-serif; color: #d70000;&quot;&gt;%s&lt;/span&gt; %s &lt;span style=&quot;font-family: sans-serif; color: #0064d7;&quot;&gt;%s&lt;/span&gt; %s&lt;/p&gt;</source>
         <translation type="unfinished"></translation>
     </message>
@@ -685,52 +695,52 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2151"/>
+        <location filename="../../blink/chatwindow.py" line="2166"/>
         <source>Send File(s)...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2958"/>
+        <location filename="../../blink/chatwindow.py" line="2994"/>
         <source>Error: image can not be rendered: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3192"/>
+        <location filename="../../blink/chatwindow.py" line="3243"/>
         <source>File decryption failed: {notification.data.error}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3744"/>
+        <location filename="../../blink/chatwindow.py" line="3832"/>
         <source>Select File(s)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5117"/>
+        <location filename="../../blink/sessions.py" line="5141"/>
         <source>Item still available in cache or local</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2920"/>
+        <location filename="../../blink/chatwindow.py" line="2956"/>
         <source>You sent an audio message. Fetching and processing...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2925"/>
+        <location filename="../../blink/chatwindow.py" line="2961"/>
         <source>Sent you an audio message. Processing...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2927"/>
+        <location filename="../../blink/chatwindow.py" line="2963"/>
         <source>Sent you an image: %s. Processing...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2922"/>
+        <location filename="../../blink/chatwindow.py" line="2958"/>
         <source>You sent an image: %s. Fetching and processing...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2933"/>
+        <location filename="../../blink/chatwindow.py" line="2969"/>
         <source>%s can&apos;t be decrypted. PGP is disabled</source>
         <translation type="unfinished"></translation>
     </message>
@@ -750,33 +760,53 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3107"/>
-        <source>Delivery failed: {notification.data.data.code} - {reason}</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../blink/chatwindow.py" line="3377"/>
+        <location filename="../../blink/chatwindow.py" line="3434"/>
         <source>audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3378"/>
+        <location filename="../../blink/chatwindow.py" line="3435"/>
         <source>video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3379"/>
+        <location filename="../../blink/chatwindow.py" line="3436"/>
         <source>file-transfer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3384"/>
+        <location filename="../../blink/chatwindow.py" line="3441"/>
         <source>call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3390"/>
+        <location filename="../../blink/chatwindow.py" line="3447"/>
         <source>%s %s %s failed (%s)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="2157"/>
+        <source>Mark as read</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3105"/>
+        <source>New message from {from_uri}</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3514"/>
+        <source>No new messages</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3516"/>
+        <source>There is 1 new message</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/chatwindow.py" line="3518"/>
+        <source>There are %d new messages</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -839,8 +869,13 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../contact.ui" line="148"/>
+        <location filename="../contact.ui" line="150"/>
         <source>Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../contact.ui" line="166"/>
+        <source>0</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -867,7 +902,7 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4944"/>
+        <location filename="../../blink/contacts.py" line="4961"/>
         <source>Add</source>
         <translation type="unfinished"></translation>
     </message>
@@ -907,82 +942,82 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4621"/>
+        <location filename="../../blink/contacts.py" line="4638"/>
         <source>Mobile</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4621"/>
+        <location filename="../../blink/contacts.py" line="4638"/>
         <source>Home</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4621"/>
+        <location filename="../../blink/contacts.py" line="4638"/>
         <source>Work</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4621"/>
+        <location filename="../../blink/contacts.py" line="4638"/>
         <source>SIP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4621"/>
+        <location filename="../../blink/contacts.py" line="4638"/>
         <source>XMPP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4621"/>
+        <location filename="../../blink/contacts.py" line="4638"/>
         <source>Other</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4725"/>
+        <location filename="../../blink/contacts.py" line="4742"/>
         <source>Address</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4725"/>
+        <location filename="../../blink/contacts.py" line="4742"/>
         <source>Type</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4725"/>
+        <location filename="../../blink/contacts.py" line="4742"/>
         <source>Default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4878"/>
+        <location filename="../../blink/contacts.py" line="4895"/>
         <source>Delete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4929"/>
+        <location filename="../../blink/contacts.py" line="4946"/>
         <source>audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4930"/>
+        <location filename="../../blink/contacts.py" line="4947"/>
         <source>video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4931"/>
+        <location filename="../../blink/contacts.py" line="4948"/>
         <source>chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4932"/>
+        <location filename="../../blink/contacts.py" line="4949"/>
         <source>audio+chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4933"/>
+        <location filename="../../blink/contacts.py" line="4950"/>
         <source>messages</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4958"/>
+        <location filename="../../blink/contacts.py" line="4975"/>
         <source>Ok</source>
         <translation type="unfinished"></translation>
     </message>
@@ -995,127 +1030,127 @@ All rights reserved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3905"/>
+        <location filename="../../blink/contacts.py" line="3922"/>
         <source>Edit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3906"/>
+        <location filename="../../blink/contacts.py" line="3923"/>
         <source>Delete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3907"/>
+        <location filename="../../blink/contacts.py" line="3924"/>
         <source>Delete Selection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3908"/>
+        <location filename="../../blink/contacts.py" line="3925"/>
         <source>Undo Last Delete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4271"/>
+        <location filename="../../blink/contacts.py" line="4289"/>
         <source>Start Audio Call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4272"/>
+        <location filename="../../blink/contacts.py" line="4290"/>
         <source>Start Video Call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4274"/>
+        <location filename="../../blink/contacts.py" line="4288"/>
         <source>Send Messages</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4275"/>
+        <location filename="../../blink/contacts.py" line="4292"/>
         <source>Send File(s)...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4276"/>
+        <location filename="../../blink/contacts.py" line="4293"/>
         <source>Request Screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4277"/>
+        <location filename="../../blink/contacts.py" line="4294"/>
         <source>Share My Screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4278"/>
+        <location filename="../../blink/contacts.py" line="4295"/>
         <source>Transfer Active Call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3367"/>
+        <location filename="../../blink/contacts.py" line="3384"/>
         <source>Undo Delete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3954"/>
+        <location filename="../../blink/contacts.py" line="3971"/>
         <source>Contact</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3955"/>
+        <location filename="../../blink/contacts.py" line="3972"/>
         <source>Undo Delete &quot;%s&quot;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3957"/>
+        <location filename="../../blink/contacts.py" line="3974"/>
         <source>Undo Delete (%d items)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3490"/>
+        <location filename="../../blink/contacts.py" line="3507"/>
         <source>Transfer Call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4501"/>
+        <location filename="../../blink/contacts.py" line="4518"/>
         <source>Select File(s)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4268"/>
+        <location filename="../../blink/contacts.py" line="4285"/>
         <source>Delete Contact</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4269"/>
+        <location filename="../../blink/contacts.py" line="4286"/>
         <source>Edit Contact</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4270"/>
+        <location filename="../../blink/contacts.py" line="4287"/>
         <source>Set Address As Default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4763"/>
+        <location filename="../../blink/contacts.py" line="4780"/>
         <source>Edit to add address</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="4273"/>
+        <location filename="../../blink/contacts.py" line="4291"/>
         <source>Start MSRP Chat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3331"/>
+        <location filename="../../blink/contacts.py" line="3348"/>
         <source>Add new group</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3332"/>
+        <location filename="../../blink/contacts.py" line="3349"/>
         <source>Add new contact</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../../blink/contacts.py" line="3904"/>
+        <location filename="../../blink/contacts.py" line="3921"/>
         <source>Add</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1123,12 +1158,12 @@ All rights reserved.</source>
 <context>
     <name>delete_message_dialog</name>
     <message>
-        <location filename="../../blink/chatwindow.py" line="830"/>
+        <location filename="../../blink/chatwindow.py" line="838"/>
         <source>Delete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="880"/>
+        <location filename="../../blink/chatwindow.py" line="888"/>
         <source>file</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1164,17 +1199,17 @@ All rights reserved.</source>
 <context>
     <name>filelist_view</name>
     <message>
-        <location filename="../../blink/sessions.py" line="5397"/>
+        <location filename="../../blink/sessions.py" line="5421"/>
         <source>Open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5398"/>
+        <location filename="../../blink/sessions.py" line="5422"/>
         <source>Open Transfers Folder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5399"/>
+        <location filename="../../blink/sessions.py" line="5423"/>
         <source>Remove File</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1420,27 +1455,27 @@ border-color: #3278c8;
 <context>
     <name>history</name>
     <message>
-        <location filename="../../blink/history.py" line="879"/>
+        <location filename="../../blink/history.py" line="921"/>
         <source> at %H:%M</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="881"/>
+        <location filename="../../blink/history.py" line="923"/>
         <source> Yesterday at %H:%M</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="883"/>
+        <location filename="../../blink/history.py" line="925"/>
         <source> on %A</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="885"/>
+        <location filename="../../blink/history.py" line="927"/>
         <source> on %B %d</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/history.py" line="887"/>
+        <location filename="../../blink/history.py" line="929"/>
         <source> on %Y-%m-%d</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1533,7 +1568,7 @@ border-color: #3278c8;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6365"/>
+        <location filename="../../blink/sessions.py" line="6389"/>
         <source>transfer requested by {}</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1570,12 +1605,12 @@ border-color: #3278c8;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6154"/>
+        <location filename="../../blink/sessions.py" line="6178"/>
         <source>is asking to share your screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6077"/>
+        <location filename="../../blink/sessions.py" line="6101"/>
         <source>To refuse a media type click its icon</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1616,47 +1651,47 @@ border-color: #3278c8;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6025"/>
+        <location filename="../../blink/sessions.py" line="6049"/>
         <source>Auto-answer is inactive</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6066"/>
+        <location filename="../../blink/sessions.py" line="6090"/>
         <source>Auto answer in %d seconds</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6084"/>
+        <location filename="../../blink/sessions.py" line="6108"/>
         <source>Audio call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6086"/>
+        <location filename="../../blink/sessions.py" line="6110"/>
         <source>Chat session</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6088"/>
+        <location filename="../../blink/sessions.py" line="6112"/>
         <source>Video call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6090"/>
+        <location filename="../../blink/sessions.py" line="6114"/>
         <source>Screen sharing request</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6118"/>
+        <location filename="../../blink/sessions.py" line="6142"/>
         <source>Incoming Session Update</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6121"/>
+        <location filename="../../blink/sessions.py" line="6145"/>
         <source>Incoming Session Request</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6152"/>
+        <location filename="../../blink/sessions.py" line="6176"/>
         <source>is offering screen sharing</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1713,12 +1748,12 @@ border-color: #3278c8;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6290"/>
+        <location filename="../../blink/sessions.py" line="6314"/>
         <source>File: %s (%s)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6292"/>
+        <location filename="../../blink/sessions.py" line="6316"/>
         <source>File: %s</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1767,7 +1802,7 @@ border-color: #3278c8;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="509"/>
+        <location filename="../../blink/mainwindow.py" line="521"/>
         <source>Add an activity note here</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1893,298 +1928,318 @@ padding: 2px;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1142"/>
+        <location filename="../blink.ui" line="1143"/>
         <source>&amp;Devices</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1146"/>
+        <location filename="../blink.ui" line="1147"/>
         <source>Audio &amp;output device</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1155"/>
+        <location filename="../blink.ui" line="1156"/>
         <source>&amp;Audio input device</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1164"/>
+        <location filename="../blink.ui" line="1165"/>
         <source>Audio alert &amp;device</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1173"/>
+        <location filename="../blink.ui" line="1174"/>
         <source>&amp;Video camera</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1190"/>
+        <location filename="../blink.ui" line="1191"/>
         <source>&amp;Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1214"/>
+        <location filename="../blink.ui" line="1215"/>
         <source>&amp;Quit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1217"/>
+        <location filename="../blink.ui" line="1218"/>
         <source>Ctrl+Q</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1232"/>
+        <location filename="../blink.ui" line="1233"/>
         <source>About &amp;Blink</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1244"/>
+        <location filename="../blink.ui" line="1245"/>
         <source>&amp;Preferences</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1247"/>
+        <location filename="../blink.ui" line="1248"/>
         <source>Ctrl+P</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1258"/>
+        <location filename="../blink.ui" line="1259"/>
         <source>Check for &amp;updates...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1263"/>
+        <location filename="../blink.ui" line="1264"/>
         <source>&amp;Logs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1266"/>
+        <location filename="../blink.ui" line="1267"/>
         <source>Ctrl+L</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1274"/>
+        <location filename="../blink.ui" line="1275"/>
         <source>File &amp;Transfers</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1277"/>
+        <location filename="../blink.ui" line="1278"/>
         <source>Ctrl+T</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1288"/>
+        <location filename="../blink.ui" line="1289"/>
         <source>Enable &amp;answering machine</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1304"/>
+        <location filename="../blink.ui" line="1305"/>
         <source>&amp;Redial</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1307"/>
+        <location filename="../blink.ui" line="1308"/>
         <source>Ctrl+R</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1318"/>
+        <location filename="../blink.ui" line="1319"/>
         <source>&amp;Mute microphone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1321"/>
+        <location filename="../blink.ui" line="1322"/>
         <source>Ctrl+M</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1332"/>
+        <location filename="../blink.ui" line="1333"/>
         <source>&amp;Silence alerts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1335"/>
+        <location filename="../blink.ui" line="1336"/>
         <source>Ctrl+S</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1343"/>
+        <location filename="../blink.ui" line="1344"/>
         <source>Search for &amp;people</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1356"/>
+        <location filename="../blink.ui" line="1357"/>
         <source>&amp;Add account...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1361"/>
+        <location filename="../blink.ui" line="1362"/>
         <source>&amp;Help</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1364"/>
+        <location filename="../blink.ui" line="1365"/>
         <source>F1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1372"/>
+        <location filename="../blink.ui" line="1373"/>
         <source>&amp;Release notes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1377"/>
+        <location filename="../blink.ui" line="1378"/>
         <source>&amp;Manage accounts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="879"/>
+        <location filename="../../blink/mainwindow.py" line="951"/>
         <source>Enable &amp;Google Contacts...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1387"/>
+        <location filename="../blink.ui" line="1388"/>
         <source>Call &amp;history on server</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1395"/>
+        <location filename="../blink.ui" line="1396"/>
         <source>Ctrl+J</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1406"/>
+        <location filename="../blink.ui" line="1407"/>
         <source>Ctrl+G</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1417"/>
+        <location filename="../blink.ui" line="1418"/>
         <source>Play a sound for &amp;received messages</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1422"/>
+        <location filename="../blink.ui" line="1423"/>
         <source>Received &amp;Files</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1425"/>
+        <location filename="../blink.ui" line="1426"/>
         <source>Ctrl+D</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1433"/>
+        <location filename="../blink.ui" line="1434"/>
         <source>&amp;Screenshots</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1436"/>
+        <location filename="../blink.ui" line="1437"/>
         <source>Ctrl+E</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1450"/>
+        <location filename="../blink.ui" line="1451"/>
         <source>&amp;Auto-answer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1458"/>
+        <location filename="../blink.ui" line="1470"/>
         <source>Ctrl+O</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="100"/>
+        <location filename="../../blink/mainwindow.py" line="107"/>
         <source>Show</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="101"/>
+        <location filename="../../blink/mainwindow.py" line="108"/>
         <source>Quit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="228"/>
+        <location filename="../../blink/mainwindow.py" line="236"/>
         <source>Request screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="229"/>
+        <location filename="../../blink/mainwindow.py" line="237"/>
         <source>Share my screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="345"/>
+        <location filename="../../blink/mainwindow.py" line="353"/>
         <source>System default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="358"/>
+        <location filename="../../blink/mainwindow.py" line="366"/>
         <source>None</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="479"/>
+        <location filename="../../blink/mainwindow.py" line="491"/>
         <source>Call history is empty</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="505"/>
+        <location filename="../../blink/mainwindow.py" line="517"/>
         <source>(invisible)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="519"/>
+        <location filename="../../blink/mainwindow.py" line="531"/>
         <source>Select Icon</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="742"/>
+        <location filename="../../blink/mainwindow.py" line="814"/>
         <source>There is 1 active call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="742"/>
+        <location filename="../../blink/mainwindow.py" line="814"/>
         <source>There are %d active calls</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="757"/>
+        <location filename="../../blink/mainwindow.py" line="829"/>
         <source>On the phone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/mainwindow.py" line="877"/>
+        <location filename="../../blink/mainwindow.py" line="949"/>
         <source>Disable &amp;Google Contacts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1403"/>
+        <location filename="../blink.ui" line="1404"/>
         <source>&amp;Messages</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1351"/>
+        <location filename="../blink.ui" line="1352"/>
         <source>Auto-accept MSRP chat from my contacts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1392"/>
+        <location filename="../blink.ui" line="1393"/>
         <source>&amp;Join MSRP Conference...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1296"/>
+        <location filename="../blink.ui" line="1297"/>
         <source>Account settings on server</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1455"/>
+        <location filename="../blink.ui" line="1467"/>
         <source>&amp;Recent conversations</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1466"/>
+        <location filename="../blink.ui" line="1478"/>
         <source>&amp;Export PGP key to my other devices</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../blink.ui" line="1456"/>
+        <source>&amp;Unread messages</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../blink.ui" line="1459"/>
+        <source>Ctrl+U</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/mainwindow.py" line="771"/>
+        <source>There is 1 new message</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/mainwindow.py" line="771"/>
+        <source>There are %d new messages</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -3699,12 +3754,12 @@ QToolButton#mute_button:pressed {
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../audio_session.ui" line="484"/>
+        <location filename="../audio_session.ui" line="535"/>
         <source>Hold the call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../audio_session.ui" line="538"/>
+        <location filename="../audio_session.ui" line="589"/>
         <source>QToolButton {
 	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
 	border-color: #545454;
@@ -3721,17 +3776,17 @@ QToolButton:pressed {
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../audio_session.ui" line="535"/>
+        <location filename="../audio_session.ui" line="586"/>
         <source>Record this call</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../audio_session.ui" line="586"/>
+        <location filename="../audio_session.ui" line="637"/>
         <source>Hangup</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../audio_session.ui" line="589"/>
+        <location filename="../audio_session.ui" line="640"/>
         <source>QToolButton {
 	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
 	border-color: #545454;
@@ -3754,156 +3809,161 @@ QToolButton:pressed {
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Drop&lt;/span&gt;:&amp;nbsp;Conference&amp;nbsp; &lt;span style=&quot; font-weight:600;&quot;&gt;Alt+Drop&lt;/span&gt;:&amp;nbsp;Transfer&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../audio_session.ui" line="484"/>
+        <source>Show session info panel</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>sessions</name>
     <message>
-        <location filename="../../blink/sessions.py" line="1903"/>
+        <location filename="../../blink/sessions.py" line="1905"/>
         <source>Drop outside the conference to detach</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1905"/>
+        <location filename="../../blink/sessions.py" line="1907"/>
         <source>&lt;p&gt;&lt;b&gt;Drop&lt;/b&gt;:&amp;nbsp;Conference&amp;nbsp; &lt;b&gt;Alt+Drop&lt;/b&gt;:&amp;nbsp;Transfer&lt;/p&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1978"/>
+        <location filename="../../blink/sessions.py" line="1980"/>
         <source>{0.type} call with {0.name} ({0.status})</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1980"/>
+        <location filename="../../blink/sessions.py" line="1982"/>
         <source>{0.type} call with {0.name} using {0.codec_info} ({0.duration!s})</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="1982"/>
+        <location filename="../../blink/sessions.py" line="1984"/>
         <source>{0.type} call with {0.name}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2201"/>
+        <location filename="../../blink/sessions.py" line="2209"/>
         <source>Initializing...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4762"/>
+        <location filename="../../blink/sessions.py" line="4786"/>
         <source>Looking up destination...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2208"/>
+        <location filename="../../blink/sessions.py" line="2216"/>
         <source>Trying %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4766"/>
+        <location filename="../../blink/sessions.py" line="4790"/>
         <source>Ringing...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2212"/>
+        <location filename="../../blink/sessions.py" line="2220"/>
         <source>Starting media...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2219"/>
+        <location filename="../../blink/sessions.py" line="2227"/>
         <source>HD Audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2219"/>
+        <location filename="../../blink/sessions.py" line="2227"/>
         <source>Audio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2222"/>
+        <location filename="../../blink/sessions.py" line="2230"/>
         <source>Media is encrypted using %s (%s)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2224"/>
+        <location filename="../../blink/sessions.py" line="2232"/>
         <source>Media is not encrypted</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2235"/>
+        <location filename="../../blink/sessions.py" line="2243"/>
         <source>On hold</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2237"/>
+        <location filename="../../blink/sessions.py" line="2245"/>
         <source>Hold by remote</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2269"/>
+        <location filename="../../blink/sessions.py" line="2277"/>
         <source>Audio refused</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2302"/>
+        <location filename="../../blink/sessions.py" line="2310"/>
         <source>Transfer: Trying</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2306"/>
+        <location filename="../../blink/sessions.py" line="2314"/>
         <source>Transfer: Succeeded</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2313"/>
+        <location filename="../../blink/sessions.py" line="2321"/>
         <source>Failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="2320"/>
+        <location filename="../../blink/sessions.py" line="2328"/>
         <source>Transfer: {}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4328"/>
+        <location filename="../../blink/sessions.py" line="4352"/>
         <source>Completed (%s)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4349"/>
+        <location filename="../../blink/sessions.py" line="4373"/>
         <source>Destination not found</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4371"/>
+        <location filename="../../blink/sessions.py" line="4395"/>
         <source>DNS Lookup failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4787"/>
+        <location filename="../../blink/sessions.py" line="4811"/>
         <source>Connecting...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4768"/>
+        <location filename="../../blink/sessions.py" line="4792"/>
         <source>Starting...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4770"/>
+        <location filename="../../blink/sessions.py" line="4794"/>
         <source>Connected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4772"/>
+        <location filename="../../blink/sessions.py" line="4796"/>
         <source>Ending...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4795"/>
+        <location filename="../../blink/sessions.py" line="4819"/>
         <source>Computing hash (%s%%)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4803"/>
+        <location filename="../../blink/sessions.py" line="4827"/>
         <source>Transferring: %s/%s (%s%%)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3918,17 +3978,17 @@ QToolButton:pressed {
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4774"/>
+        <location filename="../../blink/sessions.py" line="4798"/>
         <source>Decrypting...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4776"/>
+        <location filename="../../blink/sessions.py" line="4800"/>
         <source>Encrypting...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4778"/>
+        <location filename="../../blink/sessions.py" line="4802"/>
         <source>Encrypted...</source>
         <translation type="unfinished"></translation>
     </message>
