@@ -84,12 +84,12 @@ class PrefixValidator(QRegularExpressionValidator):
 
 class HostnameValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(HostnameValidator, self).__init__(QRegularExpression('^([\w\-_]+(\.[\w\-_]+)*)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
+        super(HostnameValidator, self).__init__(QRegularExpression(r'^([\w\-_]+(\.[\w\-_]+)*)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
 
 
 class SIPAddressValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(SIPAddressValidator, self).__init__(QRegularExpression('^([\w\-_+%]+@[\w\-_]+(\.[\w\-_]+)*)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
+        super(SIPAddressValidator, self).__init__(QRegularExpression(r'^([\w\-_+%]+@[\w\-_]+(\.[\w\-_]+)*)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
 
     def fixup(self, input):
         if input and '@' not in input:
@@ -100,7 +100,7 @@ class SIPAddressValidator(QRegularExpressionValidator):
 
 class WebURLValidator(QRegularExpressionValidator):
     def __init__(self, parent=None):
-        super(WebURLValidator, self).__init__(QRegularExpression('^(https?://[\w\-_]+(\.[\w\-_]+)*(:\d+)?(/.*)?)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
+        super(WebURLValidator, self).__init__(QRegularExpression(r'^(https?://[\w\-_]+(\.[\w\-_]+)*(:\d+)?(/.*)?)?$', QRegularExpression.PatternOption.CaseInsensitiveOption), parent)
 
 
 class XCAPRootValidator(WebURLValidator):

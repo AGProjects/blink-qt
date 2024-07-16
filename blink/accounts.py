@@ -362,12 +362,12 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         self.email_address_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
         self.display_name_editor.regexp = re.compile('^.*$')
         self.name_editor.regexp = re.compile('^.+$')
-        self.username_editor.regexp = re.compile('^\w(?<=[^0_])[\w.-]{4,31}(?<=[^_.-])$', re.IGNORECASE)  # in order to enable unicode characters add re.UNICODE to flags
-        self.sip_address_editor.regexp = re.compile('^[^@\s]+@[^@\s]+$')
+        self.username_editor.regexp = re.compile(r'^\w(?<=[^0_])[\w.-]{4,31}(?<=[^_.-])$', re.IGNORECASE)  # in order to enable unicode characters add re.UNICODE to flags
+        self.sip_address_editor.regexp = re.compile(r'^[^@\s]+@[^@\s]+$')
         self.password_editor.regexp = re.compile('^.*$')
         self.new_password_editor.regexp = re.compile('^.{8,}$')
         self.verify_password_editor.regexp = re.compile('^$')
-        self.email_address_editor.regexp = re.compile('^[^@\s]+@[^@\s]+$')
+        self.email_address_editor.regexp = re.compile(r'^[^@\s]+@[^@\s]+$')
 
         account_manager = AccountManager()
         notification_center = NotificationCenter()
