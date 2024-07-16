@@ -1996,7 +1996,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.selected_item = None
         self.session_model = ChatSessionModel(self)
-        self.session_model.sort(Qt.CheckState.Unchecked, Qt.SortOrder.AscendingOrder)
         self.session_list.setModel(self.session_model)
         self.session_widget.installEventFilter(self)
         self.state_label.installEventFilter(self)
