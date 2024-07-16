@@ -2039,6 +2039,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if geometry:
             self.restoreGeometry(geometry)
 
+        splitter_state = QSettings().value("chat_window/splitter")
+        if splitter_state:
+            self.splitter.restoreState(splitter_state)
+
         self.pending_displayed_notifications = {}
         self.render_after_load = deque()
         self.fetch_after_load = deque()
@@ -2601,6 +2605,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def closeEvent(self, event):
         QSettings().setValue("chat_window/geometry", self.saveGeometry())
+        QSettings().setValue("chat_window/splitter", self.splitter.saveState())
         super(ChatWindow, self).closeEvent(event)
 
     def eventFilter(self, watched, event):
