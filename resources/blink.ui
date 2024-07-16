@@ -1195,6 +1195,7 @@ padding: 2px;</string>
     <addaction name="logs_window_action"/>
     <addaction name="received_files_window_action"/>
     <addaction name="screenshots_window_action"/>
+    <addaction name="audio_recordings_action"/>
     <addaction name="separator"/>
     <addaction name="sip_server_settings_action"/>
     <addaction name="history_on_server_action"/>
@@ -1276,6 +1277,14 @@ padding: 2px;</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+T</string>
+   </property>
+   <property name="shortcutContext">
+    <enum>Qt::ApplicationShortcut</enum>
+   </property>
+  </action>
+  <action name="audio_recordings_action">
+   <property name="text">
+    <string>Audio Recordings</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>

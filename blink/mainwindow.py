@@ -222,6 +222,7 @@ class MainWindow(base_class, ui_class):
         self.logs_window_action.triggered.connect(self._AH_LogsWindowActionTriggered)
         self.received_files_window_action.triggered.connect(self._AH_ReceivedFilesWindowActionTriggered)
         self.screenshots_window_action.triggered.connect(self._AH_ScreenshotsWindowActionTriggered)
+        self.audio_recordings_action.triggered.connect(self._AH_AudioRecordingsActionTriggered)
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
@@ -411,6 +412,12 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         settings.answering_machine.enabled = checked
         settings.save()
+
+    def _AH_AudioRecordingsActionTriggered(self, checked):
+        settings = SIPSimpleSettings()
+        directory = settings.audio.recordings_directory.normalized
+        makedirs(directory)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def _AH_GoogleContactsActionTriggered(self):
         settings = SIPSimpleSettings()
