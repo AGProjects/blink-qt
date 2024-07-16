@@ -1666,7 +1666,8 @@ class AudioSessionWidget(base_class, ui_class):
         self.latency_label.setFont(font)
         self.packet_loss_label.setFont(font)
         self.duration_label.setMinimumWidth(self.duration_label.fontMetrics().size(Qt.TextFlag.TextSingleLine, '0:00:00').width() + 1)  # prevent the status from shifting left/right when duration changes
-        self.mute_button.type = LeftSegment
+        self.info_button.type = LeftSegment
+        self.mute_button.type = MiddleSegment
         self.hold_button.type = MiddleSegment
         self.record_button.type = MiddleSegment
         self.hangup_button.type = RightSegment
@@ -1680,6 +1681,7 @@ class AudioSessionWidget(base_class, ui_class):
         self.mute_button.setEnabled(False)
         self.hold_button.setEnabled(False)
         self.record_button.setEnabled(False)
+        self.info_button.setEnabled(True)
         self.address_label.setText(session.name)
         self.stream_info_label.session_type = session.type
         self.stream_info_label.codec_info = session.codec_info
@@ -1754,7 +1756,7 @@ class AudioSessionWidget(base_class, ui_class):
     del _get_position_in_conference, _set_position_in_conference
 
     def _SH_MuteButtonHidden(self):
-        self.hold_button.type = LeftSegment
+        self.hold_button.type = MiddleSegment
 
     def _SH_MuteButtonShown(self):
         self.hold_button.type = MiddleSegment
@@ -2107,6 +2109,7 @@ class AudioSessionItem(object):
             old_widget.mute_button.clicked.disconnect(self._SH_MuteButtonClicked)
             old_widget.hold_button.clicked.disconnect(self._SH_HoldButtonClicked)
             old_widget.record_button.clicked.disconnect(self._SH_RecordButtonClicked)
+            old_widget.info_button.clicked.disconnect(self._SH_InfoButtonClicked)
             old_widget.hangup_button.clicked.disconnect(self._SH_HangupButtonClicked)
             widget.mute_button.setEnabled(old_widget.mute_button.isEnabled())
             widget.mute_button.setChecked(old_widget.mute_button.isChecked())
@@ -2117,6 +2120,7 @@ class AudioSessionItem(object):
             widget.hangup_button.setEnabled(old_widget.hangup_button.isEnabled())
         widget.mute_button.clicked.connect(self._SH_MuteButtonClicked)
         widget.hold_button.clicked.connect(self._SH_HoldButtonClicked)
+        widget.info_button.clicked.connect(self._SH_InfoButtonClicked)
         widget.record_button.clicked.connect(self._SH_RecordButtonClicked)
         widget.hangup_button.clicked.connect(self._SH_HangupButtonClicked)
 
@@ -2172,6 +2176,10 @@ class AudioSessionItem(object):
             self.blink_session.hold()
         else:
             self.blink_session.unhold()
+
+    def _SH_InfoButtonClicked(self, checked):
+        blink = QApplication.instance()
+        blink.chat_window.show_session_info()
 
     def _SH_MuteButtonClicked(self, checked):
         if self.audio_stream is not None:
