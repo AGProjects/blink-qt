@@ -3102,12 +3102,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             player.start()
 
     def desktop_notify(self, from_uri):
-        notification_title = 'Blink Qt'  
+        notification_title = 'Blink Qt'
         notification_message = translate('chat_window', f"New message from {from_uri}")
         icon = QIcon(Resources.get('icons/blink.png'))
         if platform.system() == 'Darwin':
             desktop_notification(notification_title, notification_message, '', sound=True)
-    
+
     def _NH_BlinkGotComposingIndication(self, notification):
         session = notification.sender.items.chat
         if session is None:
