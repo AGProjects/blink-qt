@@ -3095,7 +3095,7 @@ class ContactSearchModel(QSortFilterProxyModel):
         item = source_index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Group) or not item.group.virtual:
             return False
-        search_tokens = self.filterRegularExpression().pattern().lower().split()
+        search_tokens = self.filterRegExp().pattern().lower().split()
         searched_item = ' '.join([item.name] + [uri.uri for uri in item.uris]).lower()  # should we only search in the username part of the uris? -Dan
         return all(token in searched_item for token in search_tokens)
 
