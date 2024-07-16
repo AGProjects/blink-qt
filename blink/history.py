@@ -212,6 +212,7 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_BlinkMessageWillDelete(self, notification):
         data = notification.data
         self.message_history.update(data.id, 'deleted')
+        self.download_history.remove(data.id)
 
     def _NH_BlinkMessageDidDecrypt(self, notification):
         self.message_history.update_encryption(notification)
