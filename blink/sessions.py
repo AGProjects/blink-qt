@@ -6442,12 +6442,12 @@ class ConferenceDialog(base_class, ui_class):
     def closeEvent(self, event):
         QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
         super(ConferenceDialog, self).closeEvent(event)
-        
+
     def show(self):
         geometry = QSettings().value("conference_dialog/geometry")
         if geometry:
             self.restoreGeometry(geometry)
-            
+
         self.room_button.setCurrentIndex(-1)
         self.audio_button.setChecked(True)
         self.chat_button.setChecked(True)
