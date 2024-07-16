@@ -415,58 +415,6 @@
         <number>0</number>
        </property>
        <item>
-        <widget class="SegmentButton" name="mute_button">
-         <property name="minimumSize">
-          <size>
-           <width>22</width>
-           <height>22</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>22</width>
-           <height>22</height>
-          </size>
-         </property>
-         <property name="toolTip">
-          <string>Mute this participant</string>
-         </property>
-         <property name="styleSheet">
-          <string>QToolButton#mute_button {
-	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
-	border-color: #545454;
-	border-top-left-radius: 4px;
-	border-bottom-left-radius: 4px;
-	border-width: 1px;
-	border-style: solid;
-}
-
-QToolButton#mute_button:pressed {
-	background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
-	border-style: inset;
-}
-</string>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normaloff>icons/mic12-on.svg</normaloff>
-           <normalon>icons/mic12-off.svg</normalon>icons/mic12-on.svg</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>12</width>
-           <height>12</height>
-          </size>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
-         </property>
-         <property name="autoRaise">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="SegmentButton" name="info_button">
          <property name="minimumSize">
           <size>
@@ -502,6 +450,58 @@ QToolButton:pressed {
           <iconset>
            <normaloff>icons/info16.svg</normaloff>
            <normalon>icons/info16.svg</normalon>icons/info16.svg</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>12</width>
+           <height>12</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="autoRaise">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="SegmentButton" name="mute_button">
+         <property name="minimumSize">
+          <size>
+           <width>22</width>
+           <height>22</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>22</width>
+           <height>22</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Mute this participant</string>
+         </property>
+         <property name="styleSheet">
+          <string>QToolButton {
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafafa, stop:1 #bababa);
+	border-color: #545454;
+	border-top-left-radius: 4px;
+	border-bottom-left-radius: 4px;
+	border-width: 1px;
+	border-style: solid;
+}
+
+QToolButton:pressed {
+	background: qradialgradient(cx:0.5, cy:0.5, radius:1, fx:0.5, fy:0.5, stop:0 #dddddd, stop:1 #777777);
+	border-style: inset;
+}
+</string>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/mic12-on.svg</normaloff>
+           <normalon>icons/mic12-off.svg</normalon>icons/mic12-on.svg</iconset>
          </property>
          <property name="iconSize">
           <size>
