@@ -3,7 +3,7 @@ Section: python
 Priority: optional
 Maintainer: Adrian Georgescu <ag@ag-projects.com>
 Uploaders: Tijmen de Mes <tijmen@ag-projects.com>
-Build-Depends: debhelper (>= 11),
+Build-Depends: debhelper (>= 13),
                dh-python,
                python3-all-dev,
                python3-all-dbg,
@@ -24,7 +24,8 @@ Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python3-pgpy,
          python3-pyqt5,
          python3-pyqt5.qtsvg,
-         python3-pyqt5.qtwebkit,
+         python3-pyqt5.qtwebchannel,
+         python3-pyqt5.qtwebengine,
          python3-requests,
          python3-sipsimple (>=5.3.0),
          python3-sqlobject,
