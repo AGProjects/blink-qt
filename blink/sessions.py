@@ -2998,7 +2998,7 @@ class AudioSessionListView(QListView):
     def dropEvent(self, event):
         model = self.model()
         if event.source() is self:
-            if event.modifiers() & Qt.KeyboardModifier.AltModifier:
+            if event.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
                 event.setDropAction(Qt.DropAction.LinkAction)
             else:
                 event.setDropAction(Qt.DropAction.MoveAction)
@@ -3019,7 +3019,7 @@ class AudioSessionListView(QListView):
                 event.accept(rect)
             else:
                 event.ignore(rect)
-        elif event.modifiers() & Qt.KeyboardModifier.AltModifier and dragged_session.client_conference is None:
+        elif event.keyboardModifiers() & Qt.KeyboardModifier.AltModifier and dragged_session.client_conference is None:
             if dragged_session is session or session.client_conference is not None or session.blink_session.state != 'connected':
                 event.ignore(rect)
             elif dragged_session.blink_session.transfer_state in ('active', 'completed') or session.blink_session.transfer_state in ('active', 'completed'):
