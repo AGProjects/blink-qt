@@ -688,7 +688,6 @@ class ServerToolsWebView(QWebEngineView):
         if account is old_account:
             return
         self.__dict__['account'] = account
-        self.page().profile().clearHttpCache()
         self.authenticated = False
         if old_account:
             notification_center.remove_observer(self, sender=old_account)
@@ -743,6 +742,7 @@ class ServerToolsWebView(QWebEngineView):
         for name, value in self.query_items:
             url_query.addQueryItem(name, value)
         url.setQuery(url_query)
+
         if set_home:
             self.homepage = url
         if reset_history:
@@ -793,6 +793,8 @@ class ServerToolsWindow(base_class, ui_class, metaclass=QSingleton):
         self.forward_button.setEnabled(False)
 
     def _SH_AccountButtonMenuTriggered(self, action):
+        self.web_view.page().profile().clearHttpCache()
+        self.web_view.page().triggerAction(QWebEnginePage.WebAction.Stop)
         account = action.data()
         account_changed = account is not self.web_view.account
         if account_changed:
