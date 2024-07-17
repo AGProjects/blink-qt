@@ -603,8 +603,8 @@ class MainWindow(base_class, ui_class):
                 contact_uri = contact.uri
             else:
                 contact, contact_uri = URIUtils.find_contact(self.search_box.text())
-            session_manager = SessionManager()
-            session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], connect=False)
+            session_manager = MessageManager()
+            session_manager.create_message_session(contact_uri.uri, contact.name, selected=True)
 
     def _AH_RequestScreenActionTriggered(self):
         list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
