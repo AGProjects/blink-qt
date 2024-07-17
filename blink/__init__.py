@@ -61,6 +61,8 @@ if hasattr(sys, 'frozen'):
 if platform.system() == 'Darwin':
     QApplication.setStyle('fusion')
 
+web_logging = QLoggingCategory('qt.webengine')
+web_logging.setFilterRules('*.info=false')
 
 class IPAddressMonitor(object):
     """
