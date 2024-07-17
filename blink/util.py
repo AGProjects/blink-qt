@@ -1,8 +1,8 @@
 import os
 import shutil
 
-from PyQt5.QtCore import QObject, QThread, QTimer, QCoreApplication
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtCore import QObject, QThread, QTimer, QCoreApplication
+from PyQt6.QtWidgets import QApplication
 from application.python.decorator import decorator, preserve_signature
 from application.python.descriptor import classproperty
 from application.python.types import Singleton

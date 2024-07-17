@@ -1,8 +1,8 @@
 
 
 
-from PyQt5.QtCore import QEvent, QRectF, QSize
-from PyQt5.QtSvg import QSvgWidget
+from PyQt6.QtCore import QEvent, QRectF, QSize
+from PyQt6.QtSvgWidgets import QSvgWidget
 
 from blink.resources import Resources
 from blink.widgets.util import QtDynamicProperty

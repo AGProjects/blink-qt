@@ -3,9 +3,9 @@ import os
 import sys
 import platform
 
-from PyQt5.QtCore import Qt, QEvent, QLocale, QTranslator
-from PyQt5.QtWidgets import QApplication, QMessageBox
-from PyQt5.QtGui import QIcon
+from PyQt6.QtCore import Qt, QEvent, QLocale, QTranslator, QLoggingCategory
+from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtGui import QIcon
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData

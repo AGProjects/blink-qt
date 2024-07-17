@@ -3,18 +3,15 @@ import json
 import os
 import re
 import sys
-try:
-    from PyQt5 import sip
-except ImportError:
-    import sip
 import urllib.request, urllib.parse, urllib.error
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel, QUrl, QUrlQuery
-from PyQt5.QtGui import QIcon
-from PyQt5.QtNetwork import QAuthenticator
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage, QWebEngineSettings
-from PyQt5.QtWidgets import QApplication, QButtonGroup, QComboBox, QMenu
+from PyQt6 import uic, sip
+from PyQt6.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel, QUrl, QUrlQuery
+from PyQt6.QtGui import QIcon
+from PyQt6.QtNetwork import QAuthenticator
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import QApplication, QButtonGroup, QComboBox, QMenu
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit

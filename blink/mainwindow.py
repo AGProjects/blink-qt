@@ -4,10 +4,10 @@ import os
 
 from functools import partial
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QSettings, QUrl
-from PyQt5.QtGui import QDesktopServices, QIcon
-from PyQt5.QtWidgets import QAction, QActionGroup, QApplication, QFileDialog, QMenu, QShortcut, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QSettings, QUrl, QTranslator
+from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QActionGroup, QShortcut
+from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit

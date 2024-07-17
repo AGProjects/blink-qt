@@ -1,8 +1,8 @@
 import platform
 
-from PyQt5.QtCore import Qt, QCoreApplication, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, QT_TRANSLATE_NOOP
-from PyQt5.QtGui import QBrush, QColor, QLinearGradient, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
-from PyQt5.QtWidgets import QAction, QCommonStyle, QMenu, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
+from PyQt6.QtCore import Qt, QCoreApplication, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, QT_TRANSLATE_NOOP
+from PyQt6.QtGui import QAction, QBrush, QColor, QLinearGradient, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt6.QtWidgets import QCommonStyle, QMenu, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
 
 from blink.resources import Resources
 from blink.widgets.color import ColorScheme, ColorUtils, ColorHelperMixin

@@ -1,7 +1,7 @@
 
-from PyQt5.QtCore import Qt, QEvent, QPoint, QRect, QSize
-from PyQt5.QtGui import QColor, QPainter, QPixmap
-from PyQt5.QtWidgets import QFrame
+from PyQt6.QtCore import Qt, QEvent, QPoint, QRect, QSize
+from PyQt6.QtGui import QColor, QPainter, QPixmap
+from PyQt6.QtWidgets import QFrame
 
 from blink.resources import Resources
 from blink.widgets.util import QtDynamicProperty

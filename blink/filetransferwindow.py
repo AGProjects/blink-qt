@@ -1,10 +1,10 @@
 
 import os
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QUrl
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QAction, QMenu
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QAction, QDesktopServices
+from PyQt6.QtWidgets import QMenu
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null

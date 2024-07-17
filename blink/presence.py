@@ -6,8 +6,8 @@ import socket
 import uuid
 import urllib
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QTimer
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QTimer
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null, limit

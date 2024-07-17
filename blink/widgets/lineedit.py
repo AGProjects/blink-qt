@@ -1,9 +1,9 @@
 
 import re
 
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal
-from PyQt5.QtGui import QPainter, QPalette, QPixmap
-from PyQt5.QtWidgets import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
+from PyQt6.QtCore import Qt, QEvent, pyqtSignal
+from PyQt6.QtGui import QPainter, QPalette, QPixmap
+from PyQt6.QtWidgets import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
 
 from blink.resources import Resources
 from blink.util import translate

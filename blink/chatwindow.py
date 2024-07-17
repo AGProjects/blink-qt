@@ -9,14 +9,15 @@ import sys
 import json
 import platform
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QObject, QFileInfo, pyqtSlot
-from PyQt5.QtGui import QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWebChannel import QWebChannel
-from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineView, QWebEngineSettings, QWebEngineScript
-from PyQt5.QtWidgets import QApplication, QAction, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
-from PyQt5.QtWidgets import QFileDialog, QFileIconProvider
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QObject, QFileInfo, pyqtSlot
+from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtWebChannel import QWebChannel
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineScript
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
+from PyQt6.QtWidgets import QFileDialog, QFileIconProvider
 
 from abc import ABCMeta, abstractmethod
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy, NotificationData

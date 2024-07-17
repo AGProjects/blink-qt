@@ -9,9 +9,9 @@ import uuid
 
 from collections import deque
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QObject, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QDialogButtonBox, QStyle, QDialog
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QObject, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QStyle, QDialog
 
 from pgpy import PGPMessage
 from pgpy.errors import PGPEncryptionError, PGPDecryptionError

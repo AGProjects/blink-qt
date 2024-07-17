@@ -4,10 +4,10 @@ import re
 import urllib.parse
 import sys
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QEvent, QRegularExpression, QUrl
-from PyQt5.QtGui import QFont, QRegularExpressionValidator, QValidator
-from PyQt5.QtWidgets import QActionGroup, QApplication, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QEvent, QRegularExpression, QUrl
+from PyQt6.QtGui import QFont, QRegularExpressionValidator, QValidator, QActionGroup
+from PyQt6.QtWidgets import QApplication, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
 from application.notification import IObserver, NotificationCenter

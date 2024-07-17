@@ -2,9 +2,9 @@
 import os
 from datetime import timedelta
 
-from PyQt5.QtCore import Qt, QEvent
-from PyQt5.QtGui import QBrush, QColor, QFontMetrics, QIcon, QLinearGradient, QPainter, QPalette, QPen
-from PyQt5.QtWidgets import QAction, QFileDialog, QLabel, QMenu
+from PyQt6.QtCore import Qt, QEvent
+from PyQt6.QtGui import QAction, QBrush, QColor, QFontMetrics, QIcon, QLinearGradient, QPainter, QPalette, QPen
+from PyQt6.QtWidgets import QFileDialog, QLabel, QMenu
 
 from application.python.types import MarkerType
 

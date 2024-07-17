@@ -6,13 +6,13 @@ import re
 import socket
 import sys
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
-from PyQt5.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
-from PyQt5.QtGui import QBrush, QColor, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtWidgets import QAction, QApplication, QItemDelegate, QStyledItemDelegate, QStyle
-from PyQt5.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QRadioButton, QTableView, QWidget
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
+from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
+from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
+from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QRadioButton, QTableView, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy

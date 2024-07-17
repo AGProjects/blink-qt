@@ -8,8 +8,8 @@ import platform
 import sys
 import pathlib
 
-from PyQt5.QtCore import Qt, QBuffer
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import Qt, QBuffer
+from PyQt6.QtGui import QIcon, QPixmap
 
 from application.python.descriptor import classproperty
 from application.python.types import Singleton
