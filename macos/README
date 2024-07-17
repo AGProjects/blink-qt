@@ -41,3 +41,15 @@ Blink Qt configuration and stored data folder on Mac:
 
 ~/Library/Application\ Support/Blink-Qt/
 
+
+Qt6 notes
+---------
+
+Running on MacOS
+
+https://stackoverflow.com/questions/33090346/is-there-any-way-to-use-qtwebengine-without-opengl
+
+export QMLSCENE_DEVICE=softwarecontext
+
+
+
