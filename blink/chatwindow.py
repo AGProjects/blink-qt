@@ -2811,7 +2811,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
-            self._NH_BlinkSessionIsSelected(notification)
+            if self.session_model.rowCount():
+                call_later(.5, self._NH_BlinkSessionIsSelected, notification)
+            else:
+                self.show()
 
     def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
         model = self.session_model
