@@ -3080,7 +3080,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if received_account is not None and received_account.enabled and received_account != blink_session.account:
                 blink_session.account = received_account
                 NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
-                NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
+                NotificationCenter().post_notification('PGPKeysShouldReload', sender=blink_session)
         else:
             self.render_after_load.append((session, received_account, chat_message))
 
