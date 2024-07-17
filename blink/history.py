@@ -797,7 +797,7 @@ class MessageHistory(object, metaclass=Singleton):
         unread_messages = {}
         for (remote_uri, c) in result:
             unread_messages[remote_uri] = c
-        
+
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageHistoryUnreadMessagesDidLoad', data=NotificationData(unread_messages=unread_messages))
 
