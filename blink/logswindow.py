@@ -26,10 +26,7 @@ class LogsWindow(base_class, ui_class):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
-        notification_center.add_observer(self, name='UILogSip')
-        notification_center.add_observer(self, name='UILogMsrp')
-        notification_center.add_observer(self, name='UILogXcap')
-        notification_center.add_observer(self, name='UILogMessaging')
+        notification_center.add_observer(self, name='UILogMessage')
             
         self._siptrace_packet_count = 0
         self._siptrace_start_time = datetime.now()
@@ -74,17 +71,11 @@ class LogsWindow(base_class, ui_class):
         setattr(settings.logs, 'trace_%s' % current_tab, checked)
         settings.save()
             
-    def _NH_UILogSip(self, notification):
-        self.sip_logs_view.appendPlainText(notification.data)
-
-    def _NH_UILogMsrp(self, notification):
-        self.msrp_logs_view.appendPlainText(notification.data)
-
-    def _NH_UILogXcap(self, notification):
-        self.xcap_logs_view.appendPlainText(notification.data)
-
-    def _NH_UILogMessaging(self, notification):
-        self.messages_logs_view.appendPlainText(notification.data)
+    def _NH_UILogMessage(self, notification):
+        section = notification.data.section
+        message = notification.data.message
+        view = getattr(self, '%s_logs_view' % section)
+        view.appendPlainText(message)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()

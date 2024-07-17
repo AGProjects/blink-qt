@@ -139,7 +139,7 @@ class LogManager(object, metaclass=Singleton):
         handler(notification)
 
         settings = SIPSimpleSettings()
-        if notification.name not in ('SIPEngineLog', 'SIPEngineSIPTrace', 'MessagingTrace') and settings.logs.trace_notifications:
+        if notification.name not in ('UILogMessage', 'SIPEngineLog', 'SIPEngineSIPTrace', 'MessagingTrace') and settings.logs.trace_notifications:
             message = 'Notification name=%s sender=%s data=%s' % (notification.name, notification.sender, pformat(notification.data))
             msg = '%s [%s %d]: %s\n' % (datetime.now(), self.name, self.pid, message)
             try:
@@ -147,8 +147,6 @@ class LogManager(object, metaclass=Singleton):
                 self.notifications_file.flush()
             except Exception:
                 pass
-
-            NotificationCenter().post_notification('UILogNotifications', data=msg)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
@@ -188,7 +186,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogSip', data=msg)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
 
     def _LH_SIPEngineLog(self, notification):
         settings = SIPSimpleSettings()
@@ -202,7 +200,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogPjsip', data=msg)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
 
     def _LH_DNSLookupTrace(self, notification):
         settings = SIPSimpleSettings()
@@ -232,7 +230,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogSip', data=msg)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
 
     def _LH_MessagingTrace(self, notification):
         settings = SIPSimpleSettings()
@@ -246,7 +244,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogMessaging', data=msg)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='messaging'))
 
     def _LH_MSRPTransportTrace(self, notification):
         settings = SIPSimpleSettings()
@@ -264,7 +262,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogMsrp', data=msg)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='msrp'))
 
     def _LH_MSRPLibraryLog(self, notification):
         settings = SIPSimpleSettings()
@@ -281,7 +279,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogMsrp', data=msg)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='msrp'))
 
     def log_xcap(self, notification, message):
         msg = '%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message)
@@ -291,7 +289,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogXcap', data=msg)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='xcap'))
 
     def _LH_XCAPTrace(self, notification):
         settings = SIPSimpleSettings()
