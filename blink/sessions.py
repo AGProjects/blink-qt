@@ -2984,7 +2984,7 @@ class AudioSessionListView(QListView):
 
         for mime_type in model.accepted_mime_types:
             if mime_data.hasFormat(mime_type):
-                index = self.indexAt(event.pos())
+                index = self.indexAt(event.position().toPoint())
                 rect = self.visualRect(index)
                 session = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
@@ -2997,13 +2997,13 @@ class AudioSessionListView(QListView):
     def dropEvent(self, event):
         model = self.model()
         if event.source() is self:
-            if event.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
+            if event.modifiers() & Qt.KeyboardModifier.AltModifier:
                 event.setDropAction(Qt.DropAction.LinkAction)
             else:
                 event.setDropAction(Qt.DropAction.MoveAction)
         for session in self.model().sessions:
             session.widget.drop_indicator = False
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         super(AudioSessionListView, self).dropEvent(event)
 
@@ -3018,7 +3018,7 @@ class AudioSessionListView(QListView):
                 event.accept(rect)
             else:
                 event.ignore(rect)
-        elif event.keyboardModifiers() & Qt.KeyboardModifier.AltModifier and dragged_session.client_conference is None:
+        elif event.modifiers() & Qt.KeyboardModifier.AltModifier and dragged_session.client_conference is None:
             if dragged_session is session or session.client_conference is not None or session.blink_session.state != 'connected':
                 event.ignore(rect)
             elif dragged_session.blink_session.transfer_state in ('active', 'completed') or session.blink_session.transfer_state in ('active', 'completed'):
@@ -3872,7 +3872,7 @@ class ChatSessionListView(QListView):
             if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
-                index = self.indexAt(event.pos())
+                index = self.indexAt(event.position().toPoint())
                 rect = self.visualRect(index)
                 item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
@@ -3885,7 +3885,7 @@ class ChatSessionListView(QListView):
 
     def dropEvent(self, event):
         model = self.model()
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         super(ChatSessionListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))

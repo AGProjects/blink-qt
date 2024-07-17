@@ -3650,7 +3650,7 @@ class ContactListView(QListView):
             if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
-                index = self.indexAt(event.pos())
+                index = self.indexAt(event.position().toPoint())
                 rect = self.visualRect(index)
                 item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
@@ -3665,7 +3665,7 @@ class ContactListView(QListView):
         model = self.model()
         if event.source() is self:
             event.setDropAction(Qt.DropAction.MoveAction)
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         for group in model.items[GroupList]:
             group.widget.drop_indicator = None
@@ -3811,7 +3811,7 @@ class ContactListView(QListView):
         elif isinstance(item, Group):
             index = groups.index(item)
             rect.setHeight(int(rect.height() / 2))
-            if rect.contains(event.pos()):
+            if rect.contains(event.position().toPoint()):
                 drop_groups = (groups[index - 1], groups[index]) if index > 0 else (Null, groups[index])
             else:
                 drop_groups = (groups[index], groups[index + 1]) if index < len(groups) - 1 else (groups[index], Null)
@@ -4101,7 +4101,7 @@ class ContactSearchListView(QListView):
             if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
-                index = self.indexAt(event.pos())
+                index = self.indexAt(event.position().toPoint())
                 rect = self.visualRect(index)
                 item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
@@ -4114,7 +4114,7 @@ class ContactSearchListView(QListView):
 
     def dropEvent(self, event):
         model = self.model()
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         super(ContactSearchListView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
@@ -4432,7 +4432,7 @@ class ContactDetailView(QListView):
             if mime_data.hasFormat(mime_type):
                 self.viewport().update(self.visualRect(self.drop_indicator_index))
                 self.drop_indicator_index = QModelIndex()
-                index = self.indexAt(event.pos())
+                index = self.indexAt(event.position().toPoint())
                 rect = self.visualRect(index)
                 item = index.data(Qt.ItemDataRole.UserRole)
                 name = mime_type.replace('/', ' ').replace('-', ' ').title().replace(' ', '')
@@ -4445,7 +4445,7 @@ class ContactDetailView(QListView):
 
     def dropEvent(self, event):
         model = self.model()
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         super(ContactDetailView, self).dropEvent(event)
         self.viewport().update(self.visualRect(self.drop_indicator_index))
