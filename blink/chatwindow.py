@@ -2282,6 +2282,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _update_control_menu(self):
         menu = self.control_menu
         menu.hide()
+        if not self.selected_session:
+            return
+
         blink_session = self.selected_session.blink_session
         state = blink_session.state
         messages_info = blink_session.info.streams.messages
