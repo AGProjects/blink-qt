@@ -347,7 +347,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         self.add_account_button.setChecked(True)
         self.panel_view.setCurrentWidget(self.add_account_panel)
         self.new_password_editor.textChanged.connect(self._SH_PasswordTextChanged)
-        self.button_group.buttonClicked[int].connect(self._SH_PanelChangeRequest)
+        self.button_group.idClicked.connect(self._SH_PanelChangeRequest)
         self.accept_button.clicked.connect(self._SH_AcceptButtonClicked)
         self.display_name_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
         self.name_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
