@@ -421,7 +421,7 @@ class ChatWebView(QWebEngineView):
         self.last_message_id = None
 
     def contextMenuEvent(self, event):
-        menu = self.page().createStandardContextMenu()
+        menu = self.createStandardContextMenu()
         self.id = None
         if self.last_message_id is not None:
             if self.last_message_id.startswith('text-'):
