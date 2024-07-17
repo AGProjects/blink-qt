@@ -4,10 +4,10 @@
 import os
 import platform
 
-from PyQt5 import uic
-from PyQt5.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QTimer, QUrl
-from PyQt5.QtGui import QDesktopServices, QIcon, QImage, QPainter, QTransform, qRgb
-from PyQt5.QtWidgets import QApplication, QFrame, QMenu, QStyle, QStyleOption, QStylePainter, QWidget
+from PyQt6 import uic
+from PyQt6.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QTimer, QUrl
+from PyQt6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QTransform, qRgb
+from PyQt6.QtWidgets import QApplication, QFrame, QMenu, QStyle, QStyleOption, QStylePainter, QWidget
 
 from application.system import makedirs
 from collections import defaultdict
@@ -31,10 +31,10 @@ __all__ = ['ScreensharingWindow', 'VNCViewer']
 
 class ButtonMaskMapper(dict):
     class qt:
-        NoButton    = Qt.MouseButton.NoButton
-        LeftButton  = Qt.MouseButton.LeftButton
-        MidButton   = Qt.MidButton
-        RightButton = Qt.MouseButton.RightButton
+        NoButton    = Qt.MouseButton.NoButton.value
+        LeftButton  = Qt.MouseButton.LeftButton.value
+        MidButton   = Qt.MouseButton.MiddleButton.value
+        RightButton = Qt.MouseButton.RightButton.value
 
     class vnc:
         NoButton    = 0b00000000

@@ -1,7 +1,7 @@
 
-from sip import voidptr
-from PyQt5.QtCore import QThread
-from PyQt5.QtGui import QImage
+from PyQt6.sip import voidptr
+from PyQt6.QtCore import QThread
+from PyQt6.QtGui import QImage
 
 from application.notification import NotificationCenter, NotificationData
 

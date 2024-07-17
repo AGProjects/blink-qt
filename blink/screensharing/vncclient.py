@@ -1,6 +1,6 @@
 
-from PyQt5.QtCore import QObject, QSize, QSocketNotifier, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtCore import QObject, QSize, QSocketNotifier, QThread, pyqtSignal
+from PyQt6.QtWidgets import QApplication
 
 from application.notification import NotificationCenter
 from application.python import Null
