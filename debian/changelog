@@ -1,3 +1,12 @@
+blink (5.9.1) unstable; urgency=medium
+
+  * Fixed session selection in chat window
+  * Fixed buttons in conference join dialog
+  * Fixed start chat button in main window
+  * Fixed updating menu in chat window
+
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Wed, 17 Jul 2024 15:21:29 +0200
+
 blink (5.9.0) unstable; urgency=medium
 
   * Migrate code for QT6 compatibilty
