@@ -139,7 +139,7 @@ class LogManager(object, metaclass=Singleton):
         handler(notification)
 
         settings = SIPSimpleSettings()
-        if notification.name not in ('SIPEngineLog', 'SIPEngineSIPTrace', 'MessagingLog') and settings.logs.trace_notifications:
+        if notification.name not in ('SIPEngineLog', 'SIPEngineSIPTrace', 'MessagingTrace') and settings.logs.trace_notifications:
             message = 'Notification name=%s sender=%s data=%s' % (notification.name, notification.sender, pformat(notification.data))
             try:
                 self.notifications_file.write('%s [%s %d]: %s\n' % (datetime.now(), self.name, self.pid, message))
