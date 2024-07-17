@@ -1,5 +1,5 @@
-from PyQt5 import uic
-from PyQt5 import QtCore, QtWidgets
+from PyQt6 import uic
+from PyQt6 import QtCore, QtWidgets
 
 from application.python import Null
 from application.notification import IObserver, NotificationCenter
