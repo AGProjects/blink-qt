@@ -482,37 +482,37 @@ Alle rechten voorbehouden.</translation>
         <translation type="obsolete">Decryptie mislukt: {notification.data.error}</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3546"/>
+        <location filename="../../blink/chatwindow.py" line="3549"/>
         <source>Encryption enabled</source>
         <translation>Encryptie ingeschakeld</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3548"/>
+        <location filename="../../blink/chatwindow.py" line="3551"/>
         <source>Encryption disabled</source>
         <translation>Encryptie uitgescahekeld</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3578"/>
+        <location filename="../../blink/chatwindow.py" line="3581"/>
         <source>Failed to initialize chat: %s</source>
         <translation>Kan chat niet initialiseren: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3595"/>
+        <location filename="../../blink/chatwindow.py" line="3598"/>
         <source>Disconnected: %s</source>
         <translation>Verbroken: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3597"/>
+        <location filename="../../blink/chatwindow.py" line="3600"/>
         <source>Disconnected</source>
         <translation>Verbroken</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3633"/>
+        <location filename="../../blink/chatwindow.py" line="3636"/>
         <source>Network Latency: %dms, max=%dms</source>
         <translation>Netwerklatentie: %dms, max=%dms</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3636"/>
+        <location filename="../../blink/chatwindow.py" line="3639"/>
         <source>Packet Loss: %.1f%%, max=%.1f%%</source>
         <translation>Pakketverlies: %.1f%%, max=%.1f%%</translation>
     </message>
@@ -707,7 +707,7 @@ Alle rechten voorbehouden.</translation>
         <translation>Deelt lokaal</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3646"/>
+        <location filename="../../blink/chatwindow.py" line="3649"/>
         <source>&lt;p&gt;Traffic: &lt;span style=&quot;font-family: sans-serif; color: #d70000;&quot;&gt;%s&lt;/span&gt; %s &lt;span style=&quot;font-family: sans-serif; color: #0064d7;&quot;&gt;%s&lt;/span&gt; %s&lt;/p&gt;</source>
         <translation>&lt;p&gt;Verkeer: &lt;span style=&quot;font-family: sans-serif; color: #d70000;&quot;&gt;%s&lt;/span&gt; %s &lt;span style=&quot;font-family: sans-serif; color: #0064d7;&quot;&gt;%s&lt;/span&gt; %s&lt;/p&gt;</translation>
     </message>
@@ -722,47 +722,47 @@ Alle rechten voorbehouden.</translation>
         <translation>Stuur bestand(en)...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2955"/>
+        <location filename="../../blink/chatwindow.py" line="2958"/>
         <source>You sent an audio message. Fetching and processing...</source>
         <translation>U stuurede een audio bericht. Bezig met downloaden en verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2960"/>
+        <location filename="../../blink/chatwindow.py" line="2963"/>
         <source>Sent you an audio message. Processing...</source>
         <translation>Stuurde U een audio bericht. Bezig met verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2993"/>
+        <location filename="../../blink/chatwindow.py" line="2996"/>
         <source>Error: image can not be rendered: %s</source>
         <translation>Fout: afbeelding kan niet worden weergegeven: %s</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3242"/>
+        <location filename="../../blink/chatwindow.py" line="3245"/>
         <source>File decryption failed: {notification.data.error}</source>
         <translation>Decryptie van bestand is mislukt: {notification.data.error}</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3831"/>
+        <location filename="../../blink/chatwindow.py" line="3834"/>
         <source>Select File(s)</source>
         <translation>Selecteer bestand(en)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5141"/>
+        <location filename="../../blink/sessions.py" line="5142"/>
         <source>Item still available in cache or local</source>
         <translation>Item is nog beschikbaar in de cache of op deze computer</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2962"/>
+        <location filename="../../blink/chatwindow.py" line="2965"/>
         <source>Sent you an image: %s. Processing...</source>
         <translation>Stuurde U een afbeelding: %s. Bezig met verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2957"/>
+        <location filename="../../blink/chatwindow.py" line="2960"/>
         <source>You sent an image: %s. Fetching and processing...</source>
         <translation>U stuurde een afbeelding: %s. Bezig met downloaden en verwerken...</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="2968"/>
+        <location filename="../../blink/chatwindow.py" line="2971"/>
         <source>%s can&apos;t be decrypted. PGP is disabled</source>
         <translation>%s kan niet worden ontsleuteld, PGP is uitgeschakeld</translation>
     </message>
@@ -787,27 +787,27 @@ Alle rechten voorbehouden.</translation>
         <translation type="obsolete">Afleveren mislukt: {notification.data.data.code} - {reason}</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3433"/>
+        <location filename="../../blink/chatwindow.py" line="3436"/>
         <source>audio</source>
         <translation>audio</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3434"/>
+        <location filename="../../blink/chatwindow.py" line="3437"/>
         <source>video</source>
         <translation>video</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3435"/>
+        <location filename="../../blink/chatwindow.py" line="3438"/>
         <source>file-transfer</source>
         <translation>bestandsoverdracht</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3440"/>
+        <location filename="../../blink/chatwindow.py" line="3443"/>
         <source>call</source>
         <translation>oproep</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3446"/>
+        <location filename="../../blink/chatwindow.py" line="3449"/>
         <source>%s %s %s failed (%s)</source>
         <translation>%s %s %s mislukt (%s)</translation>
     </message>
@@ -817,22 +817,22 @@ Alle rechten voorbehouden.</translation>
         <translation>Markeer als gelezen</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3104"/>
+        <location filename="../../blink/chatwindow.py" line="3107"/>
         <source>New message from {from_uri}</source>
         <translation>Nieuw bercicht van {from_uri}</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3513"/>
+        <location filename="../../blink/chatwindow.py" line="3516"/>
         <source>No new messages</source>
         <translation>Geen nieuwe berichten</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3515"/>
+        <location filename="../../blink/chatwindow.py" line="3518"/>
         <source>There is 1 new message</source>
         <translation>Er is 1 nieuw bericht</translation>
     </message>
     <message>
-        <location filename="../../blink/chatwindow.py" line="3517"/>
+        <location filename="../../blink/chatwindow.py" line="3520"/>
         <source>There are %d new messages</source>
         <translation>Er zijn %d nieuwe berichten</translation>
     </message>
@@ -1256,17 +1256,17 @@ Alle rechten voorbehouden.</translation>
 <context>
     <name>filelist_view</name>
     <message>
-        <location filename="../../blink/sessions.py" line="5421"/>
+        <location filename="../../blink/sessions.py" line="5422"/>
         <source>Open</source>
         <translation>Open</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5422"/>
+        <location filename="../../blink/sessions.py" line="5423"/>
         <source>Open Transfers Folder</source>
         <translation>Bestandsoverdracht map openen</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="5423"/>
+        <location filename="../../blink/sessions.py" line="5424"/>
         <source>Remove File</source>
         <translation>Verwijder bestand</translation>
     </message>
@@ -1581,7 +1581,7 @@ border-color: #3278c8;
 <context>
     <name>incoming_calltransfer_dialog</name>
     <message>
-        <location filename="../../blink/sessions.py" line="6389"/>
+        <location filename="../../blink/sessions.py" line="6390"/>
         <source>transfer requested by {}</source>
         <translation>doorschakelen aangevraagd door {}</translation>
     </message>
@@ -1633,57 +1633,57 @@ border-color: #3278c8;
 <context>
     <name>incoming_dialog</name>
     <message>
-        <location filename="../../blink/sessions.py" line="6049"/>
+        <location filename="../../blink/sessions.py" line="6050"/>
         <source>Auto-answer is inactive</source>
         <translation>Automatisch beantwoorden is inactief</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6090"/>
+        <location filename="../../blink/sessions.py" line="6091"/>
         <source>Auto answer in %d seconds</source>
         <translation>Automatisch beantwoorden in %d seconden</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6101"/>
+        <location filename="../../blink/sessions.py" line="6102"/>
         <source>To refuse a media type click its icon</source>
         <translation>Klik op het pictogram om een mediatype te weigeren</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6108"/>
+        <location filename="../../blink/sessions.py" line="6109"/>
         <source>Audio call</source>
         <translation>Audio-oproep</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6110"/>
+        <location filename="../../blink/sessions.py" line="6111"/>
         <source>Chat session</source>
         <translation>Chatsessie</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6112"/>
+        <location filename="../../blink/sessions.py" line="6113"/>
         <source>Video call</source>
         <translation>Video-oproep</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6114"/>
+        <location filename="../../blink/sessions.py" line="6115"/>
         <source>Screen sharing request</source>
         <translation>Verzoek voor scherm delen</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6142"/>
+        <location filename="../../blink/sessions.py" line="6143"/>
         <source>Incoming Session Update</source>
         <translation>Inkomende sessie-update</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6145"/>
+        <location filename="../../blink/sessions.py" line="6146"/>
         <source>Incoming Session Request</source>
         <translation>Inkomend sessieverzoek</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6176"/>
+        <location filename="../../blink/sessions.py" line="6177"/>
         <source>is offering screen sharing</source>
         <translation>biedt schermdeling aan</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6178"/>
+        <location filename="../../blink/sessions.py" line="6179"/>
         <source>is asking to share your screen</source>
         <translation>vraagt om je scherm te delen</translation>
     </message>
@@ -1756,12 +1756,12 @@ border-color: #3278c8;
 <context>
     <name>incoming_filetransfer_dialog</name>
     <message>
-        <location filename="../../blink/sessions.py" line="6314"/>
+        <location filename="../../blink/sessions.py" line="6315"/>
         <source>File: %s (%s)</source>
         <translation>Bestand: %s (%s)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="6316"/>
+        <location filename="../../blink/sessions.py" line="6317"/>
         <source>File: %s</source>
         <translation>Bestand: %s</translation>
     </message>
@@ -1955,7 +1955,7 @@ padding: 2px;</source>
     <message>
         <location filename="../blink.ui" line="792"/>
         <source>Start a chat session</source>
-        <translation>Realtime chatsessie starten</translation>
+        <translation>Stuur berichten</translation>
     </message>
     <message>
         <location filename="../blink.ui" line="824"/>
@@ -3975,7 +3975,7 @@ QToolButton:pressed {
         <translation>Initialiseren...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4786"/>
+        <location filename="../../blink/sessions.py" line="4787"/>
         <source>Looking up destination...</source>
         <translation>Bestemming opzoeken...</translation>
     </message>
@@ -3985,7 +3985,7 @@ QToolButton:pressed {
         <translation>Proberen %s</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4790"/>
+        <location filename="../../blink/sessions.py" line="4791"/>
         <source>Ringing...</source>
         <translation>Gaat over...</translation>
     </message>
@@ -4045,47 +4045,47 @@ QToolButton:pressed {
         <translation>Doorschakelen: {}</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4352"/>
+        <location filename="../../blink/sessions.py" line="4353"/>
         <source>Completed (%s)</source>
         <translation>Voltooid (%s)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4373"/>
+        <location filename="../../blink/sessions.py" line="4374"/>
         <source>Destination not found</source>
         <translation>Bestemming niet gevonden</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4395"/>
+        <location filename="../../blink/sessions.py" line="4396"/>
         <source>DNS Lookup failed</source>
         <translation>DNS-lookup mislukt</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4811"/>
+        <location filename="../../blink/sessions.py" line="4812"/>
         <source>Connecting...</source>
         <translation>Verbinden...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4792"/>
+        <location filename="../../blink/sessions.py" line="4793"/>
         <source>Starting...</source>
         <translation>Starten...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4794"/>
+        <location filename="../../blink/sessions.py" line="4795"/>
         <source>Connected</source>
         <translation>Verbonden</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4796"/>
+        <location filename="../../blink/sessions.py" line="4797"/>
         <source>Ending...</source>
         <translation>Beëindigen...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4819"/>
+        <location filename="../../blink/sessions.py" line="4820"/>
         <source>Computing hash (%s%%)</source>
         <translation>Hash berekenen (%s%%)</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4827"/>
+        <location filename="../../blink/sessions.py" line="4828"/>
         <source>Transferring: %s/%s (%s%%)</source>
         <translation>Bestandsoverdracht: %s/%s (%s%%)</translation>
     </message>
@@ -4105,17 +4105,17 @@ QToolButton:pressed {
         <translation>Gesprek beëindigd door andere partij</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4798"/>
+        <location filename="../../blink/sessions.py" line="4799"/>
         <source>Decrypting...</source>
         <translation>Ontsleutelen...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4800"/>
+        <location filename="../../blink/sessions.py" line="4801"/>
         <source>Encrypting...</source>
         <translation>Versleutelen...</translation>
     </message>
     <message>
-        <location filename="../../blink/sessions.py" line="4802"/>
+        <location filename="../../blink/sessions.py" line="4803"/>
         <source>Encrypted...</source>
         <translation>Versleuteld...</translation>
     </message>
