@@ -1962,10 +1962,8 @@ class AudioSessionItem(object):
         self.pending_removal = False
 
         self.zrtp_widget = ZRTPWidget()
-        self.zrtp_widget.setWindowFlags(Qt.Popup)
-        desktop = QApplication.desktop()
-        if hasattr(desktop, 'x11Info') and desktop.x11Info().isCompositingManagerRunning():
-            self.zrtp_widget.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.zrtp_widget.setWindowFlags(Qt.WindowType.Popup)
+        self.zrtp_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.zrtp_widget.nameChanged.connect(self._SH_ZRTPWidgetNameChanged)
         self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
 
