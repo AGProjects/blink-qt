@@ -6434,10 +6434,10 @@ class ConferenceDialog(base_class, ui_class):
             self.restoreGeometry(geometry)
 
     def _SH_MediaButtonClicked(self, checked):
-        self.accept_button.setEnabled(self.room_button.currentText() != '' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+        self.accept_button.setEnabled(any(button.isChecked() for button in (self.audio_button, self.chat_button)))
 
     def _SH_RoomButtonEditTextChanged(self, text):
-        self.accept_button.setEnabled(text != '' and any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+        self.accept_button.setEnabled(any(button.isChecked() for button in (self.audio_button, self.chat_button)))
 
     def closeEvent(self, event):
         QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
