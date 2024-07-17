@@ -54,7 +54,7 @@
      </size>
     </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>3</number>
     </property>
     <property name="movable">
      <bool>false</bool>
@@ -153,7 +153,7 @@
      <attribute name="title">
       <string>Messaging</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="messages_logs_view">
+     <widget class="QPlainTextEdit" name="messaging_logs_view">
       <property name="geometry">
        <rect>
         <x>0</x>
