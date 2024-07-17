@@ -32,6 +32,7 @@ except ImportError:
     branding = Null
 
 from blink.chatwindow import ChatWindow
+from blink.logswindow import LogsWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.addressbook import ContactExtension, GroupExtension
 from blink.configuration.settings import SIPSimpleSettingsExtension
@@ -133,10 +134,12 @@ class Blink(QApplication, metaclass=QSingleton):
 
         self.main_window = MainWindow()
         self.chat_window = ChatWindow()
+        self.logs_window = LogsWindow()
         self.main_window.__closed__ = True
         self.chat_window.__closed__ = True
         self.main_window.installEventFilter(self)
         self.chat_window.installEventFilter(self)
+        self.logs_window.installEventFilter(self)
 
         self.main_window.addAction(self.chat_window.control_button.actions.main_window)
         self.chat_window.addAction(self.main_window.quit_action)

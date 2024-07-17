@@ -466,9 +466,8 @@ class MainWindow(base_class, ui_class):
         self.filetransfer_window.show()
 
     def _AH_LogsWindowActionTriggered(self, checked):
-        directory = ApplicationData.get('logs')
-        makedirs(directory)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
+        blink = QApplication.instance()
+        blink.logs_window.show()
 
     def _AH_ReceivedFilesWindowActionTriggered(self, checked):
         settings = BlinkSettings()
@@ -1033,7 +1032,6 @@ class MainWindow(base_class, ui_class):
         dialog.finished.connect(self._SH_PendingWatcherDialogFinished)
         self.pending_watcher_dialogs.append(dialog)
         dialog.show()
-
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
         self.search_box.clear()
