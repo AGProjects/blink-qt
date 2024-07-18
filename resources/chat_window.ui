@@ -590,7 +590,7 @@ QWidget#session_widget_no:hover {
               </sizepolicy>
              </property>
              <property name="currentIndex">
-              <number>2</number>
+              <number>1</number>
              </property>
              <widget class="QWidget" name="participants_panel">
               <layout class="QVBoxLayout" name="participants_panel_layout">
@@ -665,14 +665,14 @@ QWidget {
                    <widget class="QToolButton" name="participants_panel_files_button">
                     <property name="minimumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="focusPolicy">
@@ -714,14 +714,14 @@ QToolButton:pressed {
                    <widget class="QToolButton" name="participants_panel_info_button">
                     <property name="minimumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="focusPolicy">
@@ -859,14 +859,14 @@ QWidget {
                    <widget class="QToolButton" name="files_panel_participants_button">
                     <property name="minimumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="focusPolicy">
@@ -908,14 +908,14 @@ QToolButton:pressed {
                    <widget class="QToolButton" name="files_panel_info_button">
                     <property name="minimumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="focusPolicy">
@@ -1047,14 +1047,14 @@ QWidget {
                    <widget class="QToolButton" name="info_panel_files_button">
                     <property name="minimumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="focusPolicy">
@@ -1096,14 +1096,14 @@ QToolButton:pressed {
                    <widget class="QToolButton" name="info_panel_participants_button">
                     <property name="minimumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="maximumSize">
                      <size>
-                      <width>16</width>
-                      <height>16</height>
+                      <width>18</width>
+                      <height>18</height>
                      </size>
                     </property>
                     <property name="focusPolicy">
@@ -2072,14 +2072,14 @@ QToolButton:hover {
             <widget class="QToolButton" name="mute_button">
              <property name="minimumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="text">
@@ -2109,14 +2109,14 @@ QToolButton:hover {
             <widget class="QToolButton" name="hold_button">
              <property name="minimumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="text">
@@ -2146,14 +2146,14 @@ QToolButton:hover {
             <widget class="QToolButton" name="record_button">
              <property name="minimumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="text">
@@ -2196,14 +2196,14 @@ QToolButton:hover {
             <widget class="ToolButton" name="control_button">
              <property name="minimumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>26</width>
-               <height>26</height>
+               <width>24</width>
+               <height>24</height>
               </size>
              </property>
              <property name="text">
@@ -2269,7 +2269,7 @@ QToolButton:hover {
           <number>0</number>
          </property>
          <item>
-          <widget class="ChatWebView" name="chat_view">
+          <widget class="ChatWebView" name="chat_view" native="true">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -2285,7 +2285,7 @@ QToolButton:hover {
            <property name="focusPolicy">
             <enum>Qt::NoFocus</enum>
            </property>
-           <property name="url">
+           <property name="url" stdset="0">
             <url>
              <string>about:blank</string>
             </url>
@@ -2332,11 +2332,6 @@ QToolButton:hover {
  </widget>
  <customwidgets>
   <customwidget>
-   <class>QWebView</class>
-   <extends>QWidget</extends>
-   <header location="global">QtWebKitWidgets/QWebView</header>
-  </customwidget>
-  <customwidget>
    <class>ToolButton</class>
    <extends>QToolButton</extends>
    <header>blink.widgets.buttons</header>
@@ -2350,6 +2345,11 @@ QToolButton:hover {
    <class>ContactState</class>
    <extends>QLabel</extends>
    <header>blink.widgets.labels</header>
+  </customwidget>
+  <customwidget>
+   <class>QWebView</class>
+   <extends>QWidget</extends>
+   <header location="global">QtWebKitWidgets/QWebView</header>
   </customwidget>
   <customwidget>
    <class>ChatTextInput</class>
