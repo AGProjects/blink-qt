@@ -200,7 +200,7 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='pjsip'))
 
     def _LH_DNSLookupTrace(self, notification):
         settings = SIPSimpleSettings()

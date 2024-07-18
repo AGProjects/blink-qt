@@ -74,8 +74,12 @@ class LogsWindow(base_class, ui_class):
     def _NH_UILogMessage(self, notification):
         section = notification.data.section
         message = notification.data.message
-        view = getattr(self, '%s_logs_view' % section)
-        view.appendPlainText(message)
+        try:
+            view = getattr(self, '%s_logs_view' % section)
+        except AttributeError:
+            pass
+        else:
+            view.appendPlainText(message)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
