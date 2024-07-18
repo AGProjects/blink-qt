@@ -2358,9 +2358,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     if self.selected_session.chat_widget.otr_timer.isActive():
                         menu.addAction(self.control_button.actions.enable_otr_progress)
                     else:
-                        menu.addAction(self.control_button.actions.enable_otr)
+                        if messages_info.encryption != 'OpenPGP':
+                            menu.addAction(self.control_button.actions.enable_otr)
                 else:
-                    menu.addAction(self.control_button.actions.disable_otr)
+                    if messages_info.encryption != 'OpenPGP':
+                        menu.addAction(self.control_button.actions.disable_otr)
                 menu.addAction(self.control_button.actions.connect)
                 menu.addAction(self.control_button.actions.connect_with_audio)
                 menu.addAction(self.control_button.actions.connect_with_video)
@@ -2373,9 +2375,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                             if self.selected_session.chat_widget.otr_timer.isActive():
                                 menu.addAction(self.control_button.actions.enable_otr_progress)
                             else:
-                                menu.addAction(self.control_button.actions.enable_otr)
+                                if messages_info.encryption != 'OpenPGP':
+                                    menu.addAction(self.control_button.actions.enable_otr)
                         else:
-                            menu.addAction(self.control_button.actions.disable_otr)
+                            if messages_info.encryption != 'OpenPGP':
+                                menu.addAction(self.control_button.actions.disable_otr)
                     if 'audio' not in stream_types:
                         menu.addAction(self.control_button.actions.add_audio)
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
