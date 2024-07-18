@@ -2172,6 +2172,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.enable_otr_progress = QAction(translate('chat_window', "Enabling OTR for messaging"), self, enabled=False)
         self.control_button.actions.disable_otr = QAction(translate('chat_window', "Disable OTR for messaging"), self, triggered=self._AH_DisableOTR)
         self.control_button.actions.main_window = QAction(translate('chat_window', "Main Window"), self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ShortcutContext.ApplicationShortcut)
+        self.control_button.actions.show_transferred_files = QAction(translate('chat_window', "Show transferred files"), self, triggered=self._AH_ShowTransferredFiles)
 
         self.addAction(self.control_button.actions.main_window)  # make this active even when it's not in the control_button's menu
 
@@ -2251,6 +2252,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self._update_widgets_for_session()  # clean this up -Dan (too many functions called in 3 different places: on selection changed, here and on notifications handlers)
                 self._update_control_menu()
                 self._update_panel_buttons()
+                if ('audio' not in new_session.blink_session.streams and 'video' not in new_session.blink_session.streams):
+                    self._SH_FilesButtonClicked(True)
                 self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
 
     selected_session = property(_get_selected_session, _set_selected_session)
@@ -2340,6 +2343,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     elif stream_types != {'screen-sharing'}:
                         menu.addAction(self.control_button.actions.end_screen_sharing)
             menu.addAction(self.control_button.actions.send_files)
+            menu.addAction(self.control_button.actions.show_transferred_files)
             self.control_button.setMenu(menu)
 
     def _update_panel_buttons(self):
@@ -3772,6 +3776,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session = self.selected_session.blink_session
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=[StreamDescription('chat')], reinitialize=True)
         blink_session.connect()
+
+    def _AH_ShowTransferredFiles(self):
+        if not self.selected_session:
+            return
+        blink_session = self.selected_session.blink_session
+        self.session_list.hide()
+        self._SH_FilesButtonClicked(True)
+        
 
     def _AH_ConnectWithAudio(self):
         stream_descriptions = [StreamDescription('audio')]
