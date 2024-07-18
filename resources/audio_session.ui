@@ -244,7 +244,7 @@
        </property>
        <property name="font">
         <font>
-         <pointsize>9</pointsize>
+         <pointsize>10</pointsize>
         </font>
        </property>
        <property name="text">
@@ -341,7 +341,7 @@
        </property>
        <property name="font">
         <font>
-         <pointsize>9</pointsize>
+         <pointsize>10</pointsize>
         </font>
        </property>
        <property name="text">
@@ -391,7 +391,7 @@
       <widget class="DurationLabel" name="duration_label">
        <property name="font">
         <font>
-         <pointsize>11</pointsize>
+         <pointsize>12</pointsize>
         </font>
        </property>
        <property name="text">

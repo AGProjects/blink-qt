@@ -85,6 +85,11 @@
             <height>20</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
           <property name="styleSheet">
            <string notr="true">QToolButton {
 	margin: 0px;
@@ -2067,14 +2072,14 @@ QToolButton:hover {
             <widget class="QToolButton" name="mute_button">
              <property name="minimumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="text">
@@ -2104,14 +2109,14 @@ QToolButton:hover {
             <widget class="QToolButton" name="hold_button">
              <property name="minimumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="text">
@@ -2141,14 +2146,14 @@ QToolButton:hover {
             <widget class="QToolButton" name="record_button">
              <property name="minimumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="text">
@@ -2191,14 +2196,14 @@ QToolButton:hover {
             <widget class="ToolButton" name="control_button">
              <property name="minimumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>28</width>
-               <height>28</height>
+               <width>26</width>
+               <height>26</height>
               </size>
              </property>
              <property name="text">

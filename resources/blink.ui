@@ -329,7 +329,8 @@
       </property>
       <property name="font">
        <font>
-        <pointsize>11</pointsize>
+        <pointsize>12</pointsize>
+        <kerning>true</kerning>
        </font>
       </property>
       <property name="focusPolicy">
@@ -613,6 +614,7 @@ buttons below.</string>
           <property name="font">
            <font>
             <family>Sans Serif</family>
+            <pointsize>12</pointsize>
            </font>
           </property>
           <property name="styleSheet">
@@ -969,6 +971,11 @@ padding: 2px;</string>
               <height>24</height>
              </size>
             </property>
+            <property name="font">
+             <font>
+              <pointsize>12</pointsize>
+             </font>
+            </property>
             <property name="focusPolicy">
              <enum>Qt::TabFocus</enum>
             </property>
@@ -993,6 +1000,11 @@ padding: 2px;</string>
               <width>16777215</width>
               <height>24</height>
              </size>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>12</pointsize>
+             </font>
             </property>
             <property name="focusPolicy">
              <enum>Qt::TabFocus</enum>
@@ -1031,14 +1043,14 @@ padding: 2px;</string>
            <widget class="QToolButton" name="mute_button">
             <property name="minimumSize">
              <size>
-              <width>29</width>
-              <height>24</height>
+              <width>26</width>
+              <height>26</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>29</width>
-              <height>24</height>
+              <width>26</width>
+              <height>26</height>
              </size>
             </property>
             <property name="toolTip">
@@ -1071,7 +1083,7 @@ padding: 2px;</string>
      <x>0</x>
      <y>0</y>
      <width>321</width>
-     <height>25</height>
+     <height>24</height>
     </rect>
    </property>
    <widget class="QMenu" name="blink_menu">
