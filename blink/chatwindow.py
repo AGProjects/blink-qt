@@ -16,7 +16,7 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineScript
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton
+from PyQt6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton, QPlainTextEdit
 from PyQt6.QtWidgets import QFileDialog, QFileIconProvider
 
 from abc import ABCMeta, abstractmethod
@@ -493,6 +493,49 @@ class EncryptionLock(LockType):
     button_text = 'Confirm'
 
 
+class QTextEdit(QTextEdit):
+    """QPlainTextEdit with placeholder text option.
+    Reimplemented from the C++ code used in Qt5.
+    """
+    def __init__(self, *args, **kwargs):
+        super(QTextEdit, self).__init__(*args, **kwargs)
+
+        self._placeholderText = ''
+        self._placeholderVisible = False
+        self.textChanged.connect(self.placeholderVisible)
+
+    def placeholderVisible(self):
+        """Return if the placeholder text is visible, and force update if required."""
+        placeholderCurrentlyVisible = self._placeholderVisible
+        self._placeholderVisible = self._placeholderText and self.document().isEmpty() and not self.hasFocus()
+        if self._placeholderVisible != placeholderCurrentlyVisible:
+            self.viewport().update()
+        return self._placeholderVisible
+
+    def placeholderText(self):
+        """Return text used as a placeholder."""
+        return self._placeholderText
+
+    def setPlaceholderText(self, text):
+        """Set text to use as a placeholder."""
+        self._placeholderText = text
+        if self.document().isEmpty():
+            self.viewport().update()
+
+    def paintEvent(self, event):
+        """Override the paint event to add the placeholder text."""
+        if self.placeholderVisible():
+            painter = QPainter(self.viewport())
+            colour = self.palette().text().color()
+            colour.setAlpha(128)
+            painter.setPen(colour)
+            painter.setClipRect(self.rect())
+            margin = self.document().documentMargin()
+            textRect = self.viewport().rect().adjusted(margin, margin, 0, 0)
+            painter.drawText(textRect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.placeholderText())
+
+        super(QTextEdit, self).paintEvent(event)
+
 class ChatTextInput(QTextEdit):
     textEntered = pyqtSignal(str)
     lockEngaged = pyqtSignal(object)
@@ -509,6 +552,8 @@ class ChatTextInput(QTextEdit):
         self.history = []
         self.history_index = 0  # negative indexes with 0 indicating the text being typed.
         self.stashed_content = None
+        self.setPlaceholderText(translate('chat_window', 'Write a message'))
+        
 
     @property
     def empty(self):
@@ -2255,6 +2300,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if ('audio' not in new_session.blink_session.streams and 'video' not in new_session.blink_session.streams):
                     self._SH_FilesButtonClicked(True)
                 self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
+                # TODO: somehow the placeholder does not get changed inside ChatInputText class -adi
+                if new_session.blink_session.info.streams.messages and new_session.blink_session.info.streams.messages.encryption:
+                    self.chat_input.setPlaceholderText(translate('chat_window', 'Write a message. Messages will be encrypted using %s' % new_session.blink_session.info.streams.messages.encryption))
+                else:
+                    self.chat_input.setPlaceholderText(translate('chat_window', 'Write a message'))
+
 
     selected_session = property(_get_selected_session, _set_selected_session)
     del _get_selected_session, _set_selected_session
