@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="urn:gsma:params:xml:ns:rcs:rcs:up:fthttpext" xmlns:x="urn:gsma:params:xml:ns:rcs:rcs:up:fthttpext" xmlns:ns1="urn:gsma:params:xml:ns:rcs:rcs:fthttp">
+  <xs:import namespace="urn:gsma:params:xml:ns:rcs:rcs:fthttp" schemaLocation="rcs-fthttp.xsd"/>
+  <xs:element name="branded-url" type="xs:anyURI"/>
+  <xs:element name="file-hash" type="xs:string"/>
+</xs:schema>

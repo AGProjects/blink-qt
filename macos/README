@@ -26,12 +26,12 @@ Making an app
 Generate a spec file used by pyinstaller using make_spec.sh script. The
 resulting file must be tweaked, see the modified blink.specs file.
 
-Copy blink.spec in the top directory and edit at least the code signing
-identity, then go there and run:
+Copy blink.spec in the main source directory, edit it and set
+codesign_identity to your Developer id.
 
-pyinstaller blink.spec
+pyinstaller blink.spec -y
 
-The generated MacOS app can then be found in dist/ folder.
+The generated app can then be found in dist/ folder.
 
 
 Local storage

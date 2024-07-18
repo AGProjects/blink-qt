@@ -6,7 +6,7 @@
 from PyInstaller.utils.hooks import collect_submodules
 all_libraries = [
     "application",
-    "PyQt5.QtSvg"
+    "PyQt6.QtSvgWidgets"
 ]
 
 hidden_imports = []
@@ -17,7 +17,7 @@ a = Analysis(
     ['blink-run.py'],
     pathex=[],
     binaries=[],
-    datas=[('macos', 'macos'), ('resources', 'share/blink'), ('blink', 'blink')],
+    datas=[('resources', 'share/blink'), ('blink', 'blink'), ('macos/xml-schemas', 'share/blink/xml-schemas/')],
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},

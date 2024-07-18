@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema targetNamespace="urn:ag-projects:xml:ns:addressbook"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns="urn:ag-projects:xml:ns:addressbook"
+    elementFormDefault="qualified" attributeFormDefault="unqualified">
+
+   <xs:complexType name="Group">
+    <xs:sequence>
+     <xs:element name="name" type="xs:string"/>
+     <xs:element name="contacts" type="ContactList"/>
+     <xs:any namespace="##other" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:ID" use="required"/>
+   </xs:complexType>
+
+   <xs:complexType name="ContactList">
+    <xs:sequence>
+     <xs:element name="contact_id" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+   </xs:complexType>
+
+   <xs:complexType name="Contact">
+    <xs:sequence>
+     <xs:element name="name" type="xs:string"/>
+     <xs:element name="uris" type="ContactURIList"/>
+     <xs:element name="dialog" type="DialogHandling"/>
+     <xs:element name="presence" type="PresenceHandling"/>
+     <xs:any namespace="##other" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:ID" use="required"/>
+   </xs:complexType>
+
+   <xs:complexType name="ContactURIList">
+    <xs:sequence>
+     <xs:element name="uri" type="ContactURI" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="default" type="xs:string"/>
+   </xs:complexType>
+
+   <xs:complexType name="ContactURI">
+    <xs:sequence>
+     <xs:any namespace="##other" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="id"   type="xs:ID"     use="required"/>
+    <xs:attribute name="uri"  type="xs:anyURI" use="required"/>
+    <xs:attribute name="type" type="xs:string"/>
+   </xs:complexType>
+
+   <xs:complexType name="DialogHandling">
+    <xs:sequence>
+     <xs:element name="policy" type="PolicyString"/>
+     <xs:element name="subscribe" type="xs:boolean"/>
+    </xs:sequence>
+   </xs:complexType>
+
+   <xs:complexType name="PresenceHandling">
+    <xs:sequence>
+     <xs:element name="policy" type="PolicyString"/>
+     <xs:element name="subscribe" type="xs:boolean"/>
+    </xs:sequence>
+   </xs:complexType>
+
+   <xs:simpleType name="PolicyString">
+    <xs:restriction base="xs:string">
+     <xs:enumeration value="allow"/>
+     <xs:enumeration value="block"/>
+     <xs:enumeration value="default"/>
+    </xs:restriction>
+   </xs:simpleType>
+
+   <xs:complexType name="Policy">
+    <xs:sequence>
+     <xs:element name="name" type="xs:string"/>
+     <xs:element name="dialog" type="DialogHandling"/>
+     <xs:element name="presence" type="PresenceHandling"/>
+     <xs:any namespace="##other" processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="id"  type="xs:ID"     use="required"/>
+    <xs:attribute name="uri" type="xs:anyURI" use="required"/>
+   </xs:complexType>
+
+</xs:schema>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="urn:gsma:params:xml:ns:rcs:rcs:fthttp" xmlns:x="urn:gsma:params:xml:ns:rcs:rcs:up:fthttpext" xmlns:ns1="urn:gsma:params:xml:ns:rcs:rcs:fthttp">
+  <xs:import namespace="urn:gsma:params:xml:ns:rcs:rcs:up:fthttpext" schemaLocation="rcs-fthttp-ext.xsd"/>
+  <xs:element name="file">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element maxOccurs="unbounded" ref="ns1:file-info"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="file-info">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="ns1:file-size"/>
+        <xs:element minOccurs="0" ref="ns1:file-name"/>
+        <xs:element ref="ns1:content-type"/>
+        <xs:element ref="ns1:data"/>
+        <xs:element minOccurs="0" ref="x:branded-url"/>
+        <xs:element minOccurs="0" ref="x:file-hash"/>
+      </xs:sequence>
+      <xs:attribute name="file-disposition"/>
+      <xs:attribute name="type" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="file-size" type="xs:nonNegativeInteger"/>
+  <xs:element name="file-name" type="xs:string"/>
+  <xs:element name="content-type" type="xs:string"/>
+  <xs:element name="data">
+    <xs:complexType>
+      <xs:attribute name="until" type='xs:dateTime' use="required"/>
+      <xs:attribute name="url" type='xs:anyURI' use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
