@@ -203,10 +203,7 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkMessageDidFail(self, notification):
         data = notification.data
-        try:
-            status = 'failed-local' if data.data.originator == 'local' else 'failed'
-        except AttributeError:
-            status = 'failed'
+        status = 'failed-local' if data.originator == 'local' else 'failed'
         self.message_history.update(data.id, status)
 
     def _NH_BlinkMessageWillDelete(self, notification):

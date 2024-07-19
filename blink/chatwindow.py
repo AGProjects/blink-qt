@@ -3220,11 +3220,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = blink_session.items.chat
         if session is None:
             return
-        reason = notification.data.data.reason.decode() if isinstance(notification.data.data.reason, bytes) else notification.data.data.reason
-        try:
-            status = 'failed-local' if notification.data.originator == 'local' else 'failed'
-        except AttributeError:
-            status = 'failed'
+
+        reason = notification.data.reason
+        status = 'failed-local' if notification.data.originator == 'local' else 'failed'
+
         if status == 'failed':
             # session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
             pass

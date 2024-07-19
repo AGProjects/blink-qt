@@ -1,4 +1,5 @@
 import bisect
+import dns.resolver
 import json
 import os
 import re
@@ -28,6 +29,7 @@ from zope.interface import implementer
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPURI, FromHeader, ToHeader, Message, RouteHeader
+from sipsimple.core._core import PJSIPError
 from sipsimple.lookup import DNSLookup
 from sipsimple.payloads import ParserError
 from sipsimple.payloads.iscomposing import IsComposingDocument, IsComposingMessage, State, LastActive, Refresh, ContentType
@@ -43,9 +45,12 @@ from blink.resources import Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.util import run_in_gui_thread, translate
 
-
 __all__ = ['MessageManager', 'BlinkMessage']
 
+dns_error_map = {dns.resolver.NXDOMAIN: 'DNS record does not exist',
+               dns.resolver.NoAnswer: 'DNS response contains no answer',
+               dns.resolver.NoNameservers: 'no DNS name servers could be reached',
+               dns.resolver.Timeout: 'no DNS response received, the query has timed out'}
 
 ui_class, base_class = uic.loadUiType(Resources.get('generate_pgp_key_dialog.ui'))
 
@@ -347,6 +352,7 @@ class OutgoingMessage(object):
         self.session = session
         self.contact = contact
         self.is_secure = False
+        self.dns_failed_reason = None
 
     @property
     def message(self):
@@ -387,12 +393,8 @@ class OutgoingMessage(object):
                         try:
                             content = stream.encrypt(self.content, self.content_type)
                         except Exception as e:
-                            notification_center.post_notification('BlinkMessageDidFail',
-                                                                  sender=self.session,
-                                                                  data=NotificationData(
-                                                                      data=NotificationData(
-                                                                          code='',
-                                                                          reason=f"Encryption error {e}"), id=self.id))
+                            data=NotificationData(originator='remote',reason=f"Encryption error {e}", id=self.id)
+                            notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
                             return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
@@ -425,7 +427,13 @@ class OutgoingMessage(object):
             notification_center.add_observer(self, sender=message_request)
             if self.is_secure:
                 notification_center.post_notification('BlinkMessageDidEncrypt', sender=self.session, data=NotificationData(message=self.message))
-            message_request.send()
+            try:
+                message_request.send()
+            except PJSIPError as e:
+                log.info(f'Sending message {self.id} failed: {str(e)}')
+                notification_center = NotificationCenter()
+                data = NotificationData(originator='local', reason=str(e), id=self.id)
+                notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
         else:
             pass
             # TODO
@@ -451,6 +459,11 @@ class OutgoingMessage(object):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    def _NH_DNSLookupTrace(self, notification):
+        if notification.data.error and notification.data.query_type == 'A':
+            reason = dns_error_map.get(notification.data.error.__class__, '')
+            self.dns_failed_reason = reason
 
     def _NH_DNSLookupDidSucceed(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
@@ -484,8 +497,15 @@ class OutgoingMessage(object):
 
         if self.session is None:
             return
+
+        reason = self.dns_failed_reason or notification.data.error
+        originator = 'local' if 'no DNS' in self.dns_failed_reason else 'remote'
+
+        log.info(f'DNS lookup for message {self.id} failed {originator}ly: {reason}')
+
+        data = NotificationData(reason=reason, originator=originator, id=self.id)
         notification_center = NotificationCenter()
-        notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=NotificationData(code=404, reason=notification.data.error), id=self.id))
+        notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
 
     def _NH_SIPMessageDidSucceed(self, notification):
         notification_center = NotificationCenter()
@@ -510,10 +530,11 @@ class OutgoingMessage(object):
         originator = 'local'
         if hasattr(notification.data, 'headers'):
             originator = 'remote'
-        notification.data.originator = originator
 
+        reason = notification.data.reason.decode() if isinstance(notification.data.reason, bytes) else notification.data.reason
+        data = NotificationData(reason=reason, originator=originator, id=self.id)
         notification_center = NotificationCenter()
-        notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
+        notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
 
 
 @implementer(IObserver)
