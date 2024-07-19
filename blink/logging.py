@@ -141,7 +141,7 @@ class LogManager(object, metaclass=Singleton):
         settings = SIPSimpleSettings()
         if notification.name not in ('UILogMessage', 'SIPEngineLog', 'SIPEngineSIPTrace', 'MessagingTrace') and settings.logs.trace_notifications:
             message = 'Notification name=%s sender=%s data=%s' % (notification.name, notification.sender, pformat(notification.data))
-            msg = '%s [%s %d]: %s\n' % (datetime.now(), self.name, self.pid, message)
+            msg = '%s: %s\n' % (datetime.now(), message)
             try:
                 self.notifications_file.write(msg)
                 self.notifications_file.flush()
@@ -179,7 +179,7 @@ class LogManager(object, metaclass=Singleton):
                data,
                '--']
         message = '\n'.join(buf)
-        msg = '%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message)
+        msg = '%s: %s\n' % (notification.datetime, message)
         try:
             self.siptrace_file.write(msg)
             self.siptrace_file.flush()
@@ -193,7 +193,7 @@ class LogManager(object, metaclass=Singleton):
         if not settings.logs.trace_pjsip:
             return
         message = "(%(level)d) %(message)s" % notification.data.__dict__
-        msg = '[%s %d] %s\n' % (self.name, self.pid, message)
+        msg = '%s\n' % (message)
         try:
             self.pjsiptrace_file.write(msg)
             self.pjsiptrace_file.flush()
@@ -223,7 +223,7 @@ class LogManager(object, metaclass=Singleton):
                            dns.resolver.Timeout: 'no DNS response received, the query has timed out'}
             message += ' failed: %s' % message_map.get(notification.data.error.__class__, '')
 
-        msg = '%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message)
+        msg = '%s: %s\n' % (notification.datetime, message)
         try:
             self.siptrace_file.write(msg)
             self.siptrace_file.flush()
@@ -237,7 +237,7 @@ class LogManager(object, metaclass=Singleton):
         if not settings.logs.trace_messaging:
             return
         message = "(%(level)s) %(message)s" % notification.data.__dict__
-        msg = '%s [%s %d] %s\n' % (notification.datetime, self.name, self.pid, message)
+        msg = '%s %s\n' % (notification.datetime, message)
         try:
             self.messagingtrace_file.write(msg)
             self.messagingtrace_file.flush()
@@ -255,7 +255,7 @@ class LogManager(object, metaclass=Singleton):
         remote_address = '%s:%d' % (notification.data.remote_address.host, notification.data.remote_address.port)
         message = '%s %s %s\n' % (local_address, arrow, remote_address) + notification.data.data
         prefix = '[Illegal request!] ' if notification.data.illegal else ''
-        msg = '%s [%s %d]: %s%s\n' % (notification.datetime, self.name, self.pid, prefix, message)
+        msg = '%s: %s%s\n' % (notification.datetime, prefix, message)
         try:
             self.msrptrace_file.write(msg)
             self.msrptrace_file.flush()
@@ -271,7 +271,7 @@ class LogManager(object, metaclass=Singleton):
         if notification.data.level < self.msrp_level:
             return
         message = '%s %s' % (notification.data.level, notification.data.message)
-        msg = '%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message)
+        msg = '%s: %s\n' % (notification.datetime, message)
 
         try:
             self.msrptrace_file.write(msg)
@@ -282,7 +282,7 @@ class LogManager(object, metaclass=Singleton):
         NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='msrp'))
 
     def log_xcap(self, notification, message):
-        msg = '%s [%s %d]: %s\n' % (notification.datetime, self.name, self.pid, message)
+        msg = '%s: %s\n' % (notification.datetime, message)
         try:
             self.xcaptrace_file.write(msg)
             self.xcaptrace_file.flush()

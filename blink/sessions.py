@@ -250,7 +250,6 @@ class MessageStreamInfo(object):
         pass
 
 
-
 class StreamsInfo(object):
     __slots__ = 'audio', 'video', 'chat', 'screen_sharing', 'messages'
 

@@ -4,14 +4,13 @@ import pickle as pickle
 import os
 import re
 import uuid
-
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from application.python.types import Singleton
-from application.system import makedirs, unlink
+from application.system import host, makedirs, unlink
 
 from datetime import date, timezone
 from dateutil.parser import parse
@@ -434,7 +433,7 @@ class DownloadHistory(object, metaclass=Singleton):
                 continue
 
             if message.state != 'displayed' and message.state != state:
-                log.info(f'== Updating {message.direction} {id} {message.state} -> {state}')
+                log.info(f'Update {message.direction} {id} {message.state} -> {state}')
                 message.state = state
 
 
@@ -629,8 +628,6 @@ class MessageHistory(object, metaclass=Singleton):
             if match:
                 remote_uri = match.group('number')
 
-        log.info(f"Storing {direction} message {message.id} of account {session.account.id} with {remote_uri} ")
-
         if direction == 'outgoing':
             display_name = message.sender.display_name
         else:
@@ -683,6 +680,11 @@ class MessageHistory(object, metaclass=Singleton):
                 if message.content != dbmessage.content:
                     dbmessage.content = message.content
         else:
+            if direction == 'outgoing':
+                log.info(f"Message {message.id} from {session.account.id} to {remote_uri} stored")
+            else:
+                log.info(f"Message {message.id} from {remote_uri} to {session.account.id} stored")
+
             if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
                 notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=session.account, data=NotificationData(remote_uri=remote_uri, state=state, direction=direction))
@@ -703,7 +705,7 @@ class MessageHistory(object, metaclass=Singleton):
                 continue
 
             if (state == 'deleted' or message.state != 'displayed') and message.state != state:
-                log.info(f'== Updating {message.direction} {id} {message.state} -> {state}')
+                log.info(f'{message.direction} message {id} {message.state} -> {state}')
                 message.state = state
 
     @run_in_thread('db')
@@ -716,7 +718,8 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             pass
         else:
-            log.info('Conversation with %s read saved to history' % remote_uri)
+            pass
+            #log.info('Conversation with %s read saved to history' % remote_uri)
 
     @run_in_thread('db')
     def update_encryption(self, notification):
@@ -729,7 +732,7 @@ class MessageHistory(object, metaclass=Singleton):
             for db_message in db_messages:
                 encryption_type = str(f'{message_info.encryption}')
                 if db_message.encryption_type != encryption_type:
-                    log.debug(f'== Updating {message.direction} {message.id} encryption to {encryption_type}')
+                    log.debug(f'Update {message.direction} {message.id} encryption to {encryption_type}')
                     db_message.encryption_type = encryption_type
 
     @run_in_thread('db')

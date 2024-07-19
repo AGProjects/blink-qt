@@ -434,6 +434,8 @@ class OutgoingMessage(object):
                 notification_center = NotificationCenter()
                 data = NotificationData(originator='local', reason=str(e), id=self.id)
                 notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
+            else:
+                log.info(f'{content_type} message {self.id} sent')
         else:
             pass
             # TODO
@@ -535,6 +537,13 @@ class OutgoingMessage(object):
         data = NotificationData(reason=reason, originator=originator, id=self.id)
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
+        
+        try:
+            code = notification.data.code
+        except AttributeError:
+            code = ''
+
+        log.info(f'Sending message {self.id} failed {originator}ly: {code} {reason}')
 
 
 @implementer(IObserver)
@@ -1080,7 +1089,8 @@ class MessageManager(object, metaclass=Singleton):
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
         if x_replicated_message is not Null:
-            log.debug(f'Message {message_id} is a replicated message from another device')
+            pass
+            #log.debug(f'Message {message_id} is a replicated message from another device')
 
         if encryption == 'OpenPGP':
             if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
@@ -1398,6 +1408,7 @@ class MessageManager(object, metaclass=Singleton):
         self.send_imdn_message(session, msg_id, message.timestamp, 'error')
 
     def _NH_BlinkMessageHistoryFailedLocalFound(self, notification):
+        log.info('Resending unsent messages...')
         messages = notification.data.messages
         for message in messages:
             from blink.contacts import URIUtils
