@@ -437,11 +437,15 @@ class DownloadHistory(object, metaclass=Singleton):
                 message.state = state
 
 
+@implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
     __version__ = 3
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='NetworkConditionsDidChange')
+
         db_file = ApplicationData.get('message_history.db')
         db_uri = f'sqlite://{db_file}'
         makedirs(ApplicationData.directory)
@@ -450,6 +454,15 @@ class MessageHistory(object, metaclass=Singleton):
         self._retry_timer.setInterval(60 * 1000)  # a minute (in milliseconds)
         self._retry_timer.timeout.connect(self._retry_failed_messages)
         self._retry_timer.start()
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_NetworkConditionsDidChange(self, notification):
+        if host.default_ip is not None:
+            self._retry_failed_messages()
 
     @run_in_thread('db')
     def _initialize(self, db_uri):
