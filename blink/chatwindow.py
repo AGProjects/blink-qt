@@ -2198,7 +2198,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_menu = QMenu(self.control_button)
         self.control_button.setMenu(self.control_menu)
         self.control_button.actions = ContextMenuActions()
-        self.control_button.actions.connect = QAction(translate('chat_window', "Start MSRP chat"), self, triggered=self._AH_Connect)
+        self.control_button.actions.connect_with_msrp = QAction(translate('chat_window', "Start MSRP chat"), self, triggered=self._AH_Connect)
         self.control_button.actions.connect_with_audio = QAction(translate('chat_window', "Start audio call"), self, triggered=self._AH_ConnectWithAudio)
         self.control_button.actions.mark_messages_read = QAction(translate('chat_window', "Mark as read"), self, triggered=self._AH_MarkMessagesRead)
         self.control_button.actions.connect_with_video = QAction(translate('chat_window', "Start video call"), self, triggered=self._AH_ConnectWithVideo)
@@ -2353,6 +2353,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.control_button.setIcon(self.control_icon)
             menu.clear()
             menu.addAction(self.control_button.actions.mark_messages_read)
+            menu.addSeparator()
+            menu.addAction(self.control_button.actions.send_files)
+            menu.addAction(self.control_button.actions.show_transferred_files)
             if state not in ('connecting/*', 'connected/*'):
                 if messages_info.encryption != 'OTR':
                     if self.selected_session.chat_widget.otr_timer.isActive():
@@ -2363,9 +2366,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 else:
                     if messages_info.encryption != 'OpenPGP':
                         menu.addAction(self.control_button.actions.disable_otr)
-                menu.addAction(self.control_button.actions.connect)
                 menu.addAction(self.control_button.actions.connect_with_audio)
                 menu.addAction(self.control_button.actions.connect_with_video)
+                menu.addSeparator()
+                menu.addAction(self.control_button.actions.connect_with_msrp)
             else:
                 menu.addAction(self.control_button.actions.disconnect)
                 if state == 'connected':
@@ -2384,10 +2388,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.add_audio)
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
                         menu.addAction(self.control_button.actions.remove_audio)
-                    if 'chat' not in stream_types:
-                        menu.addAction(self.control_button.actions.add_chat)
-                    elif stream_types != {'chat'}:
-                        menu.addAction(self.control_button.actions.remove_chat)
                     if 'video' not in stream_types:
                         menu.addAction(self.control_button.actions.add_video)
                     elif stream_types != {'video'}:
@@ -2397,8 +2397,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.share_my_screen)
                     elif stream_types != {'screen-sharing'}:
                         menu.addAction(self.control_button.actions.end_screen_sharing)
-            menu.addAction(self.control_button.actions.send_files)
-            menu.addAction(self.control_button.actions.show_transferred_files)
+                    menu.addSeparator()
+                    if 'chat' not in stream_types:
+                        menu.addAction(self.control_button.actions.add_chat)
+                    elif stream_types != {'chat'}:
+                        menu.addAction(self.control_button.actions.remove_chat)
             self.control_button.setMenu(menu)
 
     def _update_panel_buttons(self):
