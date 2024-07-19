@@ -216,6 +216,9 @@ class MainWindow(base_class, ui_class):
         self.show_last_messages_action.triggered.connect(self._AH_ShowLastMessagesActionTriggered)
         self.export_pgp_key_action.triggered.connect(self._AH_ExportPGPkeyActionTriggered)
 
+        # Devices menu
+        self.devices_menu.aboutToShow.connect(self.refresh_devices)
+
         # Window menu actions
         self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
         self.transfers_window_action.triggered.connect(self._AH_TransfersWindowActionTriggered)
@@ -223,6 +226,18 @@ class MainWindow(base_class, ui_class):
         self.received_files_window_action.triggered.connect(self._AH_ReceivedFilesWindowActionTriggered)
         self.screenshots_window_action.triggered.connect(self._AH_ScreenshotsWindowActionTriggered)
         self.audio_recordings_action.triggered.connect(self._AH_AudioRecordingsActionTriggered)
+
+    def refresh_devices(self):
+        SIPApplication.engine._ua.refresh_sound_devices()
+        settings = SIPSimpleSettings()
+        in_out_devices = list(set(SIPApplication.engine.input_devices) & set(SIPApplication.engine.output_devices))
+        in_out_devices.append('system_default')
+        if settings.audio.input_device not in in_out_devices:
+            settings.audio.input_device = 'system_default'
+        if settings.audio.output_device not in in_out_devices:
+            settings.audio.output_device = 'system_default'
+
+        settings.save()
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
