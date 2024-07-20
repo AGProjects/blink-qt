@@ -37,6 +37,7 @@ from lxml.html.clean import autolink
 from weakref import proxy
 from zope.interface import implementer
 
+
 from sipsimple.account import AccountManager
 from sipsimple.application import SIPApplication
 from sipsimple.audio import WavePlayer
@@ -52,9 +53,10 @@ from blink.configuration.datatypes import File, FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.history import HistoryManager
+from blink.logging import MessagingTrace as log
 from blink.messages import MessageManager, BlinkMessage
-from blink.resources import IconManager, Resources
-from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter, IncomingDialogBase, RequestList
+from blink.resources import ApplicationData, IconManager, Resources
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter, IncomingDialogBase, RequestList, BlinkFileTransfer
 from blink.util import run_in_gui_thread, call_later, translate, copy_transfer_file
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.graph import Graph
@@ -1293,7 +1295,7 @@ class ChatWidget(base_class, ui_class):
         self.chat_view.last_message_id = id
 
     def _SH_LinkClicked(self, link):
-        directory = SIPSimpleSettings().file_transfer.directory.normalized
+        directory = ApplicationData.get(f'downloads')
         try:
             link = copy_transfer_file(link, directory)
             QDesktopServices.openUrl(link)
@@ -1456,8 +1458,14 @@ class ChatWidget(base_class, ui_class):
 
         messages = [message for (timestamp, msg_id, message) in self.timestamp_rendered_messages if msg_id == item.id]
         account_manager = AccountManager()
-        account = account_manager.get_account(messages[0].account.id)
-        self.delete_message(blink_session, account, item.id, messages)
+
+        try:
+            msg = messages[0]
+        except IndexError:
+            pass
+        else:
+            account = account_manager.get_account(msg.account.id)
+            self.delete_message(blink_session, account, item.id, messages)
 
 del ui_class, base_class
 
@@ -2127,8 +2135,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='MessageStreamPGPKeysDidLoad')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
-        notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkSessionDidShareFile')
 
         self.account_model = AccountModel(self)
         self.enabled_account_model = ActiveAccountModel(self.account_model, self)
@@ -2987,10 +2995,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         info.data.until if info.data.until else None,
                         url=info.data.url,
                         type=info.content_type.value,
-                        account=account)
+                        account=account,
+                        protocol='sylk')
 
             file.name = HistoryManager().get_decrypted_filename(file)
-
+            log.info(f"History File {file.id} url {file.url} name {file.name} ")
             is_audio_message = AudioDescriptor(info.file_name.value)
 
             try:
@@ -3050,7 +3059,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                                                            data=NotificationData(file=file, direction=message.direction))
                     return content
 
-                if hash:
+                if hash and file.protocol == 'msrp':
                     SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.name, file.hash, file.id, account=file.account, conference_file=False)
                 else:
                     SessionManager().get_file_from_url(blink_session, file)
@@ -3260,47 +3269,43 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     MessageManager().send_imdn_message(blink_session, message.message_id, message.timestamp, 'displayed', account)
             session.chat_widget.update_message_encryption(message.message_id, True)
 
+    def _NH_BlinkSessionDidShareFile(self, notification):
+        if self.selected_session and self.selected_session.blink_session == notification.sender:
+             self._AH_ShowTransferredFiles()
+
     def _NH_BlinkFileTransferDidEnd(self, notification):
-        transfer_session = notification.sender
+        if type(notification.sender) is BlinkFileTransfer:
+            try:
+                blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is notification.sender.contact.settings)
+            except StopIteration:
+                return
 
-        if notification.data.error:
-            return
-        try:
-            blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
-        except StopIteration:
-            return
+            if notification.data.error:
+                return
 
-        if AudioDescriptor(transfer_session.file_selector.name):
-            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{transfer_session.file_selector.name}"></audio></div>'''
+            id = notification.sender.id
+            filename = notification.sender.file_selector.name
+
+            if notification.data.must_open:
+                QDesktopServices.openUrl(QUrl.filename)
+
+        else:
+            blink_session = notification.sender
+            filename = notification.data.filename
+            id = notification.data.id
+
+        if AudioDescriptor(filename):
+            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{filename}"></audio></div>'''
             blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
             return
 
-        file_descriptors  = [FileDescriptor(transfer_session.file_selector.name)]
+        file_descriptors  = [FileDescriptor(filename)]
         image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
 
         for image in image_descriptors:
             image_data = base64.b64encode(image.thumbnail.data).decode()
             content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
-            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
-
-    def _NH_BlinkHTTPFileTranfserDidEnd(self, notification):
-        blink_session = notification.sender
-
-        if blink_session is None:
-            return
-
-        if AudioDescriptor(notification.data.filename):
-            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{notification.data.filename}"></audio></div>'''
-            blink_session.items.chat.chat_widget.update_message_text(notification.data.file.id, content)
-            return
-
-        file_descriptors  = [FileDescriptor(notification.data.file.name)]
-        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
-
-        for image in image_descriptors:
-            image_data = base64.b64encode(image.thumbnail.data).decode()
-            content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
-            blink_session.items.chat.chat_widget.update_message_text(notification.data.file.id, content)
+            blink_session.items.chat.chat_widget.update_message_text(id, content)
 
     def _NH_PGPFileDidNotDecrypt(self, notification):
         transfer_session = notification.sender
@@ -3459,7 +3464,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         while self.fetch_after_load:
             (blink_session, file, message, info) = self.fetch_after_load.popleft()
-            if file.hash is not None:
+            if file.hash is not None and file.protocol == 'msrp':
                 SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.original_name, file.hash, file.id, account=file.account, conference_file=False)
             else:
                 SessionManager().get_file_from_url(blink_session, file)
@@ -3840,7 +3845,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session = self.selected_session.blink_session
         self.session_list.hide()
         self._SH_FilesButtonClicked(True)
-        
 
     def _AH_ConnectWithAudio(self):
         stream_descriptions = [StreamDescription('audio')]

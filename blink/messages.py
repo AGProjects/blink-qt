@@ -895,7 +895,7 @@ class MessageManager(object, metaclass=Singleton):
                                                                             account=account))
                 file = File(document['filename'], document['filesize'], contact,
                             document['hash'], message['message_id'], ISOTimestamp(until),
-                            document['url'], account=account)
+                            document['url'], account=account, protocol='sylk')
 
                 notification_center.post_notification('BlinkSessionDidShareFile',
                                                       sender=blink_session,
@@ -1252,7 +1252,7 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if content_type.lower() == FTHTTPDocument.content_type:
-            log.info("Messge is a filetransfer message")
+            log.info("Messsge is a filetransfer message")
             try:
                 document = FTHTTPDocument.parse(body)
             except ParserError as e:
@@ -1276,7 +1276,8 @@ class MessageManager(object, metaclass=Singleton):
                                 message_id,
                                 until,
                                 info.data.url,
-                                account=account)
+                                account=account,
+                                protocol='sylk')
 
                     message.is_secure = info.file_name.value.endswith('.asc')
 

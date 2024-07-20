@@ -53,7 +53,7 @@ from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
-from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file, UniqueFilenameGenerator
+from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status, StateColor
 from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key
@@ -1589,7 +1589,9 @@ class ServerConference(object):
                                    file.size,
                                    file.contact,
                                    file.hash,
-                                   str(uuid.uuid4()))
+                                   str(uuid.uuid4()),
+                                   protocol='msrp')
+
                 notification.center.post_notification('BlinkSessionDidShareFile', sender=self.session, data=NotificationData(file=shared_file, direction='incoming'))
 
     def _NH_SIPConferenceDidNotAddParticipant(self, notification):
@@ -4110,6 +4112,9 @@ class BlinkFileTransfer(BlinkSessionBase):
         self._uri = None
         self._stat = None
 
+        # Open file after download
+        self.must_open = False
+
     def __establish__(self):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferWasCreated', sender=self)
@@ -4178,7 +4183,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self._stat = os.fstat(self.file_selector.fd.fileno())
 
         if self.file_selector.type.startswith('image'):
-            directory = ApplicationData.get(f'transfer_images/{self.id}')
+            directory = ApplicationData.get(f'downloads/{self.id}')
             makedirs(directory)
             shutil.copy(filename, directory)
 
@@ -4198,10 +4203,11 @@ class BlinkFileTransfer(BlinkSessionBase):
                 notification_center.add_observer(self, name='PGPFileDidEncrypt')
                 message_stream.encrypt_file(filename, self)
 
-    def init_outgoing_pull(self, account, contact, contact_uri, filename, hash, transfer_id=RandomID, conference_file=True):
+    def init_outgoing_pull(self, account, contact, contact_uri, filename, hash, transfer_id=RandomID, conference_file=True, must_open=False):
         assert self.state is None
         self.transfer_type = 'pull'
         self.direction = 'outgoing'
+        self.must_open = must_open
 
         self.conference_file = conference_file
 
@@ -4354,7 +4360,7 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         self.state = state
         notification_center = NotificationCenter()
-        notification_center.post_notification('BlinkFileTransferDidEnd', sender=self, data=NotificationData(reason=state.reason, error=state.error))
+        notification_center.post_notification('BlinkFileTransferDidEnd', sender=self, data=NotificationData(id=self.id, filename=self.file_selector.name, reason=state.reason, error=state.error, must_open=self.must_open))
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -4380,7 +4386,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.handler = self.stream.handler
 
         if not self.conference_file:
-            directory = ApplicationData.get(f'transfer_images/{self.id}')
+            directory = ApplicationData.get(f'downloads/{self.id}')
             makedirs(directory)
             self.handler.save_directory = directory
 
@@ -4431,8 +4437,9 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.file_selector.name = notification.data.filename
         notification.center.post_notification('BlinkFileTransferDidDecrypt',
                                               sender=self,
-                                              data=NotificationData(reason='File decrypted'))
-        self._terminate(failure_reason=None)
+                                              data=NotificationData(reason='File decrypted', filename=notification.data.filename, must_open=notification.data.must_open, id=notification.data.id))
+        if not notification.data.must_open:
+            self._terminate(failure_reason=None)
 
     def _NH_PGPFileDidNotDecrypt(self, notification):
         if notification.sender is not self:
@@ -4491,7 +4498,7 @@ class BlinkFileTransfer(BlinkSessionBase):
             notification_center.add_observer(self, name='PGPFileDidDecrypt')
             notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
 
-            message_stream.decrypt_file(self.file_selector.name, self)
+            message_stream.decrypt_file(self.file_selector.name, self, id=self.id)
             return
 
         self._terminate(failure_reason=failure_reason)
@@ -4846,6 +4853,8 @@ class FileTransferItem(object):
         self.status = notification.data.reason
         self.widget.update_content(self)
         notification.center.post_notification('FileTransferItemDidChange', sender=self)
+        if notification.data.must_open:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(notification.data.filename))
 
     def _NH_BlinkFileTransferDidNotDecrypt(self, notification):
         self.status = notification.data.reason
@@ -5332,7 +5341,8 @@ class FileListModel(QAbstractListModel):
             return
 
         if self.session.remote_focus:
-            self.addItem(FileListItem(notification.data.file, direction=notification.data.direction, conference_file=True))
+            if notification.data.file.protocol == 'msrp':
+                self.addItem(FileListItem(notification.data.file, direction=notification.data.direction, conference_file=True))
             return
 
         self.addItem(FileListItem(notification.data.file, direction=notification.data.direction))
@@ -5342,10 +5352,10 @@ class FileListModel(QAbstractListModel):
         id = notification.data.id
         if id in self.items:
             item = [item for item in self.items if item.id == id][0]
-            if not item.hash:
+            if item.hash and item.file.protocol == 'msrp':
+                SessionManager().get_file(session.contact, session.contact_uri, item.file.original_name, item.hash, item.id, account=item.account)
+            else:
                 SessionManager().get_file_from_url(session, item.file)
-                return
-            SessionManager().get_file(session.contact, session.contact_uri, item.file.original_name, item.hash, item.id, account=item.account)
 
     def _NH_BlinkFileTransferNewIncoming(self, notification):
         transfer = notification.sender
@@ -5385,10 +5395,10 @@ class FileListDelegate(QStyledItemDelegate):
             if item.expired:
                 return True
 
-            if not item.hash:
+            if item.hash and item.file.protocol == 'msrp':
+                SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
+            else:
                 SessionManager().get_file_from_url(model.session, item.file)
-                return True
-            SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
             return True
         return super(FileListDelegate, self).editorEvent(event, model, option, index)
 
@@ -5429,6 +5439,7 @@ class FileListView(QListView, ColorHelperMixin):
 
     def contextMenuEvent(self, event):
         menu = self.context_menu
+        menu.clear()
         index = self.indexAt(event.pos())
         if index.isValid():
             item = index.data(Qt.ItemDataRole.UserRole)
@@ -5516,26 +5527,45 @@ class FileListView(QListView, ColorHelperMixin):
         item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         model = self.model()
         if item.already_exists:
-            directory = SIPSimpleSettings().file_transfer.directory.normalized
-            link = copy_transfer_file(QUrl.fromLocalFile(item.decrypted_filename), directory)
-            QDesktopServices.openUrl(link)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(item.decrypted_filename))
             return True
 
-        if item.expired:
-            return True
+        if item.hash and item.file.protocol == 'msrp':
+            if os.path.exists(item.decrypted_filename):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(item.decrypted_filename))
+            else:
+                SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
+        else:
+            if item.expired:
+                return True
 
-        if not item.hash:
-            SessionManager().get_file_from_url(model.session, item.file)
-            return True
-        SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
+            if not os.path.exists(item.filename):
+                SessionManager().get_file_from_url(model.session, item.file, must_open=True)
+            else:
+                if item.encrypted and not os.path.exists(item.decrypted_filename):
+                    stream = StreamDescription('messages')
+                    message_stream = stream.create_stream()
+                    message_stream.blink_session = model.session
+                    if model.session.account.sms.enable_pgp and model.session.account.sms.private_key is not None and os.path.exists(model.session.account.sms.private_key.normalized):
+                        message_stream.enable_pgp()
+
+                    message_stream.decrypt_file(item.filename, model.session, id=item.file.id, must_open=True)
+        return True
 
     def _AH_RemoveFile(self):
         item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        model = self.model()
         self.model().deleteItem(item)
 
     def _AH_OpenTransfersFolder(self):
-        settings = BlinkSettings()
-        QDesktopServices.openUrl(QUrl.fromLocalFile(settings.transfers_directory.normalized))
+        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        if item.hash and item.file.protocol == 'msrp':
+            settings = BlinkSettings()
+            QDesktopServices.openUrl(QUrl.fromLocalFile(settings.transfers_directory.normalized))
+            return
+
+        directory = os.path.dirname(item.filename)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
 
 # Conference participants
@@ -6467,9 +6497,9 @@ class ConferenceDialog(base_class, ui_class):
         session_manager = SessionManager()
         account = account_manager.default_account
         if account is not BonjourAccount():
-            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.sip2sip.info')
+            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.sip2sip.info') if '@' not in current_text else current_text
         else:
-            conference_uri = '%s@%s' % (current_text, 'conference.sip2sip.info')
+            conference_uri = '%s@%s' % (current_text, 'conference.sip2sip.info') if '@' not in current_text else current_text
         contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')
         streams = []
         if self.audio_button.isChecked():
@@ -6592,7 +6622,7 @@ class SessionManager(object, metaclass=Singleton):
         transfer.connect()
         return transfer
 
-    def get_file(self, contact, contact_uri, filename, hash, transfer_id=RandomID, account=None, conference_file=True):
+    def get_file(self, contact, contact_uri, filename, hash, transfer_id=RandomID, account=None, conference_file=True, must_open=False):
         if account is None:
             if contact.type == 'bonjour':
                 account = BonjourAccount()
@@ -6601,14 +6631,65 @@ class SessionManager(object, metaclass=Singleton):
 
         self.send_file_directory = os.path.dirname(filename)
 
+        if os.path.exists(filename):
+            message_log.info(f"File {transfer_id} already downloaded {filename}")
+            return
+
+        message_log.info(f"Geting file {transfer_id} to {filename}")
+
         transfer = BlinkFileTransfer()
-        transfer.init_outgoing_pull(account, contact, contact_uri, filename, hash, transfer_id, conference_file)
+        transfer.init_outgoing_pull(account, contact, contact_uri, filename, hash, transfer_id, conference_file, must_open=must_open)
         transfer.connect()
         return transfer
 
+    def _NH_PGPFileDidDecrypt(self, notification):
+        notification.center.post_notification('BlinkFileTransferDidDecrypt',
+                                              sender=notification.sender,
+                                              data=NotificationData(reason='File decrypted', filename=notification.data.filename, must_open=notification.data.must_open, id=notification.data.id))
+
+    def _NH_BlinkFileTransferDidDecrypt(self, notification):
+        if notification.data.must_open:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(notification.data.filename))
+
+        data = notification.data
+        data.error = None
+
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkFileTransferDidEnd', sender=notification.sender, data=data)
+
+    def _NH_BlinkHTTPFileTransferDidEnd(self, notification):
+        file = notification.data.file
+        must_open = notification.data.must_open
+        session = notification.sender
+
+        if file.name.endswith('.asc'):
+            stream = StreamDescription('messages')
+            message_stream = stream.create_stream()
+            message_stream.blink_session = session
+            if session.account.sms.enable_pgp and session.account.sms.private_key is not None and os.path.exists(session.account.sms.private_key.normalized):
+                message_stream.enable_pgp()
+            message_stream.decrypt_file(file.name, session, must_open=must_open, id=file.id)
+        else:
+            data = notification.data
+            data.error = None
+            data.filename = file.name
+            data.id = file.id
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkFileTransferDidEnd', sender=session, data=data)
+
     @run_in_thread('file-io')
-    def get_file_from_url(self, session, file):
-        message_log.info(f"Fetching content for filetransfer message from: {file.url}")
+    def get_file_from_url(self, session, file, must_open=False):
+        notification_center = NotificationCenter()
+        directory = ApplicationData.get(f'downloads/{file.id}')
+        makedirs(directory)
+        full_filepath = os.path.join(directory, file.name)
+        file.name = full_filepath
+        if os.path.exists(full_filepath):
+            message_log.info(f"File {file.id} already downloaded {full_filepath}")
+            notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file, must_open=must_open))
+            return
+
+        message_log.info(f"Downloading file {file.id} from {file.url}, must_open: {must_open}")
         try:
             r = requests.get(file.url, timeout=10)
             r.raise_for_status()
@@ -6619,26 +6700,11 @@ class SessionManager(object, metaclass=Singleton):
         except requests.RequestException as e:
             message_log.warning(f'HTTP filetransfer error {e}')
         else:
-            directory = ApplicationData.get(f'transfer_images/{file.id}')
-            makedirs(directory)
-            full_filepath = os.path.join(directory, file.name)
-
-            for name in UniqueFilenameGenerator.generate(full_filepath):
-                try:
-                    openfile(name, 'xb')
-                except FileExistsError:
-                    continue
-                else:
-                    full_filepath = name
-                    break
-
             with open(full_filepath, 'wb+') as output_file:
                 output_file.write(r.content)
-            file.name = full_filepath
 
-            message_log.info(f'File saved: {full_filepath}')
-            notification_center = NotificationCenter()
-            notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file))
+            message_log.info(f'File {file.id} saved to {file.name}')
+            notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file, must_open=must_open))
 
     def update_ringtone(self):
         # Outgoing ringtone
@@ -6957,13 +7023,18 @@ class SessionManager(object, metaclass=Singleton):
             self.update_ringtone()
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
-        self.file_transfers.remove(notification.sender)
-        notification.center.remove_observer(self, sender=notification.sender)
-        if not notification.data.error and not self._filetransfer_tone_timer.isActive():
-            self._filetransfer_tone_timer.start()
-            player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
-            SIPApplication.voice_audio_bridge.add(player)
-            player.start()
+        try:
+            self.file_transfers.remove(notification.sender)
+        except ValueError:
+            # this was an HTTP transfer
+            pass
+        else:
+            notification.center.remove_observer(self, sender=notification.sender)
+            if not notification.data.error and not self._filetransfer_tone_timer.isActive():
+                self._filetransfer_tone_timer.start()
+                player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
+                SIPApplication.voice_audio_bridge.add(player)
+                player.start()
 
     def _NH_BlinkSessionListSelectionChanged(self, notification):
         selected_session = notification.data.selected_session

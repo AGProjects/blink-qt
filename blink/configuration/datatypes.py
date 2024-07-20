@@ -213,11 +213,15 @@ class GraphTimeScale(int):
 
 
 class File(object):
-    def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None, account=None):
-        self.name = os.path.join(SIPSimpleSettings().file_transfer.directory.normalized, name)
-        basename = os.path.basename(name)
-        if type is not None and (type.startswith('image/') or basename.startswith('sylk-audio-recording')):
-            self.name = os.path.join(ApplicationData.get('transfer_images'), id, name)
+    def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None, account=None, protocol='msrp'):
+        if protocol == 'msrp':
+            basename = os.path.basename(name)
+            self.name = os.path.join(SIPSimpleSettings().file_transfer.directory.normalized, basename)
+        elif protocol == 'sylk':
+            self.name = os.path.join(ApplicationData.get('downloads'), id, name)
+        else:
+            self.name = name
+
         self.original_name = self.name
         self.size = size
         self.contact = sender
@@ -227,6 +231,7 @@ class File(object):
         self.url = url
         self.type = type
         self.account = account
+        self.protocol = protocol
 
     @property
     def encrypted(self):
@@ -237,6 +242,10 @@ class File(object):
         if self.name.endswith('.asc'):
             return self.name.rsplit('.', 1)[0]
         return self.name
+
+    @property
+    def decrypted(self):
+        return self.original_name.endswith('.asc') and self.already_exists
 
     @property
     def already_exists(self):

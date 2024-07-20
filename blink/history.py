@@ -28,6 +28,8 @@ from blink.configuration.settings import BlinkSettings
 from blink.logging import MessagingTrace as log
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
+from blink.sessions import BlinkSession
+
 from blink.util import run_in_gui_thread, translate
 import traceback
 
@@ -226,7 +228,9 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
         if not notification.data.error:
-            self.download_history.add(notification.sender)
+            if type(notification.sender) is not BlinkSession:
+                # this was a HTTP transfer
+                self.download_history.add(notification.sender)
 
     def _NH_BlinkHTTPFileTransferDidEnd(self, notification):
         self.download_history.add_file(notification.sender, notification.data.file)
@@ -405,10 +409,10 @@ class DownloadHistory(object, metaclass=Singleton):
         filename = os.path.basename(file.filename)
         if filename.endswith('.asc'):
             filename = filename.rsplit('.', 1)[0]
-        cached_file = os.path.join(ApplicationData.get('transfer_images'), file.file_id, filename)
+        cached_file = os.path.join(ApplicationData.get('downloads'), file.file_id, filename)
         file_in_cache = os.path.exists(cached_file)
         if not file_in_cache:
-            log.info(f'== Not removing file, not present in cache: {file.file_id} {cached_file}')
+            #log.info(f'== Not removing file, not present in cache: {file.file_id} {cached_file}')
             return
         log.info(f'== Removing file from cache: {file.file_id} {cached_file}')
         unlink(cached_file)

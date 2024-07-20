@@ -293,15 +293,13 @@ class MessageStream(object, metaclass=MediaStreamType):
         notification_center.post_notification('PGPFileDidEncrypt', sender=session, data=NotificationData(filename=f'{filename}.asc', contents=encrypted_content))
 
     @run_in_thread('pgp')
-    def decrypt_file(self, filename, transfer_session):
+    def decrypt_file(self, filename, transfer_session, must_open=False, id=None):
         session = self.blink_session
         notification_center = NotificationCenter()
 
         if self.private_key is None and len(self.other_private_keys) == 0:
             notification_center.post_notification('PGPFileDidNotDecrypt', sender=session, data=NotificationData(filename=filename, error="No private keys found"))
             return
-
-        log.info(f'Trying to decrypt file {filename}')
 
         try:
             pgpMessage = PGPMessage.from_file(filename)
@@ -318,38 +316,28 @@ class MessageStream(object, metaclass=MediaStreamType):
                 decrypted_message = key.decrypt(pgpMessage)
             except (PGPDecryptionError, PGPError) as e:
                 error = e
-                log.debug(f'-- Decryption failed for {filename} with account key {account.id}, error: {error}')
+                log.debug(f'Decryption failed for {filename} with account key {account.id}, error: {error}')
                 continue
             else:
-                log.info(f'File decrypted: {decrypted_message.filename}')
                 dir = os.path.dirname(filename)
                 full_decrypted_filepath = os.path.join(dir, decrypted_message.filename)
                 file_contents = decrypted_message.message if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode()
 
-                for name in UniqueFilenameGenerator.generate(full_decrypted_filepath):
-                    try:
-                        openfile(name, 'xb')
-                    except FileExistsError:
-                        continue
-                    else:
-                        full_decrypted_filepath = name
-                        break
-
                 with open(full_decrypted_filepath, 'wb+') as output_file:
                     output_file.write(file_contents)
-                log.info(f'Decrypted file saved: {full_decrypted_filepath}')
                 correct_filepath = "%s/%s" % (dir, os.path.basename(filename)[:-4])
                 if full_decrypted_filepath != correct_filepath:
                     # PGP messes up the filename, replacing _ with spaces
                     log.info(f"Renaming decrypted file to {correct_filepath}")
                     os.rename(full_decrypted_filepath, correct_filepath)
 
+                log.info(f'Decrypted file saved: {correct_filepath}')
                 unlink(filename)
 
-                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=full_decrypted_filepath, account=account))
+                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=full_decrypted_filepath, account=account, must_open=must_open, id=id))
                 return
 
-        log.warning(f'-- Decryption failed for {filename}, error: {error}')
+        log.warning(f'Decryption failed for {filename}, error: {error}')
         notification_center.post_notification('PGPFileDidNotDecrypt', sender=transfer_session, data=NotificationData(filename=filename, error=error))
 
     @run_in_gui_thread
