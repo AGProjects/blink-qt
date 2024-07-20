@@ -337,7 +337,13 @@ class MessageStream(object, metaclass=MediaStreamType):
 
                 with open(full_decrypted_filepath, 'wb+') as output_file:
                     output_file.write(file_contents)
-                log.info(f'File saved: {full_decrypted_filepath}')
+                log.info(f'Decrypted file saved: {full_decrypted_filepath}')
+                correct_filepath = "%s/%s" % (dir, os.path.basename(filename)[:-4])
+                if full_decrypted_filepath != correct_filepath:
+                    # PGP messes up the filename, replacing _ with spaces
+                    log.info(f"Renaming decrypted file to {correct_filepath}")
+                    os.rename(full_decrypted_filepath, correct_filepath)
+
                 unlink(filename)
 
                 notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=full_decrypted_filepath, account=account))
