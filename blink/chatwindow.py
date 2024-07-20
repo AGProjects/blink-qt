@@ -1456,7 +1456,7 @@ class ChatWidget(base_class, ui_class):
 
         messages = [message for (timestamp, msg_id, message) in self.timestamp_rendered_messages if msg_id == item.id]
         account_manager = AccountManager()
-        account = account_manager.get_account(messages[0].sender.uri)
+        account = account_manager.get_account(messages[0].account.id)
         self.delete_message(blink_session, account, item.id, messages)
 
 del ui_class, base_class
