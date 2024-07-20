@@ -53,7 +53,7 @@ from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
-from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
+from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file, UniqueFilenameGenerator
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status, StateColor
 from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key
