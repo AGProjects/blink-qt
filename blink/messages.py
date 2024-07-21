@@ -654,8 +654,17 @@ class MessageManager(object, metaclass=Singleton):
     def _save_pgp_key(self, data, uri):
         log.info(f'Saving public key for {uri}')
         settings = SIPSimpleSettings()
+        account_manager = AccountManager()
 
         id = str(uri).replace('/', '_').replace('sip:', '')
+        try:
+            account = account_manager.get_account(id)
+        except KeyError:
+            pass
+        else:
+            # don't process my own public key
+            return
+
         directory = settings.chat.keys_directory.normalized
         filename = os.path.join(directory, id + '.pubkey')
         makedirs(directory)
