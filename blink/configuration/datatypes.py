@@ -213,7 +213,7 @@ class GraphTimeScale(int):
 
 
 class File(object):
-    def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None, account=None, protocol='msrp'):
+    def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None, account=None, protocol='msrp', downloading=False):
         if protocol == 'msrp':
             basename = os.path.basename(name)
             self.name = os.path.join(SIPSimpleSettings().file_transfer.directory.normalized, basename)
@@ -232,6 +232,7 @@ class File(object):
         self.type = type
         self.account = account
         self.protocol = protocol
+        self.downloading = downloading
 
     @property
     def encrypted(self):

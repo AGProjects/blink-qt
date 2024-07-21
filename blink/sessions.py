@@ -5142,15 +5142,21 @@ class FileListItemWidget(base_class, ui_class):
         self.filesize_label.setText('%s' % FileSizeFormatter.format(item.size))
         if item.encrypted:
             self.state_indicator.setPixmap(self.pixmaps.encrypted_transfer)
-        if item.until is not None and not item.in_conference:
-            if item.expired:
-                self.status_label.setText(translate('chat_window', "Expired: %s" % item.until.strftime('%d %b %Y %H:%M')))
-                self.setToolTip(translate('chat_window', "Item still available in cache or local"))
-                self.status_label.setStyleSheet('color: red')
-            else:
-                self.status_label.setText(translate('chat_window', "Expiry: %s" % item.until.strftime('%d %b %Y %H:%M')))
+        
+        if item.downloading:
+            self.status_label.setText(item.status)
+        elif item.download_error:
+            self.status_label.setText(item.download_error)
         else:
-            self.status_label.setVisible(False)
+            if item.until is not None and not item.in_conference:
+                if item.expired:
+                    self.status_label.setText(translate('chat_window', "Expired: %s" % item.until.strftime('%d %b %Y %H:%M')))
+                    self.setToolTip(translate('chat_window', "Item still available in cache or local"))
+                    self.status_label.setStyleSheet('color: red')
+                else:
+                    self.status_label.setText(translate('chat_window', "Expiry: %s" % item.until.strftime('%d %b %Y %H:%M')))
+            else:
+                self.status_label.setVisible(False)
 
 
 del ui_class, base_class
@@ -5164,6 +5170,8 @@ class FileListItem(object):
         self._direction = direction
         self._id = id
         self.in_conference = conference_file
+        self.downloading = False
+        self.download_error = None
 
         self.status = None
         self.progress = None
@@ -5173,6 +5181,11 @@ class FileListItem(object):
         self.widget = FileListItemWidget()
         self.widget.update_content(self, initial=True)
 
+        notification_center = NotificationCenter()
+        notification_center.add_observer(ObserverWeakrefProxy(self), name='BlinkHTTPTransferProgress')
+        notification_center.add_observer(ObserverWeakrefProxy(self), name='BlinkHTTPTransferFailed')
+        notification_center.add_observer(ObserverWeakrefProxy(self), name='BlinkHTTPTransferCompleted')
+        
     def __getstate__(self):
         state = self.__dict__.copy()
         del state['widget']
@@ -5243,6 +5256,54 @@ class FileListItem(object):
     def account(self):
         return self.file.account
 
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkHTTPTransferProgress(self, notification):
+        if notification.sender != self.file:
+            return
+
+        self.bytes = notification.data.bytes
+        self.total_bytes = notification.data.total_bytes
+        progress = int(self.bytes * 100 / self.total_bytes)
+        status = translate('sessions', 'Transferring: %s/%s (%s%%)') % (FileSizeFormatter.format(self.bytes), FileSizeFormatter.format(self.total_bytes), progress)
+        if progress == 100:
+            self.downloading = False
+            self.download_error = None
+        else:
+            self.downloading = True
+
+        if self.progress is None or progress > self.progress or status != self.status:
+            self.progress = progress
+            self.status = status
+            self.widget.update_content(self)
+            notification.center.post_notification('HTTPFileTransferItemDidChange', data=NotificationData(file=self))
+
+    def _NH_BlinkHTTPTransferFailed(self, notification):
+        if notification.sender != self.file:
+            return
+
+        self.status = None
+        self.progress = None
+        self.downloading = False
+        self.download_error = notification.data.reason
+        self.widget.update_content(self)
+        notification.center.post_notification('HTTPFileTransferItemDidChange', data=NotificationData(file=self))
+
+    def _NH_BlinkHTTPTransferCompleted(self, notification):
+        if notification.sender != self.file:
+            return
+
+        self.status = None
+        self.progress = None
+        self.bytes = 0
+        self.downloading = False
+        self.download_error = None
+        self.widget.update_content(self)
+        notification.center.post_notification('HTTPFileTransferItemDidChange', data=NotificationData(file=self))
+            
 
 @implementer(IObserver)
 class FileListModel(QAbstractListModel):
@@ -5262,7 +5323,8 @@ class FileListModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkGotMessageDelete')
         notification_center.add_observer(self, name='BlinkMessageWillDelete')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
-
+        notification_center.add_observer(self, name='HTTPFileTransferItemDidChange')
+        
     @property
     def ended_items(self):
         return [item for item in self.items if item.ended]
@@ -5317,6 +5379,14 @@ class FileListModel(QAbstractListModel):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    def _NH_HTTPFileTransferItemDidChange(self, notification):
+        try:
+            index = self.index(self.items.index(notification.data.file))
+            self.dataChanged.emit(index, index)
+        except ValueError:
+            pass
+            
 
     def _NH_BlinkMessageWillDelete(self, notification):
         blink_session = notification.sender
@@ -5427,6 +5497,9 @@ class FileListView(QListView, ColorHelperMixin):
         self.context_menu = QMenu(self)
         self.actions = ContextMenuActions()
         self.actions.open_file = QAction(translate('filelist_view', "Open"), self, triggered=self._AH_OpenFile)
+        self.actions.download_file = QAction(translate('filelist_view', "Download again"), self, triggered=self._AH_DownloadFile)
+        self.actions.resume_download_file = QAction(translate('filelist_view', "Resume download"), self, triggered=self._AH_DownloadFile)
+        self.actions.cancel_download_file = QAction(translate('filelist_view', "Cancel download"), self, triggered=self._AH_CancelDownloadFile)
         self.actions.open_downloads_folder = QAction(translate('filelist_view', "Open Transfers Folder"), self, triggered=self._AH_OpenTransfersFolder)
         self.actions.remove_file = QAction(translate('filelist_view', "Remove File"), self, triggered=self._AH_RemoveFile)
         self.paint_drop_indicator = False
@@ -5444,6 +5517,14 @@ class FileListView(QListView, ColorHelperMixin):
         if index.isValid():
             item = index.data(Qt.ItemDataRole.UserRole)
             menu.addAction(self.actions.open_file)
+            if not item.downloading:
+                temporary_download_file = "%s.download" % item.filename
+                if not os.path.exists(temporary_download_file):            
+                    menu.addAction(self.actions.download_file)
+                else:
+                    menu.addAction(self.actions.resume_download_file)
+            else:
+                menu.addAction(self.actions.cancel_download_file)
             menu.addAction(self.actions.open_downloads_folder)
             if not item.in_conference:
                 menu.addAction(self.actions.remove_file)
@@ -5523,12 +5604,16 @@ class FileListView(QListView, ColorHelperMixin):
         # event.accept(self.viewport().rect())
         # self.paint_drop_indicator = True
 
-    def _AH_OpenFile(self):
+    def _AH_OpenFile(self, must_open=True):
         item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         model = self.model()
         if item.already_exists:
             QDesktopServices.openUrl(QUrl.fromLocalFile(item.decrypted_filename))
             return True
+            
+        if item.downloading:
+            message_log.info('Download still in progress')
+            return
 
         if item.hash and item.file.protocol == 'msrp':
             if os.path.exists(item.decrypted_filename):
@@ -5551,6 +5636,32 @@ class FileListView(QListView, ColorHelperMixin):
 
                     message_stream.decrypt_file(item.filename, model.session, id=item.file.id, must_open=True)
         return True
+
+    def _AH_CancelDownloadFile(self):
+        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkHTTPTransferMustStop', sender=item.file)
+
+    def _AH_DownloadFile(self):
+        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        model = self.model()
+        if item.downloading:
+            return 
+
+        if item.expired:
+            return True
+
+        if 'downloads/%s' % item.id in item.filename:
+            folder = "%s/%s" % (ApplicationData.get('downloads'), item.id)
+            temporary_download_file = "%s.download" % item.filename
+            if not os.path.exists(temporary_download_file):            
+                message_log.info('Removing existing folder %s' % folder)
+                shutil.rmtree(folder)
+ 
+        if item.hash and item.file.protocol == 'msrp':
+            SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
+        else:
+            SessionManager().get_file_from_url(model.session, item.file)
 
     def _AH_RemoveFile(self):
         item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
@@ -6563,6 +6674,7 @@ class SessionManager(object, metaclass=Singleton):
         self.last_dialed_uri = None
         self.send_file_directory = Path('~').normalized
         self.active_session = None
+        self.must_cancel_downloads = set()
 
         self.inbound_ringtone = Null
         self.outbound_ringtone = Null
@@ -6584,7 +6696,7 @@ class SessionManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
         notification_center.add_observer(self, name='BlinkFileTransferWasCreated')
         notification_center.add_observer(self, name='BlinkFileTransferWillRetry')
-
+        notification_center.add_observer(self, name='BlinkHTTPTransferMustStop')
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
 
     def create_session(self, contact, contact_uri, streams, account=None, connect=True, sibling=None, remote_instance_id=None):
@@ -6657,6 +6769,9 @@ class SessionManager(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferDidEnd', sender=notification.sender, data=data)
 
+    def _NH_BlinkHTTPTransferMustStop(self, notification):
+        self.must_cancel_downloads.add(notification.sender.id)
+
     def _NH_BlinkHTTPFileTransferDidEnd(self, notification):
         file = notification.data.file
         must_open = notification.data.must_open
@@ -6684,26 +6799,64 @@ class SessionManager(object, metaclass=Singleton):
         makedirs(directory)
         full_filepath = os.path.join(directory, file.name)
         file.name = full_filepath
+        tmp_path = "%s.download" % full_filepath
+
         if os.path.exists(full_filepath):
             message_log.info(f"File {file.id} already downloaded {full_filepath}")
             notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file, must_open=must_open))
             return
 
-        message_log.info(f"Downloading file {file.id} from {file.url}, must_open: {must_open}")
+        if os.path.exists(tmp_path):
+            downloaded_size = os.path.getsize(tmp_path)
+            message_log.info(f"Temporary file {file.id} of {downloaded_size} bytes saved at {tmp_path}")
+            resume_header = {'Range': 'bytes=%d-' % downloaded_size}
+            
+        else:
+            downloaded_size = 0
+            resume_header = {}
+
+        message_log.info(f"Downloading file {file.id} from {file.url} from {downloaded_size}")
+        notification_center = NotificationCenter()
+
         try:
-            r = requests.get(file.url, timeout=10)
+            r = requests.get(file.url, timeout=10, stream=True, headers=resume_header)
             r.raise_for_status()
         except (requests.ConnectionError, requests.Timeout) as e:
             message_log.warning(f'HTTP filetransfer connection error: {e}')
+            notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='Connection timeout'))
         except requests.HTTPError as e:
             message_log.warning(f'HTTP filetransfer error {e}')
+            notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='Error %s' % str(e)))
         except requests.RequestException as e:
             message_log.warning(f'HTTP filetransfer error {e}')
+            notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='Error: %s' % str(e)))
         else:
-            with open(full_filepath, 'wb+') as output_file:
-                output_file.write(r.content)
+            file_size = int(r.headers.get('Content-Length', 0))
+            #print(r.headers)
+            message_log.info('Downloading %d bytes (%d)' % (file_size, file.size))
+            current_bytes = downloaded_size
+            with open(tmp_path, 'ab+' if resume_header else 'wb+') as output_file:
+                chunk_size = 1024*1024
+                for chunk in r.iter_content(chunk_size=chunk_size):
+                    if file.id in self.must_cancel_downloads:
+                        message_log.info(f'Download {file.id} stopped by user')
+                        break
 
-            message_log.info(f'File {file.id} saved to {file.name}')
+                    current_bytes = current_bytes + len(chunk)
+                    notification_center.post_notification('BlinkHTTPTransferProgress', sender=file, data=NotificationData(bytes=current_bytes, total_bytes=file.size))
+                    if chunk:
+                        output_file.write(chunk)
+
+                if file.id in self.must_cancel_downloads:
+                    r.close()
+                    self.must_cancel_downloads.discard(file.id)
+                    notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='User cancelled'))
+                    return
+
+            os.rename(tmp_path, full_filepath)
+
+            message_log.info(f'File {file.id} downloaded {current_bytes} bytes saved to {file.name} size {os.path.getsize(full_filepath)}')
+            notification_center.post_notification('BlinkHTTPTransferCompleted', sender=file)
             notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file, must_open=must_open))
 
     def update_ringtone(self):

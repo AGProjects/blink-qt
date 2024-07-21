@@ -296,6 +296,7 @@ class MessageStream(object, metaclass=MediaStreamType):
     def decrypt_file(self, filename, transfer_session, must_open=False, id=None):
         session = self.blink_session
         notification_center = NotificationCenter()
+        log.info(f'Decrypting {filename}')
 
         if self.private_key is None and len(self.other_private_keys) == 0:
             notification_center.post_notification('PGPFileDidNotDecrypt', sender=session, data=NotificationData(filename=filename, error="No private keys found"))
@@ -303,7 +304,7 @@ class MessageStream(object, metaclass=MediaStreamType):
 
         try:
             pgpMessage = PGPMessage.from_file(filename)
-        except (ValueError) as e:
+        except (ValueError, FileNotFoundError) as e:
             log.warning(f'Decryption failed for {filename}, this is not a PGP File, error: {e}')
             return
 

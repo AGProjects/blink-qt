@@ -2976,7 +2976,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             #log.warning('Failed to parse FT HTTP payload: %s' % str(e))
 
         for info in document:
-
             try:
                 hash = info.hash.value
             except AttributeError:
@@ -2999,7 +2998,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         protocol='sylk')
 
             file.name = HistoryManager().get_decrypted_filename(file)
-            log.info(f"History File {file.id} url {file.url} name {file.name} ")
+            #log.info(f"History File {file.id} url {file.url} name {file.name} ")
             is_audio_message = AudioDescriptor(info.file_name.value)
 
             try:
@@ -3051,6 +3050,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     return content
 
                 if from_history or not session.chat_widget.history_loaded:
+                    file.downloading = True
                     queue_item = (blink_session, file, message, info)
                     if queue_item not in self.fetch_after_load:
                         self.fetch_after_load.append(queue_item)
@@ -3286,17 +3286,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             id = notification.sender.id
             filename = notification.sender.file_selector.name
 
-            if notification.data.must_open:
-                QDesktopServices.openUrl(QUrl.filename)
-
         else:
             blink_session = notification.sender
             filename = notification.data.filename
             id = notification.data.id
 
+        if notification.data.must_open:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(filename))
+
         if AudioDescriptor(filename):
             content = f'''<div><audio controls style="height: 35px; width: 350px" src="{filename}"></audio></div>'''
-            blink_session.items.chat.chat_widget.update_message_text(transfer_session.id, content)
+            blink_session.items.chat.chat_widget.update_message_text(id, content)
             return
 
         file_descriptors  = [FileDescriptor(filename)]
