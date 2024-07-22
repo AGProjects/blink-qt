@@ -245,7 +245,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         notification_center = NotificationCenter()
 
         if self.private_key is None and len(self.other_private_keys) == 0:
-            notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message))
+            notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message), error='No private key')
             return
 
         try:
@@ -267,8 +267,8 @@ class MessageStream(object, metaclass=MediaStreamType):
             try:
                 decrypted_message = key.decrypt(pgpMessage)
             except (PGPDecryptionError, PGPError) as e:
-                error = e
-                log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} with {account.id} : {error}')
+                error = str(e)
+                #log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} with {account.id} : {error}')
                 continue
             else:
                 message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message

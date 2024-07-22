@@ -5654,9 +5654,13 @@ class FileListView(QListView, ColorHelperMixin):
         if 'downloads/%s' % item.id in item.filename:
             folder = "%s/%s" % (ApplicationData.get('downloads'), item.id)
             temporary_download_file = "%s.download" % item.filename
-            if not os.path.exists(temporary_download_file):            
-                message_log.info('Removing existing folder %s' % folder)
-                shutil.rmtree(folder)
+            if not os.path.exists(temporary_download_file):
+                try:
+                    shutil.rmtree(folder)
+                except FileNotFoundError:
+                    pass
+                else:
+                    message_log.info(f'File transfer {item.id} removed from {folder}')
  
         if item.hash and item.file.protocol == 'msrp':
             SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)

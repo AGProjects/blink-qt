@@ -1406,14 +1406,18 @@ class MessageManager(object, metaclass=Singleton):
     def _NH_PGPMessageDidNotDecrypt(self, notification):
         session = notification.sender
         message = notification.data.message
-
-        if message.direction == 'outgoing':
-            return
-
+        
         try:
             msg_id = message.message_id
         except AttributeError:
             msg_id = message.id
+
+        notification.data.message.is_secure = True
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=notification.data.error))
+
+        if message.direction == 'outgoing':
+            return
 
         self.send_imdn_message(session, msg_id, message.timestamp, 'error')
 

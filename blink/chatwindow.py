@@ -2136,7 +2136,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
-        notification_center.add_observer(self, name='BlinkSessionDidShareFile')
+        notification_center.add_observer(self, name='BlinkMessageHistoryMustReload')
 
         self.account_model = AccountModel(self)
         self.enabled_account_model = ActiveAccountModel(self.account_model, self)
@@ -3365,10 +3365,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
                     content = HtmlProcessor.autolink(content)
                     encrypted = True
-                    session.chat_widget.pending_decryption.append((message))
-                    stream = blink_session.fake_streams.get('messages')
-                    if stream and (stream.can_decrypt or stream.can_decrypt_with_others):
-                        stream.decrypt(message)
+                    if message.decrypted != '2':
+                        session.chat_widget.pending_decryption.append((message))
+                        stream = blink_session.fake_streams.get('messages')
+                        if stream and (stream.can_decrypt or stream.can_decrypt_with_others):
+                            stream.decrypt(message)
                 else:
                     content = message.content
                     content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
@@ -3779,6 +3780,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         history = HistoryManager()
         history.load(session.blink_session.contact.uri.uri, session.blink_session)
 
+    def _NH_BlinkMessageHistoryMustReload(self, notification):
+        history = HistoryManager()
+        for session in self.session_model.sessions:
+            print(f'Check if we must reload {session.blink_session}')
+            if session.blink_session.account.id == notification.data.account:
+                history.reload_pending_encrypted(session.blink_session.contact.uri.uri, session.blink_session)
+   
     def _SH_SessionModelSessionRemoved(self, session):
         self.tab_widget.removeTab(self.tab_widget.indexOf(session.chat_widget))
         session.chat_widget = None

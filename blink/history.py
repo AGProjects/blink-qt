@@ -17,7 +17,7 @@ from dateutil.parser import parse
 from dateutil.tz import tzlocal
 from zope.interface import implementer
 
-from sipsimple.account import BonjourAccount
+from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import AddressbookManager
 from sipsimple.payloads.iscomposing import IsComposingDocument
 from sipsimple.payloads.imdn import IMDNDocument
@@ -66,6 +66,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageDidFail')
         notification_center.add_observer(self, name='BlinkMessageDidEncrypt')
         notification_center.add_observer(self, name='BlinkMessageDidDecrypt')
+        notification_center.add_observer(self, name='BlinkMessageDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkMessageWillDelete')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
@@ -77,6 +78,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkMessageContactsDidChange')
         notification_center.add_observer(self, name='MessageContactsManagerDidActivate')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
 
     @run_in_thread('file-io')
     def save(self):
@@ -85,6 +87,9 @@ class HistoryManager(object, metaclass=Singleton):
 
     def load(self, uri, session, entries=100):
         return self.message_history.load(uri, session, entries=entries)
+
+    def reload_pending_encrypted(self, uri, session, entries=100):
+        return self.message_history.reload_pending_encrypted(uri, session, entries=entries)
 
     def get_last_contacts(self, number=10, unread=False):
         return self.message_history.get_last_contacts(number, unread=unread)
@@ -96,6 +101,13 @@ class HistoryManager(object, metaclass=Singleton):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if isinstance(notification.sender, (Account, BonjourAccount)):
+            account_manager = AccountManager()
+            account = notification.sender
+            if 'sms.private_key' in notification.data.modified:
+                self.message_history.reset_decryption(str(account.id))
 
     def _NH_SIPApplicationDidStart(self, notification):
         try:
@@ -213,10 +225,13 @@ class HistoryManager(object, metaclass=Singleton):
         self.download_history.remove(data.id)
 
     def _NH_BlinkMessageDidDecrypt(self, notification):
-        self.message_history.update_encryption(notification)
+        self.message_history.update_encryption(notification, decrypted=True)
+
+    def _NH_BlinkMessageDidNotDecrypt(self, notification):
+        self.message_history.update_encryption(notification, decrypted=False)
 
     def _NH_BlinkMessageDidEncrypt(self, notification):
-        self.message_history.update_encryption(notification)
+        self.message_history.update_encryption(notification, decrypted=None)
 
     def _NH_BlinkGotDispositionNotification(self, notification):
         data = notification.data
@@ -263,6 +278,8 @@ class Message(SQLObject):
     content_type    = StringCol(default='text')
     state           = StringCol(default='pending')
     encryption_type = StringCol(default='')
+    decrypted       = StringCol(default='0')
+    decryption_error= StringCol(sqlType='LONGTEXT')
     disposition     = StringCol(default='')
     remote_idx      = DatabaseIndex('remote_uri')
     id_idx          = DatabaseIndex('message_id')
@@ -443,7 +460,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 3
+    __version__ = 4
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -513,6 +530,22 @@ class MessageHistory(object, metaclass=Singleton):
                     pass
                 else:
                     self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+
+            elif db_table_version == 3:
+
+                query = "ALTER TABLE messages add column decrypted TEXT DEFAULT '0'"
+                try:
+                    self.db.queryAll(query)
+                except (dberrors.OperationalError):
+                    pass
+
+                query = "ALTER TABLE messages add column decryption_error LONGTEXT DEFAULT ''"
+                try:
+                    self.db.queryAll(query)
+                except (dberrors.OperationalError):
+                    pass
+
+                self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
 
     @run_in_thread('db')
     def _retry_failed_messages(self):
@@ -616,6 +649,8 @@ class MessageHistory(object, metaclass=Singleton):
                     account_id=str(account.id),
                     direction=message.direction,
                     timestamp=timestamp,
+                    decrypted='0',
+                    decryption_error='',
                     disposition=str(message.disposition),
                     **optional_fields)
         except dberrors.DuplicateEntryError:
@@ -686,6 +721,8 @@ class MessageHistory(object, metaclass=Singleton):
                     account_id=str(session.account.id),
                     direction=direction,
                     timestamp=timestamp,
+                    decrypted='0',
+                    decryption_error='',
                     disposition=str(message.disposition),
                     **optional_fields)
         except dberrors.DuplicateEntryError:
@@ -739,18 +776,46 @@ class MessageHistory(object, metaclass=Singleton):
             #log.info('Conversation with %s read saved to history' % remote_uri)
 
     @run_in_thread('db')
-    def update_encryption(self, notification):
+    def reset_decryption(self, account):
+        query = f"""update messages set decrypted = '3', decryption_error = '' 
+        where account_id = {Message.sqlrepr(account)} and decrypted = '2'
+        """
+        try:
+            result = self.db.queryAll(query)
+        except Exception as e:
+            print('SQL Error: %s' % str(e))
+        else:
+            notification_center = NotificationCenter()
+            notification_center.post_notification('BlinkMessageHistoryMustReload', data=NotificationData(account=account))
+
+    @run_in_thread('db')
+    def update_encryption(self, notification, decrypted=None):
         message = notification.data.message
         session = notification.sender
         message_info = session.info.streams.messages
+        
+        try:       
+            message_id = message.message_id
+        except AttributeError: 
+            # is a BlinkMessage from active session
+            message_id = message.id
 
         if message_info.encryption is not None and message.is_secure:
-            db_messages = Message.selectBy(message_id=message.id)
+            db_messages = Message.selectBy(message_id=message_id)
             for db_message in db_messages:
                 encryption_type = str(f'{message_info.encryption}')
                 if db_message.encryption_type != encryption_type:
-                    log.debug(f'Update {message.direction} {message.id} encryption to {encryption_type}')
                     db_message.encryption_type = encryption_type
+
+                # 0 not encrypted message
+                # 1 decrypted incoming messages
+                # 2 failed to decrypt incoming messages
+                decrypted_sql = '1' if decrypted else '2'
+                if decrypted is not None:
+                    #log.debug(f'Update {message.direction} {message_id} decrypted to {decrypted_sql}')
+                    db_message.decrypted = decrypted_sql
+                    if not decrypted:
+                        db_message.decryption_error = notification.data.error
 
     @run_in_thread('db')
     def load(self, uri, session, entries=100):
@@ -762,6 +827,17 @@ class MessageHistory(object, metaclass=Singleton):
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
         log.debug(f"== Loaded {len(list(result))} messages for {remote_uri} from history")
+        notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
+
+    @run_in_thread('db')
+    def reload_pending_encrypted(self, uri, session, entries=100):
+        notification_center = NotificationCenter()
+        remote_uri = '%s@local' % session.remote_instance_id if session.remote_instance_id else uri
+        try:
+            result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', Message.q.decrypted == '3')).orderBy('timestamp')[-entries:]
+        except Exception as e:
+            return
+        log.debug(f"== ReLoaded {len(list(result))} messages for {remote_uri} from history")
         notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
 
     @run_in_thread('db')
