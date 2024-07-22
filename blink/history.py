@@ -594,6 +594,8 @@ class MessageHistory(object, metaclass=Singleton):
                               account_id=str(entry.account_id),
                               direction=entry.direction,
                               timestamp=timestamp,
+                              decrypted='0',
+                              decryption_error='',
                               disposition='',
                               state='displayed')
         except dberrors.DuplicateEntryError:
