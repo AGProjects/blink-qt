@@ -104,7 +104,7 @@ class IconSelector(QLabel):
             menu = QMenu(self)
             menu.addAction(self.actions.select_icon)
             menu.addAction(self.actions.remove_icon)
-            menu.exec_(self.mapToGlobal(self.rect().translated(0, 2).bottomLeft()))
+            menu.exec(self.mapToGlobal(self.rect().translated(0, 2).bottomLeft()))
         super(IconSelector, self).mouseReleaseEvent(event)
 
     def _SH_ChangeIconActionTriggered(self):
