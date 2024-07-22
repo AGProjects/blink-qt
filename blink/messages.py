@@ -836,6 +836,7 @@ class MessageManager(object, metaclass=Singleton):
                 else:
                     notification_center.post_notification('BlinkGotMessageDelete', sender=blink_session, data=payload['message_id'])
             elif content_type == 'application/sylk-conversation-read':
+                # TODO
                 pass
             elif content_type == 'text/pgp-public-key':
                 if message['contact'] != account.id:
@@ -1132,6 +1133,10 @@ class MessageManager(object, metaclass=Singleton):
             account.save()
             self._sync_messages(account)
             return
+
+        if content_type.lower() == 'application/sylk-conversation-read':
+             pass
+             # TODO
 
         if content_type.lower() == 'text/pgp-private-key':
             log.info(f'Received private key of account {account.id} from another device')
