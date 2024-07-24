@@ -3074,11 +3074,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             if not image_descriptors:
                 session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Error: image can not be rendered: %s') % os.path.basename(file.decrypted_filename)))
-                return None
-
-            for image in image_descriptors:
-                image_data = base64.b64encode(image.thumbnail.data).decode()
-                content = '''<a href="{}" style='display: flex; border: 0 !important'><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
+                content = ''
+            else:
+                for image in image_descriptors:
+                    image_data = base64.b64encode(image.thumbnail.data).decode()
+                    content = '''<a href="{}" style='display: flex; border: 0 !important'><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
 
             if from_history:
                 NotificationCenter().post_notification('BlinkSessionDidShareFile',
