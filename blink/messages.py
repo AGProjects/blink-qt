@@ -338,7 +338,7 @@ class OTRInternalMessage(BlinkMessage):
 @implementer(IObserver)
 class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
-    __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api-message-remove', 'application/sylk-api-pgp-key-lookup'}.union(__ignored_content_types__)  # Content types to ignore in notifications
+    __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api-message-remove', 'application/sylk-api-pgp-key-lookup', 'application/sylk-api-conversation-read'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
     def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None):
         self.lookup = None
@@ -836,8 +836,7 @@ class MessageManager(object, metaclass=Singleton):
                 else:
                     notification_center.post_notification('BlinkGotMessageDelete', sender=blink_session, data=payload['message_id'])
             elif content_type == 'application/sylk-conversation-read':
-                # TODO
-                pass
+                NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=message['contact']))
             elif content_type == 'text/pgp-public-key':
                 if message['contact'] != account.id:
                     self._save_pgp_key(message['content'], message['contact'])
@@ -1095,7 +1094,7 @@ class MessageManager(object, metaclass=Singleton):
         encryption = self.check_encryption(content_type, body)
         enc_text = f'{encryption} encrypted ' if encryption else ''
 
-        log.info(f'Received {enc_text}{content_type.lower()} message {message_id} for account {account.id} from {sender.uri}')
+        log.info(f'incoming {enc_text}{content_type.lower()} message {message_id} for account {account.id} from {sender.uri}')
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
         if x_replicated_message is not Null:
@@ -1135,8 +1134,8 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if content_type.lower() == 'application/sylk-conversation-read':
-             pass
-             # TODO
+            payload = json.loads(body)
+            NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=payload['contact']))
 
         if content_type.lower() == 'text/pgp-private-key':
             log.info(f'Received private key of account {account.id} from another device')
@@ -1493,6 +1492,15 @@ class MessageManager(object, metaclass=Singleton):
 
     def send_remove_message(self, session, id, account=None):
         outgoing_message = OutgoingMessage(session.account if account is None else account, session.contact, id, 'application/sylk-api-message-remove', session=session)
+        self._send_message(outgoing_message)
+
+    def send_conversation_read(self, session):
+        contact = str(session.contact.uri.uri)
+        payload = {'contact': contact}
+        content = json.dumps(payload)
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(session.account.uri)
+        outgoing_message = OutgoingMessage(session.account, session.contact, content, 'application/sylk-api-conversation-read', session=session)
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):

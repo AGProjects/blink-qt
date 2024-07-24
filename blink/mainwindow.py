@@ -63,6 +63,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkMessageHistoryUnreadMessagesDidLoad')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
+        notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
         
         notification_center.add_observer(self, sender=AccountManager())
 
@@ -777,6 +778,15 @@ class MainWindow(base_class, ui_class):
         for k in self.unread_messages.copy().keys():
             new_messages = new_messages + self.unread_messages[k]
         return new_messages
+
+    @run_in_gui_thread
+    def _NH_BlinkConfirmReadMessagesOnOtherDevice(self, notification):
+        try:
+            del(self.unread_messages[notification.data.remote_uri])
+        except KeyError:
+            pass
+        else:
+            NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
 
     @run_in_gui_thread
     def _NH_BlinkSessionConfirmReadMessages(self, notification):

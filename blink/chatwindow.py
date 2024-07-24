@@ -2812,6 +2812,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=session.blink_session)
                                                            
         if session and session.blink_session in self.pending_displayed_notifications:
+            MessageManager().send_conversation_read(session.blink_session)
             item = self.pending_displayed_notifications.pop(self.selected_session.blink_session)
             for (id, timestamp, account) in item:
                 MessageManager().send_imdn_message(session.blink_session, id, timestamp, 'displayed', account)
