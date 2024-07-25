@@ -1545,7 +1545,6 @@ class MessageManager(object, metaclass=Singleton):
         instance_id = contact.settings.id if contact.type == 'bonjour' else None
         if contact.type == 'dummy' and display_name is not None:
             contact.settings.name = display_name
-        log.info(f"Create outgoing message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
 
         try:
             blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (contact.type == 'dummy' and uri in session.contact.uris))
