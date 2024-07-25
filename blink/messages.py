@@ -19,7 +19,7 @@ from pgpy.errors import PGPEncryptionError, PGPDecryptionError
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
-from application.system import makedirs
+from application.system import makedirs, host
 from application.python.types import Singleton
 from datetime import datetime, timezone, timedelta
 from dateutil.tz import tzlocal, tzutc
@@ -1504,8 +1504,12 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
+        if host.default_ip is None:
+            return
+
         if account is None and not session.account.sms.use_cpim or not session.account.sms.enable_imdn:
             return
+
         if account is not None:
             if not account.sms.use_cpim or not account.sms.enable_imdn:
                 return
