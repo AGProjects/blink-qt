@@ -2657,6 +2657,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         super(ChatWindow, self).show()
         self.raise_()
         self.activateWindow()
+        if not self.session_model.rowCount():
+            history = HistoryManager()
+            history.get_last_contacts()
 
     def show_session_info(self):
         self.show()
