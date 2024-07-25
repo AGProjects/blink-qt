@@ -482,8 +482,7 @@ class MessageHistory(object, metaclass=Singleton):
         handler(notification)
 
     def _NH_NetworkConditionsDidChange(self, notification):
-        if host.default_ip is not None:
-            self._retry_failed_messages()
+        self._retry_failed_messages()
 
     @run_in_thread('db')
     def _initialize(self, db_uri):
@@ -549,6 +548,9 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def _retry_failed_messages(self):
+        if host.default_ip is None:
+            return
+
         messages = Message.selectBy(state='failed-local')
         if len(list(messages)) > 0:
             log.debug(f"==  {len(list(messages))} failed local messages from history")
