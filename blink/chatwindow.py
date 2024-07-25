@@ -2099,6 +2099,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.pending_displayed_notifications = {}
         self.render_after_load = deque()
         self.fetch_after_load = deque()
+        self.last_desktop_notify = None
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -3189,6 +3190,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_title = 'Blink Qt'
         notification_message = translate('chat_window', f"New message from {from_uri}")
         icon = QIcon(Resources.get('icons/blink.png'))
+        if self.last_desktop_notify:
+            d = datetime.now() - self.last_desktop_notify
+            if d.total_seconds() < 60:
+                return
+            
+        self.last_desktop_notify = datetime.now()
         if platform.system() == 'Darwin':
             desktop_notification(notification_title, notification_message, '', sound=True)
 
