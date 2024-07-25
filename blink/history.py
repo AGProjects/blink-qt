@@ -845,7 +845,7 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
 
     @run_in_thread('db')
-    def get_last_contacts(self, number=10, unread=False):
+    def get_last_contacts(self, number=25, unread=False):
         log.info(f'== Getting last {number} contacts with messages unread={unread}')
         if unread:
             query = f"""
