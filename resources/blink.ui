@@ -1340,7 +1340,7 @@ padding: 2px;</string>
     <string>Mute microphone</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+M</string>
+    <string>Ctrl+i</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
@@ -1350,15 +1350,12 @@ padding: 2px;</string>
    <property name="checkable">
     <bool>true</bool>
    </property>
-   <property name="text">
-    <string>&amp;Silence alerts</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+S</string>
-   </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
    </property>
+    <property name="text">
+     <string>&amp;Silence alerts</string>
+    </property>
   </action>
   <action name="search_for_people_action">
    <property name="text">
@@ -1425,7 +1422,7 @@ padding: 2px;</string>
     <string>Messages</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+G</string>
+    <string>Ctrl+M</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
@@ -1452,7 +1449,7 @@ padding: 2px;</string>
   </action>
   <action name="screenshots_window_action">
    <property name="text">
-    <string>&amp;Screenshots</string>
+    <string>Video Calls Screenshots</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+E</string>
