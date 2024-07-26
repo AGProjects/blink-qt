@@ -1088,11 +1088,11 @@ padding: 2px;</string>
    </property>
    <widget class="QMenu" name="blink_menu">
     <property name="title">
-     <string>&Blink</string>
+     <string>&amp;Blink</string>
     </property>
     <widget class="QMenu" name="accounts_menu">
      <property name="title">
-      <string>&Accounts</string>
+      <string>&amp;Accounts</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1116,16 +1116,16 @@ padding: 2px;</string>
    </widget>
    <widget class="QMenu" name="call_menu">
     <property name="title">
-     <string>&Call</string>
+     <string>&amp;Call</string>
     </property>
     <widget class="QMenu" name="voicemail_menu">
      <property name="title">
-      <string>&Voicemail</string>
+      <string>&amp;Voicemail</string>
      </property>
     </widget>
     <widget class="QMenu" name="history_menu">
      <property name="title">
-      <string>&History</string>
+      <string>&amp;History</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1140,7 +1140,7 @@ padding: 2px;</string>
    </widget>
    <widget class="QMenu" name="chat_menu">
     <property name="title">
-     <string>&Messages</string>
+     <string>&amp;Messages</string>
     </property>
     <addaction name="show_unread_messages_action"/>
     <addaction name="show_last_messages_action"/>
@@ -1152,11 +1152,11 @@ padding: 2px;</string>
    </widget>
    <widget class="QMenu" name="devices_menu">
     <property name="title">
-     <string>&Devices</string>
+     <string>&amp;Devices</string>
     </property>
     <widget class="QMenu" name="output_device_menu">
      <property name="title">
-      <string>Audio &output device</string>
+      <string>Audio &amp;output device</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1165,7 +1165,7 @@ padding: 2px;</string>
     </widget>
     <widget class="QMenu" name="input_device_menu">
      <property name="title">
-      <string>&Audio input device</string>
+      <string>&amp;Audio input device</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1174,7 +1174,7 @@ padding: 2px;</string>
     </widget>
     <widget class="QMenu" name="alert_device_menu">
      <property name="title">
-      <string>Audio alert &device</string>
+      <string>Audio alert &amp;device</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1183,7 +1183,7 @@ padding: 2px;</string>
     </widget>
     <widget class="QMenu" name="video_camera_menu">
      <property name="title">
-      <string>&Video camera</string>
+      <string>&amp;Video camera</string>
      </property>
      <property name="icon">
       <iconset>
@@ -1200,7 +1200,7 @@ padding: 2px;</string>
    </widget>
    <widget class="QMenu" name="window_menu">
     <property name="title">
-     <string>&Window</string>
+     <string>&amp;Window</string>
     </property>
     <addaction name="chat_window_action"/>
     <addaction name="transfers_window_action"/>
@@ -1225,7 +1225,7 @@ padding: 2px;</string>
      <normaloff>icons/application-exit.png</normaloff>icons/application-exit.png</iconset>
    </property>
    <property name="text">
-    <string>&Quit</string>
+    <string>&amp;Quit</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Q</string>
@@ -1243,7 +1243,7 @@ padding: 2px;</string>
      <normaloff>icons/blink48.png</normaloff>icons/blink48.png</iconset>
    </property>
    <property name="text">
-    <string>About &Blink</string>
+    <string>About &amp;Blink</string>
    </property>
    <property name="menuRole">
     <enum>QAction::AboutRole</enum>
@@ -1255,7 +1255,7 @@ padding: 2px;</string>
      <normaloff>icons/configure.png</normaloff>icons/configure.png</iconset>
    </property>
    <property name="text">
-    <string>&Preferences</string>
+    <string>&amp;Preferences</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+P</string>
@@ -1269,12 +1269,12 @@ padding: 2px;</string>
   </action>
   <action name="check_for_updates_action">
    <property name="text">
-    <string>Check for &updates...</string>
+    <string>Check for &amp;updates...</string>
    </property>
   </action>
   <action name="logs_window_action">
    <property name="text">
-    <string>&Logs</string>
+    <string>&amp;Logs</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+L</string>
@@ -1285,7 +1285,7 @@ padding: 2px;</string>
   </action>
   <action name="transfers_window_action">
    <property name="text">
-    <string>File &Transfers</string>
+    <string>File &amp;Transfers</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+T</string>
@@ -1307,7 +1307,7 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Enable &answering machine</string>
+    <string>Enable &amp;answering machine</string>
    </property>
    <property name="visible">
     <bool>false</bool>
@@ -1323,7 +1323,7 @@ padding: 2px;</string>
   </action>
   <action name="redial_action">
    <property name="text">
-    <string>&Redial</string>
+    <string>&amp;Redial</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
@@ -1337,7 +1337,7 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>&Mute microphone</string>
+    <string>&amp;Mute microphone</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+i</string>
@@ -1356,7 +1356,7 @@ padding: 2px;</string>
   </action>
   <action name="search_for_people_action">
    <property name="text">
-    <string>Search for &people</string>
+    <string>Search for &amp;people</string>
    </property>
   </action>
   <action name="auto_accept_chat_action">
@@ -1369,12 +1369,12 @@ padding: 2px;</string>
   </action>
   <action name="add_account_action">
    <property name="text">
-    <string>&Add account...</string>
+    <string>&amp;Add account...</string>
    </property>
   </action>
   <action name="help_action">
    <property name="text">
-    <string>&Help</string>
+    <string>&amp;Help</string>
    </property>
    <property name="shortcut">
     <string>F1</string>
@@ -1385,27 +1385,27 @@ padding: 2px;</string>
   </action>
   <action name="release_notes_action">
    <property name="text">
-    <string>&Release notes</string>
+    <string>&amp;Release notes</string>
    </property>
   </action>
   <action name="manage_accounts_action">
    <property name="text">
-    <string>&Manage accounts</string>
+    <string>&amp;Manage accounts</string>
    </property>
   </action>
   <action name="google_contacts_action">
    <property name="text">
-    <string>Enable &Google Contacts...</string>
+    <string>Enable &amp;Google Contacts...</string>
    </property>
   </action>
   <action name="history_on_server_action">
    <property name="text">
-    <string>Call &history on server</string>
+    <string>Call &amp;history on server</string>
    </property>
   </action>
   <action name="join_conference_action">
    <property name="text">
-    <string>&Join MSRP Conference...</string>
+    <string>&amp;Join MSRP Conference...</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+J</string>
@@ -1416,7 +1416,7 @@ padding: 2px;</string>
   </action>
   <action name="chat_window_action">
    <property name="text">
-    <string>&Messages</string>
+    <string>&amp;Messages</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+M</string>
@@ -1430,12 +1430,12 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Play a sound for &received messages</string>
+    <string>Play a sound for &amp;received messages</string>
    </property>
   </action>
   <action name="received_files_window_action">
    <property name="text">
-    <string>Received &Files</string>
+    <string>Received &amp;Files</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
@@ -1446,7 +1446,7 @@ padding: 2px;</string>
   </action>
   <action name="screenshots_window_action">
    <property name="text">
-    <string>&Screenshots</string>
+    <string>&amp;Screenshots</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+E</string>
@@ -1463,12 +1463,12 @@ padding: 2px;</string>
     <bool>false</bool>
    </property>
    <property name="text">
-    <string>&Auto-answer</string>
+    <string>&amp;Auto-answer</string>
    </property>
   </action>
   <action name="show_unread_messages_action">
    <property name="text">
-    <string>&Unread messages</string>
+    <string>&amp;Unread messages</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+U</string>
@@ -1479,7 +1479,7 @@ padding: 2px;</string>
   </action>
   <action name="show_last_messages_action">
    <property name="text">
-    <string>&Recent conversations</string>
+    <string>&amp;Recent conversations</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
@@ -1490,7 +1490,7 @@ padding: 2px;</string>
   </action>
   <action name="export_pgp_key_action">
    <property name="text">
-    <string>&Export PGP key to my other devices</string>
+    <string>&amp;Export PGP key to my other devices</string>
    </property>
   </action>
  </widget>
