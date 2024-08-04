@@ -1,11 +1,13 @@
 Dependencies
 ------------
 
-Blink Qt mainly depends on python3-sipsimple. 
+Blink Qt mainly depends on python3-sipsimple. Follow the instructions to install it from: 
 
-Follow the instructions to install it from: 
+https://raw.githubusercontent.com/AGProjects/python3-sipsimple/master/install_osx_user.sh
 
-https://github.com/AGProjects/python3-sipsimple/blob/master/install_osx_user.sh
+Run python3-sipsimple install script:
+
+./install_sipsimple.sh
 
 Once python3-sipsimple is installed:
 
