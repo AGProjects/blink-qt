@@ -12,7 +12,7 @@ Run python3-sipsimple install script:
 Once python3-sipsimple is installed:
 
 pip3 install --user -r macos/requirements-osx.txt
-sudo port install libvncserver upx
+sudo port install libvncserver upx create-dmg
 export CFLAGS="-I/opt/local/include"
 export LDFLAGS="-L/opt/local/lib"
 ./build_inplace
@@ -35,6 +35,14 @@ pyinstaller blink.spec -y
 
 The generated app can then be found in dist/ folder.
 
+To generate a .dmg run:
+
+./macos/create_dmg.sh 
+
+Note. The resulting DMG has a very large size due to bundling of all system
+installed Qt6 frameworks and Python packages.  This can be optimized by
+removing unused libraries during building the app stage.
+
 
 Local storage
 -------------
@@ -52,6 +60,4 @@ Running on MacOS
 https://stackoverflow.com/questions/33090346/is-there-any-way-to-use-qtwebengine-without-opengl
 
 export QMLSCENE_DEVICE=softwarecontext
-
-
 
