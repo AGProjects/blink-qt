@@ -1,29 +1,35 @@
-Dependencies
-------------
+Install Blink Qt locally
+------------------------
 
-Blink Qt mainly depends on python3-sipsimple. Follow the instructions to install it from: 
+ - Install Xcode from Apple
+ - Install MacPorts from https://www.macports.org
+ - Install python 3.9 from https://www.python.org/ftp/python/3.9.12/python-3.9.12-macosx10.9.pkg
+ - Install Mac Ports from https://www.macports.org
 
-https://raw.githubusercontent.com/AGProjects/python3-sipsimple/master/install_osx_user.sh
+To install blink-qt and its dependencies in Python user environment:
 
-Run python3-sipsimple install script:
+chmod +x ./install_blink.sh
+./install_blink.sh
 
-./install_sipsimple.sh
+The packages will be installed in the folder:
 
-Once python3-sipsimple is installed:
+~/Library/Python/3.9/lib/python/site-packages/
 
-pip3 install --user -r macos/requirements-osx.txt
-sudo port install libvncserver upx create-dmg
-export CFLAGS="-I/opt/local/include"
-export LDFLAGS="-L/opt/local/lib"
-./build_inplace
+The binaries will be installed in the folder:
 
-Running Blink in place:
+~/Library/Python/3.9/bin
+
+To run Blink in place:
 
 ./run
 
+To run Blink from local Python environment
 
-Making an app
--------------
+~/Library/Python/3.9/bin/blink
+
+
+Making Blink Qt app
+-------------------
 
 Generate a spec file used by pyinstaller using make_spec.sh script. The
 resulting file must be tweaked, see the modified blink.specs file.
@@ -34,6 +40,8 @@ codesign_identity to your Developer id.
 pyinstaller blink.spec -y
 
 The generated app can then be found in dist/ folder.
+
+sudo port install create-dmg
 
 To generate a .dmg run:
 
@@ -47,7 +55,7 @@ removing unused libraries during building the app stage.
 Local storage
 -------------
 
-Blink Qt configuration and stored data folder on Mac:
+Blink Qt configuration and data is stored inside the folder:
 
 ~/Library/Application\ Support/Blink-Qt/
 
@@ -60,4 +68,3 @@ Running on MacOS
 https://stackoverflow.com/questions/33090346/is-there-any-way-to-use-qtwebengine-without-opengl
 
 export QMLSCENE_DEVICE=softwarecontext
-
