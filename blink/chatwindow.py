@@ -1090,7 +1090,7 @@ class ChatWidget(base_class, ui_class):
                     try:
                         if self.last_message.timestamp < message.timestamp:
                             self.last_message = message
-                    except TypeError:
+                    except (TypeError, AttributeError):
                         self.last_message.timestamp = self.last_message.timestamp.replace(tzinfo=tzlocal())
                         if self.last_message.timestamp < message.timestamp:
                             self.last_message = message
@@ -2100,6 +2100,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.render_after_load = deque()
         self.fetch_after_load = deque()
         self.last_desktop_notify = None
+        self.last_incoming_message_alert = None
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -3181,10 +3182,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
-        if settings.sounds.play_message_alerts and self.selected_session is session:
+        must_play = True
+
+        if self.last_incoming_message_alert:
+            d = datetime.now() - self.last_incoming_message_alert
+            if d.total_seconds() < 30:
+                must_play = False
+
+        if settings.sounds.play_message_alerts and self.selected_session is session and must_play:
             player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_received.wav'), volume=20)
             SIPApplication.alert_audio_bridge.add(player)
             player.start()
+            self.last_incoming_message_alert = datetime.now()
 
     def desktop_notify(self, from_uri):
         notification_title = 'Blink Qt'
