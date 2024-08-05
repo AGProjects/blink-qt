@@ -533,7 +533,7 @@ class QTextEdit(QTextEdit):
             painter.setPen(colour)
             painter.setClipRect(self.rect())
             margin = self.document().documentMargin()
-            textRect = self.viewport().rect().adjusted(margin, margin, 0, 0)
+            textRect = self.viewport().rect().adjusted(int(margin), int(margin), 0, 0)
             painter.drawText(textRect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.placeholderText())
 
         super(QTextEdit, self).paintEvent(event)
