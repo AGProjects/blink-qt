@@ -14,6 +14,13 @@ from blink import __version__
 from blink.configuration.datatypes import ApplicationDataPath, GraphTimeScale, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
 from blink.resources import Resources
 
+try:
+    from blink.configuration._codecs import RTPSettingsExtension
+except ImportError:
+    class RTPSettingsExtension(RTPSettings):
+        audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'speex', 'GSM', 'iLBC', 'PCMU', 'PCMA')))
+        video_codec_order = Setting(type=VideoCodecList, default=VideoCodecList(('H264', 'VP8', 'VP9')))
+
 
 class AnsweringMachineSettings(SettingsGroup):
     enabled = Setting(type=bool, default=False)
@@ -57,11 +64,6 @@ class LogsSettingsExtension(LogsSettings):
     trace_msrp = Setting(type=bool, default=False)
     trace_xcap = Setting(type=bool, default=False)
     trace_notifications = Setting(type=bool, default=False)
-
-
-class RTPSettingsExtension(RTPSettings):
-    audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'speex', 'GSM', 'iLBC', 'PCMU', 'PCMA')))
-    video_codec_order = Setting(type=VideoCodecList, default=VideoCodecList(('H264', 'VP8', 'VP9')))
 
 
 class ServerSettings(SettingsGroup):
