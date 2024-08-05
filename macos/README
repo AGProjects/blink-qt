@@ -1,10 +1,10 @@
 Install Blink Qt locally
 ------------------------
 
- - Install Xcode from Apple
- - Install MacPorts from https://www.macports.org
- - Install python 3.9 from https://www.python.org/ftp/python/3.9.12/python-3.9.12-macosx10.9.pkg
- - Install Mac Ports from https://www.macports.org
+# Install Xcode from Apple
+# Install MacPorts from https://www.macports.org
+# Install python from https://www.python.org
+# Install Mac Ports from https://www.macports.org
 
 To install blink-qt and its dependencies in Python user environment:
 

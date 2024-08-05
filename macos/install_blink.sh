@@ -1,12 +1,10 @@
 #!/bin/bash
-# Install Xcode from Apple
-# Install MacPorts from https://www.macports.org
-# Install python 3.9 from https://www.python.org/ftp/python/3.9.12/python-3.9.12-macosx10.9.pkg
-# Install Mac Ports from https://www.macports.org
 
-if [ ! -d /Applications/Python\ 3.9/ ]; then
+env python3 -V|grep -E "3.11|3.10|3.9" > /dev/null
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
     echo
-    echo "Please install Python 3.9 from https://www.python.org/ftp/python/3.9.12/python-3.9.12-macosx10.9.pkg"
+    echo "Please install Python 3.9, 3.10 or 3.11 from https://www.python.org/"
     echo
     exit 1
 fi
@@ -40,9 +38,15 @@ if [ $RESULT -ne 0 ]; then
 fi
 
 cd ..
-pip3 install --user -r macos/requirements-osx.txt
 sudo port install libvncserver upx
+pip3 install --user -r macos/requirements-osx.txt
 export CFLAGS="-I/opt/local/include"
 export LDFLAGS="-L/opt/local/lib"
+cp macos/_codecs.py blink/configuration/
+cp macos/_tls.py blink/configuration/
+chmod +x ./build_inplace
 ./build_inplace
+chmod +x run
+chmod +x ./bin/blink
+chmod +x blink-run.py
 pip3 install --user .
