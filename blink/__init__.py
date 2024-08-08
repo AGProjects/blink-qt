@@ -202,6 +202,20 @@ class Blink(QApplication, metaclass=QSingleton):
         self.reinit = True
         self.quit()
 
+    @property
+    def available_codecs(self):
+        if SIPApplication and SIPApplication.engine and SIPApplication.engine._ua:
+            return list(codec.decode() for codec in SIPApplication.engine._ua.available_codecs)
+        else:
+            return []
+
+    @property
+    def available_video_codecs(self):
+        if SIPApplication and SIPApplication.engine and SIPApplication.engine._ua:
+            return list(codec.decode() for codec in SIPApplication.engine._ua.available_video_codecs)
+        else:
+            return []
+
     def eventFilter(self, watched, event):
         if watched in (self.main_window, self.chat_window):
             if event.type() == QEvent.Type.Show:
@@ -248,6 +262,10 @@ class Blink(QApplication, metaclass=QSingleton):
         if not accounts or (self.first_run and accounts == [BonjourAccount()]):
             self.main_window.preferences_window.show_create_account_dialog()
         self.update_manager.initialize()
+        msg = 'Available audio codecs: %s\n' % ", ".join(self.available_codecs)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
+        msg = 'Available video codecs: %s\n' % ", ".join(self.available_video_codecs)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
 
     def _NH_SIPApplicationWillEnd(self, notification):
         self.ip_address_monitor.stop()
