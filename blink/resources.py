@@ -128,7 +128,7 @@ class IconManager(object, metaclass=Singleton):
         if data is not None and pixmap.loadFromData(data):
             image_size = pixmap.size()
             if image_size.width() > self.max_size or image_size.height() > self.max_size:
-                pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             if imghdr.what(None, data) != 'png' or pixmap.size() != image_size:
                 buffer = QBuffer()
                 pixmap.save(buffer, 'png')
@@ -157,7 +157,7 @@ class IconManager(object, metaclass=Singleton):
         pixmap = QPixmap()
         if file is not None and pixmap.load(file):
             if pixmap.size().width() > self.max_size or pixmap.size().height() > self.max_size:
-                pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             buffer = QBuffer()
             pixmap.save(buffer, 'png')
             data = buffer.data()
