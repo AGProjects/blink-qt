@@ -29,7 +29,7 @@ if os.path.basename(script_dir) == 'bin' and os.path.exists(os.path.join(parent_
     sys.path.insert(position, parent_dir)
 
 if frozen:
-    from StringIO import StringIO
+    from io import StringIO
 
     class DivertedStdout(object):
         def __init__(self):
@@ -44,7 +44,7 @@ if frozen:
         def file(self, path):
             if self._file is not None:
                 raise RuntimeError("output file was already set to: {0._file!r}".format(self))
-            f = open(path, 'a', 0)
+            f = open(path, 'a')
             # noinspection PyUnresolvedReferences
             f.write(self._output.getvalue())
             self._output.close()
