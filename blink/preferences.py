@@ -586,6 +586,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             # user has a non-default codec order, we need to sync with the new settings
             added_codecs = set(SIPSimpleSettings.rtp.audio_codec_order.default).difference(settings.rtp.audio_codec_order)
             removed_codecs = set(settings.rtp.audio_codec_order).difference(SIPSimpleSettings.rtp.audio_codec_order.default)
+            removed_codecs.update(set(settings.rtp.audio_codec_list).difference(SIPSimpleSettings.rtp.audio_codec_order.list)
+
             if added_codecs:
                 settings.rtp.audio_codec_order = DefaultValue  # reset codec order
                 settings.rtp.audio_codec_list  = DefaultValue  # reset codec list
