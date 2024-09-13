@@ -303,7 +303,7 @@ class TableVersions(object, metaclass=Singleton):
 
     def __init__(self):
         db_file = ApplicationData.get('message_history.db')
-        db_uri = f'sqlite://{db_file}'
+        db_uri = f'sqlite:{db_file}'
         self._initialize(db_uri)
 
     @run_in_thread('db')
@@ -354,7 +354,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
     def __init__(self):
         db_file = ApplicationData.get('message_history.db')
-        db_uri = f'sqlite://{db_file}'
+        db_uri = f'sqlite:{db_file}'
         self._initialize(db_uri)
 
     @run_in_thread('db')
@@ -468,7 +468,7 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center.add_observer(self, name='NetworkConditionsDidChange')
 
         db_file = ApplicationData.get('message_history.db')
-        db_uri = f'sqlite://{db_file}'
+        db_uri = f'sqlite:{db_file}'
         makedirs(ApplicationData.directory)
         self._initialize(db_uri)
         self._retry_timer = QTimer()
