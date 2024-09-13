@@ -18,7 +18,7 @@ try:
     from blink.configuration._codecs import RTPSettingsExtension
 except ImportError:
     class RTPSettingsExtension(RTPSettings):
-        audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'speex', 'GSM', 'iLBC', 'PCMU', 'PCMA')))
+        audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'PCMU', 'PCMA')))
         video_codec_order = Setting(type=VideoCodecList, default=VideoCodecList(('H264', 'VP8', 'VP9')))
 
 
