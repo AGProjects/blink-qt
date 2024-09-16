@@ -3953,7 +3953,7 @@ class VNCServerProcess(QProcess):
         self.server_host = 'localhost'
         self.server_port = None
         self.started.connect(self._SH_Started)
-        self.error.connect(self._SH_Error)
+        self.errorOccurred.connect(self._SH_Error)
         self.finished.connect(self._SH_Finished)
         self.readyReadStandardOutput.connect(self._SH_ReadyReadStandardOutput)
         self.readyReadStandardError.connect(self._SH_ReadyReadStandardError)
@@ -4004,7 +4004,7 @@ class ExternalVNCServerHandler(ExternalVNCServerHandler):
     def _NH_MediaStreamDidStart(self, notification):
         self.vnc_process = VNCServerProcess()
         self.vnc_process.ready.connect(self._SH_VNCProcessReady)
-        self.vnc_process.error.connect(self._SH_VNCProcessError)
+        self.vnc_process.errorOccurred.connect(self._SH_VNCProcessError)
         self.vnc_process.start()
 
     def _NH_MediaStreamWillEnd(self, notification):
