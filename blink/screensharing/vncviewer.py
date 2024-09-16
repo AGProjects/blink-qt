@@ -441,7 +441,7 @@ class ScreensharingToolbox(base_class, ui_class):
         parent.installEventFilter(self)
         self.animation = QPropertyAnimation(self, b'pos')
         self.animation.setDuration(250)
-        self.animation.setDirection(QPropertyAnimation.Forward)
+        self.animation.setDirection(QPropertyAnimation.Direction.Forward)
         self.animation.setEasingCurve(QEasingCurve.Type.Linear)  # or OutCirc with 300ms
         self.retract_timer = QTimer(self)
         self.retract_timer.setInterval(3000)
@@ -523,19 +523,19 @@ class ScreensharingToolbox(base_class, ui_class):
         painter.drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option)
 
     def expose(self):
-        if self.animation.state() == QPropertyAnimation.Running and self.animation.direction() == QPropertyAnimation.Forward:
+        if self.animation.state() == QPropertyAnimation.State.Running and self.animation.direction() == QPropertyAnimation.Direction.Forward:
             return
-        elif self.animation.state() == QPropertyAnimation.Stopped and self.pos() == self.animation.endValue():
+        elif self.animation.state() == QPropertyAnimation.State.Stopped and self.pos() == self.animation.endValue():
             return
-        self.animation.setDirection(QPropertyAnimation.Forward)
+        self.animation.setDirection(QPropertyAnimation.Direction.Forward)
         self.animation.start()
 
     def retract(self):
-        if self.animation.state() == QPropertyAnimation.Running and self.animation.direction() == QPropertyAnimation.Backward:
+        if self.animation.state() == QPropertyAnimation.State.Running and self.animation.direction() == QPropertyAnimation.Direction.Backward:
             return
-        elif self.animation.state() == QPropertyAnimation.Stopped and self.pos() == self.animation.startValue():
+        elif self.animation.state() == QPropertyAnimation.State.Stopped and self.pos() == self.animation.startValue():
             return
-        self.animation.setDirection(QPropertyAnimation.Backward)
+        self.animation.setDirection(QPropertyAnimation.Direction.Backward)
         self.animation.start()
 
 del ui_class, base_class
