@@ -69,29 +69,39 @@ The .deb and related files are built in the upper directory.
 Installation on Microsoft Windows
 =================================
 
+To run Blink on Windows you need to use the repository named blink-qt5-windows.
+It is tested with the MSYS2 environment and the MinGW-w64 compiler toolchain.
+
 Step 1. Install dependencies
 ----------------------------
 
+* Install python3-sipsimple, follow the instructions on:
+  https://github.com/AGProjects/python3-sipsimple/master/docs/Install.windows
+
 * Install PyQt5:
-  pacman -S mingw-w64-i686-python2-pyqt5
+  pacman -S mingw-w64-x86_64-pyqt5
 
 * Install VNC libraries:
-  pacman -S mingw-w64-i686-libvncserver
+  pacman -S mingw-w64-x86_64-libvncserver
 
 * Install Google API client
   pip install google-api-python-client oauth2client
 
+* Install PyQt5-webkit and SVG
+  pacman -S mingw-w64-x86_64-qtwebkit
+  pacman -S mingw64/mingw-w64-x86_64-qt5-svg
+
+* Install lxml pgpy and sqlobject
+  pip install lxml[html_clean] pgpy sqlobject
 
 Step 2. Build and run Blink
 ---------------------------
 
-if [ -d blink-qt ]; then
-        cd blink-qt
-        darcs pull -a
-else
-        darcs get --set-scripts-executable http://devel.ag-projects.com/repositories/blink-qt
-        cd blink-qt
-fi
+Clone the repository if you don't have it:
+
+git clone https://github.com/AGProjects/blink-qt5-windows.git
+
 ./build_inplace
+
 ./run
 
