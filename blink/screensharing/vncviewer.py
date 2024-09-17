@@ -501,7 +501,7 @@ class ScreensharingToolbox(base_class, ui_class):
 
     def eventFilter(self, watched, event):
         if watched is self.parent() and event.type() == QEvent.Type.Resize:
-            new_x = (watched.width() - self.width()) / 2
+            new_x = int((watched.width() - self.width()) / 2)
             self.move(new_x, self.y())
             self.animation.setStartValue(QPoint(new_x, -self.height() + self.exposedPixels))
             self.animation.setEndValue(QPoint(new_x, 0))
