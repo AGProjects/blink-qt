@@ -6867,8 +6867,8 @@ class SessionManager(object, metaclass=Singleton):
         # Outgoing ringtone
         outgoing_sessions_or_proposals = [session for session in self.sessions if session.state == 'connecting/ringing' and session.direction == 'outgoing' or session.state == 'connected/sent_proposal']
         outgoing_file_transfers = [transfer for transfer in self.file_transfers if transfer.state == 'connecting/ringing' and transfer.direction == 'outgoing']
-        if any(not session.on_hold for session in outgoing_sessions_or_proposals) or outgoing_file_transfers:
-            settings = SIPSimpleSettings()
+        settings = SIPSimpleSettings()
+        if settings.audio.play_call_alerts and any(not session.on_hold for session in outgoing_sessions_or_proposals) or outgoing_file_transfers:
             outbound_ringtone = settings.sounds.outbound_ringtone
             if outbound_ringtone:
                 if any('audio' in session.streams.proposed and not session.on_hold for session in outgoing_sessions_or_proposals):
@@ -6921,7 +6921,7 @@ class SessionManager(object, metaclass=Singleton):
         # Hold tone
         connected_sessions = [session for session in self.sessions if session.state == 'connected/*']
         connected_on_hold_sessions = [session for session in connected_sessions if session.on_hold]
-        if outbound_ringtone is Null and inbound_ringtone is Null and connected_sessions:
+        if settings.audio.play_call_alerts and outbound_ringtone is Null and inbound_ringtone is Null and connected_sessions:
             if len(connected_sessions) == len(connected_on_hold_sessions):
                 hold_tone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, volume=30, initial_delay=45, pause_time=45)
                 hold_tone.bridge = SIPApplication.alert_audio_bridge
@@ -7121,21 +7121,24 @@ class SessionManager(object, metaclass=Singleton):
             notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*') and notification.sender.streams.types.intersection({'audio', 'video'})
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
-        if notification.sender is self.active_session and notification.data.originator == 'remote' and notification.data.remote_hold and not notification.data.local_hold:
+        settings = SIPSimpleSettings()
+        if settings.sounds.play_message_alerts and notification.sender is self.active_session and notification.data.originator == 'remote' and notification.data.remote_hold and not notification.data.local_hold:
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hold_tone.wav'), loop_count=1, volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
         self.update_ringtone()
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
-        if notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive():
+        settings = SIPSimpleSettings()
+        if settings.audio.play_call_alerts and notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive():
             self._hangup_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
 
     def _NH_BlinkSessionDidEnd(self, notification):
-        if notification.sender._play_hangup_tone and not self._hangup_tone_timer.isActive():
+        settings = SIPSimpleSettings()
+        if settings.audio.play_call_alerts and notification.sender._play_hangup_tone and not self._hangup_tone_timer.isActive():
             self._hangup_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
@@ -7187,7 +7190,8 @@ class SessionManager(object, metaclass=Singleton):
             pass
         else:
             notification.center.remove_observer(self, sender=notification.sender)
-            if not notification.data.error and not self._filetransfer_tone_timer.isActive():
+            settings = SIPSimpleSettings()
+            if settings.play_call_alerts and not notification.data.error and not self._filetransfer_tone_timer.isActive():
                 self._filetransfer_tone_timer.start()
                 player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
                 SIPApplication.voice_audio_bridge.add(player)

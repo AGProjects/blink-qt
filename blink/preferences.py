@@ -304,6 +304,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.audio_output_device_button.activated[int].connect(self._SH_AudioOutputDeviceButtonActivated)
         self.audio_sample_rate_button.activated[int].connect(self._SH_AudioSampleRateButtonActivated)
         self.enable_echo_cancelling_button.clicked.connect(self._SH_EnableEchoCancellingButtonClicked)
+        self.enable_play_call_alerts_button.clicked.connect(self._SH_EnablePlayCallAlertsButtonClicked)
         self.tail_length_slider.valueChanged.connect(self._SH_TailLengthSliderValueChanged)
 
         # Audio codecs
@@ -712,6 +713,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Audio devices
         self.load_audio_devices()
         self.enable_echo_cancelling_button.setChecked(settings.audio.echo_canceller.enabled)
+        self.enable_play_call_alerts_button.setChecked(settings.audio.play_call_alerts)
         with blocked_qt_signals(self.tail_length_slider):
             self.tail_length_slider.setValue(settings.audio.echo_canceller.tail_length)
         self.audio_sample_rate_button.clear()
@@ -1611,6 +1613,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_TailLengthSliderValueChanged(self, value):
         settings = SIPSimpleSettings()
         settings.audio.echo_canceller.tail_length = value
+        settings.save()
+
+    def _SH_EnablePlayCallAlertsButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.audio.play_call_alerts = checked
         settings.save()
 
     # Audio codecs signal handlers

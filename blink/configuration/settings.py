@@ -38,6 +38,7 @@ class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'))
     sample_rate = Setting(type=SampleRate, default=41000 if sys.platform != 'darwin' else 32000)
     echo_canceller = EchoCancellerSettingsExtension
+    play_call_alerts = Setting(type=bool, default=False)
 
 
 class SIPSettingsExtension(SIPSettings):
