@@ -3327,6 +3327,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
             blink_session.items.chat.chat_widget.update_message_text(id, content)
 
+        # TODO if is an image that cannot be decrypted we must update the chat message placeholder
+
     def _NH_PGPFileDidNotDecrypt(self, notification):
         transfer_session = notification.sender
 
