@@ -255,7 +255,7 @@ class MessageStream(object, metaclass=MediaStreamType):
 
         try:
             pgpMessage = PGPMessage.from_blob(message.content)
-        except (ValueError) as e:
+        except (ValueError, NotImplementedError) as e:
             log.warning(f'Decryption error for {msg_id}, not a PGPMessage: {e}')
             return
 
