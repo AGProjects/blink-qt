@@ -6864,13 +6864,14 @@ class SessionManager(object, metaclass=Singleton):
             notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file, must_open=must_open))
 
     def update_ringtone(self):
+        settings = SIPSimpleSettings()
+
         # Outgoing ringtone
         outgoing_sessions_or_proposals = [session for session in self.sessions if session.state == 'connecting/ringing' and session.direction == 'outgoing' or session.state == 'connected/sent_proposal']
         outgoing_file_transfers = [transfer for transfer in self.file_transfers if transfer.state == 'connecting/ringing' and transfer.direction == 'outgoing']
         if any(not session.on_hold for session in outgoing_sessions_or_proposals) or outgoing_file_transfers:
-            settings = SIPSimpleSettings()
             outbound_ringtone = settings.sounds.outbound_ringtone
-            if outbound_ringtone:
+            if outbound_ringtone and not settings.audio.silent:
                 if any('audio' in session.streams.proposed and not session.on_hold for session in outgoing_sessions_or_proposals):
                     ringtone_path = outbound_ringtone.path
                     ringtone_type = self.PrimaryRingtone
@@ -6903,9 +6904,8 @@ class SessionManager(object, metaclass=Singleton):
             else:
                 initial_delay = 0
 
-            settings = SIPSimpleSettings()
             sound_file = request.session.account.sounds.inbound_ringtone or settings.sounds.inbound_ringtone
-            if sound_file:
+            if sound_file and not settings.audio.silent:
                 if ringtone_type is self.PrimaryRingtone:
                     ringtone_path = sound_file.path
                 else:
@@ -6921,7 +6921,7 @@ class SessionManager(object, metaclass=Singleton):
         # Hold tone
         connected_sessions = [session for session in self.sessions if session.state == 'connected/*']
         connected_on_hold_sessions = [session for session in connected_sessions if session.on_hold]
-        if outbound_ringtone is Null and inbound_ringtone is Null and connected_sessions:
+        if outbound_ringtone is Null and inbound_ringtone is Null and connected_sessions and not settings.audio.silent:
             if len(connected_sessions) == len(connected_on_hold_sessions):
                 hold_tone = WavePlayer(SIPApplication.alert_audio_mixer, Resources.get('sounds/hold_tone.wav'), loop_count=0, volume=30, initial_delay=45, pause_time=45)
                 hold_tone.bridge = SIPApplication.alert_audio_bridge
@@ -7121,21 +7121,24 @@ class SessionManager(object, metaclass=Singleton):
             notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*') and notification.sender.streams.types.intersection({'audio', 'video'})
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
-        if notification.sender is self.active_session and notification.data.originator == 'remote' and notification.data.remote_hold and not notification.data.local_hold:
+        settings = SIPSimpleSettings()
+        if notification.sender is self.active_session and notification.data.originator == 'remote' and notification.data.remote_hold and not notification.data.local_hold and not settings.audio.silent:
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hold_tone.wav'), loop_count=1, volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
         self.update_ringtone()
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
-        if notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive():
+        settings = SIPSimpleSettings()
+        if notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive() and not settings.audio.silent:
             self._hangup_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
             player.start()
 
     def _NH_BlinkSessionDidEnd(self, notification):
-        if notification.sender._play_hangup_tone and not self._hangup_tone_timer.isActive():
+        settings = SIPSimpleSettings()
+        if notification.sender._play_hangup_tone and not self._hangup_tone_timer.isActive() and not settings.audio.silent:
             self._hangup_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
@@ -7180,6 +7183,7 @@ class SessionManager(object, metaclass=Singleton):
             self.update_ringtone()
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
+        settings = SIPSimpleSettings()
         try:
             self.file_transfers.remove(notification.sender)
         except ValueError:
@@ -7187,7 +7191,7 @@ class SessionManager(object, metaclass=Singleton):
             pass
         else:
             notification.center.remove_observer(self, sender=notification.sender)
-            if not notification.data.error and not self._filetransfer_tone_timer.isActive():
+            if not notification.data.error and not self._filetransfer_tone_timer.isActive() and not settings.audio.silent:
                 self._filetransfer_tone_timer.start()
                 player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/file_transfer.wav'), volume=30)
                 SIPApplication.voice_audio_bridge.add(player)

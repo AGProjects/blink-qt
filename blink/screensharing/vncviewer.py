@@ -18,6 +18,7 @@ from operator  import __or__
 
 from sipsimple.application import SIPApplication
 from sipsimple.audio import WavePlayer
+from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.configuration.settings import BlinkSettings
@@ -697,9 +698,11 @@ class Screenshot(object):
         except AttributeError:
             pass
         else:
-            player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/screenshot.wav'), volume=30)
-            SIPApplication.alert_audio_bridge.add(player)
-            player.start()
+            settings = SIPSimpleSettings()
+            if not settings.audio.silent:
+                player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/screenshot.wav'), volume=30)
+                SIPApplication.alert_audio_bridge.add(player)
+                player.start()
 
     @run_in_thread('file-io')
     def save(self):

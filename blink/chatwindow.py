@@ -3182,7 +3182,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
-        must_play = True
+        must_play = not settings.audio.silent
 
         if self.last_incoming_message_alert:
             d = datetime.now() - self.last_incoming_message_alert
@@ -3584,7 +3584,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
-        if settings.sounds.play_message_alerts and self.selected_session is session:
+        if settings.sounds.play_message_alerts and self.selected_session is session and not settings.audio.silent:
             player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_received.wav'), volume=20)
             SIPApplication.alert_audio_bridge.add(player)
             player.start()
@@ -4078,9 +4078,11 @@ class VideoScreenshot(object):
         except AttributeError:
             pass
         else:
-            player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/screenshot.wav'), volume=30)
-            SIPApplication.alert_audio_bridge.add(player)
-            player.start()
+            settings = SIPSimpleSettings()
+            if not settings.audio.silent:
+                player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/screenshot.wav'), volume=30)
+                SIPApplication.alert_audio_bridge.add(player)
+                player.start()
 
     @run_in_thread('file-io')
     def save(self):
