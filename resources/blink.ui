@@ -1350,6 +1350,9 @@ padding: 2px;</string>
    <property name="checkable">
     <bool>true</bool>
    </property>
+   <property name="text">
+    <string>Slient</string>
+   </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
    </property>
