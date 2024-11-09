@@ -2257,6 +2257,9 @@ class AudioSessionItem(object):
             self.widget.record_button.setEnabled(True)
             self.widget.hangup_button.setEnabled(True)
             self.status = Status('Connected')
+            settings = SIPSimpleSettings()
+            if settings.sip.auto_record:
+                self.blink_session.start_recording()
             call_later(3, self._reset_status, self.status)  # reset status 3 seconds later if it hasn't changed until then
         else:
             self.status = Status(translate('sessions', 'Audio refused'), color='#900000')

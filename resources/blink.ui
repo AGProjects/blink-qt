@@ -1135,6 +1135,7 @@ padding: 2px;</string>
     <addaction name="redial_action"/>
     <addaction name="voicemail_menu"/>
     <addaction name="auto_answer_action"/>
+    <addaction name="auto_record_action"/>
     <addaction name="separator"/>
     <addaction name="history_menu"/>
    </widget>
@@ -1494,6 +1495,14 @@ padding: 2px;</string>
   <action name="export_pgp_key_action">
    <property name="text">
     <string>&amp;Export PGP key to my other devices</string>
+   </property>
+  </action>
+  <action name="auto_record_action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Auto-record</string>
    </property>
   </action>
  </widget>

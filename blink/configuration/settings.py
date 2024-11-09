@@ -43,6 +43,7 @@ class AudioSettingsExtension(AudioSettings):
 class SIPSettingsExtension(SIPSettings):
     auto_answer_interval = Setting(type=int, default=15)
     auto_answer = Setting(type=bool, default=True)
+    auto_record = Setting(type=bool, default=False)
 
 
 class ChatSettingsExtension(ChatSettings):

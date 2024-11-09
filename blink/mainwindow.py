@@ -206,6 +206,7 @@ class MainWindow(base_class, ui_class):
         self.mute_action.triggered.connect(self._SH_MuteButtonClicked)
         self.silent_action.triggered.connect(self._SH_SilentButtonClicked)
         self.auto_answer_action.triggered.connect(self._SH_AutoAnswerButtonClicked)
+        self.auto_record_action.triggered.connect(self._SH_AutoRecordButtonClicked)
 
         # Tools menu actions
         self.sip_server_settings_action.triggered.connect(self._AH_SIPServerSettings)
@@ -869,6 +870,11 @@ class MainWindow(base_class, ui_class):
         settings.sip.auto_answer = not settings.sip.auto_answer
         settings.save()
 
+    def _SH_AutoRecordButtonClicked(self, answer):
+        settings = SIPSimpleSettings()
+        settings.sip.auto_record = not settings.sip.auto_record
+        settings.save()
+
     def _SH_SilentButtonClicked(self, silent):
         settings = SIPSimpleSettings()
         settings.audio.silent = silent
@@ -897,6 +903,7 @@ class MainWindow(base_class, ui_class):
         self.silent_action.setChecked(settings.audio.silent)
         self.silent_button.setChecked(settings.audio.silent)
         self.auto_answer_action.setChecked(settings.sip.auto_answer)
+        self.auto_record_action.setChecked(settings.sip.auto_record)
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
         self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
