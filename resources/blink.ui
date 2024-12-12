@@ -1352,7 +1352,7 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Slient</string>
+    <string>Silent</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
