@@ -271,7 +271,7 @@ class MessageStream(object, metaclass=MediaStreamType):
                 #log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} with {account.id} : {error}')
                 continue
             else:
-                message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message
+                message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode('latin1').decode()
                 #log.info(f'Message decrypted: {msg_id}')
                 notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
                 return
@@ -322,8 +322,7 @@ class MessageStream(object, metaclass=MediaStreamType):
             else:
                 dir = os.path.dirname(filename)
                 full_decrypted_filepath = os.path.join(dir, decrypted_message.filename)
-                file_contents = decrypted_message.message if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode()
-
+                file_contents = decrypted_message.message if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode('latin1')
                 with open(full_decrypted_filepath, 'wb+') as output_file:
                     output_file.write(file_contents)
                 correct_filepath = "%s/%s" % (dir, os.path.basename(filename)[:-4])
