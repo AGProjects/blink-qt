@@ -1139,7 +1139,7 @@ class ChatWidget(base_class, ui_class):
     def update_message_encryption(self, id, is_secure=False):
         if is_secure is True:
             path = QUrl.fromLocalFile(self.encrypted_icon.filename).toString()
-            html = f'<img src={path} class="status-icon is-secure">'
+            html = f'<img src="{path}" class="status-icon is-secure">'
             self.chat_js.update_element(f'span#encryption-{id}', html)
 
     def remove_message(self, id):
@@ -3386,7 +3386,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.rstrip())
             elif message.content_type.startswith('text/'):
                 if MessageManager().check_encryption(message.content_type, message.content) == 'OpenPGP':
-                    content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
+                    content = f'<img src="{QUrl.fromLocalFile(session.chat_widget.encrypted_icon.filename).toString()}" class="inline-message-icon">Encrypted Message'
                     content = HtmlProcessor.autolink(content)
                     encrypted = True
                     if message.decrypted != '2':
