@@ -1137,7 +1137,8 @@ class ChatWidget(base_class, ui_class):
 
     def update_message_encryption(self, id, is_secure=False):
         if is_secure is True:
-            html = f'<img src={self.encrypted_icon.filename} class="status-icon is-secure">'
+            path = QUrl.fromLocalFile(self.encrypted_icon.filename).toString()
+            html = f'<img src={path} class="status-icon is-secure">'
             self.chat_js.update_element(f'span#encryption-{id}', html)
 
     def remove_message(self, id):
