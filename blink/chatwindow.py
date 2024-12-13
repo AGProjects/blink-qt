@@ -1114,6 +1114,7 @@ class ChatWidget(base_class, ui_class):
         html = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
         self.chat_js.replace_element(f'#message-{id}', html)
         self.chat_js.add_context_menu(id)
+
     def update_message_text(self, id, text):
         self.chat_js.update_element(f'#text-{id}', text)
         for i, (timestamp, rendered_id, rendered_message) in enumerate(self.timestamp_rendered_messages):
