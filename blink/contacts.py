@@ -2785,7 +2785,11 @@ class ContactModel(QAbstractListModel):
 
     def _NH_BlinkContactDidChange(self, notification):
         contact = notification.sender
-        position = self.items.index(contact)
+        try:
+            position = self.items.index(contact)
+        except ValueError:
+            return
+
         move_point = self._find_contact_move_point(contact)
         if move_point is not None:
             self.beginMoveRows(QModelIndex(), position, position, QModelIndex(), move_point)
