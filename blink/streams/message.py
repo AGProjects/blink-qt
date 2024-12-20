@@ -271,9 +271,13 @@ class MessageStream(object, metaclass=MediaStreamType):
                 #log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} with {account.id} : {error}')
                 continue
             else:
-                message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode('latin1').decode()
-                #log.info(f'Message decrypted: {msg_id}')
-                notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
+                try:
+                    message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode('latin1').decode()
+                except (UnicodeDecodeError, UnicodeEncodeError) as e:
+                    log.debug(f'-- Decoding error for {msg_id} from {session.contact_uri.uri} with {account.id} : {str(e)}')
+                else:
+                    #log.info(f'Message decrypted: {msg_id}')
+                    notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
                 return
 
         log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri}: {error}')
