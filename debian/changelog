@@ -1,3 +1,58 @@
+blink (6.0.0) unstable; urgency=medium
+
+  * NOT RELEASED YET
+  * Added Logs window
+  * Added auto-record function
+  * Restore chat window if minimized
+  * Fixed path for lock icon so it works on windows
+  * Fixed decoding special characters in Chat sessions
+  * Added missing menu label
+  * Silence all audio notifications if Disable ringtones button pressed
+  * Capture decryption exceptions
+  * Don't verify TLS end-points by default
+  * Fix screensharing Qt exceptions
+  * Fixed updating audio codecs if SIPSimple defaults change
+  * Fixed logging in frozen state for Python > 3
+  * Added G722 to default audio codecs on mac
+  * Log available codecs
+  * Improve one liner mac install script
+  * Throttle incoming message wav player
+  * Throttle desktop notifications
+  * Update macos install instructions
+  * Main menu item changes
+  * Increase number of last chat contacts loaded from history
+  * Don't attempt to send IMDNs without a valid IP
+  * Load last conversations when opening Meessage window if no previous chat loaded
+  * Don't retry sending messages without a valid IP address
+  * Show the downloaded images to files even if not renderable
+  * Handle conversation read from other devices
+  * Added placeholder for handling read conversation api call
+  * Fixed traceback when setting contact icon
+  * Only decrypt messages again if private key has changed
+  * Don't save my own public key
+  * Implement pause/resume and progress indicator of HTTP transfers
+  * Refactored file transfers
+  * Fixed wrong filename after decryption
+  * Resend unsent messages when connectivity is restored
+  * Fix capture of local failures when sending outgoing messages
+  * Refresh audio devices when open the Devices menu
+  * Hide OTR menu item if OpenPGP encryption enabled
+  * Added controls to see last transferred files for chat contacts
+  * Make button sizes consistent
+  * Fix building the app and running it on MacOS
+  * Update notes for Qt6 on macos
+  * Moved VNC imports to PyQt6
+  * Fixed ZRTP dialog for PyQt6
+  * Moved clearing cache
+  * Fixed right click menu in webpage for PyQt6
+  * Fixed drag/drop for PyQt6
+  * Remove info level from webengine logging
+  * Updated filter for PyQt6
+  * Fixed button group for PyQt6
+  * Updated most imports to PyQt6
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Mon, 23 Dec 2024 11:54:56 -0300
+
 blink (5.9.1) unstable; urgency=medium
 
   * Fixed session selection in chat window
