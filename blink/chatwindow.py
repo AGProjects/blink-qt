@@ -3805,7 +3805,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.no_sessions_label.hide()
         selection_model = self.session_list.selectionModel()
         # allow user select the contact
-        #selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        if 'chat' in session.blink_session.streams:
+            selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.show()
