@@ -828,6 +828,7 @@ class MainWindow(base_class, ui_class):
     def _NH_BlinkMessageHistoryUnreadMessagesDidLoad(self, notification):
         unread_messages = notification.data.unread_messages
         total = 0
+        self.unread_messages = {}
         for k in unread_messages.keys():
             try:
                 um = self.unread_messages[k]
