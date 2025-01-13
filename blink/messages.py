@@ -1448,7 +1448,7 @@ class MessageManager(object, metaclass=Singleton):
                     blink_session._delete_when_done = False
                     if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
                         blink_session.fake_streams.get('messages').enable_pgp()
-                    notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
+                    NotificationCenter().post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
 
                 if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
                     blink_session.fake_streams.get('messages').enable_pgp()
