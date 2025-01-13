@@ -549,6 +549,13 @@ class MessageHistory(object, metaclass=Singleton):
 
                 self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
 
+    def _get_enabled_account_filter(self, prefix=None):
+        account_manager = AccountManager()
+        enabled_accounts = [account.id for account in account_manager.iter_accounts() if account.enabled]
+        table = f"{prefix}.account_id" if prefix else "account_id"
+
+        return f"{table} IN ({','.join([repr(account) for account in enabled_accounts])})"
+
     @run_in_thread('db')
     def _retry_failed_messages(self):
         if host.default_ip is None:
@@ -861,6 +868,7 @@ class MessageHistory(object, metaclass=Singleton):
                 and am.content_type not like "%sylk-api%"
                 and am.content_type != "application/blink-call-history"
                 and am.state not in ('deleted', 'displayed')
+                and {self._get_enabled_account_filter('am')}
                 group by am.remote_uri order by am.timestamp desc"""
         else:
             query = f"""
@@ -872,6 +880,7 @@ class MessageHistory(object, metaclass=Singleton):
                 and am.content_type not like "%sylk-api%"
                 and am.content_type != "application/blink-call-history"
                 and am.state != 'deleted'
+                and {self._get_enabled_account_filter('am')}
                 group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
 
         notification_center = NotificationCenter()
@@ -888,7 +897,7 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def get_unread_messages(self):
-        query = """select remote_uri, count(*) as c from messages where state != 'displayed' and direction='incoming' group by remote_uri"""
+        query = f"""select remote_uri, count(*) as c from messages where state != 'displayed' and direction='incoming' and {self._get_enabled_account_filter()} group by remote_uri"""
         try:
             result = self.db.queryAll(query)
         except Exception as e:
@@ -903,9 +912,9 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def get_all_contacts(self):
-        log.debug(f'== Getting all contacts with messages')
+        log.debug('== Getting all contacts with messages')
 
-        query = """
+        query = f"""
             select im.display_name, am.remote_uri from messages as am
             left join (select display_name, remote_uri from messages where direction='incoming' group by remote_uri) as im
             on (am.remote_uri = im.remote_uri)
@@ -914,6 +923,7 @@ class MessageHistory(object, metaclass=Singleton):
             and not am.content_type like '%sylk-api%'
             and am.content_type != "application/blink-call-history"
             and am.state != 'deleted'
+            and {self._get_enabled_account_filter('am')}
             group by am.remote_uri
             """
         notification_center = NotificationCenter()
