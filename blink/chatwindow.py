@@ -2669,6 +2669,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def show_session_info(self):
         self.show()
         self.session_list.hide()
+        if self.selected_session.active_panel != self.info_panel:
+            if self.sliding_panels:
+                self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
+            else:
+                self.session_details.setCurrentWidget(self.info_panel)
+            self.selected_session.active_panel = self.info_panel
 
     def show_with_messages(self):
         super(ChatWindow, self).show()
