@@ -48,9 +48,9 @@ from blink.util import run_in_gui_thread, translate
 __all__ = ['MessageManager', 'BlinkMessage']
 
 dns_error_map = {dns.resolver.NXDOMAIN: 'DNS record does not exist',
-               dns.resolver.NoAnswer: 'DNS response contains no answer',
-               dns.resolver.NoNameservers: 'no DNS name servers could be reached',
-               dns.resolver.Timeout: 'no DNS response received, the query has timed out'}
+                 dns.resolver.NoAnswer: 'DNS response contains no answer',
+                 dns.resolver.NoNameservers: 'no DNS name servers could be reached',
+                 dns.resolver.Timeout: 'no DNS response received, the query has timed out'}
 
 ui_class, base_class = uic.loadUiType(Resources.get('generate_pgp_key_dialog.ui'))
 
@@ -393,7 +393,7 @@ class OutgoingMessage(object):
                         try:
                             content = stream.encrypt(self.content, self.content_type)
                         except Exception as e:
-                            data=NotificationData(originator='remote',reason=f"Encryption error {e}", id=self.id)
+                            data = NotificationData(originator='remote', reason=f"Encryption error {e}", id=self.id)
                             notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
                             return
                         self.is_secure = True
@@ -537,7 +537,7 @@ class OutgoingMessage(object):
         data = NotificationData(reason=reason, originator=originator, id=self.id)
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
-        
+
         try:
             code = notification.data.code
         except AttributeError:
@@ -682,7 +682,6 @@ class MessageManager(object, metaclass=Singleton):
                 notification_center = NotificationCenter()
                 notification_center.post_notification('PGPKeysShouldReload', sender=blink_session)
 
-
     def check_encryption(self, content_type, body):
         if (content_type.lower().startswith('text/') and '-----BEGIN PGP MESSAGE-----' in body and body.strip().endswith('-----END PGP MESSAGE-----') and content_type != 'text/pgp-private-key'):
             return 'OpenPGP'
@@ -715,7 +714,6 @@ class MessageManager(object, metaclass=Singleton):
             notification_center.post_notification('BlinkMessageIsParsed', sender=session, data=message)
         elif account is not None:
             notification_center.post_notification('BlinkGotHistoryMessageUpdate', sender=account, data=message)
-
 
         if message is not None and message.direction != 'outgoing' and message.disposition is not None and 'positive-delivery' in message.disposition:
             log.debug("-- Should send delivered imdn for incoming message")
@@ -1410,7 +1408,7 @@ class MessageManager(object, metaclass=Singleton):
     def _NH_PGPMessageDidNotDecrypt(self, notification):
         session = notification.sender
         message = notification.data.message
-        
+
         try:
             msg_id = message.message_id
         except AttributeError:

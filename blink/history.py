@@ -787,13 +787,14 @@ class MessageHistory(object, metaclass=Singleton):
             pass
         else:
             pass
-            #log.info('Conversation with %s read saved to history' % remote_uri)
+            # log.info('Conversation with %s read saved to history' % remote_uri)
 
     @run_in_thread('db')
     def reset_decryption(self, account):
-        query = f"""update messages set decrypted = '3', decryption_error = '' 
-        where account_id = {Message.sqlrepr(account)} and decrypted = '2'
-        """
+        query = f"""
+            update messages set decrypted = '3', decryption_error = ''
+            where account_id = {Message.sqlrepr(account)} and decrypted = '2'
+            """
         try:
             result = self.db.queryAll(query)
         except Exception as e:
@@ -807,10 +808,10 @@ class MessageHistory(object, metaclass=Singleton):
         message = notification.data.message
         session = notification.sender
         message_info = session.info.streams.messages
-        
-        try:       
+
+        try:
             message_id = message.message_id
-        except AttributeError: 
+        except AttributeError:
             # is a BlinkMessage from active session
             message_id = message.id
 
@@ -826,7 +827,7 @@ class MessageHistory(object, metaclass=Singleton):
                 # 2 failed to decrypt incoming messages
                 decrypted_sql = '1' if decrypted else '2'
                 if decrypted is not None:
-                    #log.debug(f'Update {message.direction} {message_id} decrypted to {decrypted_sql}')
+                    # log.debug(f'Update {message.direction} {message_id} decrypted to {decrypted_sql}')
                     db_message.decrypted = decrypted_sql
                     if not decrypted:
                         db_message.decryption_error = notification.data.error
@@ -857,6 +858,7 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def get_last_contacts(self, number=25, unread=False):
         log.info(f'== Getting last {number} contacts with messages unread={unread}')
+
         if unread:
             query = f"""
                 select im.display_name, am.remote_uri, max(am.timestamp) from messages as am
@@ -926,6 +928,7 @@ class MessageHistory(object, metaclass=Singleton):
             and {self._get_enabled_account_filter('am')}
             group by am.remote_uri
             """
+
         notification_center = NotificationCenter()
         try:
             result = self.db.queryAll(query)

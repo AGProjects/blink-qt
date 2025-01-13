@@ -264,7 +264,6 @@ class MessageContactsManager(object, metaclass=Singleton):
             else:
                 notification_center.post_notification('MessageContactsManagerDidDeactivate', sender=self)
 
-
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)

@@ -64,7 +64,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
-        
+
         notification_center.add_observer(self, sender=AccountManager())
 
         icon_manager = IconManager()

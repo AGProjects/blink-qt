@@ -5389,7 +5389,6 @@ class FileListModel(QAbstractListModel):
             self.dataChanged.emit(index, index)
         except ValueError:
             pass
-            
 
     def _NH_BlinkMessageWillDelete(self, notification):
         blink_session = notification.sender
@@ -5613,7 +5612,7 @@ class FileListView(QListView, ColorHelperMixin):
         if item.already_exists:
             QDesktopServices.openUrl(QUrl.fromLocalFile(item.decrypted_filename))
             return True
-            
+
         if item.downloading:
             message_log.info('Download still in progress')
             return
@@ -5649,7 +5648,7 @@ class FileListView(QListView, ColorHelperMixin):
         item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         model = self.model()
         if item.downloading:
-            return 
+            return
 
         if item.expired:
             return True
@@ -5664,7 +5663,7 @@ class FileListView(QListView, ColorHelperMixin):
                     pass
                 else:
                     message_log.info(f'File transfer {item.id} removed from {folder}')
- 
+
         if item.hash and item.file.protocol == 'msrp':
             SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
         else:
@@ -6817,7 +6816,6 @@ class SessionManager(object, metaclass=Singleton):
             downloaded_size = os.path.getsize(tmp_path)
             message_log.info(f"Temporary file {file.id} of {downloaded_size} bytes saved at {tmp_path}")
             resume_header = {'Range': 'bytes=%d-' % downloaded_size}
-            
         else:
             downloaded_size = 0
             resume_header = {}

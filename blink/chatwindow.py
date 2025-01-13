@@ -2826,7 +2826,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def confirm_read_messages(self, session):
         if self.selected_session:
             NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=session.blink_session)
-                                                           
+
         if session and session.blink_session in self.pending_displayed_notifications:
             MessageManager().send_conversation_read(session.blink_session)
             item = self.pending_displayed_notifications.pop(self.selected_session.blink_session)
@@ -2990,7 +2990,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             document = FTHTTPDocument.parse(message.content)
         except ParserError as e:
             raise ParserError
-            #log.warning('Failed to parse FT HTTP payload: %s' % str(e))
+            # log.warning('Failed to parse FT HTTP payload: %s' % str(e))
 
         for info in document:
             try:
@@ -3214,7 +3214,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             d = datetime.now() - self.last_desktop_notify
             if d.total_seconds() < 60:
                 return
-            
+
         self.last_desktop_notify = datetime.now()
         if platform.system() == 'Darwin':
             desktop_notification(notification_title, notification_message, '', sound=True)
@@ -3387,7 +3387,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             # We don't load messages if the account is not present or not enabled.
             if account is None or not account.enabled:
-                continue
+               continue
 
             last_account = account
 
