@@ -108,6 +108,9 @@ class HistoryManager(object, metaclass=Singleton):
             account = notification.sender
             if 'sms.private_key' in notification.data.modified:
                 self.message_history.reset_decryption(str(account.id))
+            if 'enabled' in notification.data.modified:
+                self.message_history.get_unread_messages()
+
 
     def _NH_SIPApplicationDidStart(self, notification):
         try:
