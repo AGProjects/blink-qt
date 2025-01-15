@@ -1010,6 +1010,10 @@ class MainWindow(base_class, ui_class):
                 action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
                 action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
                 action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
+            if 'sms.private_key' in notification.data.modified:
+                if account is not BonjourAccount() and account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+                    self.export_pgp_key_action.setEnabled(True)
+
 
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
