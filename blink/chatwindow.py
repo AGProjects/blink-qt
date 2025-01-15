@@ -3176,6 +3176,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 blink_session.account = received_account
                 NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
                 NotificationCenter().post_notification('PGPKeysShouldReload', sender=blink_session)
+            NotificationCenter().post_notification('BlinkSessionWasLoaded', sender=blink_session)
         else:
             self.render_after_load.append((session, received_account, chat_message))
 
@@ -3496,6 +3497,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
             NotificationCenter().post_notification('PGPKeysShouldReload', sender=blink_session)
 
+        NotificationCenter().post_notification('BlinkSessionWasLoaded', sender=blink_session)
         while self.fetch_after_load:
             (blink_session, file, message, info) = self.fetch_after_load.popleft()
             if file.hash is not None and file.protocol == 'msrp':

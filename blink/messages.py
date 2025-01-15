@@ -641,7 +641,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
-        notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
+        notification_center.add_observer(self, name='BlinkSessionWasLoaded')
         notification_center.add_observer(self, name='BlinkSessionWasDeleted')
         notification_center.add_observer(self, name='PGPKeysDidGenerate')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
@@ -1361,7 +1361,7 @@ class MessageManager(object, metaclass=Singleton):
             request.dialog.hide()
             self.pgp_requests.remove(request)
 
-    def _NH_BlinkSessionNewOutgoing(self, notification):
+    def _NH_BlinkSessionWasLoaded(self, notification):
         session = notification.sender
         stream = session.fake_streams.get('messages')
 
