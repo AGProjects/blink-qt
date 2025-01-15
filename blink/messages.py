@@ -768,8 +768,10 @@ class MessageManager(object, metaclass=Singleton):
 
         log.info(f'Fetching message history for {account.id} from server {url}')
 
+        settings = SIPSimpleSettings()
+
         try:
-            r = requests.get(url, headers=headers, timeout=10)
+            r = requests.get(url, headers=headers, timeout=10, verify=settings.tls.verify_server)
             r.raise_for_status()
         except (requests.ConnectionError, requests.Timeout) as e:
             log.warning(f'SylkServer API connection error: {e}')
