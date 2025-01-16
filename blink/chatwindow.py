@@ -2230,6 +2230,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.disable_otr = QAction(translate('chat_window', "Disable OTR for messaging"), self, triggered=self._AH_DisableOTR)
         self.control_button.actions.main_window = QAction(translate('chat_window', "Main Window"), self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ShortcutContext.ApplicationShortcut)
         self.control_button.actions.show_transferred_files = QAction(translate('chat_window', "Show transferred files"), self, triggered=self._AH_ShowTransferredFiles)
+        self.control_button.actions.remove_conversation = QAction(translate('chat_window', "Remove conversation"), self, triggered=self._AH_RemoveConversation)
 
         self.addAction(self.control_button.actions.main_window)  # make this active even when it's not in the control_button's menu
 
@@ -2380,7 +2381,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.disable_otr)
                 menu.addAction(self.control_button.actions.connect_with_audio)
                 menu.addAction(self.control_button.actions.connect_with_video)
-                menu.addSeparator()
                 menu.addAction(self.control_button.actions.connect_with_msrp)
             else:
                 menu.addAction(self.control_button.actions.disconnect)
@@ -2409,11 +2409,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.share_my_screen)
                     elif stream_types != {'screen-sharing'}:
                         menu.addAction(self.control_button.actions.end_screen_sharing)
-                    menu.addSeparator()
                     if 'chat' not in stream_types:
                         menu.addAction(self.control_button.actions.add_chat)
                     elif stream_types != {'chat'}:
                         menu.addAction(self.control_button.actions.remove_chat)
+                        
+            menu.addSeparator()
+            menu.addAction(self.control_button.actions.remove_conversation)
             self.control_button.setMenu(menu)
 
     def _update_panel_buttons(self):
@@ -3889,6 +3891,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session = self.selected_session.blink_session
         self.session_list.hide()
         self._SH_FilesButtonClicked(True)
+
+    def _AH_RemoveConversation(self):
+        if not self.selected_session:
+            return
+        blink_session = self.selected_session.blink_session
+        print('Remove conversation from account %s with %s' % (blink_session.account.id, blink_session.contact_uri))
 
     def _AH_ConnectWithAudio(self):
         stream_descriptions = [StreamDescription('audio')]
