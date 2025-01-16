@@ -68,3 +68,7 @@ Running on MacOS
 https://stackoverflow.com/questions/33090346/is-there-any-way-to-use-qtwebengine-without-opengl
 
 export QMLSCENE_DEVICE=softwarecontext
+
+
+install_name_tool -add_rpath /Users/adigeo/.venv/blinqt5-windows/lib/python3.9/site-packages/PyQt5/Qt/lib  /Users/adigeo/.venv/blinqt5-windows/lib/python3.9/site-packages/PyQt5/QtWebKit.so
+install_name_tool -add_rpath /Users/adigeo/.venv/blinqt5-windows/lib/python3.9/site-packages/PyQt5/Qt/lib  /Users/adigeo/.venv/blinqt5-windows/lib/python3.9/site-packages/PyQt5/QtWebKitWidgets.so
