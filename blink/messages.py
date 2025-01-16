@@ -703,9 +703,11 @@ class MessageManager(object, metaclass=Singleton):
             except Exception as e:
                 pass
             else:
-                if content == public_key:
+                if content.strip() == public_key.strip():
                     log.info(f'Private key import for {account.id} skipped because are the same')
                     return True
+                else:
+                    log.info(f'Show PGP import panel')
         return False
 
     def _handle_incoming_message(self, message, session, account=None):
