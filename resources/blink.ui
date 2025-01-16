@@ -1145,11 +1145,14 @@ padding: 2px;</string>
     </property>
     <addaction name="show_unread_messages_action"/>
     <addaction name="show_last_messages_action"/>
+    <addaction name="separator"/>
     <addaction name="export_pgp_key_action"/>
-    <addaction name="auto_accept_chat_action"/>
-    <addaction name="received_messages_sound_action"/>
+    <addaction name="generate_pgp_key"/>
     <addaction name="separator"/>
     <addaction name="join_conference_action"/>
+    <addaction name="auto_accept_chat_action"/>
+    <addaction name="separator"/>
+    <addaction name="received_messages_sound_action"/>
    </widget>
    <widget class="QMenu" name="devices_menu">
     <property name="title">
@@ -1409,7 +1412,7 @@ padding: 2px;</string>
   </action>
   <action name="join_conference_action">
    <property name="text">
-    <string>&amp;Join MSRP Conference...</string>
+    <string>&amp;Join a MSRP conference...</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+J</string>
@@ -1434,7 +1437,7 @@ padding: 2px;</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Play a sound for &amp;received messages</string>
+    <string>Play a sound for new incoming messages</string>
    </property>
   </action>
   <action name="received_files_window_action">
@@ -1494,7 +1497,7 @@ padding: 2px;</string>
   </action>
   <action name="export_pgp_key_action">
    <property name="text">
-    <string>&amp;Export private key to my other devices</string>
+    <string>&amp;Export my encryption key to my other devices</string>
    </property>
   </action>
   <action name="auto_record_action">
@@ -1503,6 +1506,11 @@ padding: 2px;</string>
    </property>
    <property name="text">
     <string>Auto-record</string>
+   </property>
+  </action>
+  <action name="generate_pgp_key">
+   <property name="text">
+    <string>Generate a new encryption key</string>
    </property>
   </action>
  </widget>
