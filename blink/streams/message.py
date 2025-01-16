@@ -245,7 +245,7 @@ class MessageStream(object, metaclass=MediaStreamType):
         notification_center = NotificationCenter()
 
         if self.private_key is None and len(self.other_private_keys) == 0:
-            notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message), error='No private key')
+            notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error='No private key'))
             return
 
         try:
