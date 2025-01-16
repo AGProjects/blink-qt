@@ -1494,7 +1494,7 @@ padding: 2px;</string>
   </action>
   <action name="export_pgp_key_action">
    <property name="text">
-    <string>&amp;Export PGP key to my other devices</string>
+    <string>&amp;Export private key to my other devices</string>
    </property>
   </action>
   <action name="auto_record_action">

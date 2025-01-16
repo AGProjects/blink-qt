@@ -87,7 +87,7 @@
      <item>
       <widget class="QLabel" name="label_2">
        <property name="text">
-        <string>Blink uses end-to-end encryption for messaging for which it needs a private key.</string>
+        <string>Blink uses PGP end-to-end encryption for messaging, for which it needs an encryption key.</string>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
@@ -170,7 +170,7 @@
         </font>
        </property>
        <property name="text">
-        <string>A private key has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</string>
+        <string>An encryption has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</string>
        </property>
        <property name="scaledContents">
         <bool>false</bool>
