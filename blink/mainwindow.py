@@ -217,6 +217,7 @@ class MainWindow(base_class, ui_class):
         self.show_unread_messages_action.triggered.connect(self._AH_ShowUnreadMessagesActionTriggered)
         self.show_last_messages_action.triggered.connect(self._AH_ShowLastMessagesActionTriggered)
         self.export_pgp_key_action.triggered.connect(self._AH_ExportPGPkeyActionTriggered)
+        self.generate_pgp_key.triggered.connect(self._AH_GeneratePGPkeyActionTriggered)
 
         # Devices menu
         self.devices_menu.aboutToShow.connect(self.refresh_devices)
@@ -478,6 +479,11 @@ class MainWindow(base_class, ui_class):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() else None
         MessageManager().export_private_key(account)
+
+    def _AH_GeneratePGPkeyActionTriggered(self, checked):
+        account = self.identity.itemData(self.identity.currentIndex()).account
+        account = account if account is not BonjourAccount() else None
+        MessageManager().generate_private_key(account)
 
     def _AH_TransfersWindowActionTriggered(self, checked):
         self.filetransfer_window.show()

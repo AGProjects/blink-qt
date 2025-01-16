@@ -1461,6 +1461,14 @@ class MessageManager(object, metaclass=Singleton):
             outgoing_message = OutgoingMessage(account, contact, message.content, message.content_type, timestamp=timestamp, id=message.message_id, session=blink_session)
             self._send_message(outgoing_message)
 
+    def generate_private_key(self, account):
+        if account is None:
+            return
+
+        log.info(f'Generate a new private key for {account.id}')
+        print('Generate key')
+        # TODO: show a dialog panel with confirmation buttons
+
     def export_private_key(self, account):
         if account is None:
             return
