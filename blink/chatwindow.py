@@ -3691,6 +3691,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
         session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Failed to initialize chat: %s') % notification.data.reason))
+        log.info('Failed to initialize chat session: %s' % notification.data.reason)
 
     def _NH_MediaStreamDidStart(self, notification):
         if notification.sender.type != 'chat':
