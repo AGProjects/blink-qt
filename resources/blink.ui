@@ -1497,7 +1497,7 @@ padding: 2px;</string>
   </action>
   <action name="export_pgp_key_action">
    <property name="text">
-    <string>&amp;Export my encryption key to my other devices</string>
+    <string>&amp;Export private key</string>
    </property>
   </action>
   <action name="auto_record_action">
@@ -1510,7 +1510,7 @@ padding: 2px;</string>
   </action>
   <action name="generate_pgp_key">
    <property name="text">
-    <string>Generate a new encryption key</string>
+    <string>Generate new encryption key</string>
    </property>
   </action>
  </widget>
