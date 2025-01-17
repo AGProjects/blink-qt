@@ -441,7 +441,6 @@ class ChatWebView(QWebEngineView):
             menu.exec(event.globalPos())
 
     def createWindow(self, window_type):
-        print("create window of type", window_type)
         return None
 
     def dragEnterEvent(self, event):
@@ -1402,7 +1401,9 @@ class ChatWidget(base_class, ui_class):
         try:
             msg_id = self.send_message(text, content_type='text/html', id=id)
         except Exception as e:
-            self.add_message(ChatStatus(translate('chat_window', 'Error sending message: %s') % e))  # decide what type to use here. -Dan
+            self.add_message(ChatStatus(translate('chat_window', 'Error sending message: %s') % e))
+            log.error('Error sending message:  %s' % str(e))
+
         else:
             if msg_id is not None:
                 id = msg_id
@@ -1816,6 +1817,12 @@ class VideoWidget(VideoSurface, ui_class):
             self.camera_preview.producer = None
             self.camera_preview._image = None
 
+        if notification.data.stream.type == 'chat':
+            session = notification.sender.items.chat
+            if session is None:
+                return
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Cannot add chat stream: %s (%s)') % (notification.data.reason, notification.data.code)))
+
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         if notification.data.stream.type == 'video':
             self.hide()
@@ -1823,6 +1830,12 @@ class VideoWidget(VideoSurface, ui_class):
             self._image = None
             self.camera_preview.producer = None
             self.camera_preview._image = None
+
+        if notification.data.stream.type == 'chat':
+            session = notification.sender.items.chat
+            if session is None:
+                return
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Chat stream ended')))
 
     def _NH_BlinkSessionDidEnd(self, notification):
         self.hide()
@@ -2219,8 +2232,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.remove_audio = QAction(translate('chat_window', "Remove audio"), self, triggered=self._AH_RemoveAudio)
         self.control_button.actions.add_video = QAction(translate('chat_window', "Add video"), self, triggered=self._AH_AddVideo)
         self.control_button.actions.remove_video = QAction(translate('chat_window', "Remove video"), self, triggered=self._AH_RemoveVideo)
-        self.control_button.actions.add_chat = QAction(translate('chat_window', "Add real time chat"), self, triggered=self._AH_AddChat)
-        self.control_button.actions.remove_chat = QAction(translate('chat_window', "Remove real time chat"), self, triggered=self._AH_RemoveChat)
+        self.control_button.actions.add_chat = QAction(translate('chat_window', "Add MSRP chat"), self, triggered=self._AH_AddChat)
+        self.control_button.actions.remove_chat = QAction(translate('chat_window', "Remove MSRP chat"), self, triggered=self._AH_RemoveChat)
         self.control_button.actions.send_files = QAction(translate("chat_window", "Send File(s)..."), self, triggered=self._AH_SendFiles)
         self.control_button.actions.share_my_screen = QAction(translate('chat_window', "Share my screen"), self, triggered=self._AH_ShareMyScreen)
         self.control_button.actions.request_screen = QAction(translate('chat_window', "Request screen"), self, triggered=self._AH_RequestScreen)
@@ -2383,7 +2396,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 menu.addAction(self.control_button.actions.connect_with_video)
                 menu.addAction(self.control_button.actions.connect_with_msrp)
             else:
-                menu.addAction(self.control_button.actions.disconnect)
                 if state == 'connected':
                     stream_types = blink_session.streams.types
                     if 'chat' not in stream_types:
@@ -2413,9 +2425,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.add_chat)
                     elif stream_types != {'chat'}:
                         menu.addAction(self.control_button.actions.remove_chat)
-                        
-            menu.addSeparator()
-            menu.addAction(self.control_button.actions.remove_conversation)
+                    menu.addAction(self.control_button.actions.disconnect)
+
+            if state != 'connected':
+                menu.addSeparator()
+                menu.addAction(self.control_button.actions.remove_conversation)
             self.control_button.setMenu(menu)
 
     def _update_panel_buttons(self):
@@ -3269,12 +3283,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         reason = notification.data.reason
         status = 'failed-local' if notification.data.originator == 'local' else 'failed'
-
+        code = None
         if status == 'failed':
-            # session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Delivery failed: {notification.data.data.code} - {reason}')))
-            pass
-        call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status=status)
+            code = notification.data.code
 
+        if code is None:
+            code = ''
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Message failed: {reason} {code}')))
+        log.error('Message %s: %s (%s)' % (status, reason, code))
+        call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status=status)
 
     def _NH_PGPMessageDidDecrypt(self, notification):
         blink_session = notification.sender
@@ -3696,13 +3713,22 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Failed to initialize chat: %s') % notification.data.reason))
         log.info('Failed to initialize chat session: %s' % notification.data.reason)
 
+    def _NH_MediaStreamDidFail(self, notification):
+        if notification.sender.type != 'chat':
+            return
+        session = notification.sender.blink_session.items.chat
+        if session is None:
+            return
+        session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Media failed: %s') % notification.data.reason))
+        log.info('Chat media failed: %s' % notification.data.reason)
+
     def _NH_MediaStreamDidStart(self, notification):
         if notification.sender.type != 'chat':
             return
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.add_message(ChatStatus('Connected'))
+        session.chat_widget.add_message(ChatStatus('Chat stream established'))
 
     def _NH_MediaStreamDidEnd(self, notification):
         if notification.sender.type != 'chat':
@@ -3710,10 +3736,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
+
         if notification.data.error is not None:
             session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Disconnected: %s') % notification.data.error))
         else:
-            session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Disconnected')))
+            #session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Disconnected')))
             # Set type back for message as the stream ended cleanly -- Tijmen
             notification.sender.blink_session.chat_type = None
 

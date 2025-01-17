@@ -1102,7 +1102,8 @@ class BlinkSession(BlinkSessionBase):
         for stream in set(notification.data.proposed_streams).intersection(self.streams):
             self.streams.remove(stream)
             if self.state == 'connected/sent_proposal':
-                notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=NotificationData(stream=stream))
+                notification.data.stream = stream
+                notification.center.post_notification('BlinkSessionDidNotAddStream', sender=self, data=notification.data)
         if self.state not in ('ending', 'ended', 'deleted'):
             self.state = 'connected'
 
