@@ -1563,6 +1563,7 @@ class MessageManager(object, metaclass=Singleton):
     def send_message(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
         blink_session.last_failed_reason = None
+        blink_session.updateTimestamp()
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id, blink_session)
         self._send_message(outgoing_message)
 

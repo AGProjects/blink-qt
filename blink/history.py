@@ -900,6 +900,7 @@ class MessageHistory(object, metaclass=Singleton):
             # find the display name sent by remote party
             display_name = r[0]
             uri = r[1]
+            timestamp = r[2]
             query = f"""select display_name from messages
                 where remote_uri = '{uri}'
                 and direction = 'incoming' and remote_uri != display_name"""
@@ -910,10 +911,10 @@ class MessageHistory(object, metaclass=Singleton):
             else:
                 if len(list(c)) > 0:
                     display_name = list(c)[0][0]
-                    print('Found DN = %s' % display_name)
 
-            results.append((display_name, uri))
+            results.append((display_name, uri, timestamp))
 
+        results = sorted(results, key=lambda tup: tup[2])
         results.reverse()
         notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=results))
 
