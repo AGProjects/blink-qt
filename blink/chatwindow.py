@@ -3300,8 +3300,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if blink_session.last_failed_reason != (reason, code):
             blink_session.last_failed_reason = (reason, code)
-            session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Message failed: {reason} {code}')))
-        log.error('Message %s: %s (%s)' % (status, reason, code))
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Sending failed: {reason} {code}')))
+
         call_later(.5, session.chat_widget.update_message_status, id=notification.data.id, status=status)
 
     def _NH_PGPMessageDidDecrypt(self, notification):

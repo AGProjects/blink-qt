@@ -3721,6 +3721,7 @@ class ChatSessionModel(QAbstractListModel):
         self.beginInsertRows(QModelIndex(), position, position)
         self.sessions.insert(position, session)
         self.endInsertRows()
+        message_log.info(f'Initialize {session.blink_session.direction} session from {session.blink_session.account.id} to {session.blink_session.contact_uri.uri}')
 
     def _pop_session(self, session):
         position = self.sessions.index(session)

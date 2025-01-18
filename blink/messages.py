@@ -400,9 +400,10 @@ class OutgoingMessage(object):
                         try:
                             content = stream.encrypt(self.content, self.content_type)
                         except Exception as e:
-                            data = NotificationData(originator='remote', reason=f"Encryption error {e}", id=self.id)
+                            reason = f"Encryption error {str(e)}"
+                            data = NotificationData(originator='remote', reason=reason, id=self.id)
                             notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data, code=None)
-                            log.error('Sending message %s failed: %s' % (self.id, str(e)))
+                            log.info(f'Sending message {self.id} to {self.sip_uri} failed: {reason}')
                             return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
@@ -438,12 +439,12 @@ class OutgoingMessage(object):
             try:
                 message_request.send()
             except PJSIPError as e:
-                log.info(f'Sending {content_type} message {self.id} failed: {str(e)}')
+                log.info(f'Sending message {self.id} to {self.session.contact_uri.uri} failed: {str(e)}')
                 notification_center = NotificationCenter()
                 data = NotificationData(originator='local', reason=str(e), id=self.id, code=None)
                 notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
             else:
-                log.info(f'{content_type} message {self.id} sent')
+                log.info(f'Sending message {self.id} to {self.session.contact_uri.uri}...')
         else:
             pass
             # TODO
@@ -551,7 +552,7 @@ class OutgoingMessage(object):
         except AttributeError:
             code = ''
 
-        log.info(f'Sending message {self.id} failed {originator}ly: {code} {reason}')
+        log.info(f'Sending message {self.id} to {self.session.contact_uri.uri} failed {originator}ly: {code} {reason}')
 
 
 @implementer(IObserver)
@@ -1455,7 +1456,7 @@ class MessageManager(object, metaclass=Singleton):
             try:
                 blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
             except StopIteration:
-                log.info(f"Create message view for {contact_uri.uri} with instance_id {instance_id}")
+                log.info(f"Create message view from history for {contact_uri.uri} with instance_id {instance_id}")
                 created_views.add(contact_uri.uri)
                 try:
                     ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
@@ -1576,6 +1577,7 @@ class MessageManager(object, metaclass=Singleton):
         try:
             blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
+            log.info(f"Create message view from session for {contact_uri.uri} with instance_id {instance_id}")
             try:
                 ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
             except StopIteration:
