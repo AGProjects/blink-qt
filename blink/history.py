@@ -702,7 +702,7 @@ class MessageHistory(object, metaclass=Singleton):
             except StopIteration:
                 display_name = message.sender.display_name
             else:
-                display_name = contact.name
+                display_name = contact.name if contact.name != remote_uri else message.sender.display_name
 
         timestamp_native = message.timestamp
         timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
@@ -891,9 +891,29 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             return
 
-        log.debug(f"== Contacts fetched: {len(list(result))}")
-        result = [(display_name, uri) for (display_name, uri, timestamp) in result]
-        results = list(result)
+        #log.debug(f"== Contacts fetched: {len(list(result))}")
+        #result = [(display_name, uri) for (display_name, uri, timestamp) in result]
+        #results = list(result)
+
+        results = []
+        for r in result:
+            # find the display name sent by remote party
+            display_name = r[0]
+            uri = r[1]
+            query = f"""select display_name from messages
+                where remote_uri = '{uri}'
+                and direction = 'incoming' and remote_uri != display_name"""
+            try:
+                c = self.db.queryAll(query)
+            except Exception as e:
+                pass
+            else:
+                if len(list(c)) > 0:
+                    display_name = list(c)[0][0]
+                    print('Found DN = %s' % display_name)
+
+            results.append((display_name, uri))
+
         results.reverse()
         notification_center.post_notification('BlinkMessageHistoryLastContactsDidSucceed', data=NotificationData(contacts=results))
 
