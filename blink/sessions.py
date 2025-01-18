@@ -539,6 +539,7 @@ class BlinkSession(BlinkSessionBase):
         self._smp_handler = Null
         self.routes = None
         self.chat_type = None
+        self.last_failed_reason = None
 
     def _get_state(self):
         return self.__dict__['state']
