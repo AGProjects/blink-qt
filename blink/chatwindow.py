@@ -1447,6 +1447,12 @@ class ChatWidget(base_class, ui_class):
         self.composing_timer.stop()
         self.chat_input.reset_locks()
 
+        session = notification.sender.items.chat
+        if session is None:
+           return
+
+        session.chat_widget.add_message(ChatStatus(translate('chat_window', notification.data.reason)))
+
     def _NH_BlinkSessionWasDeleted(self, notification):
         self.setParent(None)
 
