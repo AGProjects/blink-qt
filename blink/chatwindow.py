@@ -3290,6 +3290,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if code is None:
             code = ''
 
+        log.info(f'Last failure code: {blink_session.last_failed_reason} new: {(reason, code)}')
+
         if blink_session.last_failed_reason != (reason, code):
             blink_session.last_failed_reason = (reason, code)
             session.chat_widget.add_message(ChatStatus(translate('chat_window', f'Message failed: {reason} {code}')))
@@ -3595,7 +3597,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
 
-        blink_session.last_failed_reason = None
         message = notification.data.message
 
         if message.content_type.startswith('image/'):
