@@ -27,6 +27,7 @@ from urllib.parse import urlsplit, urlunsplit, quote
 from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
+from sipsimple.addressbook import AddressbookManager
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPURI, FromHeader, ToHeader, Message, RouteHeader
 from sipsimple.core._core import PJSIPError
@@ -1441,6 +1442,7 @@ class MessageManager(object, metaclass=Singleton):
         for message in messages:
             from blink.contacts import URIUtils
             contact, contact_uri = URIUtils.find_contact(message.remote_uri)
+
             if contact_uri.uri in created_views:
                 # creation of message views take time, so we need to skip duplicates here
                 continue
@@ -1449,14 +1451,18 @@ class MessageManager(object, metaclass=Singleton):
             account = AccountManager().get_account(message.account_id)
 
             instance_id = contact.settings.id if contact.type == 'bonjour' else None
-            if contact.type == 'dummy' and message.display_name is not None:
-                contact.settings.name = message.display_name
 
             try:
                 blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
             except StopIteration:
                 log.info(f"Create message view for {contact_uri.uri} with instance_id {instance_id}")
                 created_views.add(contact_uri.uri)
+                try:
+                    ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
+                except StopIteration:
+                    pass
+                else:
+                    contact.settings.name = ab_contact.name
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
             else:
                 if blink_session.fake_streams.get('messages') is None:
@@ -1566,12 +1572,17 @@ class MessageManager(object, metaclass=Singleton):
         account = AccountManager().default_account
 
         instance_id = contact.settings.id if contact.type == 'bonjour' else None
-        if contact.type == 'dummy' and display_name is not None:
-            contact.settings.name = display_name
 
         try:
             blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
+            try:
+                ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
+            except StopIteration:
+                pass
+            else:
+                contact.settings.name = ab_contact.name
+
             blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
         else:
             if blink_session.fake_streams.get('messages') is None:
