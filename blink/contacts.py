@@ -290,6 +290,10 @@ class MessageContactsManager(object, metaclass=Singleton):
                     display_name = uri
                 contact = Contact(MessageContact(display_name, [contact_uri], uri), None)
             found_contacts.append(contact)
+
+            if display_name and contact.settings.name == uri and display_name != uri:
+                contact.settings.name = display_name
+
             try:
                 self.contacts[contact.settings.id]
             except KeyError:

@@ -935,8 +935,26 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             return
 
+        results = []
+        for r in result:
+            # find the display name sent by remote party
+            display_name = r[0]
+            uri = r[1]
+            query = f"""select display_name from messages
+                where remote_uri = '{uri}'
+                and direction = 'incoming' and remote_uri != display_name"""
+            try:
+                c = self.db.queryAll(query)
+            except Exception as e:
+                pass
+            else:
+                if len(list(c)) > 0:
+                    display_name = list(c)[0][0]
+
+            results.append((display_name, uri))
+
         log.debug(f"== Contacts fetched: {len(list(result))}")
-        notification_center.post_notification('BlinkMessageHistoryAllContactsDidSucceed', data=NotificationData(contacts=list(result)))
+        notification_center.post_notification('BlinkMessageHistoryAllContactsDidSucceed', data=NotificationData(contacts=results))
 
     @run_in_thread('db')
     def remove(self, account):
