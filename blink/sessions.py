@@ -1014,12 +1014,12 @@ class BlinkSession(BlinkSessionBase):
                 self.sip_session.connect(ToHeader(self.uri), routes, list(self.streams))
             else:
                 self.routes = None
-                self._terminate(reason='Destination not found', error=True)
+                self._terminate(reason='Domain not found in DNS', error=True)
 
     def _NH_DNSLookupDidFail(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
-            self._terminate(reason='Destination not found', error=True)
+            self._terminate(reason='Domain not found in DNS', error=True)
 
     def _NH_SIPSessionNewOutgoing(self, notification):
         self.state = 'connecting'
@@ -4379,7 +4379,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.state = 'connecting'
         routes = notification.data.result
         if not routes:
-            self._terminate(failure_reason=translate('sessions', 'Destination not found'))
+            self._terminate(failure_reason=translate('sessions', 'Domain not found in DNS'))
             self.routes = None
             return
         self.routes = routes
