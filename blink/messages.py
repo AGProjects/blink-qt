@@ -1581,7 +1581,10 @@ class MessageManager(object, metaclass=Singleton):
             except StopIteration:
                 pass
             else:
-                contact.settings.name = ab_contact.name
+                if ab_contact.name != contact_uri.uri:
+                    contact.settings.name = ab_contact.name
+                elif display_name and display_name != contact_uri.uri:
+                    contact.settings.name = display_name
 
             blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
         else:
