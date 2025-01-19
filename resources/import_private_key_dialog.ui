@@ -23,7 +23,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>Import Private Key</string>
+   <string>Import private Key</string>
   </property>
   <property name="windowIcon">
    <iconset>
@@ -80,14 +80,14 @@
         </font>
        </property>
        <property name="text">
-        <string>Import Private Key</string>
+        <string>Import private Key</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="label_2">
        <property name="text">
-        <string>Blink uses PGP end-to-end encryption for messaging, for which it needs an encryption key.</string>
+        <string>Blink uses PGP end-to-end encryption for messaging, for which it needs the same private key on all devices.</string>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
@@ -170,7 +170,7 @@
         </font>
        </property>
        <property name="text">
-        <string>An encryption has been sent from one of your other devices.  Enter the code shown on the sending device to import it.</string>
+        <string>A private key has been received from another device.  Enter the code shown on the sending device to import it.</string>
        </property>
        <property name="scaledContents">
         <bool>false</bool>

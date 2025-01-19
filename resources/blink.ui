@@ -1510,7 +1510,7 @@ padding: 2px;</string>
   </action>
   <action name="generate_pgp_key">
    <property name="text">
-    <string>Generate new encryption key</string>
+    <string>Generate new private key</string>
    </property>
   </action>
  </widget>

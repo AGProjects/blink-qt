@@ -23,7 +23,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>Export Private Key</string>
+   <string>Export private Key</string>
   </property>
   <property name="windowIcon">
    <iconset>
@@ -80,14 +80,14 @@
         </font>
        </property>
        <property name="text">
-        <string>Export Private Key</string>
+        <string>Export private Key</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="label_3">
        <property name="text">
-        <string>Blink uses PGP end-to-end encryption for messages to contacts that support this feature. To replicate messages on multiple devices using the same account you need the same encryption key on all of them.</string>
+        <string>Blink uses PGP end-to-end encryption for messaging. To read messages on multiple devices using the same account you need the same private key on all of them.</string>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
@@ -103,7 +103,7 @@
         </font>
        </property>
        <property name="text">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Press &lt;span style=&quot; font-weight:600;&quot;&gt;Export&lt;/span&gt; and enter this pincode when prompted on your other device:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Press &lt;span style=&quot; font-weight:600;&quot;&gt;Export&lt;/span&gt; and enter this pincode when prompted on your other devices:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
        </property>
       </widget>
      </item>

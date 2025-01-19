@@ -23,7 +23,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>Missing Encryption key</string>
+   <string>Generate private key</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <item row="0" column="0">
@@ -58,7 +58,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Missing Encryption key</string>
+        <string>Generate private key</string>
        </property>
       </widget>
      </item>
@@ -74,14 +74,14 @@
         </size>
        </property>
        <property name="text">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;You received an encrypted message for &lt;span style=&quot; font-weight:600;&quot;&gt;ACCOUNT&lt;/span&gt;.&lt;/p&gt;&lt;p&gt;To use PGP end-to-end encryption for messaging you need an encryption key for this account.&lt;/p&gt;&lt;p&gt;Please choose &lt;span style=&quot; font-weight:600; font-style:italic;&quot;&gt;'Export private key'&lt;/span&gt; on a device/browser where you signed in before with Blink or Sylk.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;You received an encrypted message for &lt;span style=&quot; font-weight:600;&quot;&gt;ACCOUNT&lt;/span&gt;.&lt;/p&gt;&lt;p&gt;To use PGP end-to-end encryption, you need a private key.&lt;/p&gt;&lt;p&gt;Please choose &lt;span style=&quot; font-weight:600; font-style:italic;&quot;&gt;'Export private key'&lt;/span&gt; on the device where you signed in before.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="key_maybe_present_label">
        <property name="text">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;To use PGP end-to-end encryption for messaging you need an encryption key for &lt;span style=&quot; font-weight:600;&quot;&gt;ACCOUNT&lt;/span&gt;.&lt;/p&gt;&lt;p&gt;If you used PGP end-to-end encryption on another device/browser, choose &lt;span style=&quot; font-weight:600; font-style:italic;&quot;&gt;'Export private key'&lt;/span&gt; there.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>To use PGP end-to-end encryption, you need the same private key for ACCOUNT on all devices. If you used another device, choose 'Export private key' there.</string>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
@@ -91,7 +91,7 @@
      <item>
       <widget class="QLabel" name="label_3">
        <property name="text">
-        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If you &lt;span style=&quot; font-weight:600;&quot;&gt;lost access&lt;/span&gt; to that device/browser, please continue with 'Generate'. 'Cancel' will &lt;span style=&quot; font-weight:600;&quot;&gt;disable&lt;/span&gt; end-to-end encrypted messaging.&lt;/p&gt;&lt;p&gt;If you generate a new encryption key, you &lt;span style=&quot; font-weight:600;&quot;&gt;cannot&lt;/span&gt; decrypt older messages.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+        <string>If you lost access to all other devices, chose 'Generate'. If you generate a new private key, you &lt;span style=&quot; font-weight:600;&quot;&gt;cannot&lt;/span&gt; decrypt old messages on new devices. Already decrypted messages are still available.</string>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
