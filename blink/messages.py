@@ -439,12 +439,12 @@ class OutgoingMessage(object):
             try:
                 message_request.send()
             except PJSIPError as e:
-                log.info(f'Sending message {self.id} to {self.session.contact_uri.uri} failed: {str(e)}')
+                log.info(f'Sending message {self.id} to {self.sip_uri} failed: {str(e)}')
                 notification_center = NotificationCenter()
                 data = NotificationData(originator='local', reason=str(e), id=self.id, code=None)
                 notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
             else:
-                log.info(f'Sending message {self.id} to {self.session.contact_uri.uri}...')
+                log.info(f'Sending message {self.id} to {self.sip_uri}...')
         else:
             pass
             # TODO
