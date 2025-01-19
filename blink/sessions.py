@@ -6626,7 +6626,7 @@ class ConferenceDialog(base_class, ui_class):
         session_manager = SessionManager()
         account = account_manager.default_account
         if account is not BonjourAccount():
-            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.sip2sip.info') if '@' not in current_text else current_text
+            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.%s' % account.id.domain) if '@' not in current_text else current_text
         else:
             conference_uri = '%s@%s' % (current_text, 'conference.sip2sip.info') if '@' not in current_text else current_text
         contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')

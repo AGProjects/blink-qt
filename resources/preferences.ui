@@ -951,7 +951,7 @@
                <number>0</number>
               </property>
               <property name="inactiveText" stdset="0">
-               <string>conference.sip2sip.info</string>
+               <string>conference</string>
               </property>
              </widget>
             </item>
