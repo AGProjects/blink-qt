@@ -4,9 +4,11 @@
 echo "Installing port dependencies..."
 sudo port install yasm x264 gnutls openssl sqlite3 gnutls ffmpeg mpfr libmpc libvpx wget
 
-if [ $? -eq 0 ]; then
-    echo "Port dependencies installed"
-else
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+    echo
+    echo "Failed to install all C dependencies"
+    echo
     exit 1
 fi
 
@@ -16,9 +18,11 @@ echo "Installing python dependencies..."
 pip3 install --upgrade pip
 pip3 install --user cython==0.29.37 dnspython lxml twisted python-dateutil greenlet zope.interface requests gmpy2 wheel gevent
 
-if [ $? -eq 0 ]; then
-    echo "Python dependencies installed"
-else
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+    echo
+    echo "Failed to install all python dependencies"
+    echo
     exit 1
 fi
 
@@ -38,7 +42,17 @@ for p in python3-application python3-eventlib python3-gnutls python3-otr python3
     cd $p
     echo "Installing $p..."
     pip3 install --user .
+
+    if [ $RESULT -ne 0 ]; then
+        echo
+        echo "Failed to install $p dependency"
+        cd ..
+        echo
+        exit 1
+        fi
+
     cd ..
+
 done
 
 # Download and build SIP SIMPLE client SDK
@@ -52,7 +66,23 @@ echo "Installing SIP Simple SDK..."
 cd python3-sipsimple
 chmod +x ./get_dependencies.sh
 ./get_dependencies.sh 
+
+if [ $RESULT -ne 0 ]; then
+    echo
+    echo "Failed to install all SIP SIMPLE SDK dependencies"
+    echo
+    exit 1
+fi
+
 pip3 install --user .
+if [ $RESULT -ne 0 ]; then
+    echo
+    echo "Failed to build SIP SIMPLE SDK"
+    echo
+    cd
+    exit 1
+fi
+
 cd ..
 
 if [ ! -d sipclients3 ]; then
