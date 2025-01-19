@@ -1662,7 +1662,7 @@
                </size>
               </property>
               <property name="text">
-               <string>Peer name:</string>
+               <string>SIP Proxy CN:</string>
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
