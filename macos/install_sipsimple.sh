@@ -2,11 +2,25 @@
 
 # Install C building dependencies
 echo "Installing port dependencies..."
-sudo port install yasm x264 gnutls openssl sqlite3 gnutls ffmpeg mpfr libmpc libvpx
+sudo port install yasm x264 gnutls openssl sqlite3 gnutls ffmpeg mpfr libmpc libvpx wget
+
+if [ $? -eq 0 ]; then
+    echo "Port dependencies installed"
+else
+    exit 1
+fi
 
 # Install Python building dependencies
 echo "Installing python dependencies..."
+
+pip3 install --upgrade pip
 pip3 install --user cython==0.29.37 dnspython lxml twisted python-dateutil greenlet zope.interface requests gmpy2 wheel gevent
+
+if [ $? -eq 0 ]; then
+    echo "Python dependencies installed"
+else
+    exit 1
+fi
 
 # Create a work directory
 
