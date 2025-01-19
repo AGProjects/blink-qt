@@ -1021,7 +1021,7 @@ class MessageManager(object, metaclass=Singleton):
 
         for session in [session for session in self.sessions if session.account is request.account]:
             stream = session.fake_streams.get('messages')
-            if not stream.can_encrypt:
+            if stream and not stream.can_encrypt:
                 stream.enable_pgp()
 
         while self._incoming_encrypted_message_queue:
