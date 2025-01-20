@@ -61,6 +61,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
         notification_center.add_observer(self, name='ChatSessionUnreadMessagesCountChanged')
         notification_center.add_observer(self, name='BlinkMessageHistoryUnreadMessagesDidLoad')
+        notification_center.add_observer(self, name='BlinkMessageNewUnread')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
@@ -811,16 +812,8 @@ class MainWindow(base_class, ui_class):
         self.active_sessions_label.setVisible(bool(self.total_unread_messages))
         self.show_unread_messages_action.setEnabled(bool(self.total_unread_messages))
 
-    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
-        direction = notification.data.direction
-
-        if direction != 'incoming':
-            return
-
-        if direction == 'displayed':
-            return
-
-        uri = notification.data.remote_uri
+    def _NH_BlinkMessageNewUnread(self, notification):
+        uri = notification.sender
 
         try:
             self.unread_messages[uri]

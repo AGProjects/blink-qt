@@ -3211,6 +3211,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 self.pending_displayed_notifications.setdefault(blink_session, []).append((message.id, message.timestamp, received_account))
 
+        if direction == 'incoming':
+            if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
+                pass
+            else:
+                NotificationCenter().post_notification('BlinkMessageNewUnread', sender=uri)
+
         if direction != 'outgoing':
             if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                 pass
