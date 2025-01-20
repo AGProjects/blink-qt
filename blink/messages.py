@@ -1220,14 +1220,17 @@ class MessageManager(object, metaclass=Singleton):
                 if content_type.lower() != IMDNDocument.content_type:
                     return
             elif x_replicated_message is not Null:
-                log.debug("Not creating session for incoming message, message is replicated")
-                notification_center.post_notification('BlinkGotHistoryMessage',
-                                                      sender=account,
-                                                      data=NotificationData(remote_uri=contact.uri.uri,
-                                                                            message=message,
-                                                                            encryption=encryption,
-                                                                            state='accepted'))
-                return
+                #log.debug("Not creating session for incoming message, message is replicated")
+                #notification_center.post_notification('BlinkGotHistoryMessage',
+                #                                      sender=account,
+                #                                      data=NotificationData(remote_uri=contact.uri.uri,
+                #                                                            message=message,
+                #                                                           encryption=encryption,
+                #                                                            state='accepted'))
+                #return
+                log.info(f"Create outgoing message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
+                blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+                blink_session.direction = 'outgoing'
             else:
                 log.info(f"Create incoming message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
@@ -1351,6 +1354,7 @@ class MessageManager(object, metaclass=Singleton):
                     notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
                 notification_center.post_notification('BlinkGotMessage',
                                                       sender=blink_session,
+                                                      replicated_message=x_replicated_message,
                                                       data=NotificationData(message=message, account=account))
             else:
                 blink_session.fake_streams.get('messages').decrypt(message)

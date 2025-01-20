@@ -3137,6 +3137,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             #self.show_with_messages()
             pass #show now or allow the user to bring up the window?
 
+        try:
+             replicated_message = notification.data.replicated_message
+        except AttributeError:
+             replicated_message = False
+
         message = notification.data.message
         direction = notification.data.message.direction
 
@@ -3225,7 +3230,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
-        must_play = not settings.audio.silent
+        must_play = not settings.audio.silent and not replicated_message
 
         if self.last_incoming_message_alert:
             d = datetime.now() - self.last_incoming_message_alert
