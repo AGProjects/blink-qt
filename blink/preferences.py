@@ -2035,6 +2035,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                     account.sms.history_synchronization_token = None
                     account.sms.enable_history_synchronization = False
                     account.save()
+                else:
+                    self.history_url_editor.setText(account.sms.history_synchronization_url)
+            if 'sms.history_synchronization_token' in notification.data.modified:
+                if account.sms.history_synchronization_token:
+                    self.last_id_editor.setText(account.sms.history_synchronization_id)
 
 
 del ui_class, base_class

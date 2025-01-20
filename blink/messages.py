@@ -658,6 +658,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
 
     @run_in_thread('file-io')
     def _save_pgp_key(self, data, uri):
@@ -751,6 +752,9 @@ class MessageManager(object, metaclass=Singleton):
     @run_in_thread('sync')
     def _sync_messages(self, account):
         if not account.sms.enable_history_synchronization:
+            if account.sms.history_synchronization_timestamp:
+                account.sms.history_synchronization_timestamp = None
+                account.save()
             return
 
         if not account.sms.history_synchronization_token:
@@ -1052,6 +1056,10 @@ class MessageManager(object, metaclass=Singleton):
     def _SH_PGPRequestFinished(self, request):
         request.dialog.hide()
         self.pgp_requests.remove(request)
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if isinstance(notification.sender, Account) and 'sms.enable_history_synchronization' in notification.data.modified:
+            self._sync_messages(notification.sender)
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
         if notification.sender is not BonjourAccount():
