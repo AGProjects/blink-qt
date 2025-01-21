@@ -3717,7 +3717,6 @@ class ChatSessionModel(QAbstractListModel):
         self.dataChanged.emit(index, index)
 
     def _find_insertion_point(self, session):
-        print('_find_insertion_point for session %s: %s' % (session.name, session.timestamp))
         for position, item in enumerate(self.sessions):
             if session.timestamp > item.timestamp:
                 break
