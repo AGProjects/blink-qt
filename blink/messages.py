@@ -342,7 +342,7 @@ class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
     __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api-message-remove', 'application/sylk-api-pgp-key-lookup', 'application/sylk-api-conversation-read'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
-    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None):
+    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True):
         self.lookup = None
         self.account = account
         self.uri = contact.uri.uri
@@ -355,6 +355,7 @@ class OutgoingMessage(object):
         self.contact = contact
         self.is_secure = False
         self.dns_failed_reason = None
+        self.use_cpim = use_cpim
 
     @property
     def message(self):
@@ -409,7 +410,7 @@ class OutgoingMessage(object):
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
             additional_sip_headers = []
-            if self.account.sms.use_cpim:
+            if self.account.sms.use_cpim and self.use_cpim:
                 ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
                 additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
                 if self.account.sms.enable_imdn and self.content_type not in self.__disabled_imdn_content_types__:
@@ -743,7 +744,7 @@ class MessageManager(object, metaclass=Singleton):
         log.debug('Requesting SylkServer API token')
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(account.uri)
-        outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token')
+        outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token', use_cpim=False)
         self._send_message(outgoing_message)
 
     def _send_message(self, outgoing_message):
@@ -1539,7 +1540,7 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def send_remove_message(self, session, id, account=None):
-        outgoing_message = OutgoingMessage(session.account if account is None else account, session.contact, id, 'application/sylk-api-message-remove', session=session)
+        outgoing_message = OutgoingMessage(session.account if account is None else account, session.contact, id, 'application/sylk-api-message-remove', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
     def send_conversation_read(self, session):
@@ -1548,7 +1549,7 @@ class MessageManager(object, metaclass=Singleton):
         content = json.dumps(payload)
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(session.account.uri)
-        outgoing_message = OutgoingMessage(session.account, session.contact, content, 'application/sylk-api-conversation-read', session=session)
+        outgoing_message = OutgoingMessage(session.account, session.contact, content, 'application/sylk-api-conversation-read', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
