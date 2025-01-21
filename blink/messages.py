@@ -7,6 +7,7 @@ import requests
 import random
 import urllib
 import uuid
+import pgpy
 
 from collections import deque
 
@@ -708,16 +709,21 @@ class MessageManager(object, metaclass=Singleton):
         filename = os.path.join(directory, f'{id}.{extension}')
         if os.path.exists(filename):
             try:
-                with open(filename) as f:
-                    content = f.read()
+                key1, _ = pgpy.PGPKey.from_file(filename)
+                key2, _ = pgpy.PGPKey.from_blob(public_key)
             except Exception as e:
+                log.warning(f"Can't load PGP key for comparison: {str(e)}")
                 pass
             else:
-                if content.strip() == public_key.strip():
+                fingerprint1 = key1.fingerprint
+                fingerprint2 = key2.fingerprint
+
+                if fingerprint1 == fingerprint2:
                     log.info(f'Private key import for {account.id} skipped because are the same')
                     return True
                 else:
-                    log.info(f'Show PGP import panel')
+                    log.info('Show PGP import panel')
+
         return False
 
     def _handle_incoming_message(self, message, session, account=None):
