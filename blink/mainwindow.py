@@ -532,6 +532,8 @@ class MainWindow(base_class, ui_class):
 
         session_manager = SessionManager()
         if not session_manager.active_session:
+            action = self.transfer_menu.addAction(translate("main_window", "No active call"))
+            action.setEnabled(False)
             return
 
         for session in self.session_model.sessions:
