@@ -280,7 +280,7 @@ class MessageStream(object, metaclass=MediaStreamType):
                     notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
                 return
 
-        log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri}: {error}')
+        log.debug(f'-- Message {msg_id} from {session.contact_uri.uri} decryption error: {error}')
         notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=error))
 
     @run_in_thread('pgp')

@@ -749,9 +749,9 @@ class MessageHistory(object, metaclass=Singleton):
                     dbmessage.content = message.content
         else:
             if direction == 'outgoing':
-                log.info(f"Message {message.id} from {session.account.id} to {remote_uri} stored")
+                log.info(f"Message {message.id} to {remote_uri} stored")
             else:
-                log.info(f"Message {message.id} from {remote_uri} to {session.account.id} stored")
+                log.info(f"Message {message.id} from {remote_uri} stored")
 
             if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
@@ -773,7 +773,10 @@ class MessageHistory(object, metaclass=Singleton):
                 continue
 
             if (state == 'deleted' or message.state != 'displayed') and message.state != state:
-                log.info(f'{message.direction} message {id} {message.state} -> {state}')
+                if message.direction == 'outgoing':
+                    log.info(f'Message {id} to {message.remote_uri} state changed {message.state} -> {state}')
+                else:
+                    log.info(f'Message {id} from {message.remote_uri} state changed {message.state} -> {state}')
                 message.state = state
 
     @run_in_thread('db')

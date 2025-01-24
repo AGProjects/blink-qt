@@ -394,7 +394,7 @@ class OutgoingMessage(object):
                 if not stream:
                     data = NotificationData(originator='remote', reason=f"No chat stream established", id=self.id, code=None)
                     notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
-                    log.error('Sending message %s failed: no chat stream established' % self.id)
+                    log.error('Message %s failed: no chat stream established' % self.id)
                     return
 
                 if self.content_type.lower() not in self.__disabled_imdn_content_types__:
@@ -405,7 +405,7 @@ class OutgoingMessage(object):
                             reason = f"Encryption error {str(e)}"
                             data = NotificationData(originator='remote', reason=reason, id=self.id)
                             notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data, code=None)
-                            log.info(f'Sending message {self.id} to {self.sip_uri} failed: {reason}')
+                            log.info(f'Message {self.id} to {str(self.sip_uri)[4:]} failed: {reason}')
                             return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
@@ -441,12 +441,12 @@ class OutgoingMessage(object):
             try:
                 message_request.send()
             except PJSIPError as e:
-                log.info(f'Sending message {self.id} to {self.sip_uri} failed: {str(e)}')
+                log.info(f'Message {self.id} to {str(self.sip_uri)[4:]} failed: {str(e)}')
                 notification_center = NotificationCenter()
                 data = NotificationData(originator='local', reason=str(e), id=self.id, code=None)
                 notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
             else:
-                log.info(f'Sending message {self.id} to {self.sip_uri}...')
+                log.info(f'Message {self.id} to {str(self.sip_uri)[4:]} sending...')
         else:
             pass
             # TODO
@@ -554,7 +554,7 @@ class OutgoingMessage(object):
         except AttributeError:
             code = ''
 
-        log.info(f'Sending message {self.id} to {self.session.contact_uri.uri} failed {originator}ly: {code} {reason}')
+        log.info(f'Message {self.id} to {self.session.contact_uri.uri} failed {originator}ly: {code} {reason}')
 
 
 @implementer(IObserver)
@@ -664,7 +664,7 @@ class MessageManager(object, metaclass=Singleton):
 
     @run_in_thread('file-io')
     def _save_pgp_key(self, data, uri):
-        log.info(f'Saving public key for {uri}')
+        log.info(f'Saving public key for {str(uri)[4:]}')
         settings = SIPSimpleSettings()
         account_manager = AccountManager()
 
@@ -1120,7 +1120,7 @@ class MessageManager(object, metaclass=Singleton):
         encryption = self.check_encryption(content_type, body)
         enc_text = f'{encryption} encrypted ' if encryption else ''
 
-        log.info(f'incoming {enc_text}{content_type.lower()} message {message_id} for account {account.id} from {sender.uri}')
+        log.info(f'Message {message_id} {enc_text}{content_type.lower()} for account {account.id} from {sender.uri}')
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
         if x_replicated_message is not Null:
@@ -1243,11 +1243,18 @@ class MessageManager(object, metaclass=Singleton):
                 #                                                           encryption=encryption,
                 #                                                            state='accepted'))
                 #return
-                log.info(f"Create outgoing message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
+                if instance_id:
+                    log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to instance_id {instance_id}")
+                else:
+                    log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to {contact_uri.uri}")
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
                 blink_session.direction = 'outgoing'
             else:
-                log.info(f"Create incoming message view for account {account.id} to {contact_uri.uri} with instance_id {instance_id}")
+                if instance_id:
+                    log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to instance_id {instance_id}")
+                else:
+                    log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to {contact_uri.uri}")
+                
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
                 # TODO session should have direction incoming, right now there is no way to create it without an event. We set the direction manually. -- Tijmen
                 blink_session.direction = 'incoming'
@@ -1563,7 +1570,7 @@ class MessageManager(object, metaclass=Singleton):
             if not account.sms.use_cpim or not account.sms.enable_imdn:
                 return
 
-        log.debug(f"-- Attempt to send imdn for {id}: {state}")
+        log.debug(f"Message {id} imdn sending: {state}")
         if state == 'delivered':
             notification = DeliveryNotification(state)
         elif state == 'displayed':
