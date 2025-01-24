@@ -1078,7 +1078,7 @@ class MainWindow(base_class, ui_class):
                 self.display_name.setText(account.display_name or '')
             if {'enabled', 'message_summary.enabled', 'message_summary.voicemail_uri'}.intersection(notification.data.modified):
                 action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
-                action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
+                action.setVisible(False if account is BonjourAccount() else account.enabled)
                 action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
             if 'sms.private_key' in notification.data.modified:
                 if account is not BonjourAccount() and account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
@@ -1096,7 +1096,7 @@ class MainWindow(base_class, ui_class):
         action.triggered.connect(self._AH_AccountActionTriggered)
 
         action = self.voicemail_menu.addAction(self.mwi_icons[0], account.id)
-        action.setVisible(False if account is BonjourAccount() else account.enabled and account.message_summary.enabled)
+        action.setVisible(False if account is BonjourAccount() else account.enabled)
         action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
         action.setData(account)
         action.triggered.connect(self._AH_VoicemailActionTriggered)
