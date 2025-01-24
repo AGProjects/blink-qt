@@ -2,36 +2,27 @@ blink (6.0.0) unstable; urgency=medium
 
   * NOT RELEASED YET
   * Added Logs window
+  * Added Call Transfer menu
   * Added audio auto-record function
-  * Restore chat window if minimized
+  * Added outbound account selection gfor message session
   * Added button to open last unread messages
-  * Use default conference as conference server, local domain will be appended
-  * Reorganize Blink menus
-  * PGP fixes
-  * TLS verification fixes
-  * Message syncronization fixes
-  * Message rendering fixes
-  * Silence all audio notifications if Disable ringtones button pressed
-  * Fixed updating audio codecs if SIPSimple defaults change
-  * Log available audio/video codecs
-  * Throttle incoming message wav player
-  * Throttle desktop notifications
-  * Don't attempt to send IMDNs without a valid IP
-  * Load last conversations when opening Meessage window if no previous chat loaded
-  * Don't retry sending messages without a valid IP address
-  * Show the downloaded images to files even if not renderable
-  * Only decrypt messages again if private key has changed
-  * Don't save my own public key
-  * Implement pause/resume and progress indicator of HTTP transfers
-  * Refactored file transfers
-  * Fixed wrong filename after decryption
-  * Resend unsent messages when connectivity is restored
-  * Fix capture of local failures when sending outgoing messages
-  * Refresh audio devices when open the Devices menu
   * Added controls to see last transferred files for chat contacts
-  * Fix building the app and running it on MacOS
-  * Update notes for Qt6 on macos
+  * Added pause/resume for file transfers
+  * Restore chat window if minimized
+  * Use default conference as conference server, local domain will be appended
+  * PGP decryption/encryption fixes
+  * TLS verification fixes
+  * Message rendering fixes
+  * Message session fixes
+  * Sylk-Server API messages replication fixes
+  * Silence all audio notifications if Disable ringtones button pressed
+  * Fixed updating codecs if SDK defaults have changed
+  * Throttle incoming message audio notifications
+  * Throttle desktop notifications for messages
+  * Refactored file transfers
+  * Refresh audio devices when open the Devices menu
   * Fixes for PyQt6 migration
+  * Make app compatible with MacOS
 
  -- Adrian Georgescu <ag@ag-projects.com>  Fri, 24 Jan 2025 11:54:56 -0300
 
