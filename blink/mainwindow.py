@@ -18,10 +18,11 @@ from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.datatypes import Path
 from sipsimple.configuration.settings import SIPSimpleSettings
+from sipsimple.session import IllegalStateError
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils
+from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager
 from blink.messages import MessageManager
@@ -202,6 +203,8 @@ class MainWindow(base_class, ui_class):
         self.join_conference_action.triggered.connect(self.conference_dialog.show)
         self.history_menu.aboutToShow.connect(self._SH_HistoryMenuAboutToShow)
         self.history_menu.triggered.connect(self._AH_HistoryMenuTriggered)
+        self.transfer_menu.aboutToShow.connect(self._SH_TransferMenuAboutToShow)
+        self.transfer_menu.triggered.connect(self._AH_TransferMenuTriggered)
         self.output_devices_group.triggered.connect(self._AH_AudioOutputDeviceChanged)
         self.input_devices_group.triggered.connect(self._AH_AudioInputDeviceChanged)
         self.alert_devices_group.triggered.connect(self._AH_AudioAlertDeviceChanged)
@@ -523,6 +526,68 @@ class MainWindow(base_class, ui_class):
         else:
             action = self.history_menu.addAction(translate("main_window", "Call history is empty"))
             action.setEnabled(False)
+
+    def _SH_TransferMenuAboutToShow(self):
+        self.transfer_menu.clear()
+
+        session_manager = SessionManager()
+        if not session_manager.active_session:
+            return
+
+        for session in self.session_model.sessions:
+            if session.active:
+                continue
+
+            title = session.blink_session.contact.name
+            action = self.transfer_menu.addAction(translate("main_window", "To call with %s" % title))
+            action.session = session.blink_session
+            action.remote_uri = session.blink_session.contact_uri
+
+        search_text = self.search_box.text()
+        if len(search_text):
+            selected_items = self.search_list.selectionModel().selectedIndexes()
+            if selected_items:
+                item = selected_items[0].data(Qt.ItemDataRole.UserRole) if selected_items else None
+                if isinstance(item, Contact):
+                    selected_uri = item.uri
+                    title = item.name 
+                    action = self.transfer_menu.addAction(translate("main_window", "To found contact %s" % title))
+                    action.session = None
+                    action.remote_uri = item.uri
+            else:
+                contact, contact_uri = URIUtils.find_contact(search_text)
+                if contact_uri:
+                    title = contact.name
+                    action = self.transfer_menu.addAction(translate("main_window", "To search contact %s" % title))
+                    action.session = None
+                    action.remote_uri = contact_uri
+            return
+
+        try:
+            selected_items = self.contact_list.selectionModel().selectedIndexes()
+        except IndexError:
+            pass
+        else:
+            item = selected_items[0].data(Qt.ItemDataRole.UserRole) if selected_items else None
+            if isinstance(item, Contact):
+                if item.uri == session_manager.active_session.contact_uri:
+                    return
+                title = item.name 
+                action = self.transfer_menu.addAction(translate("main_window", "To selected contact %s" % title))
+                action.session = None
+                action.remote_uri = item.uri
+
+    def _AH_TransferMenuTriggered(self, action):
+        session_manager = SessionManager()
+        if not session_manager.active_session:
+            return
+
+        try:
+            session_manager.active_session.transfer(action.remote_uri, replaced_session=action.session)
+        except IllegalStateError:
+            pass
+        else:
+            self.main_view.setCurrentWidget(self.sessions_panel)
 
     def _AH_HistoryMenuTriggered(self, action):
         account_manager = AccountManager()
