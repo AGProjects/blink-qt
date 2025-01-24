@@ -1279,8 +1279,8 @@ class MessageManager(object, metaclass=Singleton):
                     blink_session.fake_streams.get('messages').enable_pgp()
                 notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
 
-            if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
-                blink_session.fake_streams.get('messages').enable_pgp()
+        if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
+            blink_session.fake_streams.get('messages').enable_pgp()
 
         if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)) and account is BonjourAccount():
             stream = blink_session.fake_streams.get('messages')
