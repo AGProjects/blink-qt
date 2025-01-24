@@ -913,6 +913,8 @@ class MessageManager(object, metaclass=Singleton):
                                                         encryption='OpenPGP' if is_secure else None)
 
                 notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
+                if message['direction'] == 'incoming':
+                    NotificationCenter().post_notification('BlinkMessageNewUnread', sender=contact.uri.uri)
 
                 try:
                     blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
@@ -963,6 +965,9 @@ class MessageManager(object, metaclass=Singleton):
                                                           message=history_message,
                                                           encryption=encryption,
                                                           state=message['state']))
+
+                if message['direction'] == 'incoming':
+                    NotificationCenter().post_notification('BlinkMessageNewUnread', sender=contact.uri.uri)
 
                 try:
                     blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
