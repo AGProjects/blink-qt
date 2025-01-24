@@ -538,7 +538,7 @@ class OutgoingMessage(object):
             notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
     def _NH_SIPMessageDidFail(self, notification):
-        if self.content_type.lower() in self.__ignored_content_types__:
+        if self.__disabled_imdn_content_types__:
             return
 
         if self.session is None:
