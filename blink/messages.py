@@ -339,8 +339,8 @@ class OTRInternalMessage(BlinkMessage):
 
 @implementer(IObserver)
 class OutgoingMessage(object):
-    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type, 'application/sylk-conversation-read', 'application/sylk-conversation-remove', 'text/pgp-public-key'}  # Content types to ignore in notifications
-    __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api-message-remove', 'application/sylk-api-pgp-key-lookup', 'application/sylk-api-conversation-read'}.union(__ignored_content_types__)  # Content types to ignore in notifications
+    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
+    __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
     def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True):
         self.lookup = None
@@ -360,6 +360,10 @@ class OutgoingMessage(object):
     @property
     def message(self):
         return BlinkMessage(self.content, self.content_type, self.account, timestamp=self.timestamp, id=self.id, is_secure=self.is_secure, direction='outgoing')
+
+    @property
+    def _disabled_imdn_content_type(self):
+        return any(self.content_type.lower().startswith(prefix) for prefix in self.__disabled_imdn_content_types__)
 
     def _lookup(self):
         settings = SIPSimpleSettings()
@@ -397,7 +401,7 @@ class OutgoingMessage(object):
                     log.error('Message %s failed: no chat stream established' % self.id)
                     return
 
-                if self.content_type.lower() not in self.__disabled_imdn_content_types__:
+                if not self._disabled_imdn_content_type:
                     if self.account.sms.enable_pgp and stream.can_encrypt:
                         try:
                             content = stream.encrypt(self.content, self.content_type)
@@ -413,7 +417,7 @@ class OutgoingMessage(object):
             if self.account.sms.use_cpim and self.use_cpim:
                 ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
                 additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
-                if self.account.sms.enable_imdn and self.content_type not in self.__disabled_imdn_content_types__:
+                if self.account.sms.enable_imdn and not self._disabled_imdn_content_type:
                     additional_headers.append(CPIMHeader('Disposition-Notification', ns, 'positive-delivery, display'))
                 payload = CPIMPayload(content,
                                       self.content_type,
@@ -452,14 +456,14 @@ class OutgoingMessage(object):
             # TODO
 
     def send(self):
-        if self.content_type.lower() in ['text/pgp-private-key', 'application/sylk-api-token']:
+        if self.content_type.lower() == ['text/pgp-private-key', 'application/sylk-api-token']:
             self._lookup()
             return
 
         if self.session is None:
             return
 
-        if self.content_type.lower() not in self.__disabled_imdn_content_types__:
+        if not self._disabled_imdn_content_type:
             notification_center = NotificationCenter()
             notification_center.post_notification('BlinkMessageIsPending', sender=self.session, data=NotificationData(message=self.message, id=self.id))
 
@@ -640,7 +644,8 @@ class RequestList(list):
 
 @implementer(IObserver)
 class MessageManager(object, metaclass=Singleton):
-    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove', 'application/sylk-conversation-read', 'application/sylk-conversation-remove'}
+    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type,
+                                 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove', 'application/sylk-api'}
 
     def __init__(self):
         self.sessions = []
@@ -1128,6 +1133,7 @@ class MessageManager(object, metaclass=Singleton):
         log.info(f'Message {message_id} {enc_text}{content_type.lower()} for account {account.id} from {sender.uri}')
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
+
         if x_replicated_message is not Null:
             pass
             #log.debug(f'Message {message_id} is a replicated message from another device')
@@ -1163,10 +1169,6 @@ class MessageManager(object, metaclass=Singleton):
             account.save()
             self._sync_messages(account)
             return
-
-        if content_type.lower() == 'application/sylk-conversation-read':
-            payload = json.loads(body)
-            NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=payload['contact']))
 
         if content_type.lower() == 'text/pgp-private-key':
             log.info(f'Received private key of account {account.id} from another device')
@@ -1221,6 +1223,11 @@ class MessageManager(object, metaclass=Singleton):
                 notification_center.post_notification('BlinkGotMessageDelete', sender=blink_session, data=payload['message_id'])
             return
 
+        if content_type.lower() == 'application/sylk-conversation-read':
+            payload = json.loads(body)
+            NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=payload['contact']))
+            return
+
         timestamp = cpim_message.timestamp if cpim_message is not None and cpim_message.timestamp is not None else ISOTimestamp.now()
         if timestamp.tzinfo is tzutc():
             timestamp = timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
@@ -1235,7 +1242,7 @@ class MessageManager(object, metaclass=Singleton):
             blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (instance_id and instance_id == session.remote_instance_id))
         except StopIteration:
             blink_session = None
-            if content_type.lower() in self.__ignored_content_types__:
+            if any(content_type.lower().startswith(prefix) for prefix in self.__ignored_content_types__):
                 log.debug(f"Not creating session for incoming message for content type {content_type.lower()}")
                 if content_type.lower() != IMDNDocument.content_type:
                     return
@@ -1259,7 +1266,7 @@ class MessageManager(object, metaclass=Singleton):
                     log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to instance_id {instance_id}")
                 else:
                     log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to {contact_uri.uri}")
-                
+
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
                 # TODO session should have direction incoming, right now there is no way to create it without an event. We set the direction manually. -- Tijmen
                 blink_session.direction = 'incoming'
