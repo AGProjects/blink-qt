@@ -1148,6 +1148,11 @@ padding: 2px;</string>
       <string>&amp;Voicemail</string>
      </property>
     </widget>
+    <widget class="QMenu" name="transfer_menu">
+     <property name="title">
+      <string>&amp;Transfer</string>
+     </property>
+    </widget>
     <widget class="QMenu" name="history_menu">
      <property name="title">
       <string>&amp;History</string>
@@ -1159,6 +1164,7 @@ padding: 2px;</string>
     </widget>
     <addaction name="redial_action"/>
     <addaction name="voicemail_menu"/>
+    <addaction name="transfer_menu"/>
     <addaction name="auto_answer_action"/>
     <addaction name="auto_record_action"/>
     <addaction name="separator"/>
