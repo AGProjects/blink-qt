@@ -9,6 +9,8 @@ from application.python.types import Singleton
 from application.system import openfile
 from filecmp import cmp
 from functools import partial
+from gnutls.crypto import X509Certificate
+from gnutls.errors import GNUTLSError
 from itertools import count
 from threading import Event
 from sys import exc_info
@@ -138,5 +140,32 @@ class FunctionExecutor(object):
             raise type(self.exception)(self.exception).with_traceback(self.traceback)
         else:
             return self.result
+
+def trusted_cas(content):
+    trusted_cas = []
+    crt = ''
+    start = False
+    end = False
+
+    content = content or ''
+    content = content.decode() if isinstance(content, bytes) else content
+
+    for line in content.split("\n"):
+        if "BEGIN CERT" in line:
+            start = True
+            crt = line + "\n"
+        elif "END CERT" in line:
+            crt = crt + line + "\n"
+            end = True
+            start = False
+
+            try:
+                trusted_cas.append(X509Certificate(crt))
+            except (GNUTLSError, ValueError) as e:
+                continue
+        elif start:
+            crt = crt + line + "\n"
+
+    return trusted_cas
 
 
