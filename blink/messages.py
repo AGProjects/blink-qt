@@ -339,7 +339,7 @@ class OTRInternalMessage(BlinkMessage):
 
 @implementer(IObserver)
 class OutgoingMessage(object):
-    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type, 'application/sylk-conversation-read', 'application/sylk-conversation-delete', 'text/pgp-public-key'}  # Content types to ignore in notifications
+    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type, 'application/sylk-conversation-read', 'application/sylk-conversation-remove', 'text/pgp-public-key'}  # Content types to ignore in notifications
     __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api-message-remove', 'application/sylk-api-pgp-key-lookup', 'application/sylk-api-conversation-read'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
     def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True):
@@ -640,7 +640,7 @@ class RequestList(list):
 
 @implementer(IObserver)
 class MessageManager(object, metaclass=Singleton):
-    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}
+    __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove', 'application/sylk-conversation-read', 'application/sylk-conversation-remove'}
 
     def __init__(self):
         self.sessions = []
