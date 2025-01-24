@@ -80,7 +80,7 @@
      <item>
       <widget class="QLabel" name="key_maybe_present_label">
        <property name="text">
-        <string>Blink uses PGP end-to-end encryption for messaging, for whihc it needs the same private key for ACCOUNT on all devices. If you used another device, choose 'Export private key' there.</string>
+        <string>Blink uses PGP end-to-end encryption for messaging, for which it needs the same private key for ACCOUNT on all devices. If you used another device, choose 'Export private key' there.</string>
        </property>
        <property name="wordWrap">
         <bool>true</bool>
