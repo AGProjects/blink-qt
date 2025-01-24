@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>321</width>
-    <height>550</height>
+    <width>292</width>
+    <height>655</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -610,6 +610,32 @@ buttons below.</string>
          </widget>
         </item>
         <item>
+         <widget class="QPushButton" name="open_unread_messages_button">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: #a0003a;
+border-style: outset;
+border-width: 1px;
+border-radius: 3px;
+border-color: #800040;
+color: white;
+margin-left: 1px;
+margin-right: 1px;
+padding: 2px;</string>
+          </property>
+          <property name="text">
+           <string>Open unread messages</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QLabel" name="active_sessions_label">
           <property name="font">
            <font>
@@ -874,7 +900,6 @@ padding: 2px;</string>
             </property>
             <property name="font">
              <font>
-              <weight>50</weight>
               <bold>false</bold>
              </font>
             </property>
@@ -1082,8 +1107,8 @@ padding: 2px;</string>
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>321</width>
-     <height>24</height>
+     <width>292</width>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="blink_menu">
@@ -1344,7 +1369,7 @@ padding: 2px;</string>
     <string>&amp;Mute microphone</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+i</string>
+    <string>Ctrl+I</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>

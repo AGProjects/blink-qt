@@ -89,8 +89,6 @@ class MainWindow(base_class, ui_class):
         self.default_icon = QIcon(self.default_icon_path)
         self.last_icon_directory = Path('~').normalized
         self.set_user_icon(icon_manager.get('avatar'))
-
-        self.active_sessions_label.hide()
         self.enable_call_buttons(False)
         self.conference_button.setEnabled(False)
         self.hangup_all_button.setEnabled(False)
@@ -101,6 +99,9 @@ class MainWindow(base_class, ui_class):
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
         self.search_view.setCurrentWidget(self.search_list_panel)
         self.export_pgp_key_action.setEnabled(False)
+        self.open_unread_messages_button.setEnabled(False)
+        self.open_unread_messages_button.setVisible(False)
+        self.active_sessions_label.hide()
 
         # System tray
         if QSystemTrayIcon.isSystemTrayAvailable():
@@ -182,6 +183,7 @@ class MainWindow(base_class, ui_class):
 
         self.silent_button.clicked.connect(self._SH_SilentButtonClicked)
         self.switch_view_button.viewChanged.connect(self._SH_SwitchViewButtonChangedView)
+        self.open_unread_messages_button.clicked.connect(self._AH_ShowUnreadMessagesActionTriggered)
 
         # Blink menu actions
         self.about_action.triggered.connect(self.about_panel.show)
@@ -811,6 +813,10 @@ class MainWindow(base_class, ui_class):
         self.active_sessions_label.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
         self.active_sessions_label.setVisible(bool(self.total_unread_messages))
         self.show_unread_messages_action.setEnabled(bool(self.total_unread_messages))
+        self.open_unread_messages_button.setEnabled(bool(self.total_unread_messages))
+        self.open_unread_messages_button.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
+        self.open_unread_messages_button.setVisible(bool(self.total_unread_messages))
+        self.active_sessions_label.setVisible(False)
 
     def _NH_BlinkMessageNewUnread(self, notification):
         uri = notification.sender
