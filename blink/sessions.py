@@ -42,7 +42,7 @@ from sipsimple.configuration.datatypes import Path
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPCoreError, SIPURI, ToHeader
 from sipsimple.lookup import DNSLookup
-from sipsimple.session import Session, IllegalStateError
+from sipsimple.session import Session, IllegalStateError, IllegalDirectionError
 from sipsimple.streams import MediaStreamRegistry
 from sipsimple.streams.msrp.chat import OTRState, SMPStatus
 from sipsimple.streams.msrp.filetransfer import FileSelector
@@ -905,7 +905,8 @@ class BlinkSession(BlinkSessionBase):
         replaced_sip_session = None if replaced_session is None else replaced_session.sip_session
         try:
             self.sip_session.transfer(self._parse_uri(contact_uri.uri), replaced_session=replaced_sip_session)
-        except IllegalStateError:
+        except (IllegalStateError, IllegalDirectionError) as e:
+            log.error("Call transfer error: %s" % str(e))
             pass
 
     def end(self, delete=False):
