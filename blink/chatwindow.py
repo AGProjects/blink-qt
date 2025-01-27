@@ -18,6 +18,7 @@ from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngine
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton, QPlainTextEdit
 from PyQt6.QtWidgets import QFileDialog, QFileIconProvider
+from PyQt6.QtWidgets import QMessageBox
 
 from abc import ABCMeta, abstractmethod
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy, NotificationData
@@ -2154,6 +2155,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkMessageHistoryLoadDidFail')
         notification_center.add_observer(self, name='BlinkMessageHistoryLastContactsDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryCallHistoryDidStore')
+        notification_center.add_observer(self, name='BlinkConversationWillRemove')
         notification_center.add_observer(self, name='MessageStreamPGPKeysDidLoad')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
@@ -3612,6 +3614,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)
             blink_session.items.chat.chat_widget.add_message(chat_message)
 
+    def _NH_BlinkConversationWillRemove(self, notification):
+        session = notification.sender.items.chat
+        if session.chat_widget.history_loaded:
+            session.chat_widget.history_loaded = False
+            session.chat_widget.show_loading_screen(True)
+            session.chat_widget.last_message = None
+            session.chat_widget.timestamp_rendered_messages = []
+
+            session.chat_widget.chat_js.empty_element('#chat')
+
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session
         session = blink_session.items.chat
@@ -3954,7 +3966,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if not self.selected_session:
             return
         blink_session = self.selected_session.blink_session
-        print('Remove conversation from account %s with %s' % (blink_session.account.id, blink_session.contact_uri))
+        title = translate('chat_window', "Remove conversation")
+        message = translate('chat_window', "Do you want to remove the conversation between %s and %s on all devices?") % (blink_session.account.id, blink_session.contact.name)
+        if QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            MessageManager().send_conversation_remove(blink_session)
+            NotificationCenter().post_notification('BlinkConversationWillRemove', sender=blink_session, data=NotificationData(contact=blink_session.contact_uri.uri, timestamp=ISOTimestamp.now()))
+            log.info('Remove conversation from account %s with %s' % (blink_session.account.id, blink_session.contact_uri))
 
     def _AH_ConnectWithAudio(self):
         stream_descriptions = [StreamDescription('audio')]

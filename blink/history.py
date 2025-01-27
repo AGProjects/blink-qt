@@ -68,6 +68,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageDidDecrypt')
         notification_center.add_observer(self, name='BlinkMessageDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkMessageWillDelete')
+        notification_center.add_observer(self, name='BlinkConversationWillRemove')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
         notification_center.add_observer(self, name='BlinkGotHistoryMessage')
@@ -205,7 +206,9 @@ class HistoryManager(object, metaclass=Singleton):
             self.message_history.get_all_contacts()
 
     def _NH_BlinkGotHistoryConversationRemove(self, notification):
-        self.message_history.remove_contact_messages(notification.sender, notification.data)
+        data = notification.data
+        self.message_history.remove_contact_messages(notification.sender, data.contact, data.timestamp)
+        self.download_history.remove_contact_files(notification.sender, data.contact)
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
             self.message_history.get_all_contacts()
@@ -235,6 +238,14 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkMessageDidEncrypt(self, notification):
         self.message_history.update_encryption(notification, decrypted=None)
+
+    def _NH_BlinkConversationWillRemove(self, notification):
+        data = notification.data
+        self.message_history.remove_contact_messages(notification.sender.account, data.contact, data.timestamp, notification.sender)
+        self.download_history.remove_contact_files(notification.sender.account, data.contact)
+        settings = BlinkSettings()
+        if settings.interface.show_messages_group:
+            self.message_history.get_all_contacts()
 
     def _NH_BlinkGotDispositionNotification(self, notification):
         data = notification.data
@@ -985,9 +996,23 @@ class MessageHistory(object, metaclass=Singleton):
         Message.deleteBy(account=account)
 
     @run_in_thread('db')
-    def remove_contact_messages(self, account, contact):
-        log.info(f'== Removing conversation between {account.id} <-> {contact}')
-        Message.deleteBy(remote_uri=contact, account_id=str(account.id))
+    def remove_contact_messages(self, account, contact, timestamp=None, session=None):
+        if not timestamp:
+            timestamp = ISOTimestamp.now()
+
+        timestamp_native = timestamp
+        timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
+        timestamp_fixed = timestamp_utc - timestamp.utcoffset()
+        timestamp = parse(str(timestamp_fixed))
+
+        log.info(f'== Removing conversation between {account.id} <-> {contact} < {timestamp}')
+        result = Message.selectBy(remote_uri=contact, account_id=str(account.id))
+        for message in result:
+            if message.timestamp.replace(tzinfo=timezone.utc) <= timestamp:
+                message.destroySelf()
+        if session:
+            self.load(contact, session)
+
 
     @run_in_thread('db')
     def remove_message(self, id):

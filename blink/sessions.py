@@ -5337,6 +5337,7 @@ class FileListModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkSessionShouldDownloadFile')
         notification_center.add_observer(self, name='BlinkGotMessageDelete')
         notification_center.add_observer(self, name='BlinkMessageWillDelete')
+        notification_center.add_observer(self, name='BlinkConversationWillRemove')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='HTTPFileTransferItemDidChange')
         
@@ -5456,6 +5457,16 @@ class FileListModel(QAbstractListModel):
     def _NH_FileTransferItemDidChange(self, notification):
         index = self.index(self.items.index(notification.sender))
         self.dataChanged.emit(index, index)
+
+    def _NH_BlinkConversationWillRemove(self, notification):
+        blink_session = notification.sender
+        session = blink_session.items.chat
+
+        if session is None:
+            return
+
+        for item in self.items:
+            self.removeItem(item.id)
 
     def _NH_SIPApplicationDidStart(self, notification):
         self.beginResetModel()

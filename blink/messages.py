@@ -830,7 +830,6 @@ class MessageManager(object, metaclass=Singleton):
         log.debug(f'-- {len(messages)} messages fetched from server for {account.id}')
         while messages:
             message = messages.pop(0)
-
             last_id = message['message_id']
             content_type = message['content_type'].lower()
 
@@ -850,7 +849,15 @@ class MessageManager(object, metaclass=Singleton):
 
                 notification_center.post_notification('BlinkGotDispositionNotification', **kwargs)
             elif content_type == 'application/sylk-conversation-remove':
-                notification_center.post_notification('BlinkGotHistoryConversationRemove', sender=account, data=message['content'])
+                from blink.contacts import URIUtils
+                contact, contact_uri = URIUtils.find_contact(message['content'])
+                timestamp = ISOTimestamp(message['timestamp'])
+                try:
+                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+                except StopIteration:
+                    notification_center.post_notification('BlinkGotHistoryConversationRemove', sender=account, data=NotificationData(contact=contact_uri.uri, timestamp=timestamp))
+                else:
+                    NotificationCenter().post_notification('BlinkConversationWillRemove', sender=blink_session, data=NotificationData(contact=blink_session.contact_uri.uri, timestamp=timestamp))
             elif content_type == 'application/sylk-message-remove':
                 payload = json.loads(message['content'])
                 notification_center.post_notification('BlinkGotHistoryMessageDelete', data=payload['message_id'])
@@ -1229,6 +1236,22 @@ class MessageManager(object, metaclass=Singleton):
             NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=payload['contact']))
             return
 
+        if content_type.lower() == 'application/sylk-conversation-remove':
+            payload = json.loads(body)
+            contact, contact_uri = URIUtils.find_contact(payload['contact'])
+            timestamp = ISOTimestamp(payload['timestamp'])
+            try:
+                blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+            except StopIteration:
+                notification_center.post_notification('BlinkGotHistoryConversationRemove', sender=account, data=NotificationData(contact=contact_uri.uri, timestamp=timestamp))
+            else:
+                # If the session switches account after we removed, we could be also deleting from another account
+                if str(blink_session.account.uri) == str(to_header.uri):
+                    NotificationCenter().post_notification('BlinkConversationWillRemove', sender=blink_session, data=NotificationData(contact=blink_session.contact_uri.uri, timestamp=timestamp))
+                else:
+                    log.info(f'Conversation remove is not for session account: {blink_session.account.id}')
+            return
+
         timestamp = cpim_message.timestamp if cpim_message is not None and cpim_message.timestamp is not None else ISOTimestamp.now()
         if timestamp.tzinfo is tzutc():
             timestamp = timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
@@ -1604,6 +1627,15 @@ class MessageManager(object, metaclass=Singleton):
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(session.account.uri)
         outgoing_message = OutgoingMessage(session.account, contact, content, 'application/sylk-api-conversation-read', session=session, use_cpim=False)
+        self._send_message(outgoing_message)
+
+    def send_conversation_remove(self, session):
+        contact = str(session.contact.uri.uri)
+        payload = {'contact': contact, 'timestamp': str(ISOTimestamp.now())}
+        content = json.dumps(payload)
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(session.account.uri)
+        outgoing_message = OutgoingMessage(session.account, contact, content, 'application/sylk-api-conversation-remove', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
