@@ -662,6 +662,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='PGPKeysDidGenerate')
         notification_center.add_observer(self, name='PGPMessageDidNotDecrypt')
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
+        notification_center.add_observer(self, name='PGPKeysShouldReload')
         notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
@@ -1438,6 +1439,31 @@ class MessageManager(object, metaclass=Singleton):
 
         elif session.account.sms.enable_pgp:
             stream.enable_pgp()
+
+    def _NH_PGPKeysShouldReload(self, notification):
+        session = notification.sender
+        stream = session.fake_streams.get('messages')
+
+        if stream is None:
+            return
+
+        if session.account.sms.enable_pgp and (session.account.sms.private_key is None or not os.path.exists(session.account.sms.private_key.normalized)):
+            for request in self.pgp_requests[session.account, GeneratePGPKeyRequest]:
+                return
+
+            if session.account is BonjourAccount():
+                session = session
+                stream = session.fake_streams.get('messages')
+                stream.generate_keys()
+                return
+
+            generate_dialog = GeneratePGPKeyDialog()
+            generate_request = GeneratePGPKeyRequest(generate_dialog, session.account, 1, session)
+            generate_request.accepted.connect(self._SH_GeneratePGPKeys)
+            generate_request.finished.connect(self._SH_PGPRequestFinished)
+            bisect.insort_right(self.pgp_requests, generate_request)
+            generate_request.dialog.show()
+
 
     def _NH_PGPKeysDidGenerate(self, notification):
         session = notification.sender
