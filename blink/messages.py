@@ -1410,10 +1410,12 @@ class MessageManager(object, metaclass=Singleton):
                 self._incoming_encrypted_message_queue.append((message, account, contact))
                 if account is blink_session.account:
                     notification_center.post_notification('BlinkMessageIsParsed', sender=blink_session, data=message)
+                data = NotificationData(message=message,
+                                        account=account,
+                                        replicated_message=x_replicated_message)
                 notification_center.post_notification('BlinkGotMessage',
                                                       sender=blink_session,
-                                                      replicated_message=x_replicated_message,
-                                                      data=NotificationData(message=message, account=account))
+                                                      data=data)
             else:
                 blink_session.fake_streams.get('messages').decrypt(message)
             return
