@@ -491,8 +491,8 @@ class MainWindow(base_class, ui_class):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() else None
         title = translate('main_window', "Generate new private key")
-        message = translate('main_window', "Do you want to generate a new private key for %s?") % (account.id)
-        if QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+        message = translate('main_window', "You should generate a new private key for %s only if one of your devices have been compromised. Do you want to generate a new private key?") % (account.id)
+        if QMessageBox.critical(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             MessageManager().generate_private_key(account)
 
     def _AH_TransfersWindowActionTriggered(self, checked):

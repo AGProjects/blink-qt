@@ -3967,8 +3967,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         blink_session = self.selected_session.blink_session
         title = translate('chat_window', "Remove conversation")
-        message = translate('chat_window', "Do you want to remove the conversation between %s and %s on all devices?") % (blink_session.account.id, blink_session.contact.name)
-        if QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+        message = translate('chat_window', "Do you want to remove all messages exchanged with %s on all devices?. This cannot be undone.") % blink_session.contact.name
+        if QMessageBox.warning(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             MessageManager().send_conversation_remove(blink_session)
             NotificationCenter().post_notification('BlinkConversationWillRemove', sender=blink_session, data=NotificationData(contact=blink_session.contact_uri.uri, timestamp=ISOTimestamp.now()))
             log.info('Remove conversation from account %s with %s' % (blink_session.account.id, blink_session.contact_uri))
