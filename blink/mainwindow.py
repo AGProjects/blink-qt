@@ -8,6 +8,7 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, QSettings, QUrl, QTranslator
 from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QActionGroup, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
+from PyQt6.QtWidgets import QMessageBox
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -489,7 +490,10 @@ class MainWindow(base_class, ui_class):
     def _AH_GeneratePGPkeyActionTriggered(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() else None
-        MessageManager().generate_private_key(account)
+        title = translate('main_window', "Generate new private key")
+        message = translate('main_window', "Do you want to generate a new private key for %s?") % (account.id)
+        if QMessageBox.question(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            MessageManager().generate_private_key(account)
 
     def _AH_TransfersWindowActionTriggered(self, checked):
         self.filetransfer_window.show()

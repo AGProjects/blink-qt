@@ -1524,8 +1524,17 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         log.info(f'Generate a new private key for {account.id}')
-        print('Generate key')
-        # TODO: show a dialog panel with confirmation buttons
+        timestamp = datetime.now().strftime('%Y%m%d%H%M')
+        settings = SIPSimpleSettings()
+        directory = os.path.join(settings.chat.keys_directory.normalized, 'private')
+        filename = os.path.join(directory, account.id)
+        os.rename(f'{filename}.privkey', f'{filename}-{timestamp}-old.privkey')
+        os.rename(f'{filename}.pubkey', f'{filename}-{timestamp}-old.pubkey')
+
+        account.sms.public_key = None
+        account.sms.private_key = None
+        account.save()
+        log.debug(f'Current key deleted for {account.id}')
 
     def export_private_key(self, account):
         if account is None:
