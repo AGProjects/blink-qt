@@ -3794,11 +3794,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     # signal handlers
     #
     def _SH_InfoButtonClicked(self, checked):
+        if not self.selected_session:
+            return
+
         if self.sliding_panels:
             self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
         else:
             self.session_details.setCurrentWidget(self.info_panel)
-        self.selected_session.active_panel = self.info_panel
+
 
     def _SH_FilesButtonClicked(self, checked):
         if self.sliding_panels:
