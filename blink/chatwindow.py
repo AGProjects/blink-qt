@@ -554,7 +554,6 @@ class ChatTextInput(QTextEdit):
         self.history_index = 0  # negative indexes with 0 indicating the text being typed.
         self.stashed_content = None
         self.setPlaceholderText(translate('chat_window', 'Write a message'))
-        
 
     @property
     def empty(self):
@@ -2250,7 +2249,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.main_window = QAction(translate('chat_window', "Main Window"), self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ShortcutContext.ApplicationShortcut)
         self.control_button.actions.show_transferred_files = QAction(translate('chat_window', "Show transferred files"), self, triggered=self._AH_ShowTransferredFiles)
         self.control_button.actions.remove_conversation = QAction(translate('chat_window', "Remove conversation"), self, triggered=self._AH_RemoveConversation)
-
         self.addAction(self.control_button.actions.main_window)  # make this active even when it's not in the control_button's menu
 
         self.slide_direction = self.session_details.RightToLeft  # decide if we slide from one direction only -Dan
@@ -3884,7 +3882,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             print(f'Check if we must reload {session.blink_session}')
             if session.blink_session.account.id == notification.data.account:
                 history.reload_pending_encrypted(session.blink_session.contact.uri.uri, session.blink_session)
-   
+
     def _SH_SessionModelSessionRemoved(self, session):
         self.tab_widget.removeTab(self.tab_widget.indexOf(session.chat_widget))
         session.chat_widget = None
