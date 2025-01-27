@@ -1460,7 +1460,7 @@ class MessageManager(object, metaclass=Singleton):
             bisect.insort_right(self.pgp_requests, generate_request)
             generate_request.dialog.show()
 
-        elif session.account.sms.enable_pgp:
+        elif session.account.sms.enable_pgp and not stream.can_decrypt_with_others:
             stream.enable_pgp()
 
     def _NH_PGPKeysShouldReload(self, notification):
