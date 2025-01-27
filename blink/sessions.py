@@ -6102,7 +6102,7 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
 
     def dropEvent(self, event):
         model = self.model()
-        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.pos())):
+        if model.handleDroppedData(event.mimeData(), event.dropAction(), self.indexAt(event.position().toPoint())):
             event.accept()
         super(ConferenceParticipantListView, self).dropEvent(event)
         self.paint_drop_indicator = False
