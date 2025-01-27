@@ -1603,7 +1603,7 @@ class MessageManager(object, metaclass=Singleton):
         content = json.dumps(payload)
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(session.account.uri)
-        outgoing_message = OutgoingMessage(session.account, session.contact, content, 'application/sylk-api-conversation-read', session=session, use_cpim=False)
+        outgoing_message = OutgoingMessage(session.account, contact, content, 'application/sylk-api-conversation-read', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
