@@ -1,6 +1,5 @@
 blink (6.0.0) unstable; urgency=medium
 
-  * NOT RELEASED YET
   * Added Logs window
   * Added Call Transfer menu
   * Added audio auto-record function
@@ -8,6 +7,7 @@ blink (6.0.0) unstable; urgency=medium
   * Added button to open last unread messages
   * Added controls to see last transferred files for chat contacts
   * Added pause/resume for file transfers
+  * Added support to remove conversations
   * Restore chat window if minimized
   * Use default conference as conference server, local domain will be appended
   * PGP decryption/encryption fixes
@@ -24,7 +24,7 @@ blink (6.0.0) unstable; urgency=medium
   * Fixes for PyQt6 migration
   * Make app compatible with MacOS
 
- -- Adrian Georgescu <ag@ag-projects.com>  Fri, 24 Jan 2025 11:54:56 -0300
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Tue, 28 Jan 2025 14:32:19 +0100
 
 blink (5.9.1) unstable; urgency=medium
 
