@@ -2,7 +2,7 @@
 
 # Install C building dependencies
 echo "Installing port dependencies..."
-sudo port install yasm x264 gnutls openssl sqlite3 gnutls ffmpeg mpfr libmpc libvpx wget
+sudo port install yasm x264 gnutls openssl sqlite3 ffmpeg mpfr libmpc libvpx wget
 
 RESULT=$?
 if [ $RESULT -ne 0 ]; then
