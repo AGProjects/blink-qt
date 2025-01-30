@@ -2481,7 +2481,7 @@ class AudioSessionModel(QAbstractListModel):
                     self.sessions.insert(insert_point, source)
                     self.endMoveRows()
                 source.client_conference = target.client_conference
-                session_list.scrollTo(self.index(self.sessions.index(source)), session_list.EnsureVisible)  # is this even needed? -Dan
+                session_list.scrollTo(self.index(self.sessions.index(source)), session_list.ScrollHint.EnsureVisible)  # is this even needed? -Dan
             else:
                 target_row = self.sessions.index(target)
                 if self.beginMoveRows(QModelIndex(), target_row, target_row, QModelIndex(), 0):
