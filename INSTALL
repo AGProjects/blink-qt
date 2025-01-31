@@ -66,12 +66,12 @@ debuild
 The .deb and related files are built in the upper directory.
 
 
-Installation on Microsoft Windows
-=================================
+Installation on Microsoft Windows and older linux systems without Qt6
+=====================================================================
 
-To run Blink on Windows you need to use the repository named blink-qt5-windows.
-It is tested with the MSYS2 environment and the MinGW-w64 compiler toolchain.
+To run Blink on Windows and older Linux systems without Qt6, you need to use
+the repository named blink-qt5.
 
-https://github.com/AGProjects/blink-qt5-windows.git
+https://github.com/AGProjects/blink-qt5.git
 
 
