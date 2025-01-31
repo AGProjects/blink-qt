@@ -9,7 +9,7 @@ blink (6.0.0) unstable; urgency=medium
   * Added Logs window
   * Added Call Transfer menu
   * Added audio auto-record function
-  * Added outbound account selection gfor message session
+  * Added outbound account selection for message session
   * Added button to open last unread messages
   * Added controls to see last transferred files for chat contacts
   * Added pause/resume for file transfers
