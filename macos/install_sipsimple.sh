@@ -2,7 +2,7 @@
 
 # Install C building dependencies
 echo "Installing port dependencies..."
-sudo port install yasm x264 gnutls openssl sqlite3 ffmpeg mpfr libmpc libvpx wget
+sudo port install yasm x264 gnutls openssl sqlite3 ffmpeg mpfr libmpc libvpx wget gmp mpc
 
 RESULT=$?
 if [ $RESULT -ne 0 ]; then
@@ -15,8 +15,11 @@ fi
 # Install Python building dependencies
 echo "Installing python dependencies..."
 
+export CFLAGS="-I/opt/local/include"
+export LDFLAGS="-L/opt/local/lib"
+
 pip3 install --upgrade pip
-pip3 install --user cython==0.29.37 dnspython lxml twisted python-dateutil greenlet zope.interface requests gmpy2 wheel gevent
+pip3 install --user cython==0.29.37 dnspython lxml twisted python-dateutil greenlet zope.interface requests gmpy2 wheel gevent pytz
 
 RESULT=$?
 if [ $RESULT -ne 0 ]; then
