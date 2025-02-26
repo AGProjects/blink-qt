@@ -1,3 +1,9 @@
+blink (6.0.3) unstable; urgency=medium
+
+  * Fix requesting Sylk API token
+
+ --  Adrian Georgescu <ag@ag-projects.com>  Wed, 26 Feb 2025 09:40:18 -0300
+
 blink (6.0.2) unstable; urgency=medium
 
   * Updated dependencies
