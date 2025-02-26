@@ -456,7 +456,7 @@ class OutgoingMessage(object):
             # TODO
 
     def send(self):
-        if self.content_type.lower() == ['text/pgp-private-key', 'application/sylk-api-token']:
+        if self.content_type.lower() in ('text/pgp-private-key', 'application/sylk-api-token'):
             self._lookup()
             return
 
