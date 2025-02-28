@@ -4,7 +4,7 @@ import os
 from ctypes import c_char_p, c_wchar_p, CDLL
 from ctypes.util import find_library
 from sipsimple.configuration.settings import SIPSimpleSettings
-from zope.interface import implements
+from zope.interface import implementer
 
 from blink.update import IUpdateManager
 
@@ -55,16 +55,15 @@ winsparkle_set_app_details.argtypes = [c_wchar_p, c_wchar_p, c_wchar_p]
 winsparkle_set_app_details.restype = None
 
 
+@implementer(IUpdateManager)
 class UpdateManager(object):
-
-    implements(IUpdateManager)
 
     def initialize(self):
         """Initialize WinSparkle library, it will try to fetch updates in the background"""
         from blink import Blink, __version__
         application = Blink()
         settings = SIPSimpleSettings()
-        winsparkle_set_appcast_url(settings.server.updater_url)
+        winsparkle_set_appcast_url(settings.server.updater_url.encode())
         winsparkle_set_app_details(application.organizationName(), application.applicationName(), __version__)
         winsparkle_init()
 
