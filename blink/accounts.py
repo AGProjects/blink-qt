@@ -433,6 +433,9 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
             account.auth.password = self.password
             if account.id.domain == 'sip2sip.info':
                 account.server.settings_url = "https://blink.sipthor.net/settings.phtml"
+            if account.id.domain == 'sylk.link':
+                account.server.settings_url = "https://blink.sipthor.net/settings.phtml"
+                account.tls_name = 'sip2sip.info'
             account.save()
             account_manager = AccountManager()
             account_manager.default_account = account
