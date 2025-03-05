@@ -1988,11 +1988,6 @@
              </item>
              <item>
               <property name="text">
-               <string>44100</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
                <string>48000</string>
               </property>
              </item>
