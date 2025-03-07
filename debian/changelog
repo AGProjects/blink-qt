@@ -1,3 +1,14 @@
+blink (6.0.4bookworm) bookworm; urgency=medium
+
+  * Auto set some settings for accounts under sylk.link domain
+  * Use 32000Hz audio sample rate by default
+  * Remove 41000Hz sample rate
+  * Added python3-lxml-html-clean dependency
+  * Fix requesting Sylk token for message history
+  * Updated dependencies in install
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Fri, 07 Mar 2025 17:42:32 +0000
+
 blink (6.0.3) unstable; urgency=medium
 
   * Fix requesting Sylk API token
