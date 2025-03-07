@@ -2943,11 +2943,6 @@ Audio with verified ZRTP is needed for the SMP verification to be available.</so
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1991"/>
-        <source>44100</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../preferences.ui" line="1996"/>
         <source>48000</source>
         <translation type="unfinished"></translation>

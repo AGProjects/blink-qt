@@ -3075,11 +3075,6 @@ Audio met geverifieerde ZRTP is nodig om de SMP-verificatie beschikbaar te maken
         <translation></translation>
     </message>
     <message>
-        <location filename="../preferences.ui" line="1991"/>
-        <source>44100</source>
-        <translation></translation>
-    </message>
-    <message>
         <location filename="../preferences.ui" line="1996"/>
         <source>48000</source>
         <translation></translation>
