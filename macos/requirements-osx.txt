@@ -9,5 +9,5 @@ sqlobject
 twisted
 zope.interface
 google-api-python-client
-pyobjc
 pyinstaller
+pyobjc-framework-AVFoundation==10.0
