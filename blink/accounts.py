@@ -543,11 +543,6 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
                 account.xcap.xcap_root = response_data['xcap_root']
                 account.server.conference_server = response_data['conference_server']
                 account.server.settings_url = response_data['settings_url']
-                if account.id.domain == 'sip2sip.info':
-                    account.server.settings_url = "https://blink.sipthor.net/settings.phtml"
-                if account.id.domain == 'sylk.link':
-                    account.server.settings_url = "https://blink.sipthor.net/settings.phtml"
-                    account.tls_name = 'sip2sip.info'
                 account.save()
                 account_manager.default_account = account
                 call_in_gui_thread(self.accept)
