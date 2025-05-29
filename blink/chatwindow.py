@@ -3641,7 +3641,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             return
 
-        uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
+        try:
+            uri = '%s@%s' % (message.sender.uri.user.decode(), message.sender.uri.host.decode())
+        except AttributeError:
+            uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
+
         account_manager = AccountManager()
         if account_manager.has_account(uri):
             account = account_manager.get_account(uri)
