@@ -408,47 +408,79 @@ cdef class RFBClient:
 
 # callbacks
 #
-cdef rfbBool _malloc_framebuffer_callback(rfbClient *client) with gil:
+cdef rfbBool _malloc_framebuffer_callback_impl(rfbClient *client) with gil:
     instance = <RFBClient> client.clientData.data
     return instance._malloc_framebuffer_callback()
 
-cdef void _update_framebuffer_callback(rfbClient *client, int x, int y, int w, int h) with gil:
+cdef rfbBool _malloc_framebuffer_callback(rfbClient *client) noexcept nogil:
+    with gil:
+        _malloc_framebuffer_callback_impl(client)
+
+cdef void _update_framebuffer_callback_impl(rfbClient *client, int x, int y, int w, int h) with gil:
     instance = <RFBClient> client.clientData.data
     instance._update_framebuffer_callback(x, y, w, h)
 
-cdef void _update_cursor_callback(rfbClient *client, int xhot, int yhot, int width, int height, int bytes_per_pixel) with gil:
+cdef void _update_framebuffer_callback(rfbClient *client, int x, int y, int w, int h) noexcept nogil:
+    with gil:
+        _update_framebuffer_callback_impl(client, x, y, w, h)
+
+cdef void _update_cursor_callback_impl(rfbClient *client, int xhot, int yhot, int width, int height, int bytes_per_pixel) with gil:
     instance = <RFBClient> client.clientData.data
     instance._update_cursor_callback(xhot, yhot, width, height, bytes_per_pixel)
 
-cdef rfbBool _update_cursor_position_callback(rfbClient *client, int x, int y) with gil:
+cdef void _update_cursor_callback(rfbClient *client, int xhot, int yhot, int width, int height, int bytes_per_pixel) noexcept nogil:
+    with gil:
+        _update_cursor_callback_impl(client, xhot, yhot, width, height, bytes_per_pixel)
+
+cdef rfbBool _update_cursor_position_callback_impl(rfbClient *client, int x, int y) with gil:
     instance = <RFBClient> client.clientData.data
     return instance._update_cursor_position_callback(x, y)
 
-cdef char* _get_password_callback(rfbClient *client) with gil:
+cdef rfbBool _update_cursor_position_callback(rfbClient *client, int x, int y) noexcept nogil:
+    with gil:
+        _update_cursor_position_callback_impl(client, x, y)
+
+cdef char* _get_password_callback_impl(rfbClient *client) with gil:
     instance = <RFBClient> client.clientData.data
     return instance._get_password_callback()
 
-cdef rfbCredential* _get_credentials_callback(rfbClient *client, int credentials_type) with gil:
+cdef char* _get_password_callback(rfbClient *client) noexcept nogil:
+    with gil:
+        _get_password_callback_impl(client)
+
+cdef rfbCredential* _get_credentials_callback_impl(rfbClient *client, int credentials_type) with gil:
     instance = <RFBClient> client.clientData.data
     return instance._get_credentials_callback(credentials_type)
 
-cdef void _text_cut_callback(rfbClient *client, const char *text, int length) with gil:
+cdef rfbCredential* _get_credentials_callback(rfbClient *client, int credentials_type) nogil noexcept:
+    with gil:
+        _get_credentials_callback_impl(client, credentials_type)
+
+cdef void _text_cut_callback_impl(rfbClient *client, const char *text, int length) with gil:
     instance = <RFBClient> client.clientData.data
     instance._text_cut_callback(text, length)
 
 
-cdef void _rfb_client_log(const char *format, ...) with gil:
-    cdef char buffer[512]
-    cdef va_list args
+cdef void _text_cut_callback(rfbClient *client, const char *text, int length) noexcept nogil:
+    with gil:
+        _text_cut_callback_impl(client, text, length)
 
-    va_start(args, format)
+cdef void _rfb_client_log_impl(const char *format, va_list args) with gil:
+    cdef char buffer[512]
     PyOS_vsnprintf(buffer, sizeof(buffer), format, args)
-    va_end(args)
 
     message = (<bytes>buffer).rstrip()
 
     NotificationCenter().post_notification('RFBClientLog', data=NotificationData(message=message.decode('utf8'), thread=QThread.currentThread()))
 
+
+cdef void _rfb_client_log(const char *format, ...) noexcept nogil:
+    cdef va_list args
+
+    with gil:
+        va_start(args, format)
+        _rfb_client_log_impl(format, args)
+        va_end(args)
 
 cdef extern rfbClientLogProc rfbClientLog = _rfb_client_log
 cdef extern rfbClientLogProc rfbClientErr = _rfb_client_log
