@@ -146,12 +146,12 @@ class VideoSurface(QWidget):
 
     def mousePressEvent(self, event):
         if self.interactive and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
-            if self.rect().adjusted(0, 10, 0, -10).contains(event.pos()):
+            if self.rect().adjusted(0, 10, 0, -10).contains(event.position().toPoint()):
                 self._interaction.moving = True
             else:
                 self._interaction.resizing = True
-                event_x = event.x()
-                event_y = event.y()
+                event_x = event.position().x()
+                event_y = event.position().y()
                 half_width = self.width() / 2
                 half_height = self.height() / 2
                 if event_x < half_width and event_y < half_height:
@@ -162,7 +162,8 @@ class VideoSurface(QWidget):
                     self._interaction.resize_corner = self.BottomLeftCorner
                 else:
                     self._interaction.resize_corner = self.BottomRightCorner
-            self._interaction.mouse_last_position = event.globalPos()
+            self._interaction.mouse_last_position = event.globalPosition().toPoint()
+            print(self._interaction.mouse_last_position)
             self._interaction.initial_geometry = self.geometry()
 
     def mouseReleaseEvent(self, event):
@@ -172,7 +173,7 @@ class VideoSurface(QWidget):
 
     def mouseMoveEvent(self, event):
         if self._interaction.moving:
-            mouse_position = event.globalPos()
+            mouse_position = event.globalPosition().toPoint()
             offset = mouse_position - self._interaction.mouse_last_position
             if self.parent() is not None:
                 parent_rect = self.parent().rect()
@@ -190,7 +191,7 @@ class VideoSurface(QWidget):
             self.move(self.pos() + offset)
             self._interaction.mouse_last_position += offset
         elif self._interaction.resizing:
-            mouse_position = event.globalPos()
+            mouse_position = event.globalPosition().toPoint()
             delta_y = mouse_position.y() - self._interaction.mouse_last_position.y()
             geometry = self.geometry()
 
@@ -211,11 +212,12 @@ class VideoSurface(QWidget):
                 self.setGeometry(geometry)
                 self._interaction.mouse_last_position = mouse_position
         elif self.interactive:
-            mouse_position = event.pos()
+            mouse_position = event.position().toPoint()
             topbar_rect = QRect(0, 0, self.width(), 10)
 
             if self.rect().adjusted(0, 10, 0, -10).contains(mouse_position):
                 self.setCursor(Qt.CursorShape.ArrowCursor)
+
             elif topbar_rect.contains(mouse_position):
                 self.setCursor(self.cursors.resize_top)
             else:
