@@ -163,7 +163,6 @@ class VideoSurface(QWidget):
                 else:
                     self._interaction.resize_corner = self.BottomRightCorner
             self._interaction.mouse_last_position = event.globalPosition().toPoint()
-            print(self._interaction.mouse_last_position)
             self._interaction.initial_geometry = self.geometry()
 
     def mouseReleaseEvent(self, event):
