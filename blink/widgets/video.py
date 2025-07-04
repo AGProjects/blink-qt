@@ -53,7 +53,7 @@ class VideoSurface(QWidget):
         self.setMouseTracking(True)
         self.cursors = Container()
         self.cursors.resize_top    = QCursor(QIcon(Resources.get('icons/resize-top.svg')).pixmap(16),    hotX=8,  hotY=0)
-        self.cursors.resize_bottom = QCursor(QIcon(Resources.get('icons/resize-bottom.svg')).pixmap(16), hotX=8,  hotY=16)
+        self.cursors.resize_bottom = QCursor(QIcon(Resources.get('icons/resize-bottom.svg')).pixmap(16), hotX=8,  hotY=0)
         if framerate is not None:
             self._clock = QTimer()
             self._clock.setInterval(int(1000/framerate))
