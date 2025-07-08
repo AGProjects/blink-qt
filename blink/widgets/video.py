@@ -1,17 +1,16 @@
 
-
-
-from PyQt6.QtCore import Qt, QMetaObject, QPoint, QRect, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QIcon, QImage, QPainter, QPixmap, QTransform
-from PyQt6.QtWidgets import QWidget
-
-from application.python.types import MarkerType
+import platform
 from math import ceil
 from operator import truediv
+
+from application.python.types import MarkerType
+from PyQt6.QtCore import QMetaObject, QPoint, QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import (QColor, QCursor, QIcon, QImage, QPainter, QPixmap,
+                         QTransform)
+from PyQt6.QtWidgets import QWidget
 from sipsimple.core import FrameBufferVideoRenderer
 
 from blink.resources import Resources
-
 
 __all__ = ['VideoSurface']
 
