@@ -27,11 +27,13 @@ from functools import partial
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from heapq import heappush
-from httplib2 import Http, HttpLib2Error
 from itertools import count
-from oauth2client.client import OAuth2WebServerFlow, AccessTokenRefreshError
-from oauth2client.file import Storage
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request, AuthorizedSession
+from google.auth.exceptions import RefreshError as AccessTokenRefreshError
 from operator import attrgetter
+from requests import RequestException
 from threading import Event
 from urllib.parse import parse_qsl
 from zope.interface import implementer
@@ -680,20 +682,22 @@ class GoogleContactIconRetriever(object):
     def run(self):
         owner = self.contact.name or self.contact.organization or self.contact.id
         icon = self.contact.icon
-        http = self.credentials.authorize(Http(timeout=5))
+        session = AuthorizedSession(self.credentials)
         try:
             if icon.url is not None:
-                response, content = http.request(icon.url + '?size={}'.format(IconManager.max_size))
+                response = session.get(icon.url + '?size={}'.format(IconManager.max_size))
+                content = response.content
+                response_status = response.status_code
             else:
                 response = content = None
-        except (HttpLib2Error, socket.error) as e:
+        except (RequestException, socket.error) as e:
             log.warning('could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
         else:
             if response is None:
                 icon_manager = IconManager()
                 icon_manager.store_data(self.contact.id, None)
                 icon.downloaded_url = None
-            elif response['status'] == '200' and response['content-type'].startswith('image/'):
+            elif response_status == 200 and response.headers.get('content-type','').startswith('image/'):
                 icon_manager = IconManager()
                 try:
                     icon_manager.store_data(self.contact.id, content)
@@ -701,13 +705,15 @@ class GoogleContactIconRetriever(object):
                     log.error('could not store icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                 else:
                     icon.downloaded_url = icon.url
-            elif response['status'] in ('403', '404') and icon.alternate_url:  # private or unavailable photo. use old GData protocol if alternate_url is available.
+            elif response_status in (403, 404) and icon.alternate_url:  # private or unavailable photo. use old GData protocol if alternate_url is available.
                 try:
-                    response, content = http.request(icon.alternate_url, headers={'GData-Version': '3.0'})
-                except (HttpLib2Error, socket.error) as e:
+                    response = session.get(icon.alternate_url, headers={'GData-Version': '3.0'})
+                    content = response.content
+                    response_status = response.status_code
+                except (RequestException, socket.error) as e:
                     log.warning('could not retrieve icon for {owner}: {exception!s}'.format(owner=owner, exception=e))
                 else:
-                    if response['status'] == '200' and response['content-type'].startswith('image/'):
+                    if response_status == 200 and response.headers.get('content-type', '').startswith('image/'):
                         icon_manager = IconManager()
                         try:
                             icon_manager.store_data(self.contact.id, content)
@@ -937,26 +943,46 @@ class GoogleAuthorizationView(QWebEngineView):
                 self.accepted.emit(params['code'], self.email)
 
 
-class GoogleAuthorizationStorage(Storage):
+class GoogleAuthorizationStorage:
     def __init__(self, filename):
+        self.filename = filename
         self._directory = os.path.dirname(filename)
-        super(GoogleAuthorizationStorage, self).__init__(filename)
+
+    def get(self):
+        if not os.path.exists(self.filename):
+            return None
+        return Credentials.from_authorized_user_file(self.filename)
 
     def put(self, credentials):
-        makedirs(self._directory)
-        super(GoogleAuthorizationStorage, self).put(credentials)
+        os.makedirs(self._directory, exist_ok=True)
+        with open(self.filename, 'w') as f:
+            f.write(credentials.to_json())
 
 
 class GoogleAuthorization(object):
     client_id = '28246556873-20215d5a5ttd0l3sa7cchsm7hklh2d3c.apps.googleusercontent.com'
     client_secret = '3L8FDV5LELGmMIwr3NhfaZsq'
     redirect_uri = 'http://127.0.0.1'
-    scope = 'https://www.googleapis.com/auth/contacts.readonly profile'
+    scope = ('openid '
+             'https://www.googleapis.com/auth/userinfo.profile '
+             'https://www.googleapis.com/auth/contacts.readonly')
 
     def __init__(self):
         settings = SIPSimpleSettings()
         self.storage = GoogleAuthorizationStorage(ApplicationData.get('google/credentials'))
-        self.flow = OAuth2WebServerFlow(client_id=self.client_id, client_secret=self.client_secret, scope=self.scope, redirect_uri=self.redirect_uri, login_hint=settings.google_contacts.username, user_agent=settings.user_agent)
+        self.flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=self.scope.split(),
+            redirect_uri=self.redirect_uri,
+        )
+        self.flow.login_hint = settings.google_contacts.username
         self.view = GoogleAuthorizationView()
         self.view.accepted.connect(self._SH_AuthorizationAccepted)
         self.view.rejected.connect(self._SH_AuthorizationRejected)
@@ -976,16 +1002,33 @@ class GoogleAuthorization(object):
     @run_in_thread('network-io')
     def request_credentials(self):
         credentials = self.storage.get()
-        if credentials is None or credentials.invalid:
-            self.view.open(self.flow.step1_get_authorize_url())
+        if credentials is None or not credentials.valid:
+            if credentials and credentials.expired and credentials.refresh_token:
+                try:
+                    credentials.refresh(Request())
+                    self.storage.put(credentials)
+                except AccessTokenRefreshError:
+                    self._open_authorization()
+            else:
+                self._open_authorization()
         else:
             notification_center = NotificationCenter()
             notification_center.post_notification('GoogleAuthorizationWasAccepted', sender=self, data=NotificationData(credentials=credentials, email=self.email))
 
+    def _open_authorization(self):
+        auth_url, _ = self.flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            login_hint=self.email,
+            prompt='consent',
+        )
+        self.view.open(auth_url)
+
     @run_in_thread('network-io')
     def _SH_AuthorizationAccepted(self, code, email):
         self.email = email
-        credentials = self.flow.step2_exchange(code)
+        self.flow.fetch_token(code=code)
+        credentials = self.flow.credentials
         self.storage.put(credentials)
         notification_center = NotificationCenter()
         notification_center.post_notification('GoogleAuthorizationWasAccepted', sender=self, data=NotificationData(credentials=credentials, email=email))
@@ -1084,7 +1127,7 @@ class GoogleContactsManager(object, metaclass=Singleton):
                 self.sync_contacts()
                 return
             log.warning('Could not fetch Google contacts: {!s}'.format(e))
-        except (HttpLib2Error, socket.error) as e:
+        except (RequestException, socket.error) as e:
             log.warning('Could not fetch Google contacts: {!s}'.format(e))
         else:
             added_contacts = []
