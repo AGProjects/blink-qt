@@ -1002,18 +1002,19 @@ class GoogleAuthorization(object):
     @run_in_thread('network-io')
     def request_credentials(self):
         credentials = self.storage.get()
+        if credentials and credentials.expired and credentials.refresh_token:
+            try:
+                credentials.refresh(Request())
+                self.storage.put(credentials)
+            except AccessTokenRefreshError:
+                credentials = None
+
         if credentials is None or not credentials.valid:
-            if credentials and credentials.expired and credentials.refresh_token:
-                try:
-                    credentials.refresh(Request())
-                    self.storage.put(credentials)
-                except AccessTokenRefreshError:
-                    self._open_authorization()
-            else:
-                self._open_authorization()
-        else:
-            notification_center = NotificationCenter()
-            notification_center.post_notification('GoogleAuthorizationWasAccepted', sender=self, data=NotificationData(credentials=credentials, email=self.email))
+            self._open_authorization()
+            return
+
+        notification_center = NotificationCenter()
+        notification_center.post_notification('GoogleAuthorizationWasAccepted', sender=self, data=NotificationData(credentials=credentials, email=self.email))
 
     def _open_authorization(self):
         auth_url, _ = self.flow.authorization_url(
