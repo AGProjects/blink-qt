@@ -1,4 +1,16 @@
-blink (6.0.4bookworm) bookworm; urgency=medium
+blink (6.0.4) unstable; urgency=medium
+
+  * Replaced oauth2client with google auth
+  * Fixed video colors on MacOS
+  * Removed debug print
+  * Fixed mouse positions in resizing and moving video
+  * Fixed resize cursor in video
+  * Initial port to Cython 3 with backwards compatibilty
+  * Update mac requirements
+
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Tue, 27 Jan 2026 13:49:13 +0100
+
+blink (6.0.4) unstable; urgency=medium
 
   * Auto set some settings for accounts under sylk.link domain
   * Use 32000Hz audio sample rate by default
