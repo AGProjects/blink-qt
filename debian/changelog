@@ -1,4 +1,4 @@
-blink (6.0.4) unstable; urgency=medium
+blink (6.0.5) unstable; urgency=medium
 
   * Replaced oauth2client with google auth
   * Fixed video colors on MacOS
