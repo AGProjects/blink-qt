@@ -1056,7 +1056,7 @@ class ChatWidget(base_class, ui_class):
                 (prev_timestamp, prev_id, previous_rendered_message) = self.timestamp_rendered_messages[i-1]
                 if timestamp >= message.timestamp:
                     if message.is_related_to(previous_rendered_message):
-                        print(f'consecutive {message_id} to previous {previous_rendered_message.id} {timestamp} > {message.timestamp}')
+                        # print(f'consecutive {message_id} to previous {previous_rendered_message.id} {timestamp} > {message.timestamp}')
                         message.consecutive = True
                         html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
                         if previous_rendered_message.consecutive:
@@ -3898,7 +3898,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkMessageHistoryMustReload(self, notification):
         history = HistoryManager()
         for session in self.session_model.sessions:
-            print(f'Check if we must reload {session.blink_session}')
+            # print(f'Check if we must reload {session.blink_session}')
             if session.blink_session.account.id == notification.data.account:
                 history.reload_pending_encrypted(session.blink_session.contact.uri.uri, session.blink_session)
 
