@@ -1,6 +1,5 @@
 lxml
 lxml_html_clean
-oauth2client
 pgpy
 PyQt6
 PyQt6-WebEngine
@@ -11,3 +10,5 @@ zope.interface
 google-api-python-client
 pyinstaller
 pyobjc-framework-AVFoundation==10.0
+google_auth_oauthlib
+numpy
