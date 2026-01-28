@@ -1,3 +1,9 @@
+blink (6.0.6) unstable; urgency=medium
+
+  * Fixed missing dependency
+
+ -- Tijmen de Mes <tijmen@ag-projects.com>  Wed, 28 Jan 2026 19:46:05 +0100
+
 blink (6.0.5) unstable; urgency=medium
 
   * Replaced oauth2client with google auth
