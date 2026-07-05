@@ -1109,7 +1109,7 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SIPAccountManagerDidStart(self, notification):
         account = notification.sender.default_account
-        if account is not BonjourAccount() and account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+        if account is not None and account is not BonjourAccount() and account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
             self.export_pgp_key_action.setEnabled(True)
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
