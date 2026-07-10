@@ -3,6 +3,15 @@ import os
 import sys
 import platform
 
+# QtWebEngine's embedded Chromium spams stderr with harmless errors on systems
+# where it cannot export GPU buffers to a dma_buf (e.g. Raspberry Pi and other
+# ARM/GBM setups): "gbm_wrapper.cc ... Failed to export buffer to dma_buf". The
+# web views fall back to shared-memory buffers and render correctly, so we just
+# disable Chromium's logging to keep the console clean. Any flags the user sets
+# via QTWEBENGINE_CHROMIUM_FLAGS are preserved. This must run before QtWebEngine
+# is imported/initialized below.
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = ("--disable-logging " + os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")).strip()
+
 from PyQt6.QtCore import Qt, QEvent, QLocale, QTranslator, QLoggingCategory
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QIcon
