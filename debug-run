@@ -1,0 +1,25 @@
+#!/bin/sh
+# Capture a full backtrace of the blink segfault.
+# Requires: gdb and python3 debug symbols (sudo apt install gdb python3-dbg)
+
+export QT_QPA_PLATFORM=xcb
+export QT_LOGGING_RULES='qt.webengine*=false'
+
+echo "==== Qt image formats visible to PyQt6 (must include 'svg') ===="
+python3 -c "from PyQt6.QtGui import QImageReader; print(sorted(bytes(f).decode() for f in QImageReader.supportedImageFormats()))" 2>&1
+echo
+
+echo "==== SVG plugins found on disk ===="
+find / -name 'libqsvg*.so' 2>/dev/null
+echo
+
+echo "==== Running under gdb (py-bt gives exact Python file:line) ===="
+gdb --batch \
+    -ex 'run' \
+    -ex 'echo \n==== PYTHON BACKTRACE (crashing thread) ====\n' \
+    -ex 'py-bt' \
+    -ex 'echo \n==== C/C++ BACKTRACE (crashing thread) ====\n' \
+    -ex 'bt full' \
+    -ex 'echo \n==== ALL THREADS ====\n' \
+    -ex 'thread apply all bt' \
+    --args python3 bin/blink 2>&1 | tee /tmp/blink-crash.log
