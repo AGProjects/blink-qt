@@ -54,8 +54,8 @@ class VideoSurface(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
         self.setMouseTracking(True)
         self.cursors = Container()
-        self.cursors.resize_top    = QCursor(QIcon(Resources.get('icons/resize-top.svg')).pixmap(16),    hotX=8,  hotY=0)
-        self.cursors.resize_bottom = QCursor(QIcon(Resources.get('icons/resize-bottom.svg')).pixmap(16), hotX=8,  hotY=0)
+        self.cursors.resize_top    = self._build_cursor('icons/resize-top.svg',    hot_x=8, hot_y=0, fallback=Qt.CursorShape.SizeVerCursor)
+        self.cursors.resize_bottom = self._build_cursor('icons/resize-bottom.svg', hot_x=8, hot_y=0, fallback=Qt.CursorShape.SizeVerCursor)
         if framerate is not None:
             self._clock = QTimer()
             self._clock.setInterval(int(1000/framerate))
@@ -64,6 +64,18 @@ class VideoSurface(QWidget):
             self._clock = None
         self._interaction = InteractionState()
         self._image = None
+
+    @staticmethod
+    def _build_cursor(icon_path, hot_x, hot_y, fallback):
+        # QIcon.pixmap() can return a null pixmap when the SVG icon engine is
+        # unavailable (e.g. the qsvgicon plugin is missing). Constructing a
+        # QCursor from a null pixmap triggers "Cannot create bitmap cursor;
+        # invalid bitmap(s)" and yields an unusable cursor, so fall back to a
+        # standard cursor shape in that case.
+        pixmap = QIcon(Resources.get(icon_path)).pixmap(16, 16)
+        if pixmap.isNull():
+            return QCursor(fallback)
+        return QCursor(pixmap, hotX=hot_x, hotY=hot_y)
 
     def __getattr__(self, name):
         if name == '_renderer':
