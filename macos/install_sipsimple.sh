@@ -1,98 +1,93 @@
 #!/bin/bash
+#
+# Install (or reuse) the SIP SIMPLE client SDK inside the shared virtualenv.
+#
+# If an importable sipsimple of at least $SIPSIMPLE_MIN_VERSION is already
+# present in the active environment, the (expensive) PJSIP build is skipped
+# and the SDK is reused as-is.
+#
+# This mirrors the logic of the python3-sipsimple build scripts: it installs
+# pinned, tagged GitHub releases instead of cloning the latest sources via
+# darcs.
 
-# Install C building dependencies
-echo "Installing port dependencies..."
-sudo port install yasm x264 gnutls openssl sqlite3 ffmpeg mpfr libmpc libvpx wget gmp mpc
+set -e
 
-RESULT=$?
-if [ $RESULT -ne 0 ]; then
-    echo
-    echo "Failed to install all C dependencies"
-    echo
-    exit 1
+SIPSIMPLE_VERSION="5.3.3.1-mac"      # tagged python3-sipsimple release to build
+SIPSIMPLE_MIN_VERSION="5.3.2"        # minimum acceptable already-installed version
+PJSIP_VERSION="2.11"
+SIPCLIENTS_VERSION="5.2.3"
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Operate inside the shared virtualenv (create/reuse it if not already active).
+if [ -z "$VIRTUAL_ENV" ]; then
+    # shellcheck source=/dev/null
+    source "$HERE/activate_venv.sh"
 fi
 
-# Install Python building dependencies
-echo "Installing python dependencies..."
+# --- Reuse an already-installed SDK ----------------------------------------
+if python3 - "$SIPSIMPLE_MIN_VERSION" <<'PY'
+import re, sys
+try:
+    import sipsimple
+except Exception:
+    sys.exit(1)
+def parse(v):
+    return [int(x) for x in re.findall(r"\d+", v)]
+sys.exit(0 if parse(sipsimple.__version__) >= parse(sys.argv[1]) else 1)
+PY
+then
+    echo "SIP SIMPLE SDK $(python3 -c 'import sipsimple; print(sipsimple.__version__)') already installed - skipping build."
+    exit 0
+fi
+
+echo "SIP SIMPLE SDK not found (or older than $SIPSIMPLE_MIN_VERSION); building it..."
+
+# --- C build dependencies (MacPorts) ---------------------------------------
+echo "Installing port dependencies..."
+sudo port install yasm x264 gnutls openssl sqlite3 ffmpeg mpfr libmpc libvpx wget gmp mpc libuuid
+
+# MacPorts' libuuid header conflicts with the macOS SDK one during the build.
+if [ -f /opt/local/include/uuid/uuid.h ]; then
+    sudo mv /opt/local/include/uuid/uuid.h /opt/local/include/uuid/uuid.h.old
+fi
 
 export CFLAGS="-I/opt/local/include"
 export LDFLAGS="-L/opt/local/lib"
 
+# --- Python build dependencies (pinned, tagged tarballs) -------------------
+echo "Installing python build dependencies..."
 pip3 install --upgrade pip
-pip3 install --user cython==0.29.37 dnspython lxml twisted python-dateutil greenlet zope.interface requests gmpy2 wheel gevent pytz
+pip3 install -r "$HERE/python-requirements.txt"
+pip3 install -r "$HERE/sipsimple-requirements.txt"
 
-RESULT=$?
-if [ $RESULT -ne 0 ]; then
-    echo
-    echo "Failed to install all python dependencies"
-    echo
-    exit 1
+# --- Build & install the SDK -----------------------------------------------
+BUILD_DIR="$HOME/work"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+srcdir="python3-sipsimple-$SIPSIMPLE_VERSION"
+if [ ! -d "$srcdir" ]; then
+    echo "Downloading python3-sipsimple $SIPSIMPLE_VERSION..."
+    wget -N "https://github.com/AGProjects/python3-sipsimple/archive/refs/tags/$SIPSIMPLE_VERSION.tar.gz"
+    tar zxf "$SIPSIMPLE_VERSION.tar.gz"
+    rm -f "$SIPSIMPLE_VERSION.tar.gz"
 fi
 
-# Create a work directory
+cp "$HERE/_sipsimple_codecs.py" "$srcdir/sipsimple/configuration/_codecs.py"
 
-if [ ! -d work ]; then
-    mkdir work
-fi
-
-cd work
-
-# Download and build SIP SIMPLE client SDK built-in dependencies
-for p in python3-application python3-eventlib python3-gnutls python3-otr python3-msrplib python3-xcaplib; do
-    if [ ! -d $p ]; then
-        darcs clone --lazy http://devel.ag-projects.com/repositories/$p
-    fi
-    cd $p
-    echo "Installing $p..."
-    pip3 install --user .
-
-    if [ $RESULT -ne 0 ]; then
-        echo
-        echo "Failed to install $p dependency"
-        cd ..
-        echo
-        exit 1
-        fi
-
-    cd ..
-
-done
-
-# Download and build SIP SIMPLE client SDK
-if [ ! -d python3-sipsimple ]; then
-    darcs clone --lazy http://devel.ag-projects.com/repositories/python3-sipsimple
-fi
-
-cp ../_sipsimple_codecs.py python3-sipsimple/sipsimple/configuration/_codecs.py
-
-echo "Installing SIP Simple SDK..."
-cd python3-sipsimple
+cd "$srcdir"
+echo "Fetching SDK C dependencies (PJSIP $PJSIP_VERSION)..."
 chmod +x ./get_dependencies.sh
-./get_dependencies.sh 
+./get_dependencies.sh "$PJSIP_VERSION"
 
-if [ $RESULT -ne 0 ]; then
-    echo
-    echo "Failed to install all SIP SIMPLE SDK dependencies"
-    echo
-    exit 1
-fi
+echo "Building SIP SIMPLE SDK..."
+pip3 install .
 
-pip3 install --user .
-if [ $RESULT -ne 0 ]; then
-    echo
-    echo "Failed to build SIP SIMPLE SDK"
-    echo
-    cd
-    exit 1
-fi
+cd "$BUILD_DIR"
 
-cd ..
+# --- Command line SIP clients (optional companion tools) -------------------
+echo "Installing sipclients3 $SIPCLIENTS_VERSION..."
+pip3 install "https://github.com/AGProjects/sipclients3/archive/refs/tags/$SIPCLIENTS_VERSION.tar.gz"
 
-if [ ! -d sipclients3 ]; then
-    darcs clone --lazy http://devel.ag-projects.com/repositories/sipclients3
-fi
-
-cd sipclients3
-pip3 install --user .
-cd ..
-
+echo "SIP SIMPLE SDK installation complete."

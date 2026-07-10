@@ -1,3 +1,5 @@
+cython==0.29.37
+wheel
 lxml
 lxml_html_clean
 pgpy

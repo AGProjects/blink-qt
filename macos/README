@@ -4,32 +4,42 @@ Install Blink Qt locally
 # Install Xcode from Apple
 # Install MacPorts from https://www.macports.org
 # Install python from https://www.python.org
-# Install Mac Ports from https://www.macports.org
 
-To install blink-qt and its dependencies in Python user environment:
+To install blink-qt and its dependencies:
 
-chmod +x ./install_blink.sh
-./install_blink.sh
+chmod +x ./macos/install_blink.sh
+./macos/install_blink.sh
 
-The packages will be installed in the folder:
+Everything is installed into a dedicated virtualenv:
 
-~/Library/Python/3.9/lib/python/site-packages/
+~/work/sipsimple-python-<version>-<arch>-env
 
-The binaries will be installed in the folder:
+This is the same environment used by the python3-sipsimple build scripts, so a
+SIP SIMPLE SDK that was already built there is reused instead of being
+recompiled. On subsequent runs the (slow) PJSIP build is skipped whenever an
+importable sipsimple of a sufficient version is already present.
 
-~/Library/Python/3.9/bin
+The SIP SIMPLE SDK and its dependencies are installed from pinned, tagged
+GitHub releases (see macos/python-requirements.txt and
+macos/sipsimple-requirements.txt) rather than cloned via darcs.
 
 To run Blink in place:
 
 ./run
 
-To run Blink from local Python environment
+To run Blink from the virtualenv, activate it and run blink:
 
-~/Library/Python/3.9/bin/blink
+source ./macos/activate_venv.sh
+blink
 
 
 Making Blink Qt app
 -------------------
+
+Activate the virtualenv first so pyinstaller can find PyQt6, the SIP SIMPLE
+SDK and blink:
+
+source ./macos/activate_venv.sh
 
 Generate a spec file used by pyinstaller using make_spec.sh script. The
 resulting file must be tweaked, see the modified blink.specs file.
@@ -39,7 +49,8 @@ codesign_identity to your Developer id.
 
 pyinstaller blink.spec -y
 
-The generated app can then be found in dist/ folder.
+The generated app can then be found in dist/ folder (Blink-Qt.app). Note that
+dist/Blink.app, if present, is the separate Cocoa version of Blink.
 
 sudo port install create-dmg
 

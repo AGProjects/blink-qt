@@ -1,0 +1,70 @@
+Blink-Qt macOS post-build pipeline
+==================================
+
+These scripts take the app that PyInstaller produces and turn it into a
+distributable, self-contained, signed and notarized bundle. They are the
+PyInstaller-layout adaptation of the Cocoa Blink build_scripts (relink +
+codesign) and build_scripts/publish (notarize + dmg).
+
+Run order (after `pyinstaller blink.spec -y`, inside the venv):
+
+    ./00-slim-qt.sh         Remove Qt frameworks the app does not use: QtPdf,
+                            QtPdfQuick, the QtQuick3D* family and QtShaderTools
+                            (plus their QML modules and the libqpdf plugin). A
+                            framework still referenced by a surviving binary is
+                            kept unless --force is given. (~25 MB)
+
+    ./01-relink.sh          Rewrite absolute system-library load commands
+                            (/opt/local, /usr/local, MacPorts, Homebrew, ...)
+                            to @executable_path/../Frameworks and copy any
+                            missing libraries in, then verify none remain.
+
+    ./02-strip.sh           Remove loose dylibs in Contents/Frameworks that
+                            nothing references (orphans and redundant
+                            duplicates, e.g. a second OpenSSL major). Pruned
+                            files are MOVED to dist/pruned-libs (not deleted).
+                            Use --dry-run to preview.
+
+    ./03-codesign.sh        Sign every nested dylib/.so, helper app and
+                            framework, then the app itself with a hardened
+                            runtime and macos/Blink.entitlements.
+
+    ./04-notarize-dmg.sh    ditto -> notarytool submit --wait -> stapler ->
+                            Gatekeeper verify -> create-dmg.
+
+    ./run-all.sh            Runs 01 -> 04 in order.
+
+bundle_tool.py is the macOS-only worker used by 01/02 (shells out to otool and
+install_name_tool). It has relink / strip / verify subcommands.
+
+Configuration (environment variables)
+-------------------------------------
+    APP              app bundle to operate on   (default: dist/Blink-Qt.app)
+    SIGN_IDENTITY    codesign identity          (default: "Developer ID Application")
+    ENTITLEMENTS     entitlements plist         (default: macos/Blink.entitlements)
+    NOTARY_PROFILE   notarytool keychain profile (default: "notarytool-password")
+
+Create the notarization keychain profile once:
+
+    xcrun notarytool store-credentials "notarytool-password" \
+        --apple-id <apple-id> --team-id 4DFEFUDLKZ \
+        --password <app-specific-password>
+
+Notes
+-----
+* Run 01 before 02: stripping relies on an accurate reference graph, which
+  relinking produces.
+* Editing or removing libraries invalidates signatures, so always sign (03)
+  AFTER slim (00), relink (01) and strip (02). On Apple Silicon a modified,
+  unsigned Mach-O is killed at load with "Code Signature Invalid" (SIGKILL) —
+  do NOT launch the app between these steps and 03-codesign.sh. (relink
+  ad-hoc re-signs only the files it changes so it never leaves the bundle in a
+  broken state; slim/strip only remove files.) For a quick local test without
+  a Developer ID, ad-hoc sign: `SIGN_IDENTITY="-" ./03-codesign.sh` — note
+  codesign ignores --timestamp for ad-hoc, which is fine for local runs.
+* After stripping, launch the app and exercise every feature (audio, video,
+  chat, screen sharing, web views). If a library was pruned that is actually
+  dlopen'd by name at runtime, restore it from dist/pruned-libs and re-run
+  02-strip.sh with --dry-run to inspect.
+* These scripts require macOS (otool, install_name_tool, codesign, lipo,
+  notarytool, stapler, spctl, create-dmg).
