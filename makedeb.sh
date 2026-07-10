@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# skip dh_auto_test during the build (like autopackager does)
+export DEB_BUILD_OPTIONS=nocheck
+
 distro="${1:-}"
 mode="${2:-}"
 
