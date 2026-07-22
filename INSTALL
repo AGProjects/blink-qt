@@ -19,6 +19,7 @@ Install the runtime dependencies:
  * python3-pgpy
  * python3-pyqt6
  * python3-pyqt6.qtsvg
+ * qt6-svg-plugins (Debian 13/trixie and later; on older releases the plugin is part of libqt6svg6)
  * python3-pyqt6.qtwebchannel
  * python3-pyqt6.qtwebengine
  * python3-requests
