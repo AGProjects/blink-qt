@@ -44,7 +44,8 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link
+from blink.message_envelopes import LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, metadata_link
+from blink.location import storage_fields as location_storage_fields
 from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
@@ -327,14 +328,15 @@ del ui_class, base_class
 
 
 class BlinkMessage(MSRPChatMessage):
-    __slots__ = 'id', 'disposition', 'is_secure', 'direction'
+    __slots__ = 'id', 'disposition', 'is_secure', 'direction', 'metadata'
 
-    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, disposition=None, is_secure=False, direction=None):
+    def __init__(self, content, content_type, sender=None, recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, disposition=None, is_secure=False, direction=None, metadata=None):
         super(BlinkMessage, self).__init__(content, content_type, sender, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
         self.id = id if id is not None else str(uuid.uuid4())
         self.disposition = disposition
         self.is_secure = is_secure
         self.direction = direction
+        self.metadata = metadata    # cleartext side-band (CPIM agp.Metadata, journal metadata): location v2, call records
 
 
 class OTRInternalMessage(BlinkMessage):
@@ -1212,8 +1214,11 @@ class MessageManager(object, metaclass=Singleton):
         contact, contact_uri = URIUtils.find_contact(message['contact'])
         history_message = BlinkMessage(message.get('content') or '', message['content_type'], self._journal_sender(account, message, contact),
                                        timestamp=self._journal_timestamp(message), id=message['message_id'],
-                                       disposition=message.get('disposition'), direction=message['direction'])
+                                       disposition=message.get('disposition'), direction=message['direction'], metadata=message.get('metadata'))
         self._journal_store(account, message, history_message, message['contact'], state=message.get('state'))
+        if content_type == LOCATION_CONTENT_TYPE:
+            tick = location_storage_fields(history_message.content, history_message.metadata)
+            return f'location {tick["related_action"]}' if tick else 'location (unreadable)'
         if content_type == METADATA_CONTENT_TYPE:
             link = metadata_link(history_message.content)
             return f'metadata {link[1]}' if link is not None else 'metadata (unlinked)'
@@ -1342,6 +1347,7 @@ class MessageManager(object, metaclass=Singleton):
             sender = cpim_message.sender or from_header
             disposition = next(([item.strip() for item in header.value.split(',')] for header in cpim_message.additional_headers if header.name == 'Disposition-Notification'), None)
             message_id = next((header.value for header in cpim_message.additional_headers if header.name == 'Message-ID'), str(uuid.uuid4()))
+            metadata = next((header.value for header in cpim_message.additional_headers if header.name == 'Metadata'), None)   # agp.Metadata
         else:
             payload = SimplePayload.decode(data.body, data.content_type)
             body = payload.content.decode()
@@ -1349,6 +1355,7 @@ class MessageManager(object, metaclass=Singleton):
             sender = from_header
             disposition = None
             message_id = str(uuid.uuid4())
+            metadata = None
 
         encryption = self.check_encryption(content_type, body)
         enc_text = f'{encryption} encrypted ' if encryption else ''
@@ -1499,7 +1506,7 @@ class MessageManager(object, metaclass=Singleton):
         if timestamp.tzinfo is tzutc():
             timestamp = timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
         timestamp = str(timestamp)
-        message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition, direction='incoming')
+        message = BlinkMessage(body, content_type, sender, timestamp=timestamp, id=message_id, disposition=disposition, direction='incoming', metadata=metadata)
 
         if x_replicated_message is not Null:
             message.sender = account
@@ -1513,8 +1520,13 @@ class MessageManager(object, metaclass=Singleton):
                                                   data=NotificationData(remote_uri=remote_uri, message=message, encryption=encryption, state='accepted'))
             known = content_type.lower() in KNOWN_INERT_CONTENT_TYPES
             link = metadata_link(body) if content_type.lower() == METADATA_CONTENT_TYPE else None
+            tick = location_storage_fields(body, metadata) if content_type.lower() == LOCATION_CONTENT_TYPE else {}
             if link is not None:
                 what = f': {link[1]} for message {link[0]}'
+            elif tick:
+                what = f': {tick["related_action"]} of share {tick.get("related_msg_id")}'
+            elif content_type.lower() == LOCATION_CONTENT_TYPE:
+                what = ': unreadable without decrypting'
             else:
                 what = '' if known else ' (a type this version does not know)'
             ActivityLog().info(f'[Message with {remote_uri}] {content_type.lower()} message {message_id} stored, not shown{what}')

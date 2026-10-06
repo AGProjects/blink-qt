@@ -33,6 +33,7 @@ from blink.logging import ActivityLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_summary, dominant_media, legacy_call_record, this_device_id
 from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link, reply_metadata
+from blink.location import storage_fields as location_storage_fields
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
@@ -617,7 +618,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 10
+    __version__ = 11
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -800,15 +801,35 @@ class MessageHistory(object, metaclass=Singleton):
         return content_type in cls.__file_transfer_content_types__
 
     @staticmethod
-    def _related_fields(content_type, content):
+    def _related_fields(content_type, content, metadata=None):
         """related_msg_id and related_action of a metadata companion (reply, label,
-        peaks, call recording): filed against its message, never a bubble or unread."""
+        peaks, call recording): filed against its message, never a bubble or unread.
+        For a location tick also category and metadata (blink.location.storage_fields):
+        filed against its share, update ticks being the share's trail."""
+        if content_type == LOCATION_CONTENT_TYPE:
+            try:
+                return location_storage_fields(content, metadata, content_type)
+            except Exception as e:
+                log.warning(f'Location message could not be classified: {e!r}')
+                return {}
         if content_type != METADATA_CONTENT_TYPE:
             return {}
         link = metadata_link(content)
         if link is None:
             return {}
         return {'related_msg_id': link[0], 'related_action': link[1]}
+
+    @classmethod
+    def _stored_location(cls, message_id, fields, remote_uri):
+        """After a location tick is stored: log it (trail ticks only at debug level,
+        they come every few seconds). Caller is in the db thread."""
+        action = fields.get('related_action')
+        if action is None:
+            ActivityLog().info(f'[db] Location message {message_id} with {remote_uri} stored, it cannot be read without decrypting')
+        elif action in cls.__trail_actions__:
+            log.debug(f'Location {action} {message_id} stored in the trail of share {fields.get("related_msg_id")}')
+        else:
+            ActivityLog().info(f'[db] Location {action} {message_id} with {remote_uri} stored for share {fields.get("related_msg_id")}')
 
     @classmethod
     def _stored_companion(cls, message_id, fields):
@@ -1418,6 +1439,25 @@ class MessageHistory(object, metaclass=Singleton):
         ActivityLog().info(f'[db] {linked} of {len(rows)} metadata messages filed against their message, {hidden} hidden with their removed message')
         return linked
 
+    def _upgrade_to_v11(self):
+        """file location ticks against their share"""
+        # Location messages stored before this version have no related_* columns, so
+        # update ticks show as bubbles and nothing groups a share. A tick stored without
+        # its version 2 side-band cannot be read without decrypting and stays as it is.
+        table = Message.sqlmeta.table
+        rows = self.db.queryAll(f"select id, content, metadata from {table}"
+                                f" where content_type = '{LOCATION_CONTENT_TYPE}' and (related_action is null or related_action = '')")
+        filed = 0
+        for row_id, content, metadata in rows:
+            fields = location_storage_fields(content, metadata, LOCATION_CONTENT_TYPE)
+            if not fields:
+                continue
+            assignments = ', '.join(f'{name} = {self.db.sqlrepr(value)}' for name, value in fields.items())
+            self.db.queryAll(f'update {table} set {assignments} where id = {int(row_id)}')
+            filed += 1
+        ActivityLog().info(f'[db] {filed} of {len(rows)} location messages filed against their share' + (f', {len(rows) - filed} cannot be read without decrypting' if len(rows) > filed else ''))
+        return filed
+
     def _add_column(self, name, definition):
         try:
             self.db.queryAll(f'ALTER TABLE {Message.sqlmeta.table} ADD COLUMN {name} {definition}')
@@ -1545,7 +1585,7 @@ class MessageHistory(object, metaclass=Singleton):
             optional_fields['state'] = state
         optional_fields['read'] = cls._initial_read(message.direction, message.content_type, state)
         optional_fields.update(cls._content_fields(message.content_type, message.content))
-        optional_fields.update(cls._related_fields(message.content_type, message.content))
+        optional_fields.update(cls._related_fields(message.content_type, message.content, getattr(message, 'metadata', None)))
 
         if encryption is not None:
             optional_fields['encryption_type'] = str([f'{encryption}'])
@@ -1574,9 +1614,13 @@ class MessageHistory(object, metaclass=Singleton):
             cls._apply_pending_removal(message.id)
             if message.content_type == METADATA_CONTENT_TYPE:
                 cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh
+            elif message.content_type == LOCATION_CONTENT_TYPE and optional_fields.get('related_action') in cls.__trail_actions__:
+                cls._stored_location(message.id, optional_fields, remote_uri)     # moves a pin: nothing to refresh
             elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
                 notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction))
+                if message.content_type == LOCATION_CONTENT_TYPE:
+                    cls._stored_location(message.id, optional_fields, remote_uri)
 
     @classmethod
     @run_in_thread('db')
@@ -1620,7 +1664,7 @@ class MessageHistory(object, metaclass=Singleton):
             optional_fields['state'] = state
         optional_fields['read'] = cls._initial_read(direction, message.content_type, state)
         optional_fields.update(cls._content_fields(message.content_type, message.content))
-        optional_fields.update(cls._related_fields(message.content_type, message.content))
+        optional_fields.update(cls._related_fields(message.content_type, message.content, getattr(message, 'metadata', None)))
         if session.chat_type is not None:
             chat_info = session.info.streams.chat
 
@@ -1665,9 +1709,13 @@ class MessageHistory(object, metaclass=Singleton):
 
             if message.content_type == METADATA_CONTENT_TYPE:
                 cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh
+            elif message.content_type == LOCATION_CONTENT_TYPE and optional_fields.get('related_action') in cls.__trail_actions__:
+                cls._stored_location(message.id, optional_fields, remote_uri)     # moves a pin: nothing to refresh
             elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
                 notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=session.account, data=NotificationData(remote_uri=remote_uri, state=state, direction=direction))
+                if message.content_type == LOCATION_CONTENT_TYPE:
+                    cls._stored_location(message.id, optional_fields, remote_uri)
 
     @run_in_thread('db')
     def update_message(self, notification):

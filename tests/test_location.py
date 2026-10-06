@@ -180,6 +180,34 @@ class SummaryAndCategoryTests(unittest.TestCase):
         self.assertEqual(location.row_metadata('{"x": 1}', None), '{"x": 1}')         # not a location row
 
 
+class StorageFieldsTests(unittest.TestCase):
+    def test_v2_share(self):
+        content, metadata = v2('location_start', POSITION, sessionId='s1', deviceId='d1')
+        fields = location.storage_fields(content, metadata)
+        self.assertEqual(fields, {'related_action': 'location_start', 'related_msg_id': 's1', 'category': 'location',
+                                  'metadata': '{"version":"2.0","deviceId":"d1"}'})
+        # what is stored reads back as the same tick
+        rebuilt = location.row_metadata(fields['metadata'], fields['related_action'], fields['related_msg_id'])
+        payload = location.location_payload(content, rebuilt, decrypt=decrypt, content_type=location.LOCATION_CONTENT_TYPE)
+        self.assertEqual((payload['action'], payload['session_id'], payload['coords']['latitude']), ('location_start', 's1', 52.3702))
+        content, metadata = v2('location_update', POSITION, sessionId='s1')
+        self.assertEqual(location.storage_fields(content, metadata),
+                         {'related_action': 'location_update', 'related_msg_id': 's1', 'metadata': '{"version":"2.0"}'})
+        content, metadata = v2('location_stop', sessionId='s1')
+        self.assertEqual(location.storage_fields(content, metadata)['related_action'], 'location_stop')
+
+    def test_v1_and_one_shot(self):
+        fields = location.storage_fields(v1('location_update', armour(POSITION), sessionId='s1'))
+        self.assertEqual(fields, {'related_action': 'location_update', 'related_msg_id': 's1'})    # body keeps the envelope
+        body = location.one_shot_envelope(POSITION, 'o1')
+        self.assertEqual(location.storage_fields(body), {'related_action': 'location_once', 'related_msg_id': 'o1', 'category': 'location'})
+
+    def test_unreadable(self):
+        for content, metadata in (('garbage', None), ('', None), (armour({'action': 'location_start'}), None)):
+            self.assertEqual(location.storage_fields(content, metadata), {}, content)
+        self.assertEqual(location.storage_fields(armour(v1('location', POSITION)), None, location.LEGACY_LOCATION_CONTENT_TYPE), {})
+
+
 class TrackTests(unittest.TestCase):
     def point(self, lat, minute):
         return {'latitude': lat, 'longitude': 4.0, 'timestamp': '2026-10-06T10:%02d:00Z' % minute}

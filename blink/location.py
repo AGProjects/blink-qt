@@ -48,7 +48,7 @@ __all__ = [
     'track_points', 'append_track_point', 'merge_location_bodies',
     'MAX_TRACK_POINTS',
     'one_shot_envelope', 'location_request_envelope', 'REQUEST_LIFETIME_HOURS',
-    'envelope_summary', 'row_metadata', 'TEARDOWN_ACTIONS', 'ORIGIN_ACTIONS',
+    'envelope_summary', 'row_metadata', 'storage_fields', 'TEARDOWN_ACTIONS', 'ORIGIN_ACTIONS',
 ]
 
 
@@ -483,6 +483,33 @@ def envelope_summary(content, metadata=None, content_type=None):
                                if key not in METADATA_DERIVABLE_FIELDS),
         'envelope': envelope,
     }
+
+
+def storage_fields(content, metadata=None, content_type=LOCATION_CONTENT_TYPE):
+    """The columns of a stored location tick, from its cleartext envelope only.
+
+    related_action is the tick's action and related_msg_id its share
+    (sessionId, else messageId), so the ticks of one share are filed against
+    its origin row and come with it; update ticks are trail rows, left out of
+    a page and drawn as the origin's trail. category marks browsable rows
+    (origins, one-shots). metadata keeps the version 2 side-band minus what
+    has a column (row_metadata puts it back on read); a version 1 tick keeps
+    its envelope in the body and stores none. Nothing is decrypted, so the
+    journal can file a share without a key. {} when the tick cannot be read
+    without decrypting (legacy format) or is not a location message.
+    """
+    summary = envelope_summary(content, metadata, content_type)
+    if summary is None:
+        return {}
+    fields = {'related_action': summary['action']}
+    if summary['session_id']:
+        fields['related_msg_id'] = summary['session_id']
+    if summary['category']:
+        fields['category'] = summary['category']
+    side_band = location_metadata(metadata)
+    if side_band is not None and (envelope_version(side_band) or 0) >= 2:
+        fields['metadata'] = json.dumps(summary['store_metadata'], separators=(',', ':'))
+    return fields
 
 
 def location_payload(content, metadata=None, decrypt=None, content_type=None):
