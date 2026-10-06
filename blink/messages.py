@@ -1440,6 +1440,11 @@ class MessageManager(object, metaclass=Singleton):
             ActivityLog().info(f'[Message] {content_type.lower()} message {message_id} for account {account.id} skipped, it was already handled (live or from the journal)')
             return
 
+        if content_type.lower() == IsComposingDocument.content_type and x_replicated_message is not Null:
+            # our own typing notice, replicated back from the server: never "typing" to ourselves
+            log.debug(f'Ignoring the replicated copy of our is-composing message {message_id} for account {account.id}')
+            return
+
         if content_type.lower() in self.__not_history_content_types__:
             # not history: acted on elsewhere or not at all. The other types the journal ignores
             # (API token, private key, typing) are handled live below
@@ -1961,9 +1966,13 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = InternalOTROutgoingMessage(session.account, session.contact, data, 'text/plain', session=session)
         self._send_message(outgoing_message)
 
-    def send_composing_indication(self, session, state, refresh=None, last_active=None):
+    def send_composing_indication(self, session, state, refresh=60, last_active=None):
+        """Refresh 60 and last-active now, as Blink for macOS sends them: a receiver that
+        hears nothing more drops "typing" after a minute rather than the RFC default 120 s."""
         if not session.account.sms.enable_iscomposing:
             return
+        if last_active is None:
+            last_active = ISOTimestamp.now()
 
         content = IsComposingDocument.create(state=State(state),
                                              refresh=Refresh(refresh) if refresh is not None else None,
