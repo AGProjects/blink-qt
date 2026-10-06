@@ -44,7 +44,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.message_envelopes import CALL_CONTENT_TYPE, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
+from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
@@ -351,11 +351,13 @@ def can_use_cpim(content_type):
     return not (content_type.startswith('application/sylk-api') or content_type == 'text/pgp-public-key')
 
 
-def skip_journal_headers(content, otr=False):
-    """[X-Sylk-Skip-Journal] for an OTR message, else []. An OTR ciphertext is bound to
-    the session that made it: replayed from the journal on another device it can never
-    be read. SylkServer checks for the header's presence, on both sides of the relay."""
-    if otr or (isinstance(content, bytes) and content.startswith(b'?OTR')):
+def skip_journal_headers(content, otr=False, skip=False):
+    """[X-Sylk-Skip-Journal] for an OTR message or when asked to (skip), else []. An OTR
+    ciphertext is bound to the session that made it: replayed from the journal on another
+    device it can never be read. A notice for our other devices (addressbook update) is
+    stale by the time an offline device would replay it. SylkServer checks for the
+    header's presence, on both sides of the relay."""
+    if skip or otr or (isinstance(content, bytes) and content.startswith(b'?OTR')):
         return [Header('X-Sylk-Skip-Journal', 'yes')]
     return []
 
@@ -365,8 +367,9 @@ class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
     __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
-    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True):
+    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True, skip_journal=False):
         self.lookup = None
+        self.skip_journal = skip_journal
         self.account = account
         self.uri = contact.uri.uri
         self.content_type = content_type
@@ -436,9 +439,10 @@ class OutgoingMessage(object):
                             return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
-            additional_sip_headers = skip_journal_headers(content)
+            additional_sip_headers = skip_journal_headers(content, skip=self.skip_journal)
             if additional_sip_headers:
-                ActivityLog().info(f'[Message with {self._peer}] Sending {self.content_type} message {self.id} without journalling it (OTR)')
+                why = 'a notice for the other devices' if self.skip_journal else 'OTR'
+                ActivityLog().info(f'[Message with {self._peer}] Sending {self.content_type} message {self.id} without journalling it ({why})')
             if self.account.sms.use_cpim and self.use_cpim:
                 ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
                 additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
@@ -1445,6 +1449,13 @@ class MessageManager(object, metaclass=Singleton):
             log.debug(f'Ignoring the replicated copy of our is-composing message {message_id} for account {account.id}')
             return
 
+        if content_type.lower() == ADDRESSBOOK_UPDATE_CONTENT_TYPE:
+            # another device of ours changed the addressbook: refetch it (never stored)
+            if account is not BonjourAccount():
+                from blink.contacts import AddressbookNotifier
+                AddressbookNotifier().handle_tick(account, body, sender.uri)
+            return
+
         if content_type.lower() in self.__not_history_content_types__:
             # not history: acted on elsewhere or not at all. The other types the journal ignores
             # (API token, private key, typing) are handled live below
@@ -2041,6 +2052,13 @@ class MessageManager(object, metaclass=Singleton):
         contact, contact_uri = URIUtils.find_contact(account.uri)
         outgoing_message = OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', session=session, use_cpim=False)
         self._send_message(outgoing_message)
+
+    def send_addressbook_update(self, account, content):
+        """Tell the other devices of this account that the addressbook changed. To our own
+        account, never journalled, no CPIM: it is a notice, not a message."""
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(account.uri)
+        self._send_message(OutgoingMessage(account, contact, content, ADDRESSBOOK_UPDATE_CONTENT_TYPE, use_cpim=False, skip_journal=True))
 
     def announce_conversation_removal(self, keys):
         """Ask the server to remove these conversations from the other devices of every

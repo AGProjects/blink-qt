@@ -6,6 +6,8 @@ import os
 import re
 import socket
 import sys
+import threading
+import time
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
@@ -23,6 +25,7 @@ from application.python.types import MarkerType, Singleton
 from application.python import Null
 from application.system import makedirs, unlink
 from collections import OrderedDict, deque
+from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
 from googleapiclient.discovery import build
@@ -40,16 +43,17 @@ from urllib.parse import parse_qsl
 from zope.interface import implementer
 
 from sipsimple import addressbook
-from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.account.bonjour import BonjourServiceDescription
 from sipsimple.configuration import ConfigurationManager, DefaultValue, Setting, SettingsState, SettingsObjectMeta, ObjectNotFoundError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import BaseSIPURI, SIPURI
-from sipsimple.threading import run_in_thread
+from sipsimple.threading import run_in_thread, run_in_twisted_thread
+from sipsimple.threading.green import Command
 
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
-from blink import addressbook_origin
+from blink import addressbook_notify, addressbook_origin
 from blink.contact_repair import merge_plan, repair_plan
 from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
@@ -448,9 +452,11 @@ class ContactRepair(object, metaclass=Singleton):
         self.done = True
         activity = ActivityLog()
         try:
-            repaired = self.repair_contacts()
-            filed = self.file_into_kind_groups()
-            merged = self.merge_messages_duplicates()
+            # healing what the server handed us: every device does it on its own, nothing to announce
+            with AddressbookNotifier().quiet():
+                repaired = self.repair_contacts()
+                filed = self.file_into_kind_groups()
+                merged = self.merge_messages_duplicates()
         except Exception as e:
             activity.exception(f'[addressbook] Repairing the addressbook failed: {e!r}')
             return
@@ -768,7 +774,7 @@ class GroupKindStamper(object, metaclass=Singleton):
         for group in sorted(groups, key=lambda group: str(group.name or '').lower()):
             activity.info(f"[addressbook]   group '{group.name}' (id={group.id}, kind={group_kind(group) or '-'}, {len(group.contacts)} members)")
         written = 0
-        with addressbook_origin.reason('group-kind'), addressbook.AddressbookManager.transaction():
+        with AddressbookNotifier().quiet(), addressbook_origin.reason('group-kind'), addressbook.AddressbookManager.transaction():
             for identity, group, action in stamp_plan(groups, STAMPED_KINDS):
                 if action == 'missing':
                     activity.info(f"[addressbook] No '{identity.name}' group to stamp, nothing is created here")
@@ -843,6 +849,374 @@ class AddressbookReloadLog(object, metaclass=Singleton):
             activity.info(f'[addressbook] Addressbook of {account_id}: {len(changes)} changes since the last document')
             for line in addressbook_origin.format_changes(changes, cap=self.change_cap):
                 activity.info(f'[addressbook]   {line}')
+
+
+class _AddressbookNotifyState(object):
+    """Per account: a manager runs per account, and one account's burst says nothing about another's."""
+
+    def __init__(self):
+        self.throttle = addressbook_notify.SendThrottle()
+        self.scheduler = addressbook_notify.FetchScheduler()
+        self.send_armed = False
+        self.fetch_armed = False
+        self.fuse_logged = False
+        self.reasons = []           # (op, kind, id, member), when, description -- what the pending tick is about
+        self.contacts = set()       # what the ticks we are about to fetch for said had changed
+        self.groups = set()
+        self.full = False
+        self.awaiting_reload = False
+        self.retried = False
+
+
+@implementer(IObserver)
+class AddressbookNotifier(object, metaclass=Singleton):
+    """application/sylk-addressbook-update, as Blink for macOS sends and answers it.
+
+    After WE write to the server addressbook, one message to our own account
+    (X-Sylk-Skip-Journal, no CPIM) tells every other device to refetch it; when
+    another device tells us, we refetch the resource-lists document after a
+    jitter. The tick carries ids only, XCAP stays the source of truth. The rules
+    (debounce, floor, fuse, backoff, freshness) are in blink.addressbook_notify.
+
+    Nothing is announced for a document we are copying from the server
+    (data.remote, set by sipsimple when the write is made) nor for writes made
+    inside quiet(): this device healing what it was handed, which every other
+    device does on its own from the same document. Announcing either is how two
+    devices end up waking each other for ever.
+
+    The XCAP manager posts its notifications on the thread that saves (file-io),
+    so the decision to note a write is taken there, at once; the timers run on
+    the GUI thread.
+    """
+
+    xcap_changes = {'XCAPManagerDidAddContact':     ('contact', 'add'),
+                    'XCAPManagerDidUpdateContact':  ('contact', 'update'),
+                    'XCAPManagerDidRemoveContact':  ('contact', 'remove'),
+                    'XCAPManagerDidAddGroup':       ('group', 'add'),
+                    'XCAPManagerDidUpdateGroup':    ('group', 'update'),
+                    'XCAPManagerDidRemoveGroup':    ('group', 'remove'),
+                    # spelled XCAPManage... in sipsimple: the corrected spelling observes nothing
+                    'XCAPManageDidAddGroupMember':    ('group', 'add-member'),
+                    'XCAPManageDidRemoveGroupMember': ('group', 'remove-member')}
+
+    reasons_cap = 100
+    fetch_check_delay = 20.0        # seconds before asking whether a requested fetch delivered a document
+
+    def __init__(self):
+        self._started = False
+        self._lock = threading.RLock()
+        self._quiet = 0
+        self._states = {}
+
+    def start(self):
+        if self._started:
+            return
+        self._started = True
+        notification_center = NotificationCenter()
+        for name in self.xcap_changes:
+            notification_center.add_observer(self, name=name)
+        notification_center.add_observer(self, name='XCAPManagerDidChangeState')
+        notification_center.add_observer(self, name='XCAPManagerDidReloadData')
+
+    @contextmanager
+    def quiet(self):
+        """Announce nothing written inside, for every account (reentrant).
+
+        The saves made inside run later on the file-io thread, so the quiet
+        stretch is closed there too, after them.
+        """
+        with self._lock:
+            self._quiet += 1
+        try:
+            yield
+        finally:
+            self._end_quiet()
+
+    @run_in_thread('file-io')
+    def _end_quiet(self):
+        with self._lock:
+            if self._quiet > 0:
+                self._quiet -= 1
+
+    def _state(self, account):
+        with self._lock:
+            key = str(account.id)
+            state = self._states.get(key)
+            if state is None:
+                state = self._states[key] = _AddressbookNotifyState()
+            return state
+
+    @staticmethod
+    def _account(manager):
+        account = getattr(manager, 'account', None)
+        return account if isinstance(account, Account) else None
+
+    @staticmethod
+    def _settled(manager):
+        """Is anything of ours still on its way to the server? Asked both ways: we must not
+        announce a change the server has not taken yet, nor apply a fetched document on top
+        of our own unflushed journal."""
+        try:
+            return manager.state == 'insync' and not manager.journal
+        except (AttributeError, ReferenceError):
+            return True
+
+    @staticmethod
+    def _this_device():
+        return str(SIPSimpleSettings().instance_id or '')
+
+    @staticmethod
+    def _bare(instance_id):
+        text = str(instance_id or '').strip()
+        return text[9:] if text.startswith('urn:uuid:') else text
+
+    def handle_notification(self, notification):
+        change = self.xcap_changes.get(notification.name)
+        if change is not None:
+            self._note_change(notification.sender, notification.data, *change)
+        else:
+            handler = getattr(self, '_NH_%s' % notification.name, None)
+            if handler is not None:
+                call_in_gui_thread(handler, notification)
+
+    # sending
+
+    def _note_change(self, manager, data, kind, op):
+        # on the thread that saved
+        if getattr(data, 'remote', False):
+            return          # copying a fetched document, not a change of ours
+        account = self._account(manager)
+        if account is None:
+            return
+        subject = getattr(data, kind, None)
+        id = getattr(subject, 'id', None)
+        with self._lock:
+            if self._quiet:
+                return      # healing, see quiet()
+            state = self._state(account)
+            if not state.throttle.note(kind, id):
+                return
+            try:
+                self._note_reason(state, kind, id, op, data)
+            except Exception as e:
+                log.debug(f'[addressbook] Cannot describe an addressbook change: {e!r}')
+        call_in_gui_thread(self._arm, account)
+
+    @staticmethod
+    def _describe_contact(contact):
+        if contact is None:
+            return '?'
+        uris = []
+        try:
+            for item in (getattr(contact, 'uris', None) or ()):
+                uri = getattr(item, 'uri', None) or item
+                if uri:
+                    uris.append(str(uri))
+        except Exception:
+            pass
+        shown = ', '.join(uris[:3]) + (f' +{len(uris) - 3}' if len(uris) > 3 else '')
+        return f"{getattr(contact, 'id', None)} {getattr(contact, 'name', None)!r}" + (f' <{shown}>' if uris else '')
+
+    @staticmethod
+    def _describe_group(group):
+        if group is None:
+            return '?'
+        try:
+            members = len(getattr(group, 'contacts', None) or ())
+        except Exception:
+            members = '?'
+        return f"{getattr(group, 'id', None)} {getattr(group, 'name', None)!r} ({members} members)"
+
+    def _note_reason(self, state, kind, id, op, data):
+        member = None
+        if kind == 'group':
+            subject = self._describe_group(getattr(data, 'group', None))
+            if op in ('add-member', 'remove-member'):
+                contact = getattr(data, 'contact', None)
+                member = getattr(contact, 'id', None)
+                subject = f'{subject}, member {self._describe_contact(contact)}'
+        else:
+            subject = self._describe_contact(getattr(data, 'contact', None))
+        key = (op, kind, str(id), member)
+        if len(state.reasons) >= self.reasons_cap or any(entry[0] == key for entry in state.reasons):
+            return
+        state.reasons.append((key, time.time(), subject))
+
+    def _arm(self, account):
+        state = self._state(account)
+        with self._lock:
+            if state.send_armed or not state.throttle.pending:
+                return
+            delay = state.throttle.delay()
+            if delay is None:
+                return
+            state.send_armed = True
+        # nothing is ever cancelled: an early wakeup finds the burst not due and arms again
+        call_later(max(delay, 0.1), self._flush, account)
+
+    def _flush(self, account):
+        activity = ActivityLog()
+        manager = getattr(account, 'xcap_manager', None)
+        state = self._state(account)
+        retry = None
+        with self._lock:
+            state.send_armed = False
+            tick = state.throttle.take(self._settled(manager))
+            if tick is None:
+                # not due, not settled, or the fuse is blown: the ids are kept, only late
+                delay = state.throttle.delay()
+                if delay is not None:
+                    state.send_armed = True
+                    fuse_blown = state.throttle.fuse_blown
+                    retry = max(delay, 30.0 if fuse_blown else 1.0)
+                    if fuse_blown and not state.fuse_logged:
+                        state.fuse_logged = True
+                        activity.warning(f'[addressbook] Too many addressbook changes announced for {account.id} in {addressbook_notify.NOTIFY_FUSE_WINDOW:.0f}s, holding the next one back: something is writing in a loop')
+            else:
+                state.fuse_logged = False
+                reasons, state.reasons = state.reasons, []
+        if tick is None:
+            if retry is not None:
+                call_later(retry, self._flush, account)
+            return
+        contact_ids, group_ids, truncated = tick
+        content = addressbook_notify.build_tick(self._this_device(), contact_ids, group_ids, truncated)
+        activity.info(f"[addressbook] Addressbook of {account.id} changed, telling the other devices: {len(contact_ids)} contacts, {len(group_ids)} groups{' (truncated)' if truncated else ''}")
+        for (op, kind, id, member), when, subject in reasons:
+            activity.info(f"[addressbook]   {op} {kind} {subject} at {time.strftime('%H:%M:%S', time.localtime(when))}")
+        if len(reasons) >= self.reasons_cap:
+            activity.info('[addressbook]   ... more not listed')
+        MessageManager().send_addressbook_update(account, content)
+        self._arm(account)
+
+    # receiving
+
+    @run_in_gui_thread
+    def handle_tick(self, account, content, sender_uri=None):
+        """A tick from one of our own devices: arm a jittered refetch."""
+        activity = ActivityLog()
+        if sender_uri is not None:
+            # self only: nobody else gets to make us re-read our addressbook
+            user, host = (part.decode(errors='replace') if isinstance(part, bytes) else str(part) for part in (sender_uri.user, sender_uri.host))
+            sender = f'{user}@{host}'
+            if sender.lower() != str(account.id).lower():
+                activity.warning(f'[addressbook] Ignoring an addressbook update for {account.id} sent by {sender}')
+                return
+        tick = addressbook_notify.parse_tick(content)
+        if tick is None:
+            activity.warning(f'[addressbook] Ignoring an unreadable addressbook update for {account.id}')
+            return
+        if tick['origin'] and self._bare(tick['origin']) == self._bare(self._this_device()):
+            log.debug(f'Ignoring our own addressbook update for {account.id}')
+            return
+        # freshness is judged here, on arrival, never again when the jitter expires
+        if not addressbook_notify.is_fresh(tick['timestamp']):
+            activity.info(f'[addressbook] Ignoring a stale addressbook update for {account.id} ({int(time.time()) - tick["timestamp"]}s old)')
+            return
+        if getattr(account, 'xcap_manager', None) is None or not account.xcap.enabled:
+            activity.info(f'[addressbook] Ignoring an addressbook update for {account.id}: the account does not use XCAP')
+            return
+        state = self._state(account)
+        if tick['truncated'] or tick['contact_ids'] is None:
+            state.full = True
+        state.contacts.update(tick['contact_ids'] or ())
+        state.groups.update(tick['group_ids'] or ())
+        delay = state.scheduler.schedule()
+        if delay is None:
+            activity.info(f'[addressbook] Addressbook update for {account.id} merged into the fetch already coming')
+            return
+        activity.info(f'[addressbook] The addressbook of {account.id} changed on another device ({self._bare(tick["origin"]) or "?"}), fetching it in {round(delay)}s')
+        state.fetch_armed = True
+        call_later(delay, self._fire_fetch, account)
+
+    def _fire_fetch(self, account):
+        activity = ActivityLog()
+        state = self._state(account)
+        state.fetch_armed = False
+        manager = getattr(account, 'xcap_manager', None)
+        if manager is None:
+            return
+        fetch, retry_in, backed_off = state.scheduler.fire(self._settled(manager))
+        if not fetch:
+            if backed_off:
+                activity.warning(f'[addressbook] Too many addressbook fetches for {account.id}, backing off')
+            if retry_in is not None:
+                state.fetch_armed = True
+                call_later(retry_in, self._fire_fetch, account)
+            return
+        if state.full:
+            activity.info(f'[addressbook] Fetching the addressbook of {account.id} (the other device could not say what changed)')
+        else:
+            activity.info(f'[addressbook] Fetching the addressbook of {account.id} ({len(state.contacts)} contacts, {len(state.groups)} groups changed)')
+        # the ids scope the log, never the fetch: XCAP fetches the whole resource-lists document
+        state.contacts.clear()
+        state.groups.clear()
+        state.full = False
+        state.awaiting_reload = True
+        self._send_fetch_command(manager)
+        call_later(self.fetch_check_delay, self._report_fetch_outcome, account)
+
+    @run_in_twisted_thread
+    def _send_fetch_command(self, manager):
+        # Without the cached etag: a 304 would take the manager straight back to insync
+        # without reloading, and another device saying the document changed is better
+        # information than an etag the server may not have bumped. Safe only here: we are
+        # settled, so no update is waiting to PUT with If-Match.
+        try:
+            document = manager.resource_lists
+            if document.etag is not None:
+                log.debug(f'Fetching the addressbook without the cached etag {document.etag}: another device says it changed')
+                document.etag = None
+        except (AttributeError, ReferenceError):
+            pass
+        try:
+            manager.command_channel.send(Command('fetch', documents=set(addressbook_notify.FETCH_DOCUMENTS)))
+        except Exception as e:
+            ActivityLog().error(f'[addressbook] Cannot ask for an addressbook fetch: {e!r}')
+
+    def _report_fetch_outcome(self, account):
+        """Did the fetch deliver a document? Nothing below us retries a failed one, and the
+        tick was the only prompt. One retry, then say so."""
+        activity = ActivityLog()
+        state = self._state(account)
+        if not state.awaiting_reload:
+            state.retried = False
+            return
+        manager = getattr(account, 'xcap_manager', None)
+        if manager is not None and not state.retried:
+            state.retried = True
+            activity.info(f'[addressbook] The addressbook of {account.id} did not arrive, asking once more')
+            self._send_fetch_command(manager)
+            call_later(self.fetch_check_delay, self._report_fetch_outcome, account)
+            return
+        state.awaiting_reload = False
+        state.retried = False
+        activity.warning(f'[addressbook] The addressbook of {account.id} was fetched twice because another device said it changed, and neither attempt returned a usable document: check the XCAP log for a failed GET or a parse error')
+
+    def _NH_XCAPManagerDidChangeState(self, notification):
+        # insync is the moment our journal reached the server: a held tick may go now,
+        # and a fetch held for a fetch in flight may follow
+        if notification.data.state != 'insync':
+            return
+        account = self._account(notification.sender)
+        if account is None:
+            return
+        state = self._state(account)
+        following = state.scheduler.done()
+        if following is not None and not state.fetch_armed:
+            state.fetch_armed = True
+            call_later(following, self._fire_fetch, account)
+        self._arm(account)
+
+    def _NH_XCAPManagerDidReloadData(self, notification):
+        account = self._account(notification.sender)
+        if account is None:
+            return
+        state = self._state(account)
+        if state.awaiting_reload:
+            state.awaiting_reload = False
+            state.retried = False
+            ActivityLog().info(f'[addressbook] The addressbook of {account.id} reloaded after another device changed it')
 
 
 @implementer(IObserver)
@@ -3532,6 +3906,7 @@ class ContactModel(QAbstractListModel):
         MessagesGroupFiler().start()
         CallsGroupFiler().start()
         ContactRepair().start()
+        AddressbookNotifier().start()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
