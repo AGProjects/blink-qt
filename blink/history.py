@@ -311,10 +311,12 @@ class HistoryManager(object, metaclass=Singleton):
             self.message_history.get_all_contacts()
 
     def _NH_BlinkJournalDidApply(self, notification):
-        # after a journal run: unread counts and the Messages group come from history
+        # after a journal run: unread counts and the Messages group come from history,
+        # and the database is counted (queued after the run's writes on the db thread)
         self.message_history.get_unread_messages()
         if BlinkSettings().interface.show_messages_group:
             self.message_history.get_all_contacts()
+        self.message_history.journal_db_check(str(notification.sender.id), getattr(notification.data, 'stats_path', None))
 
     def _NH_BlinkSessionConfirmReadMessages(self, notification):
         # the user has the conversation in front of them; keyed as the chat window loads it
@@ -1178,6 +1180,40 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().warning(f'[db] Compacting the message history failed: {e}')
             return
         ActivityLog().info(f'[db] Compacted the message history: {free} of {pages} pages were free, {time.monotonic() - started:.2f}s')
+
+    @run_in_thread('db')
+    def journal_db_check(self, account_id, stats_path=None):
+        """Count what the database holds for an account after a journal run (plan §1.4),
+        log it and add it to the run's import statistics file."""
+        table = Message.sqlmeta.table
+        account = self.db.sqlrepr(str(account_id))
+        try:
+            total = self.db.queryOne(f'select count(*) from {table} where account_id = {account} and {NOT_DELETED_SQL}')[0]
+            categories = {str(category or '(none)'): count for category, count in
+                          self.db.queryAll(f'select category, count(*) from {table} where account_id = {account} and {NOT_DELETED_SQL} group by category')}
+            content_types = {str(content_type): count for content_type, count in
+                             self.db.queryAll(f'select content_type, count(*) from {table} where account_id = {account} and {NOT_DELETED_SQL} group by content_type')}
+            unread = self.db.queryOne(f"select count(*) from {table} where account_id = {account} and direction = 'incoming' and read = 0 and {NOT_DELETED_SQL}")[0]
+            tombstoned = self.db.queryOne(f'select count(*) from {table} where account_id = {account} and deleted = 1')[0]
+            conversations = self.db.queryOne(f'select count(distinct remote_uri) from {table} where account_id = {account} and {NOT_DELETED_SQL}')[0]
+            pending = self.db.queryOne(f'select count(*) from {PendingRemoval.sqlmeta.table} where account_id = {account}')[0]
+        except Exception as e:
+            ActivityLog().error(f'[db] Counting the messages of {account_id} failed: {e}')
+            return
+        activity = ActivityLog()
+        activity.info(f'[db] {account_id} now has {total} messages in {conversations} conversations, {unread} unread, {tombstoned} hidden, {pending} pending removals')
+        activity.info('[db]   by category: ' + ', '.join(f'{category} {count}' for category, count in sorted(categories.items(), key=lambda item: -item[1])))
+        activity.info('[db]   by content type: ' + ', '.join(f'{content_type} {count}' for content_type, count in sorted(content_types.items(), key=lambda item: -item[1])))
+        if stats_path:
+            try:
+                with open(stats_path, encoding='utf-8') as stats_file:
+                    stats = json.load(stats_file)
+                stats['database'] = {'messages': total, 'conversations': conversations, 'unread': unread, 'hidden': tombstoned,
+                                     'pending_removals': pending, 'categories': categories, 'content_types': content_types}
+                with open(stats_path, 'w', encoding='utf-8') as stats_file:
+                    json.dump(stats, stats_file, indent=1, sort_keys=True)
+            except (OSError, ValueError) as e:
+                activity.warning(f'[db] Cannot add the database counts to {stats_path}: {e}')
 
     @run_in_thread('db')
     def mark_conversation_read(self, remote_uri, source=None):

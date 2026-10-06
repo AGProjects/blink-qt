@@ -122,5 +122,45 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(journal.JournalCache(os.path.join(self.directory, 'nope')).pages(), [])
 
 
+
+class StatsTests(unittest.TestCase):
+    def test_run(self):
+        stats = journal.JournalStats('me@example.com', first_sync=True, reason='token received')
+        stats.page_downloaded('p1.json', 4, 1000, 0.5, 'm4')
+        stats.entry('text/plain', 'texts', 'alice@example.com', 'incoming', '2026-10-06T08:00:00Z')
+        stats.entry('text/plain', 'texts', 'alice@example.com', 'outgoing', '2026-10-06T09:00:00Z')
+        stats.entry('message/imdn', 'receipts skipped (first sync)', 'alice@example.com', 'incoming', '2026-10-06T08:30:00Z')
+        stats.entry('application/x-future-thing', 'stored as application/x-future-thing', 'bob@example.com', 'incoming', '2026-10-05T10:00:00Z')
+        stats.entry('application/sylk-location-sharing', 'stored as application/sylk-location-sharing', 'bob@example.com', 'incoming', None)
+        stats.quarantined.append('bad.json')
+        self.assertEqual(stats.entries, 5)
+        self.assertEqual(stats.outcomes()['texts'], 2)
+        self.assertEqual(stats.unhandled(), {'application/x-future-thing': 1})     # location is known, just stored for now
+        data = stats.as_dict()
+        self.assertEqual(data['conversations']['alice@example.com'], {'entries': 3, 'incoming': 2, 'types': {'text/plain': 2, 'message/imdn': 1},
+                                                                       'first': '2026-10-06T08:00:00Z', 'last': '2026-10-06T09:00:00Z'})
+        self.assertEqual(data['content_types']['text/plain'], {'received': 2, 'texts': 2})
+        self.assertEqual(data['pages'], [{'file': 'p1.json', 'entries': 4, 'bytes': 1000, 'seconds': 0.5, 'cursor': 'm4'}])
+        lines = stats.summary_lines()
+        self.assertTrue(lines[0].startswith('Journal run of me@example.com: 5 entries, 1 pages'))
+        self.assertIn('  text/plain: 2 received (2 texts)', lines)
+        self.assertIn('  UNHANDLED application/x-future-thing x1', lines)
+        self.assertIn('  QUARANTINED bad.json', lines)
+        directory = tempfile.mkdtemp()
+        path = stats.write(directory)
+        self.assertTrue(os.path.basename(path).startswith('import-me@example.com-'))
+        with open(path) as stats_file:
+            self.assertEqual(json.load(stats_file)['entries'], 5)
+
+    def test_top_conversations(self):
+        stats = journal.JournalStats('me')
+        for index in range(60):
+            for _ in range(index + 1):
+                stats.entry('text/plain', 'texts', f'c{index:02d}', 'incoming')
+        lines = stats.summary_lines(top=50)
+        self.assertIn('  60 conversations, the 50 largest:', lines)
+        self.assertTrue(lines[3].startswith('    c59: 60 entries'))
+
+
 if __name__ == '__main__':
     unittest.main()

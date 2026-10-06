@@ -44,7 +44,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.journal import JournalCache, journal_action, parse_payload
+from blink.journal import JournalCache, JournalStats, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
@@ -908,10 +908,12 @@ class MessageManager(object, metaclass=Singleton):
         started = time.monotonic()
         pages = entries = transferred = 0
         complete = False
+        stats = JournalStats(account.id, first_sync=first_sync, cursor=account.sms.history_synchronization_id, reason=reason)
 
         while pages < self.journal_max_pages:
             cursor = account.sms.history_synchronization_id
             url = self._journal_page_url(account)
+            page_started = time.monotonic()
             log.info(f'Fetching message history for {account.id} from server {url}')
             try:
                 r = requests.get(url, headers=headers, timeout=20, verify=settings.tls.verify_server)
@@ -951,9 +953,10 @@ class MessageManager(object, metaclass=Singleton):
             pages += 1
             entries += len(messages)
             transferred += len(r.content)
-            log.info(f'Cached journal page {name} ({len(messages)} entries)')
-
             last_id = messages[-1].get('message_id')
+            stats.page_downloaded(name, len(messages), len(r.content), time.monotonic() - page_started, last_id)
+            log.info(f'Cached journal page {name} ({len(messages)} entries, {len(r.content)} bytes, cursor {last_id})')
+
             if not last_id:
                 break
             account.sms.history_synchronization_id = last_id
@@ -965,12 +968,12 @@ class MessageManager(object, metaclass=Singleton):
             activity.info(f'[journal] Downloaded {entries} journal entries of {account.id} in {pages} pages ({transferred} bytes, {time.monotonic() - started:.1f}s)')
         elif complete:
             activity.info(f'[journal] The message journal of {account.id} has no new entries')
-        self._apply_cached_journal(account)
+        self._apply_cached_journal(account, stats)
 
     journal_progress_every = 250    # entries between progress lines, and between short pauses
     journal_throttle = 0.05         # seconds to pause, so the GUI and the db thread keep up
 
-    def _apply_cached_journal(self, account):
+    def _apply_cached_journal(self, account, stats=None):
         """Apply cached journal pages oldest first.
 
         A page is deleted only once applied. A page that cannot be applied stops
@@ -983,6 +986,8 @@ class MessageManager(object, metaclass=Singleton):
             return
         activity = ActivityLog()
         activity.info(f'[journal] Applying {len(names)} cached journal pages of {account.id}')
+        if stats is None:
+            stats = JournalStats(account.id, reason='cached pages')
         started = time.monotonic()
         totals = Counter()
         contacts = Counter()
@@ -995,31 +1000,43 @@ class MessageManager(object, metaclass=Singleton):
                 error = e
             if page is not None:
                 try:
-                    stats = self._apply_server_history_messages(account, page.get('messages') or [], first_sync=not page.get('cursor'), contacts=contacts)
+                    page_stats = self._apply_server_history_messages(account, page.get('messages') or [], first_sync=not page.get('cursor'), contacts=contacts, stats=stats)
                 except Exception as e:
-                    stats = None
+                    page_stats = None
                     error = e
-            if page is None or stats is None:
+            if page is None or page_stats is None:
                 attempts, quarantined = cache.failed(name)
                 if quarantined:
+                    stats.quarantined.append(name)
                     activity.error(f'[journal] Journal page {name} of {account.id} failed {attempts} times and was moved to quarantine: {error}')
                     continue
                 activity.exception(f'[journal] Applying journal page {name} of {account.id} failed (attempt {attempts}), kept for the next sync: {error}')
                 break
             cache.applied(name)
             applied += 1
-            totals.update(stats)
-            log.info(f'Applied journal page {name}: ' + ', '.join(f'{count} {outcome}' for outcome, count in sorted(stats.items())))
+            totals.update(page_stats)
+            log.info(f'Applied journal page {name}: ' + ', '.join(f'{count} {outcome}' for outcome, count in sorted(page_stats.items())))
+        stats.apply_seconds += time.monotonic() - started
         summary = ', '.join(f'{count} {outcome}' for outcome, count in sorted(totals.items())) or 'nothing'
-        activity.info(f'[journal] Applied {sum(totals.values())} journal entries of {account.id} from {applied} of {len(names)} pages in {time.monotonic() - started:.1f}s: {summary}')
-        # one notification for the whole run: unread counts and the Messages group are refreshed from history
-        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts)))
+        activity.info(f'[journal] Applied {sum(totals.values())} journal entries of {account.id} from {applied} of {len(names)} pages in {stats.apply_seconds:.1f}s: {summary}')
+        for line in stats.summary_lines():
+            activity.info(f'[journal] {line}')
+        try:
+            stats_path = stats.write(ApplicationData.get('logs'))
+        except OSError as e:
+            stats_path = None
+            activity.warning(f'[journal] Cannot write the import statistics: {e}')
+        else:
+            activity.info(f'[journal] Import statistics written to {stats_path}')
+        # one notification for the whole run: unread counts and the Messages group are refreshed from
+        # history, then the database is counted against this run
+        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=stats_path))
 
     @run_in_thread('sync')
     def _process_server_history_messages(self, account, messages):
         self._apply_server_history_messages(account, messages)
 
-    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None):
+    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None):
         """Apply journal entries by content type (blink.journal.journal_action). Runs in the sync thread.
 
         Bulk mode: nothing here creates a conversation or decrypts; an entry for a
@@ -1027,8 +1044,9 @@ class MessageManager(object, metaclass=Singleton):
         An entry that cannot be applied is counted as failed and logged; the page
         still counts as applied.
         """
-        stats = Counter()
+        outcomes = Counter()
         contacts = contacts if contacts is not None else Counter()
+        started = time.monotonic()
         log.debug(f'-- {len(messages)} messages fetched from server for {account.id}')
         for index, message in enumerate(messages, 1):
             content_type = str(message.get('content_type') or '').lower()
@@ -1038,13 +1056,16 @@ class MessageManager(object, metaclass=Singleton):
             except Exception as e:
                 outcome = 'failed'
                 log.warning(f'Journal entry {message.get("message_id")} ({content_type}) of {account.id} could not be applied: {e!r}')
-            stats[outcome] += 1
+            outcomes[outcome] += 1
+            if stats is not None:
+                stats.entry(content_type, outcome, message.get('contact'), message.get('direction'), message.get('timestamp'))
             if index % self.journal_progress_every == 0:
-                log.info(f'Applied {index} of {len(messages)} journal entries of {account.id}')
+                elapsed = time.monotonic() - started
+                log.info(f'Applied {index} of {len(messages)} journal entries of {account.id} ({index / elapsed if elapsed else 0:.0f}/s)')
                 time.sleep(self.journal_throttle)
         account.sms.history_synchronization_timestamp = ISOTimestamp.now()
         account.save()
-        return stats
+        return outcomes
 
     def _journal_session(self, contact):
         return next((session for session in self.sessions if session.contact.settings is contact.settings), None)
