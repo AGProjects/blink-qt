@@ -15,7 +15,7 @@ from application.python import Null
 from application.python.types import Singleton
 from application.system import host, makedirs, unlink
 
-from datetime import date, timezone
+from datetime import date, datetime, timezone
 from dateutil.parser import parse
 from dateutil.tz import tzlocal
 from zope.interface import implementer
@@ -40,7 +40,7 @@ from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, is_instance_id, pla
 from blink.util import run_in_gui_thread, translate
 import traceback
 
-from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex, AND
+from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex, AND, OR
 from sqlobject import connectionForURI
 from sqlobject import dberrors
 
@@ -401,6 +401,10 @@ class DownloadedFiles(SQLObject):
     filename           = UnicodeCol()
     id_idx             = DatabaseIndex('file_id')
     unq_idx            = DatabaseIndex(file_id, filename, account_id, unique=True)
+
+
+# Every reader of the messages table hides tombstones with this.
+NOT_DELETED_SQL = '(deleted is null or deleted = 0)'
 
 
 class PendingRemoval(SQLObject):
@@ -790,10 +794,132 @@ class MessageHistory(object, metaclass=Singleton):
         """{conversation key: unread incoming messages}, for enabled accounts. Caller is in the db thread."""
         table = Message.sqlmeta.table
         query = (f"select remote_uri, count(*) from {table}"
-                 f" where direction = 'incoming' and read = 0 and (deleted is null or deleted = 0)"
+                 f" where direction = 'incoming' and read = 0 and {NOT_DELETED_SQL}"
                  f" and state != 'deleted' and {self.__readable_sql__} and {self._get_enabled_account_filter()}"
                  f" group by remote_uri")
         return {remote_uri: count for remote_uri, count in self.db.queryAll(query)}
+
+    # Tombstones
+    #
+    # A removed message or conversation is hidden (deleted = 1, deleted_time =
+    # when), not erased: the removal may have come from another device, files
+    # on disk are untouched, and a conversation can be restored. Every reader
+    # filters NOT_DELETED_SQL.
+
+    @staticmethod
+    def _storage_time(value):
+        """A timestamp as stored in the timestamp column (naive UTC), or None."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = parse(value)
+        if isinstance(value, (int, float)):
+            value = datetime.fromtimestamp(value, timezone.utc)
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    @staticmethod
+    def _set_deleted(where, deleted, when=None):
+        """Set or clear the tombstone on the rows matching `where` that change; return how many. Caller is in the db thread."""
+        db = Message._connection
+        table = Message.sqlmeta.table
+        state = NOT_DELETED_SQL if deleted else 'deleted = 1'
+        count = db.queryOne(f'select count(*) from {table} where ({where}) and {state}')[0]
+        if count:
+            stamp = int(when if when is not None else time.time()) if deleted else 0
+            db.queryAll(f'update {table} set deleted = {1 if deleted else 0}, deleted_time = {stamp} where ({where}) and {state}')
+        return count
+
+    @classmethod
+    def _tombstone_message(cls, message_id, when=None):
+        """(rows, sidecars) hidden for a message: the row, rows filed against it (location
+        ticks, by related_msg_id) and metadata sidecars naming it in their envelope
+        (reply, label, peaks), matched in the compact JSON spelling senders use."""
+        db = Message._connection
+        identifier = db.sqlrepr(str(message_id))
+        rows = cls._set_deleted(f'message_id = {identifier} or related_msg_id = {identifier}', True, when)
+        sidecars = cls._set_deleted(f"content_type = 'application/sylk-message-metadata' and content like {db.sqlrepr('%%"messageId":"%s"%%' % message_id)}", True, when)
+        return rows, sidecars
+
+    @classmethod
+    def _apply_pending_removal(cls, message_id):
+        """Apply a removal that arrived before its message. Caller is in the db thread."""
+        try:
+            pending = list(PendingRemoval.selectBy(message_id=str(message_id)))
+        except Exception as e:
+            ActivityLog().error(f'[db] Reading pending removals of {message_id} failed: {e}')
+            return
+        for removal in pending:
+            when = removal.removed_at.replace(tzinfo=timezone.utc).timestamp() if removal.removed_at else None
+            rows, sidecars = cls._tombstone_message(message_id, when)
+            removal.destroySelf()
+            ActivityLog().info(f'[db] Applied the pending removal of message {message_id} ({removal.source or "unknown"}): {rows} rows, {sidecars} sidecars')
+
+    @run_in_thread('db')
+    def tombstone_message(self, message_id, when=None, account_id=None, remote_uri=None, source=None):
+        """Hide a message and everything filed against it. A removal whose message is
+        not stored yet (journal order, replication) is kept and applied on arrival."""
+        try:
+            rows, sidecars = self._tombstone_message(message_id, when)
+        except Exception as e:
+            ActivityLog().error(f'[db] Removing message {message_id} failed: {e}')
+            return
+        if rows or sidecars:
+            ActivityLog().info(f'[db] Message {message_id} marked deleted: {rows} rows' + (f', {sidecars} sidecars' if sidecars else '') + (f' ({source})' if source else ''))
+            return
+        removed_at = self._storage_time(when) if when is not None else datetime.now(timezone.utc).replace(tzinfo=None)
+        try:
+            if not list(PendingRemoval.selectBy(message_id=str(message_id), account_id=str(account_id or ''))):
+                PendingRemoval(message_id=str(message_id), account_id=str(account_id or ''), remote_uri=str(remote_uri) if remote_uri else None,
+                               removed_at=removed_at, source=source)
+        except Exception as e:
+            ActivityLog().error(f'[db] Keeping the removal of message {message_id} failed: {e}')
+            return
+        ActivityLog().info(f'[db] Message {message_id} is not stored yet, its removal is kept until it arrives' + (f' ({source})' if source else ''))
+
+    @run_in_thread('db')
+    def tombstone_conversation(self, remote_uri, before_time=None, when=None, account_id=None):
+        """Hide a conversation up to the moment it was removed.
+
+        `before_time` is when the removal was made, not when it arrived: a removal
+        replayed from the journal must not hide messages exchanged after it. Without
+        `account_id` every account's rows are hidden, as the conversation is shown.
+        """
+        db = Message._connection
+        where = f'remote_uri = {db.sqlrepr(str(remote_uri))}'
+        if account_id:
+            where += f' and account_id = {db.sqlrepr(str(account_id))}'
+        floor = self._storage_time(before_time)
+        if floor is not None:
+            where += f' and timestamp <= {db.sqlrepr(floor)}'
+        try:
+            count = self._set_deleted(where, True, when)
+        except Exception as e:
+            ActivityLog().error(f'[db] Removing the conversation with {remote_uri} failed: {e}')
+            return
+        ActivityLog().info(f'[db] Conversation with {remote_uri} marked deleted: {count} rows' + (f' up to {floor}' if floor is not None else '') + (f' for account {account_id}' if account_id else ''))
+
+    @run_in_thread('db')
+    def restore_conversation(self, remote_uri):
+        """Un-hide every tombstoned row of a conversation."""
+        db = Message._connection
+        try:
+            count = self._set_deleted(f'remote_uri = {db.sqlrepr(str(remote_uri))}', False)
+        except Exception as e:
+            ActivityLog().error(f'[db] Restoring the conversation with {remote_uri} failed: {e}')
+            return
+        ActivityLog().info(f'[db] Conversation with {remote_uri} restored: {count} rows')
+
+    def deleted_conversations(self):
+        """{conversation key: (rows, when removed)} for conversations whose every row is a
+        tombstone. Derived, not stored: one live row and it is a conversation again.
+        Caller is in the db thread."""
+        table = Message.sqlmeta.table
+        query = (f'select remote_uri, count(*), max(deleted_time) from {table}'
+                 f' where deleted = 1 and remote_uri not in (select remote_uri from {table} where {NOT_DELETED_SQL})'
+                 f' group by remote_uri')
+        return {remote_uri: (int(count or 0), int(removed or 0)) for remote_uri, count, removed in self.db.queryAll(query) if remote_uri}
 
     @run_in_thread('db')
     def mark_conversation_read(self, remote_uri, source=None):
@@ -1091,6 +1217,7 @@ class MessageHistory(object, metaclass=Singleton):
         except dberrors.DuplicateEntryError:
             pass
         else:
+            cls._apply_pending_removal(message.id)
             if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
                 notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction))
@@ -1176,6 +1303,7 @@ class MessageHistory(object, metaclass=Singleton):
                 log.info(f"Message {message.id} to {remote_uri} stored")
             else:
                 log.info(f"Message {message.id} from {remote_uri} stored")
+            cls._apply_pending_removal(message.id)
 
             if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
@@ -1204,6 +1332,9 @@ class MessageHistory(object, metaclass=Singleton):
                 message.state = state
             if state == 'displayed' and message.direction == 'incoming' and not message.read:
                 message.read = 1
+            if state == 'deleted' and not message.deleted:
+                message.deleted = 1
+                message.deleted_time = int(time.time())
 
     @run_in_thread('db')
     def update_displayed_for_uri(self, remote_uri):
@@ -1266,7 +1397,7 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(uri)
         try:
-            query = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted'))
+            query = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', OR(Message.q.deleted == None, Message.q.deleted == 0)))
             total = query.count()
             result = list(query.orderBy('timestamp')[-entries:])
         except Exception as e:
@@ -1281,7 +1412,7 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(uri)
         try:
-            result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', Message.q.decrypted == '3')).orderBy('timestamp')[-entries:]
+            result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', OR(Message.q.deleted == None, Message.q.deleted == 0), Message.q.decrypted == '3')).orderBy('timestamp')[-entries:]
         except Exception as e:
             return
         log.debug(f"== ReLoaded {len(list(result))} messages for {remote_uri} from history")
@@ -1301,7 +1432,8 @@ class MessageHistory(object, metaclass=Singleton):
                 and am.direction="incoming"
                 and am.content_type not like "%sylk-api%"
                 and am.content_type not in ("application/blink-call-history", "application/blink-call-detail-record")
-                and am.state not in ('deleted', 'displayed')
+                and am.read = 0
+                and am.state != 'deleted' and (am.deleted is null or am.deleted = 0)
                 and {self._get_enabled_account_filter('am')}
                 group by am.remote_uri order by am.timestamp desc"""
         else:
@@ -1313,7 +1445,7 @@ class MessageHistory(object, metaclass=Singleton):
                 am.content_type not like "%pgp%"
                 and am.content_type not like "%sylk-api%"
                 and am.content_type not in ("application/blink-call-history", "application/blink-call-detail-record")
-                and am.state != 'deleted'
+                and am.state != 'deleted' and (am.deleted is null or am.deleted = 0)
                 and {self._get_enabled_account_filter('am')}
                 group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
 
@@ -1373,7 +1505,7 @@ class MessageHistory(object, metaclass=Singleton):
             am.content_type not like '%pgp%'
             and not am.content_type like '%sylk-api%'
             and am.content_type not in ("application/blink-call-history", "application/blink-call-detail-record")
-            and am.state != 'deleted'
+            and am.state != 'deleted' and (am.deleted is null or am.deleted = 0)
             and {self._get_enabled_account_filter('am')}
             group by am.remote_uri
             """
