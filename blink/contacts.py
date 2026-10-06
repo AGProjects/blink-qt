@@ -5592,7 +5592,12 @@ class ContactURIModel(QAbstractTableModel):
         return super(ContactURIModel, self).headerData(section, orientation, role)
 
     def init_with_address(self, address=None):
-        items = [ContactURIItem(None, address, self.default_uri_type, False)] if address else []
+        # a phone number is stored as the addressbook stores one, as macOS and mobile do: bare E.164, type tel
+        uri_type = self.default_uri_type
+        e164 = pstn_e164(address, AccountManager().default_account) if address else None
+        if e164:
+            address, uri_type = e164, 'tel'
+        items = [ContactURIItem(None, address, uri_type, False)] if address else []
         items.append(ContactURIItem(None, None, self.default_uri_type, False, ghost=True))
         self.beginResetModel()
         self.items = items

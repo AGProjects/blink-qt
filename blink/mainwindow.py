@@ -25,7 +25,7 @@ from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI
 from blink.filetransferwindow import FileTransferWindow
-from blink.history import HistoryManager
+from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
@@ -873,7 +873,8 @@ class MainWindow(base_class, ui_class):
     def _NH_BlinkSessionConfirmReadMessages(self, notification):
         session = notification.sender
         # history keys a Bonjour neighbour by its instance id, everyone else by user@host
-        keys = {str(session.uri).partition(':')[2], str(session.contact_uri.uri).partition(';')[0]}
+        keys = {str(session.uri).partition(':')[2], str(session.contact_uri.uri).partition(';')[0],
+                conversation_key(session.contact_uri.uri, session.account), conversation_key(session.uri, session.account)}
         if session.remote_instance_id:
             keys.add(session.remote_instance_id)
         removed = [self.unread_messages.pop(key) for key in keys if key in self.unread_messages]
@@ -891,7 +892,7 @@ class MainWindow(base_class, ui_class):
         self.active_sessions_label.setVisible(False)
 
     def _NH_BlinkMessageNewUnread(self, notification):
-        uri = notification.sender
+        uri = conversation_key(notification.sender)     # keyed as history files the conversation
 
         try:
             self.unread_messages[uri]

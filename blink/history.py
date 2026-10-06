@@ -181,6 +181,7 @@ class HistoryManager(object, metaclass=Singleton):
             traceback.print_exc()
         else:
             self.calls = data[-self.history_size:]
+        self.message_history.rekey_conversations()      # once, now that the accounts' dial rules are known
         self.message_history._retry_failed_messages()
         self.message_history.get_unread_messages()
 
@@ -498,6 +499,24 @@ class TableVersions(object, metaclass=Singleton):
         self.__versions__[table] = version
 
 
+def conversation_key(raw_uri, account=None):
+    """The key a conversation is filed under: one for every spelling of a party.
+
+    A Bonjour neighbour (an instance id, or the placeholder standing in for one)
+    is its bare instance id, as it is stored; anything else is
+    blink.uris.canonical_uri: no scheme or parameters, lowercased, a phone
+    number in E.164 by the account's dial rules (0031..., +31..., 020... and
+    +31...@domain are one conversation), a withheld caller one address.
+    """
+    text = str(raw_uri or '').strip()
+    if not text:
+        return text
+    instance_id = placeholder_instance_id(text) or (bare_instance_id(text) if is_instance_id(bare_instance_id(text)) else None)
+    if instance_id:
+        return instance_id
+    return canonical_uri(text, account) or text
+
+
 class DownloadHistory(object, metaclass=Singleton):
     __version__ = 1
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
@@ -529,10 +548,7 @@ class DownloadHistory(object, metaclass=Singleton):
     @classmethod
     @run_in_thread('db')
     def add(cls, session):
-        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or str(session.contact_uri.uri)
-        match = cls.phone_number_re.match(remote_uri)
-        if match:
-            remote_uri = match.group('number')
+        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or conversation_key(session.contact_uri.uri, session.account)
         try:
             DownloadedFiles(file_id=session.id,
                             account_id=str(session.account.id),
@@ -544,10 +560,7 @@ class DownloadHistory(object, metaclass=Singleton):
     @classmethod
     @run_in_thread('db')
     def add_file(cls, session, file):
-        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or str(session.contact_uri.uri)
-        match = cls.phone_number_re.match(remote_uri)
-        if match:
-            remote_uri = match.group('number')
+        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or conversation_key(session.contact_uri.uri, session.account)
         try:
             DownloadedFiles(file_id=file.id,
                             account_id=str(session.account.id),
@@ -1214,6 +1227,51 @@ class MessageHistory(object, metaclass=Singleton):
             if row.category == 'text' and not row.has_link:
                 row.has_link = has_link(row.content_type, plaintext) or 0
 
+    rekey_marker = 'history-canonical-keys.done'
+
+    @run_in_thread('db')
+    def rekey_conversations(self):
+        """File every conversation under its canonical key, once (conversation_key).
+
+        Run after the accounts are loaded, so a national number is put in E.164
+        by its own account's dial rules: before that 020... could not be told
+        from +31 20.... Messages in two spellings of one party end up in one
+        conversation; a message stored under both is kept once. Downloaded files
+        follow. A marker file makes it run once.
+        """
+        marker = ApplicationData.get(self.rekey_marker)
+        if os.path.exists(marker):
+            return
+        from sipsimple.account import AccountManager
+        account_manager = AccountManager()
+        table = Message.sqlmeta.table
+        moved = duplicates = conversations = 0
+        try:
+            pairs = self.db.queryAll(f'select distinct remote_uri, account_id from {table}')
+            for old_key, account_id in pairs:
+                account = account_manager.get_account(account_id) if account_manager.has_account(account_id) else None
+                new_key = conversation_key(old_key, account)
+                if not old_key or not new_key or new_key == old_key:
+                    continue
+                where = f'remote_uri = {self.db.sqlrepr(old_key)} and account_id = {self.db.sqlrepr(account_id)}'
+                count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+                self.db.queryAll(f'update or ignore {table} set remote_uri = {self.db.sqlrepr(new_key)} where {where}')
+                left = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+                self.db.queryAll(f'delete from {table} where {where}')
+                self.db.queryAll(f'update or ignore {DownloadedFiles.sqlmeta.table} set remote_uri = {self.db.sqlrepr(new_key)} where {where}')
+                ActivityLog().info(f'[db] Conversation {old_key} of {account_id} filed under {new_key}: {count - left} messages' + (f', {left} duplicates dropped' if left else ''))
+                moved += count - left
+                duplicates += left
+                conversations += 1
+        except Exception as e:
+            ActivityLog().exception(f'[db] Filing conversations under their canonical key failed, retried at the next start: {e!r}')
+            return
+        with open(marker, 'w') as marker_file:
+            marker_file.write('1\n')
+        ActivityLog().info(f'[db] Conversations filed under their canonical key: {conversations} keys changed, {moved} messages moved, {duplicates} duplicates dropped')
+        if conversations:
+            self.get_unread_messages()
+
     @run_in_thread('db')
     def move_conversation(self, old_key, new_key, account_id=None):
         """File every message of one conversation under another key.
@@ -1598,7 +1656,7 @@ class MessageHistory(object, metaclass=Singleton):
         log.info(f"== Adding call detail record to storage: {entry.direction} {media_type} {outcome} to {entry.uri}")
 
         try:
-            message = Message(remote_uri=entry.uri,
+            message = Message(remote_uri=conversation_key(entry.uri),
                               display_name=entry.name,
                               uri=str(entry.uri),
                               content=call_summary(record) or '',
@@ -1675,11 +1733,8 @@ class MessageHistory(object, metaclass=Singleton):
         if message.content.startswith('?OTRv'):
             return
 
+        remote_uri = conversation_key(remote_uri, account)
         log.info(f"== Adding {message.direction} history message to storage: {message.id} {state} {remote_uri}")
-
-        match = cls.phone_number_re.match(remote_uri)
-        if match:
-            remote_uri = match.group('number')
 
         if message.direction == 'outgoing':
             display_name = message.sender.display_name
@@ -1755,12 +1810,8 @@ class MessageHistory(object, metaclass=Singleton):
             user = user.decode() if isinstance(user, bytes) else user
             domain = domain.decode() if isinstance(domain, bytes) else domain
 
-            remote_uri = '%s@%s' % (user, domain)
             # a neighbour who is away is addressed by placeholder; the conversation is its instance id
-            remote_uri = placeholder_instance_id(remote_uri) or remote_uri
-            match = cls.phone_number_re.match(remote_uri)
-            if match:
-                remote_uri = match.group('number')
+            remote_uri = conversation_key('%s@%s' % (user, domain), session.account)
 
         if direction == 'outgoing':
             display_name = message.sender.display_name
@@ -1923,7 +1974,7 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def load(self, uri, session, entries=100):
         notification_center = NotificationCenter()
-        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(uri)
+        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else conversation_key(uri, session.account)
         try:
             query = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', OR(Message.q.deleted == None, Message.q.deleted == 0)))
             total = query.count()
@@ -1938,7 +1989,7 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def reload_pending_encrypted(self, uri, session, entries=100):
         notification_center = NotificationCenter()
-        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(uri)
+        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else conversation_key(uri, session.account)
         try:
             result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', OR(Message.q.deleted == None, Message.q.deleted == 0), Message.q.decrypted == '3')).orderBy('timestamp')[-entries:]
         except Exception as e:
