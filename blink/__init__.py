@@ -31,7 +31,7 @@ from zope.interface import implementer
 from sipsimple import __version__ as sdk_version
 from sipsimple.application import SIPApplication
 from sipsimple.account import Account, AccountManager, BonjourAccount
-from sipsimple.addressbook import Contact, Group
+from sipsimple.addressbook import Contact, ContactURI, Group
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.configuration.backend.file import FileBackend
 from sipsimple.payloads import XMLDocument
@@ -49,7 +49,7 @@ except ImportError:
 from blink.chatwindow import ChatWindow
 from blink.logswindow import LogsWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
-from blink.configuration.addressbook import ContactExtension, GroupExtension
+from blink.configuration.addressbook import ContactExtension, ContactURIExtension, GroupExtension, SharedSettingsMigration
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.logging import ActivityLog, LogManager
 from blink.mainwindow import MainWindow
@@ -204,7 +204,9 @@ class Blink(QApplication, metaclass=QSingleton):
         Account.register_extension(AccountExtension)
         BonjourAccount.register_extension(BonjourAccountExtension)
         Contact.register_extension(ContactExtension)
+        ContactURI.register_extension(ContactURIExtension)
         Group.register_extension(GroupExtension)
+        SharedSettingsMigration().start()
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
 
         notification_center = NotificationCenter()
