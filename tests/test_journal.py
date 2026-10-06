@@ -162,5 +162,33 @@ class StatsTests(unittest.TestCase):
         self.assertTrue(lines[3].startswith('    c59: 60 entries'))
 
 
+class SeenMessageIdsTests(unittest.TestCase):
+    def test_seen(self):
+        seen = journal.SeenMessageIds(size=3)
+        self.assertFalse(seen.seen('a'))
+        self.assertTrue(seen.seen('a'))
+        self.assertIn('a', seen)
+        for value in (None, ''):
+            self.assertFalse(seen.seen(value))
+            self.assertFalse(seen.seen(value))
+        self.assertEqual(len(seen), 1)
+
+    def test_ring(self):
+        seen = journal.SeenMessageIds(size=3)
+        for message_id in 'abcd':
+            self.assertFalse(seen.seen(message_id))
+        self.assertEqual(len(seen), 3)
+        self.assertNotIn('a', seen)                 # the oldest went
+        self.assertTrue(seen.seen('d'))
+        self.assertFalse(seen.seen('a'))
+
+    def test_forget(self):
+        seen = journal.SeenMessageIds()
+        seen.seen('a')
+        seen.forget('a')
+        seen.forget('never seen')
+        self.assertFalse(seen.seen('a'))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -44,7 +44,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.journal import JournalCache, JournalStats, journal_action, parse_payload
+from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
@@ -668,10 +668,12 @@ class MessageManager(object, metaclass=Singleton):
                                  'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove', 'application/sylk-api'}
 
     own_message_ids_size = 1000
+    seen_message_ids_size = 10000
 
     def __init__(self):
         self.sessions = []
         self._own_message_ids = OrderedDict()  # ids of messages sent by this device, to recognise their replicated copies
+        self.seen_message_ids = SeenMessageIds(self.seen_message_ids_size)  # handled live or from the journal, whichever came first
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
         self._sync_queue = deque()
@@ -1051,11 +1053,15 @@ class MessageManager(object, metaclass=Singleton):
         for index, message in enumerate(messages, 1):
             content_type = str(message.get('content_type') or '').lower()
             action = journal_action(content_type)
-            try:
-                outcome = getattr(self, f'_journal_{action}')(account, message, content_type, first_sync, contacts)
-            except Exception as e:
-                outcome = 'failed'
-                log.warning(f'Journal entry {message.get("message_id")} ({content_type}) of {account.id} could not be applied: {e!r}')
+            if self.seen_message_ids.seen(message.get('message_id')):
+                outcome = 'duplicates'      # already handled live (or earlier in this run)
+            else:
+                try:
+                    outcome = getattr(self, f'_journal_{action}')(account, message, content_type, first_sync, contacts)
+                except Exception as e:
+                    outcome = 'failed'
+                    self.seen_message_ids.forget(message.get('message_id'))
+                    log.warning(f'Journal entry {message.get("message_id")} ({content_type}) of {account.id} could not be applied: {e!r}')
             outcomes[outcome] += 1
             if stats is not None:
                 stats.entry(content_type, outcome, message.get('contact'), message.get('direction'), message.get('timestamp'))
@@ -1372,6 +1378,16 @@ class MessageManager(object, metaclass=Singleton):
                 log.info(f"-- Skipping PGP encrypted message, PGP is disabled for {account.id}")
                 return
 
+        # only a CPIM message carries the sender's id; without CPIM the id above is made up here
+        if cpim_message is not None and self.seen_message_ids.seen(message_id):
+            log.info(f'Message {message_id} for account {account.id} was already handled (live or from the journal), skipped')
+            return
+
+        if journal_action(content_type) == 'ignored' and content_type.lower() != IsComposingDocument.content_type:
+            # not history (address book, data export, contact update): acted on elsewhere or not at all
+            log.debug(f'Not storing {content_type.lower()} message {message_id} for account {account.id}')
+            return
+
         if content_type.lower() == 'application/sylk-api-token':
             try:
                 data = json.loads(body)
@@ -1480,6 +1496,16 @@ class MessageManager(object, metaclass=Singleton):
         if x_replicated_message is not Null:
             message.sender = account
             message.direction = "outgoing"
+
+        if journal_action(content_type) == 'inert' and content_type.lower() != FTHTTPDocument.content_type:
+            # stored as it is and never unread, without opening a conversation: locations, metadata
+            # companions, call records and types this version does not know (not shown, for now)
+            remote_uri = contact_instance_id(contact, contact_uri) or contact.uri.uri
+            notification_center.post_notification('BlinkGotHistoryMessage', sender=account,
+                                                  data=NotificationData(remote_uri=remote_uri, message=message, encryption=encryption, state='accepted'))
+            known = content_type.lower() in KNOWN_INERT_CONTENT_TYPES
+            ActivityLog().info(f'[Message with {remote_uri}] {content_type.lower()} message {message_id} stored, not shown' + ('' if known else ' (a type this version does not know)'))
+            return
 
         try:
             blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
@@ -1601,9 +1627,9 @@ class MessageManager(object, metaclass=Singleton):
                     notification.center.post_notification('BlinkSessionDidShareFile',
                                                           sender=blink_session,
                                                           data=NotificationData(file=file, direction=message.direction))
-
-        if not content_type.lower().startswith('text'):
             return
+
+        # text from here on: every other content type was handled, stored inert or dropped above
 
         if encryption is None and not x_replicated_message:
             otr = blink_session.fake_streams.get('messages').check_otr(message)
