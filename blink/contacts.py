@@ -49,6 +49,7 @@ from sipsimple.threading import run_in_thread
 
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
+from blink import addressbook_origin
 from blink.group_kinds import STAMPED_KINDS, group_kind, stamp_plan
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager
@@ -105,7 +106,7 @@ class GroupKindStamper(object, metaclass=Singleton):
         for group in sorted(groups, key=lambda group: str(group.name or '').lower()):
             activity.info(f"[addressbook]   group '{group.name}' (id={group.id}, kind={group_kind(group) or '-'}, {len(group.contacts)} members)")
         written = 0
-        with addressbook.AddressbookManager.transaction():
+        with addressbook_origin.reason('group-kind'), addressbook.AddressbookManager.transaction():
             for identity, group, action in stamp_plan(groups, STAMPED_KINDS):
                 if action == 'missing':
                     activity.info(f"[addressbook] No '{identity.name}' group to stamp, nothing is created here")

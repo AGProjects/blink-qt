@@ -67,6 +67,13 @@ class GroupExtension(GroupExtension):
     # 'conference', 'favorites'; empty for a user's own group (blink.group_kinds)
     kind = SharedSetting(type=str, default='')
 
+    # who last changed the group and when (blink.addressbook_origin), never set by hand
+    modified_by = SharedSetting(type=str, default='')
+    modified_agent = SharedSetting(type=str, default='')
+    modified_at = SharedSetting(type=str, default='')
+    modified_reason = SharedSetting(type=str, default='')
+    modified_hash = SharedSetting(type=str, default='')
+
 
 @implementer(IObserver)
 class SharedSettingsMigration(object, metaclass=Singleton):

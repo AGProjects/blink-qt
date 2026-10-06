@@ -49,7 +49,9 @@ except ImportError:
 from blink.chatwindow import ChatWindow
 from blink.logswindow import LogsWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
+from blink import addressbook_origin
 from blink.configuration.addressbook import ContactExtension, ContactURIExtension, GroupExtension, SharedSettingsMigration
+from blink.message_envelopes import this_device_id
 from blink.configuration.settings import SIPSimpleSettingsExtension
 from blink.logging import ActivityLog, LogManager
 from blink.mainwindow import MainWindow
@@ -206,6 +208,11 @@ class Blink(QApplication, metaclass=QSingleton):
         Contact.register_extension(ContactExtension)
         ContactURI.register_extension(ContactURIExtension)
         Group.register_extension(GroupExtension)
+        # stamp every local contact and group write with this device, its user agent and the time
+        addressbook_origin.install(Contact, Group,
+                                   device_id=this_device_id,
+                                   agent=lambda: SIPSimpleSettings().user_agent,
+                                   log=lambda line: ActivityLog().info(line))
         SharedSettingsMigration().start()
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
 
