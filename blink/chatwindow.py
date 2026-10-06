@@ -1121,10 +1121,20 @@ class ChatWidget(base_class, ui_class):
                 rendered_message.message = text
                 self.timestamp_rendered_messages[i] = (rendered_message.timestamp, rendered_message.id, rendered_message)
 
+    # a message state never goes back: a 'delivered' or 'received' report
+    # arriving after 'displayed' (another device of the peer, the server
+    # journal) must not take the double tick away
+    message_status_rank = {'pending': 0, 'failed-local': 1, 'failed': 1, 'accepted': 2, 'sent': 2, 'received': 2, 'delivered': 3, 'displayed': 4}
+
     def update_message_status(self, id, status):
+        statuses = self.__dict__.setdefault('_message_statuses', {})
+        rank = self.message_status_rank.get(status, 2)
+        if rank < self.message_status_rank.get(statuses.get(id), -1):
+            return
+        statuses[id] = status
         if status == 'pending':
             icon = self.clock_icon
-        if status == 'failed':
+        elif status == 'failed':
             icon = self.warning_icon
         elif status == 'failed-local':
             icon = self.warning_icon
