@@ -287,9 +287,14 @@ class MainWindow(base_class, ui_class):
             dialog.close()
 
     def show(self):
+        first_show = not getattr(self, '_shown_once', False)
+        self._shown_once = True
         super(MainWindow, self).show()
         self.raise_()
         self.activateWindow()
+        if first_show:
+            # the search box is the first tab stop and would take the focus: start on the contact list (Ctrl+F searches)
+            self.contact_list.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def set_user_icon(self, icon):
         self.account_state.setIcon(icon or self.default_icon)
