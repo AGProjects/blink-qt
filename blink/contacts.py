@@ -54,6 +54,7 @@ from blink.group_kinds import STAMPED_KINDS, group_kind, stamp_plan
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
+from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
 from blink.uris import bare_instance_id, bonjour_placeholder_uri, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
@@ -122,6 +123,65 @@ class GroupKindStamper(object, metaclass=Singleton):
                         written += 1
                         activity.info(f"[addressbook] Stamped group '{group.name}' (id={group.id}) with kind={identity.kind}")
         activity.info(f'[addressbook] Group kinds checked: {written} stamped')
+
+
+@implementer(IObserver)
+class AddressbookReloadLog(object, metaclass=Singleton):
+    """Say what arrived with every addressbook document, and which device changed what.
+
+    Per reload: account, ETag, counts, every group with its members, and the
+    changes since the last document of that account, attributed by their
+    origin stamp (blink.addressbook_origin) as on macOS. The last document's
+    snapshot is kept in addressbook_origins/<account>.json, so a change made
+    while Blink was not running is still attributed on the next start.
+    Read-only with respect to the addressbook.
+    """
+
+    change_cap = 50
+    member_cap = 30
+
+    def __init__(self):
+        self._started = False
+
+    def start(self):
+        if not self._started:
+            self._started = True
+            NotificationCenter().add_observer(self, name='XCAPManagerDidReloadData')
+
+    def handle_notification(self, notification):
+        if notification.name == 'XCAPManagerDidReloadData':
+            try:
+                self._log_reload(notification.sender, notification.data)
+            except Exception as e:
+                ActivityLog().warning(f'[addressbook] Cannot log the addressbook reload: {e!r}')
+
+    def _log_reload(self, xcap_manager, data):
+        activity = ActivityLog()
+        account = getattr(xcap_manager, 'account', None)
+        account_id = getattr(account, 'id', '?')
+        document = getattr(data, 'addressbook', None)
+        if document is None:
+            return
+        etag = getattr(getattr(xcap_manager, 'resource_lists', None), 'etag', None)
+        contacts = list(document.contacts or ())
+        groups = list(document.groups or ())
+        activity.info(f'[addressbook] Addressbook of {account_id} reloaded: ETag {etag or "-"}, {len(contacts)} contacts, {len(groups)} groups, {len(document.policies or ())} policies')
+        for group in sorted(groups, key=lambda group: str(group.name or '').lower()):
+            members = [getattr(member, 'name', None) or getattr(member, 'id', str(member)) for member in (group.contacts or ())]
+            kind = (group.attributes or {}).get('kind') or '-'
+            shown = ', '.join(str(name) for name in members[:self.member_cap]) + (f', ... {len(members) - self.member_cap} more' if len(members) > self.member_cap else '')
+            activity.info(f"[addressbook]   group '{group.name}' (id={group.id}, kind={kind}): {len(members)} members{': ' + shown if members else ''}")
+
+        path = ApplicationData.get(f'addressbook_origins/{account_id}.json')
+        previous = addressbook_origin.load_snapshot(path)
+        changes, snapshot = addressbook_origin.diff_document(document, previous, this_device_id())
+        addressbook_origin.save_snapshot(path, snapshot)
+        if changes is None:
+            activity.info(f"[addressbook] Addressbook of {account_id}: baseline of {len(snapshot['contacts'])} contacts and {len(snapshot['groups'])} groups, changes are attributed from the next document on")
+        elif changes:
+            activity.info(f'[addressbook] Addressbook of {account_id}: {len(changes)} changes since the last document')
+            for line in addressbook_origin.format_changes(changes, cap=self.change_cap):
+                activity.info(f'[addressbook]   {line}')
 
 
 @implementer(IObserver)
@@ -2805,6 +2865,7 @@ class ContactModel(QAbstractListModel):
         self.deleted_items = []
         self.contact_list = parent.contact_list
         self.virtual_group_manager = VirtualGroupManager()
+        AddressbookReloadLog().start()
         GroupKindStamper().start()
 
         notification_center = NotificationCenter()
