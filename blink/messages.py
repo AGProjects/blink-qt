@@ -668,6 +668,9 @@ class MessageManager(object, metaclass=Singleton):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type,
                                  'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove', 'application/sylk-api'}
 
+    # what the journal ignores and nothing below handles live
+    __not_history_content_types__ = {'application/sylk-addressbook-update', 'application/sylk-data-export', 'application/sylk-contact-update'}
+
     own_message_ids_size = 1000
     seen_message_ids_size = 10000
 
@@ -1384,12 +1387,13 @@ class MessageManager(object, metaclass=Singleton):
 
         # only a CPIM message carries the sender's id; without CPIM the id above is made up here
         if cpim_message is not None and self.seen_message_ids.seen(message_id):
-            log.info(f'Message {message_id} for account {account.id} was already handled (live or from the journal), skipped')
+            ActivityLog().info(f'[Message] {content_type.lower()} message {message_id} for account {account.id} skipped, it was already handled (live or from the journal)')
             return
 
-        if journal_action(content_type) == 'ignored' and content_type.lower() != IsComposingDocument.content_type:
-            # not history (address book, data export, contact update): acted on elsewhere or not at all
-            log.debug(f'Not storing {content_type.lower()} message {message_id} for account {account.id}')
+        if content_type.lower() in self.__not_history_content_types__:
+            # not history: acted on elsewhere or not at all. The other types the journal ignores
+            # (API token, private key, typing) are handled live below
+            ActivityLog().info(f'[Message] {content_type.lower()} message {message_id} for account {account.id} skipped, it is not history')
             return
 
         if content_type.lower() == 'application/sylk-api-token':
