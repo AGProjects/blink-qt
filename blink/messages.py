@@ -988,7 +988,7 @@ class MessageManager(object, metaclass=Singleton):
                 except StopIteration:
                     pass
                 else:
-                    if ['direction'] == 'incoming' and 'positive-delivery' in history_message.disposition:
+                    if message['direction'] == 'incoming' and 'positive-delivery' in history_message.disposition:
                         log.debug("-- Should send delivered imdn for history message")
                         self.send_imdn_message(blink_session, history_message.id, history_message.timestamp, 'delivered')
 
