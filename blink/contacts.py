@@ -147,6 +147,7 @@ class CallsGroupFiler(object, metaclass=Singleton):
 
     def __init__(self):
         self.xcap_loaded = False
+        self.deferred = []          # calls that ended before a missing group could be created
         self._started = False
 
     def start(self):
@@ -165,7 +166,19 @@ class CallsGroupFiler(object, metaclass=Singleton):
 
     def _NH_XCAPManagerDidReloadData(self, notification):
         if not self.xcap_loaded:
-            call_later(self.settle_delay, setattr, self, 'xcap_loaded', True)
+            call_later(self.settle_delay, self._addressbook_loaded)
+
+    def _addressbook_loaded(self):
+        if self.xcap_loaded:
+            return
+        self.xcap_loaded = True
+        deferred, self.deferred = self.deferred, []
+        for remote_uri, display_name, account in deferred:
+            ActivityLog().info(f'[contacts] Filing the call with {remote_uri} now that the addressbook has loaded')
+            try:
+                self.file(remote_uri, display_name, account)
+            except Exception as e:
+                ActivityLog().exception(f'[contacts] Filing the call with {remote_uri} failed: {e!r}')
 
     def _NH_SIPSessionDidEnd(self, notification):
         session = notification.sender
@@ -232,7 +245,12 @@ class CallsGroupFiler(object, metaclass=Singleton):
             joined = []
             for identity, reserved_id in targets:
                 group = self.ensure_group(identity, reserved_id)
-                if group is None or contact.id in {member.id for member in group.contacts}:
+                if group is None:
+                    # not created before the addressbook has loaded: filed again then
+                    if (remote_uri, display_name, account) not in self.deferred:
+                        self.deferred.append((remote_uri, display_name, account))
+                    continue
+                if contact.id in {member.id for member in group.contacts}:
                     continue
                 with addressbook.AddressbookManager.transaction():
                     group.contacts.add(contact)
