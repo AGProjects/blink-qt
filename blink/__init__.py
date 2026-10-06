@@ -124,6 +124,7 @@ class Blink(QApplication, metaclass=QSingleton):
     # Notifications logged to the Activity log, matching what Blink for macOS logs
     __activity_notifications__ = ('SIPAccountManagerWillStart', 'SIPAccountDidActivate', 'SIPAccountDidDeactivate',
                                   'SIPAccountRegistrationDidSucceed', 'SIPAccountRegistrationDidFail', 'SIPAccountRegistrationDidEnd',
+                                  'SIPAccountRegistrationGotAnswer',
                                   'TLSTransportHasChanged', 'XCAPManagerDidDiscoverServerCapabilities', 'XCAPManagerClientError',
                                   'SystemIPAddressDidChange')
 
@@ -132,6 +133,8 @@ class Blink(QApplication, metaclass=QSingleton):
         self._log_versions()
         self.registrar_addresses = {}
         self._tls_diagnosed = {}
+        self._registrar_lookups = {}     # DNSLookup -> account, for logging where a failed registration was sent
+        self._registrar_logged = {}      # account id -> (monotonic time, routes) of the last logged lookup
         self.contact_addresses = {}
         self.setAttribute(Qt.ApplicationAttribute.AA_DontShowIconsInMenus, False)
         self.sip_application = SIPApplication()
@@ -410,8 +413,55 @@ class Blink(QApplication, metaclass=QSingleton):
         error = notification.data.error
         error = error.decode(errors='replace') if isinstance(error, bytes) else str(error)
         ActivityLog().warning('Account %s failed to register: %s' % (account.id, error))
+        self._log_registrar_routes(account)
         if 'ECERTVERIF' in error or 'certificate' in error.lower():
             self._diagnose_tls(account)
+
+    def _NH_SIPAccountRegistrationGotAnswer(self, notification):
+        # one answer per registrar tried, when the SDK reports them
+        data = notification.data
+        registrar = getattr(data, 'registrar', None)
+        code = getattr(data, 'code', None)
+        if registrar is None or code is None or 200 <= code < 300:
+            return
+        reason = data.reason.decode(errors='replace') if isinstance(getattr(data, 'reason', None), bytes) else getattr(data, 'reason', '')
+        ActivityLog().warning('Account %s registrar %s:%s;transport=%s answered %s %s' % (notification.sender.id, registrar.address, registrar.port, registrar.transport, code, reason))
+
+    def _log_registrar_routes(self, account):
+        """Log where the registration goes: the same lookup the SDK makes (outbound proxy, or the
+        domain's NAPTR/SRV/A records), in the order the registrars are tried."""
+        from sipsimple.core import SIPURI
+        from sipsimple.lookup import DNSLookup
+        proxy = account.sip.outbound_proxy
+        if proxy is not None:
+            uri = SIPURI(host=proxy.host, port=proxy.port, parameters={'transport': proxy.transport})
+            source = 'outbound proxy %s' % proxy.host
+        else:
+            uri = SIPURI(host=account.id.domain)
+            source = 'DNS of %s' % account.id.domain
+        lookup = DNSLookup()
+        self._registrar_lookups[lookup] = (account, source)
+        NotificationCenter().add_observer(self, sender=lookup)
+        lookup.lookup_sip_proxy(uri, SIPSimpleSettings().sip.transport_list, tls_name=account.sip.tls_name or uri.host)
+
+    def _NH_DNSLookupDidSucceed(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        account, source = self._registrar_lookups.pop(notification.sender, (None, None))
+        if account is None:
+            return
+        routes = ', '.join('%s:%s;transport=%s' % (route.address, route.port, route.transport) for route in notification.data.result)
+        now = time.monotonic()
+        last_time, last_routes = self._registrar_logged.get(account.id, (None, None))
+        if last_routes == routes and now - last_time < 600:
+            return  # same destinations as the last failure, said once every 10 minutes
+        self._registrar_logged[account.id] = (now, routes)
+        ActivityLog().warning('Account %s registers through %s: %s (tried in this order)' % (account.id, source, routes or 'no destinations'))
+
+    def _NH_DNSLookupDidFail(self, notification):
+        notification.center.remove_observer(self, sender=notification.sender)
+        account, source = self._registrar_lookups.pop(notification.sender, (None, None))
+        if account is not None:
+            ActivityLog().warning('Account %s cannot find its registrar (%s): %s' % (account.id, source, notification.data.error))
 
     tls_diagnosis_interval = 300  # seconds between certificate checks of one account
 
@@ -443,49 +493,58 @@ class Blink(QApplication, metaclass=QSingleton):
 
     @staticmethod
     def _check_tls_certificate(account_id, target, server_name, ca_file):
+        """Check every address of the server: the chain against the CA list, and the
+        certificate's name against the TLS name and against the host name."""
         import ssl
+        from gnutls.crypto import X509Certificate
         activity = ActivityLog()
         host, port = target
-
-        def connect(context):
-            with socket.create_connection((host, port), timeout=10) as raw_socket:
-                with context.wrap_socket(raw_socket, server_hostname=server_name) as tls_socket:
-                    return tls_socket.getpeercert(binary_form=True)
-
         try:
-            context = ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
-            connect(context)
-        except ssl.SSLCertVerificationError as e:
-            reason = e.verify_message or str(e)
-        except (OSError, ssl.SSLError) as e:
-            activity.warning('[tls] Cannot check the certificate of %s:%d for account %s: %s' % (host, port, account_id, e))
-            return
-        else:
-            activity.info('[tls] The certificate of %s:%d (%s) verifies here with %s; the SIP stack refused it, check the TLS settings of account %s'
-                          % (host, port, server_name, ca_file or 'the system CA store', account_id))
+            addresses = sorted({info[4][0] for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
+        except OSError as e:
+            activity.warning('[tls] Cannot resolve %s for account %s: %s' % (host, account_id, e))
             return
 
-        details = ''
-        try:
-            unverified = ssl.create_default_context()
-            unverified.check_hostname = False
-            unverified.verify_mode = ssl.CERT_NONE
-            from gnutls.crypto import X509Certificate
-            certificate = X509Certificate(ssl.DER_cert_to_PEM_cert(connect(unverified)).encode())
-            until = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(certificate.expiration_time))
-            details = '; certificate for %s, issued by %s, valid until %s' % (certificate.subject, certificate.issuer, until)
-        except Exception:
-            pass
-        system_store = ''
-        if ca_file:
+        def attempt(address, name, check_name, cafile=ca_file):
+            context = ssl.create_default_context(cafile=cafile) if cafile else ssl.create_default_context()
+            context.check_hostname = check_name
             try:
-                connect(ssl.create_default_context())
-            except Exception:
-                pass
-            else:
-                system_store = ' (it does verify with the system CA store, so %s is missing its issuer)' % ca_file
-        activity.warning('[tls] The certificate of %s:%d was refused for account %s: %s (server name %s, CA list %s)%s%s'
-                         % (host, port, account_id, reason, server_name, ca_file or 'system', details, system_store))
+                with socket.create_connection((address, port), timeout=10) as raw_socket:
+                    with context.wrap_socket(raw_socket, server_hostname=name) as tls_socket:
+                        tls_socket.getpeercert(binary_form=True)
+            except ssl.SSLCertVerificationError as e:
+                return e.verify_message or str(e)
+            except (OSError, ssl.SSLError) as e:
+                return 'cannot connect: %s' % e
+            return 'ok'
+
+        def describe(address):
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            try:
+                with socket.create_connection((address, port), timeout=10) as raw_socket:
+                    with context.wrap_socket(raw_socket, server_hostname=server_name) as tls_socket:
+                        der = tls_socket.getpeercert(binary_form=True)
+                certificate = X509Certificate(ssl.DER_cert_to_PEM_cert(der).encode())
+                until = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(certificate.expiration_time))
+                alt_names = ', '.join(str(name) for name in getattr(certificate, 'alternative_names', None).dns) if getattr(certificate, 'alternative_names', None) else ''
+                return '%s%s, issued by %s, valid until %s' % (certificate.subject, (' (also %s)' % alt_names) if alt_names else '', certificate.issuer, until)
+            except Exception as e:
+                return 'certificate unreadable: %s' % e
+
+        names = [server_name] + ([host] if host != server_name else [])
+        refused = False
+        for address in addresses:
+            chain = attempt(address, server_name, False)
+            checks = ['chain %s' % chain] + ['name %s %s' % (name, attempt(address, name, True) if chain == 'ok' else 'not checked') for name in names]
+            if chain != 'ok' and ca_file:
+                checks.append('system CA store %s' % attempt(address, server_name, False, cafile=None))
+            refused = refused or any(not check.endswith(' ok') for check in checks[:2])
+            activity.info('[tls] %s %s:%d for account %s: %s; %s' % (host, address, port, account_id, ', '.join(checks), describe(address)))
+        if not refused:
+            activity.info('[tls] Every address of %s verifies here with %s and name %s; the SIP stack checks something else (see the PJSIP trace)'
+                          % (host, ca_file or 'the system CA store', server_name))
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
         account = notification.sender
