@@ -50,6 +50,7 @@ from sipsimple.threading import run_in_thread
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
 from blink import addressbook_origin
+from blink.contact_repair import repair_plan
 from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
@@ -279,6 +280,131 @@ class CallsGroupFiler(object, metaclass=Singleton):
         if created or joined:
             activity.info(f"[contacts] {'Created' if created else 'Filed'} contact {contact.name} <{address}>" + (f" -> {', '.join(joined)}" if joined else ''))
         return contact
+
+
+@implementer(IObserver)
+class ContactRepair(object, metaclass=Singleton):
+    """Repair the addressbook once per run, after it has loaded, as Blink for macOS does.
+
+    - addresses: a conference room back on its bridge domain (conference-domain),
+      a phone number in E.164 by the default account's dial rules (e164)
+    - names that are only an old spelling of the contact's address (echoed-name)
+    - duplicate addresses within a contact (dup-uri)
+    - every phone number filed in Tel and every conference room in Conference
+      (file-into-kind-group)
+    Nothing is created or deleted but groups and duplicate addresses; a real
+    name is never touched. Each action is logged with its reason and stamped
+    with it (modified_reason). Sylk Mobile does the same from its side.
+    """
+
+    settle_delay = 15  # seconds after the first XCAP reload
+
+    def __init__(self):
+        self.done = False
+        self._started = False
+
+    def start(self):
+        if self._started:
+            return
+        self._started = True
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='XCAPManagerDidReloadData')
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        if not xcap_is_expected():
+            call_later(5, self.run)
+
+    def _NH_XCAPManagerDidReloadData(self, notification):
+        if not self.done:
+            # a little later than the filers, so groups created by them are in place
+            call_later(self.settle_delay + 5, self.run)
+
+    def run(self):
+        if self.done:
+            return
+        self.done = True
+        activity = ActivityLog()
+        try:
+            repaired = self.repair_contacts()
+            filed = self.file_into_kind_groups()
+        except Exception as e:
+            activity.exception(f'[addressbook] Repairing the addressbook failed: {e!r}')
+            return
+        activity.info(f'[addressbook] Repair done: {repaired} contacts repaired, {filed} contacts filed into Tel or Conference')
+
+    def repair_contacts(self):
+        activity = ActivityLog()
+        manager = addressbook.AddressbookManager()
+        account = AccountManager().default_account
+        repaired = 0
+        for contact in list(manager.get_contacts()):
+            try:
+                plan = repair_plan(contact, account)
+            except Exception as e:
+                activity.warning(f'[addressbook] Cannot judge contact {contact.name} ({contact.id}) for repair: {e!r}')
+                continue
+            if not plan:
+                continue
+            reasons = []
+            with addressbook_origin.reason('repair'), addressbook.AddressbookManager.transaction():
+                for uri, current, wanted, reason in plan.get('addresses', ()):
+                    uri.uri = wanted
+                    reasons.append(reason)
+                    activity.info(f"[addressbook] Repair ({reason}): address of {contact.name} ({contact.id}) {current} -> {wanted}")
+                if 'name' in plan:
+                    was, wanted = plan['name']
+                    contact.name = wanted
+                    reasons.append('echoed-name')
+                    activity.info(f"[addressbook] Repair (echoed-name): name {was!r} -> {wanted!r} ({contact.id}), the name was the address")
+                for dropped, kept in plan.get('duplicates', ()):
+                    # the default must survive: it points at one of these objects
+                    default = contact.uris.default
+                    if default is not None and getattr(default, 'id', None) == getattr(dropped, 'id', None):
+                        contact.uris.default = kept
+                    contact.uris.remove(dropped)
+                    reasons.append('dup-uri')
+                    activity.info(f"[addressbook] Repair (dup-uri): duplicate address {dropped.uri} dropped from {contact.name} ({contact.id}), kept id {getattr(kept, 'id', '?')}")
+                contact.save()
+            repaired += 1
+        return repaired
+
+    def file_into_kind_groups(self):
+        """Every phone number in Tel, every conference room in Conference. Only adds."""
+        activity = ActivityLog()
+        manager = addressbook.AddressbookManager()
+        account = AccountManager().default_account
+        contacts = list(manager.get_contacts())
+
+        def addresses(contact):
+            return [str(uri.uri) for uri in contact.uris]
+
+        wanted = ((TEL, None, [contact for contact in contacts if any(pstn_e164(address, account) for address in addresses(contact))]),
+                  (CONFERENCE, None, [contact for contact in contacts if any(is_conference_uri(address, account) for address in addresses(contact))]))
+        filed = 0
+        with addressbook_origin.reason('file-into-kind-group'):
+            for identity, reserved_id, members in wanted:
+                if not members:
+                    continue
+                group = CallsGroupFiler().ensure_group(identity, reserved_id)
+                if group is None:
+                    continue
+                present = {member.id for member in group.contacts}
+                missing = [contact for contact in members if contact.id not in present]
+                if not missing:
+                    continue
+                with addressbook.AddressbookManager.transaction():
+                    for contact in missing:
+                        group.contacts.add(contact)
+                    group.save()
+                filed += len(missing)
+                activity.info(f"[addressbook] Repair (file-into-kind-group): {len(missing)} contacts filed into '{group.name}': " + ', '.join(sorted(str(contact.name or contact.id) for contact in missing)))
+        return filed
 
 
 @implementer(IObserver)
@@ -3240,6 +3366,7 @@ class ContactModel(QAbstractListModel):
         GroupKindStamper().start()
         MessagesGroupFiler().start()
         CallsGroupFiler().start()
+        ContactRepair().start()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
