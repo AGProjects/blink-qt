@@ -32,7 +32,7 @@ from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, 
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
-from blink.resources import ApplicationData, IconManager, Resources
+from blink.resources import ApplicationData, IconManager, Resources, themed_icon
 from blink.util import run_in_gui_thread, translate
 from blink.widgets.buttons import AccountState, SwitchViewButton
 
@@ -88,7 +88,7 @@ class MainWindow(base_class, ui_class):
             self.restoreGeometry(geometry)
 
         self.default_icon_path = Resources.get('icons/default-avatar.png')
-        self.default_icon = QIcon(self.default_icon_path)
+        self.default_icon = themed_icon(self.default_icon_path)
         self.last_icon_directory = Path('~').normalized
         self.set_user_icon(icon_manager.get('avatar'))
         self.enable_call_buttons(False)

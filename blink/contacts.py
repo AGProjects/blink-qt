@@ -58,14 +58,14 @@ from blink.contact_repair import merge_plan, repair_plan
 from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
-from blink.resources import ApplicationData, Resources, IconManager
+from blink.resources import ApplicationData, Resources, IconManager, themed_icon
 from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
 from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_fileable_address, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
-from blink.widgets.color import ColorHelperMixin
+from blink.widgets.color import ColorHelperMixin, is_dark_theme, secondary_text_color
 from blink.widgets.util import ContextMenuActions
 
 
@@ -2817,7 +2817,7 @@ class ContactIconDescriptor(object):
 
     def __get__(self, instance, owner):
         if self.icon is None:
-            self.icon = QIcon(self.filename)
+            self.icon = themed_icon(self.filename)
             self.icon.filename = self.filename
         return self.icon
 
@@ -3246,7 +3246,14 @@ class ContactWidget(base_class, ui_class):
         super(ContactWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
+        if is_dark_theme():
+            palette = self.info_label.palette()
+            for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+                palette.setColor(color_group, QPalette.ColorRole.WindowText, secondary_text_color(QApplication.palette(), color_group))
+            self.info_label.setPalette(palette)
+            self.info_label.setForegroundRole(QPalette.ColorRole.WindowText)
+        else:
+            self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
         # AlternateBase set to #f0f4ff or #e0e9ff
 
     def paintEvent(self, event):
@@ -3323,7 +3330,10 @@ class GroupWidget(base_class, ui_class):
         if self.__dict__.get('selected', None) == value:
             return
         self.__dict__['selected'] = value
-        self.name_label.setStyleSheet("color: #ffffff; font-weight: bold;" if value else "color: #000000; font-weight: bold;")
+        if value:
+            self.name_label.setStyleSheet("color: #ffffff; font-weight: bold;")
+        else:
+            self.name_label.setStyleSheet("color: #e0e0e0; font-weight: bold;" if is_dark_theme() else "color: #000000; font-weight: bold;")
         # self.name_label.setForegroundRole(QPalette.ColorRole.BrightText if value else QPalette.ColorRole.WindowText)
         self.update()
 
@@ -3372,7 +3382,20 @@ class GroupWidget(base_class, ui_class):
         rect = self.rect()
 
         background = QLinearGradient(0, 0, self.width(), self.height())
-        if self.selected:
+        if is_dark_theme():
+            if self.selected:
+                background.setColorAt(0.0, QColor('#5a5a5a'))
+                background.setColorAt(1.0, QColor('#4a4a4a'))
+                upper_color = QColor('#6a6a6a')
+                lower_color = QColor('#2a2a2a')
+                foreground = QColor('#ffffff')
+            else:
+                background.setColorAt(0.0, QColor('#3c3c3c'))
+                background.setColorAt(1.0, QColor('#323232'))
+                upper_color = QColor('#4a4a4a')
+                lower_color = QColor('#222222')
+                foreground = QColor('#aaaaaa')
+        elif self.selected:
             background.setColorAt(0.0, QColor('#cacaca'))
             background.setColorAt(1.0, QColor('#b4b4b4'))
             upper_color = QColor('#f0f0f0')
@@ -3460,6 +3483,9 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         self.contact_oddline_widget.setPalette(palette)
 
         palette = self.contact_evenline_widget.palette()
+        if is_dark_theme():
+            # dark theme: contact.ui fixes AlternateBase to a light blue, under the theme's light text
+            palette.setColor(QPalette.ColorRole.AlternateBase, QApplication.palette().color(QPalette.ColorRole.AlternateBase))
         palette.setColor(QPalette.ColorRole.Window, palette.color(QPalette.ColorRole.AlternateBase))
         self.contact_evenline_widget.setPalette(palette)
 
@@ -3663,7 +3689,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
             text_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, option, widget)
             text_rect.setRight(option.rect.right() - 5)
             if type_text:
-                painter.setPen(option.palette.color(color_group, QPalette.ColorRole.HighlightedText if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Dark))
+                painter.setPen(option.palette.color(color_group, QPalette.ColorRole.HighlightedText) if option.state & QStyle.StateFlag.State_Selected else secondary_text_color(option.palette, color_group))
                 painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, type_text)
                 text_rect.adjust(0, 0, -option.fontMetrics.size(Qt.TextFlag.TextSingleLine, type_text).width() - 5, 0)
             text_color = option.palette.color(color_group, QPalette.ColorRole.HighlightedText if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Text)
@@ -5806,9 +5832,10 @@ class ContactDetailView(QListView):
 
     def __init__(self, contact_list):
         super(ContactDetailView, self).__init__(contact_list.parent())
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.AlternateBase, QColor('#eeeeee'))
-        self.setPalette(palette)
+        if not is_dark_theme():
+            palette = self.palette()
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor('#eeeeee'))
+            self.setPalette(palette)
         self.contact_list = contact_list
         self.setItemDelegate(ContactDetailDelegate(self))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

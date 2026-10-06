@@ -19,8 +19,25 @@ from sipsimple.configuration.datatypes import Path
 from blink.util import run_in_gui_thread
 
 
-__all__ = ['ApplicationData', 'Resources', 'IconManager']
+__all__ = ['ApplicationData', 'Resources', 'IconManager', 'themed_icon']
 
+
+def themed_icon(filename, dark_color='#b4b4b4'):
+    """QIcon of a dark monochrome glyph (the default avatar), redrawn light under a dark theme
+    where the original disappears into the background."""
+    from PyQt6.QtGui import QColor, QPainter, QPalette
+    from PyQt6.QtWidgets import QApplication
+    application = QApplication.instance()
+    if application is None or application.palette().color(QPalette.ColorRole.Window).lightness() >= 128:
+        return QIcon(filename)
+    pixmap = QPixmap(filename)
+    if pixmap.isNull():
+        return QIcon(filename)
+    painter = QPainter(pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), QColor(dark_color))
+    painter.end()
+    return QIcon(pixmap)
 
 class DirectoryContextManager(str):
     def __enter__(self):

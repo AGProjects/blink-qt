@@ -1,13 +1,28 @@
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWidgets import QApplication
 
 from application.python import limit
 from application.python.decorator import decorator, preserve_signature
 from math import fmod, isnan
 
 
-__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin']
+__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin', 'is_dark_theme', 'secondary_text_color']
+
+
+def is_dark_theme():
+    """Whether the application palette is a dark one (light text on a dark window)."""
+    return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+
+def secondary_text_color(palette, color_group=QPalette.ColorGroup.Normal):
+    """The colour of secondary text (the address line under a name): the palette's Dark in a
+    light theme; in a dark theme Dark is near black, so a grey between the text and the window."""
+    if is_dark_theme():
+        text, window = palette.color(color_group, QPalette.ColorRole.WindowText), palette.color(color_group, QPalette.ColorRole.Window)
+        return QColor((text.red() * 3 + window.red() * 2) // 5, (text.green() * 3 + window.green() * 2) // 5, (text.blue() * 3 + window.blue() * 2) // 5)
+    return palette.color(color_group, QPalette.ColorRole.Dark)
 
 
 class HCYColor(object):
