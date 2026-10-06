@@ -5,12 +5,13 @@ import os
 import re
 import requests
 import time
+import urllib3
 import random
 import urllib
 import uuid
 import pgpy
 
-from collections import OrderedDict, deque
+from collections import Counter, OrderedDict, deque
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
@@ -43,6 +44,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
+from blink.journal import JournalCache, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
@@ -837,6 +839,7 @@ class MessageManager(object, metaclass=Singleton):
         finally:
             self._syncing.discard(account.id)
 
+    _journal_unverified_logged = False
     journal_since_years = 5     # how far back a first sync (no cursor) asks, as sylk mobile does
     journal_max_pages = 200     # pages per run; the next run continues from the cursor
 
@@ -897,8 +900,14 @@ class MessageManager(object, metaclass=Singleton):
         first_sync = not account.sms.history_synchronization_id
         activity.info(f'[journal] Fetching the message journal of {account.id}' + (f' ({reason})' if reason else '')
                       + (f' since {self.journal_since_years} years ago' if first_sync else f' after {account.sms.history_synchronization_id}'))
+        if not settings.tls.verify_server and not self._journal_unverified_logged:
+            # the user's choice (tls.verify_server); said once here instead of a urllib3 warning per request
+            self._journal_unverified_logged = True
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            activity.warning('[journal] The certificate of the journal server is not verified (TLS verify server is off)')
         started = time.monotonic()
         pages = entries = transferred = 0
+        complete = False
 
         while pages < self.journal_max_pages:
             cursor = account.sms.history_synchronization_id
@@ -924,6 +933,7 @@ class MessageManager(object, metaclass=Singleton):
 
             messages = data.get('messages') if isinstance(data, dict) else None
             if not messages:
+                complete = True
                 break
 
             name = self._journal_file_name(messages)
@@ -953,232 +963,222 @@ class MessageManager(object, metaclass=Singleton):
 
         if pages:
             activity.info(f'[journal] Downloaded {entries} journal entries of {account.id} in {pages} pages ({transferred} bytes, {time.monotonic() - started:.1f}s)')
+        elif complete:
+            activity.info(f'[journal] The message journal of {account.id} has no new entries')
         self._apply_cached_journal(account)
 
+    journal_progress_every = 250    # entries between progress lines, and between short pauses
+    journal_throttle = 0.05         # seconds to pause, so the GUI and the db thread keep up
+
     def _apply_cached_journal(self, account):
-        """Apply cached journal pages oldest first; a page is deleted only after it was applied."""
-        directory = self._journal_directory(account)
-        try:
-            names = sorted(name for name in os.listdir(directory) if name.endswith('.json'))
-        except OSError as e:
-            ActivityLog().error(f'[journal] Cannot list {directory}: {e}')
-            return
+        """Apply cached journal pages oldest first.
+
+        A page is deleted only once applied. A page that cannot be applied stops
+        the run (order matters) and is retried on the next sync; after
+        MAX_PAGE_ATTEMPTS failed runs it is quarantined and the pages after it go on.
+        """
+        cache = JournalCache(self._journal_directory(account))
+        names = cache.pages()
         if not names:
             return
         activity = ActivityLog()
         activity.info(f'[journal] Applying {len(names)} cached journal pages of {account.id}')
         started = time.monotonic()
-        applied = entries = 0
+        totals = Counter()
+        contacts = Counter()
+        applied = 0
         for name in names:
-            path = os.path.join(directory, name)
             try:
-                with open(path, encoding='utf-8') as page_file:
-                    page = json.load(page_file)
-                messages = page.get('messages') or []
-                count = len(messages)
-                self._apply_server_history_messages(account, messages)
-            except Exception as e:
-                activity.exception(f'[journal] Applying journal page {name} of {account.id} failed, kept for the next sync: {e}')
+                page = cache.load(name)
+            except (OSError, ValueError) as e:
+                page = None
+                error = e
+            if page is not None:
+                try:
+                    stats = self._apply_server_history_messages(account, page.get('messages') or [], first_sync=not page.get('cursor'), contacts=contacts)
+                except Exception as e:
+                    stats = None
+                    error = e
+            if page is None or stats is None:
+                attempts, quarantined = cache.failed(name)
+                if quarantined:
+                    activity.error(f'[journal] Journal page {name} of {account.id} failed {attempts} times and was moved to quarantine: {error}')
+                    continue
+                activity.exception(f'[journal] Applying journal page {name} of {account.id} failed (attempt {attempts}), kept for the next sync: {error}')
                 break
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
+            cache.applied(name)
             applied += 1
-            entries += count
-        activity.info(f'[journal] Applied {entries} journal entries of {account.id} from {applied} of {len(names)} pages in {time.monotonic() - started:.1f}s')
+            totals.update(stats)
+            log.info(f'Applied journal page {name}: ' + ', '.join(f'{count} {outcome}' for outcome, count in sorted(stats.items())))
+        summary = ', '.join(f'{count} {outcome}' for outcome, count in sorted(totals.items())) or 'nothing'
+        activity.info(f'[journal] Applied {sum(totals.values())} journal entries of {account.id} from {applied} of {len(names)} pages in {time.monotonic() - started:.1f}s: {summary}')
+        # one notification for the whole run: unread counts and the Messages group are refreshed from history
+        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts)))
 
     @run_in_thread('sync')
     def _process_server_history_messages(self, account, messages):
         self._apply_server_history_messages(account, messages)
 
-    def _apply_server_history_messages(self, account, messages):
-        """Apply journal entries. Runs in the sync thread."""
-        notification_center = NotificationCenter()
-        last_id = None
-        new_messages = 0
+    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None):
+        """Apply journal entries by content type (blink.journal.journal_action). Runs in the sync thread.
 
+        Bulk mode: nothing here creates a conversation or decrypts; an entry for a
+        conversation that is open is also shown there. Returns {outcome: count}.
+        An entry that cannot be applied is counted as failed and logged; the page
+        still counts as applied.
+        """
+        stats = Counter()
+        contacts = contacts if contacts is not None else Counter()
         log.debug(f'-- {len(messages)} messages fetched from server for {account.id}')
-        while messages:
-            message = messages.pop(0)
-            last_id = message['message_id']
-            content_type = message['content_type'].lower()
-
-            if content_type == 'message/imdn':
-                payload = json.loads(message['content'])
-                data = NotificationData(id=payload['message_id'], status=message['state'])
-                kwargs = {'data': data}
-
-                from blink.contacts import URIUtils
-                contact, contact_uri = URIUtils.find_contact(message['contact'])
-                try:
-                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
-                except StopIteration:
-                    pass
-                else:
-                    kwargs['sender'] = blink_session
-
-                notification_center.post_notification('BlinkGotDispositionNotification', **kwargs)
-            elif content_type == 'application/sylk-conversation-remove':
-                from blink.contacts import URIUtils
-                contact, contact_uri = URIUtils.find_contact(message['content'])
-                timestamp = ISOTimestamp(message['timestamp'])
-                ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation removed on another device (from the journal), messages up to {timestamp} for account {account.id}')
-                try:
-                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
-                except StopIteration:
-                    notification_center.post_notification('BlinkGotHistoryConversationRemove', sender=account, data=NotificationData(contact=contact_uri.uri, timestamp=timestamp))
-                else:
-                    NotificationCenter().post_notification('BlinkConversationWillRemove', sender=blink_session, data=NotificationData(contact=blink_session.contact_uri.uri, timestamp=timestamp))
-            elif content_type == 'application/sylk-message-remove':
-                payload = json.loads(message['content'])
-                notification_center.post_notification('BlinkGotHistoryMessageDelete', data=payload['message_id'])
-
-                from blink.contacts import URIUtils
-                contact, contact_uri = URIUtils.find_contact(message['contact'])
-                try:
-                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
-                except StopIteration:
-                    pass
-                else:
-                    notification_center.post_notification('BlinkGotMessageDelete', sender=blink_session, data=payload['message_id'])
-            elif content_type == 'application/sylk-conversation-read':
-                NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=message['contact']))
-            elif content_type == 'text/pgp-public-key':
-                if message['contact'] != account.id:
-                    self._save_pgp_key(message['content'], message['contact'])
-            elif content_type == 'application/sylk-file-transfer':
-                try:
-                    document = json.loads(message['content'])
-                except Exception as e:
-                    log.warning('Failed to parse file transfer history message: %s' % str(e))
-                    continue
-
-                from blink.contacts import URIUtils
-                contact, contact_uri = URIUtils.find_contact(message['contact'])
-
-                try:
-                    until = document['until']
-                except KeyError:
-                    until = str(ISOTimestamp(datetime.now() + timedelta(days=30)))
-
-                try:
-                    hash = document['hash']
-                except KeyError:
-                    hash = None
-
-                new_body = FTHTTPDocument.create(file=[FileInfo(file_size=document['filesize'],
-                                                                file_name=document['filename'],
-                                                                content_type=document['filetype'],
-                                                                url=document['url'],
-                                                                until=until,
-                                                                hash=hash)])
-                sender = account
-                if message['direction'] == 'incoming':
-                    sender = ChatIdentity(SIPURI.parse(f'sip:{contact.uri.uri}'), contact.name)
-
-                timestamp = ISOTimestamp(message['timestamp']).replace(tzinfo=timezone.utc).astimezone(tzlocal())
-                try:
-                    is_secure = document['filename'].endswith('.asc')
-                except AttributeError:
-                    is_secure = False
-
-                history_message = BlinkMessage(new_body.decode(),
-                                               FTHTTPDocument.content_type,
-                                               sender,
-                                               timestamp=timestamp,
-                                               id=message['message_id'],
-                                               disposition=message['disposition'],
-                                               direction=message['direction'],
-                                               is_secure=is_secure)
-
-                history_message_data = NotificationData(remote_uri=contact.uri.uri,
-                                                        message=history_message,
-                                                        state='accepted',
-                                                        encryption='OpenPGP' if is_secure else None)
-
-                notification_center.post_notification('BlinkGotHistoryMessage', sender=account, data=history_message_data)
-                if message['direction'] == 'incoming':
-                    NotificationCenter().post_notification('BlinkMessageNewUnread', sender=contact.uri.uri)
-
-                try:
-                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
-                except StopIteration:
-                    continue
-
-                notification_center.post_notification('BlinkGotMessage',
-                                                      sender=blink_session,
-                                                      data=NotificationData(message=history_message,
-                                                                            history=True,
-                                                                            account=account))
-                file = File(document['filename'], document['filesize'], contact,
-                            document['hash'], message['message_id'], ISOTimestamp(until),
-                            document['url'], account=account, protocol='sylk')
-
-                notification_center.post_notification('BlinkSessionDidShareFile',
-                                                      sender=blink_session,
-                                                      data=NotificationData(file=file, direction=message['direction']))
-            elif content_type.startswith('text/'):
-                if message['contact'] is None:
-                    continue
-
-                if message['content'].startswith("?OTR:") or message['content'].startswith('?OTRv3?'):
-                    continue
-
-                from blink.contacts import URIUtils
-                contact, contact_uri = URIUtils.find_contact(message['contact'])
-
-                sender = account
-                if message['direction'] == 'incoming':
-                    sender = ChatIdentity(SIPURI.parse(f'sip:{contact.uri.uri}'), contact.name)
-
-                timestamp = ISOTimestamp(message['timestamp']).replace(tzinfo=timezone.utc).astimezone(tzlocal())
-
-                history_message = BlinkMessage(message['content'],
-                                               message['content_type'],
-                                               sender,
-                                               timestamp=timestamp,
-                                               id=message['message_id'],
-                                               disposition=message['disposition'],
-                                               direction=message['direction'])
-
-                encryption = self.check_encryption(history_message.content_type, history_message.content)
-                notification_center.post_notification('BlinkGotHistoryMessage',
-                                                      sender=account,
-                                                      data=NotificationData(
-                                                          remote_uri=message['contact'],
-                                                          message=history_message,
-                                                          encryption=encryption,
-                                                          state=message['state']))
-
-                if message['direction'] == 'incoming':
-                    NotificationCenter().post_notification('BlinkMessageNewUnread', sender=contact.uri.uri)
-
-                try:
-                    blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
-                except StopIteration:
-                    pass
-                else:
-                    if message['direction'] == 'incoming' and 'positive-delivery' in history_message.disposition:
-                        log.debug("-- Should send delivered imdn for history message")
-                        self.send_imdn_message(blink_session, history_message.id, history_message.timestamp, 'delivered')
-
-                    notification_center.post_notification('BlinkGotMessage',
-                                                          sender=blink_session,
-                                                          data=NotificationData(
-                                                              message=history_message,
-                                                              history=True,
-                                                              account=account))
-                    if encryption == 'OpenPGP':
-                        if blink_session.fake_streams.get('messages').can_decrypt:
-                            blink_session.fake_streams.get('messages').decrypt(history_message)
-                        else:
-                            self._incoming_encrypted_message_queue.append((history_message, account, contact))
-
-        # the cursor is advanced by the download, once a page is on disk
+        for index, message in enumerate(messages, 1):
+            content_type = str(message.get('content_type') or '').lower()
+            action = journal_action(content_type)
+            try:
+                outcome = getattr(self, f'_journal_{action}')(account, message, content_type, first_sync, contacts)
+            except Exception as e:
+                outcome = 'failed'
+                log.warning(f'Journal entry {message.get("message_id")} ({content_type}) of {account.id} could not be applied: {e!r}')
+            stats[outcome] += 1
+            if index % self.journal_progress_every == 0:
+                log.info(f'Applied {index} of {len(messages)} journal entries of {account.id}')
+                time.sleep(self.journal_throttle)
         account.sms.history_synchronization_timestamp = ISOTimestamp.now()
         account.save()
+        return stats
 
+    def _journal_session(self, contact):
+        return next((session for session in self.sessions if session.contact.settings is contact.settings), None)
+
+    @staticmethod
+    def _journal_timestamp(message):
+        return ISOTimestamp(message['timestamp']).replace(tzinfo=timezone.utc).astimezone(tzlocal())
+
+    def _journal_ignored(self, account, message, content_type, first_sync, contacts):
+        return 'ignored'
+
+    def _journal_receipt(self, account, message, content_type, first_sync, contacts):
+        if first_sync:
+            return 'receipts skipped (first sync)'
+        payload = parse_payload(message.get('content'))
+        if not payload or not payload.get('message_id'):
+            return 'failed'
+        kwargs = {'data': NotificationData(id=payload['message_id'], status=message.get('state'))}
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(message['contact'])
+        session = self._journal_session(contact)
+        if session is not None:
+            kwargs['sender'] = session
+        NotificationCenter().post_notification('BlinkGotDispositionNotification', **kwargs)
+        return 'receipts'
+
+    def _journal_conversation_remove(self, account, message, content_type, first_sync, contacts):
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(message['content'])
+        timestamp = ISOTimestamp(message['timestamp'])
+        ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation removed on another device (from the journal), messages up to {timestamp} for account {account.id}')
+        session = self._journal_session(contact)
+        if session is None:
+            NotificationCenter().post_notification('BlinkGotHistoryConversationRemove', sender=account, data=NotificationData(contact=contact_uri.uri, timestamp=timestamp))
+        else:
+            NotificationCenter().post_notification('BlinkConversationWillRemove', sender=session, data=NotificationData(contact=session.contact_uri.uri, timestamp=timestamp))
+        return 'conversations removed'
+
+    def _journal_message_remove(self, account, message, content_type, first_sync, contacts):
+        payload = parse_payload(message.get('content'))
+        if not payload or not payload.get('message_id'):
+            return 'failed'
+        NotificationCenter().post_notification('BlinkGotHistoryMessageDelete', sender=account, data=payload['message_id'])
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(message['contact'])
+        session = self._journal_session(contact)
+        if session is not None:
+            NotificationCenter().post_notification('BlinkGotMessageDelete', sender=session, data=payload['message_id'])
+        return 'messages removed'
+
+    def _journal_conversation_read(self, account, message, content_type, first_sync, contacts):
+        NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=message['contact']))
+        return 'conversations read'
+
+    def _journal_public_key(self, account, message, content_type, first_sync, contacts):
+        if message['contact'] == account.id:
+            return 'own keys'
+        self._save_pgp_key(message['content'], message['contact'])
+        return 'public keys'
+
+    def _journal_store(self, account, message, history_message, remote_uri, encryption=None, state=None):
+        """Persist a journal entry (history decides read state and category) and show it if its conversation is open."""
+        NotificationCenter().post_notification('BlinkGotHistoryMessage', sender=account,
+                                               data=NotificationData(remote_uri=remote_uri, message=history_message, encryption=encryption, state=state))
+
+    def _journal_sender(self, account, message, contact):
+        if message['direction'] == 'incoming':
+            return ChatIdentity(SIPURI.parse(f'sip:{contact.uri.uri}'), contact.name)
+        return account
+
+    def _journal_file_transfer(self, account, message, content_type, first_sync, contacts):
+        document = parse_payload(message.get('content'))
+        if not document or not document.get('filename'):
+            return 'failed'
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(message['contact'])
+        until = document.get('until') or str(ISOTimestamp(datetime.now() + timedelta(days=30)))
+        file_hash = document.get('hash')
+        new_body = FTHTTPDocument.create(file=[FileInfo(file_size=document.get('filesize'), file_name=document['filename'], content_type=document.get('filetype'),
+                                                        url=document.get('url'), until=until, hash=file_hash)])
+        is_secure = str(document['filename']).endswith('.asc')
+        history_message = BlinkMessage(new_body.decode(), FTHTTPDocument.content_type, self._journal_sender(account, message, contact),
+                                       timestamp=self._journal_timestamp(message), id=message['message_id'],
+                                       disposition=message.get('disposition'), direction=message['direction'], is_secure=is_secure)
+        self._journal_store(account, message, history_message, contact.uri.uri, encryption='OpenPGP' if is_secure else None, state='accepted')
+        if message['direction'] == 'incoming':
+            contacts[contact.uri.uri] += 1
+        session = self._journal_session(contact)
+        if session is not None:
+            NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, account=account))
+            file = File(document['filename'], document.get('filesize'), contact, file_hash, message['message_id'], ISOTimestamp(until),
+                        document.get('url'), account=account, protocol='sylk')
+            NotificationCenter().post_notification('BlinkSessionDidShareFile', sender=session, data=NotificationData(file=file, direction=message['direction']))
+        return 'files'
+
+    def _journal_text(self, account, message, content_type, first_sync, contacts):
+        if message.get('contact') is None:
+            return 'failed'
+        content = message.get('content') or ''
+        if content.startswith('?OTR:') or content.startswith('?OTRv3?'):
+            return 'OTR skipped'
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(message['contact'])
+        history_message = BlinkMessage(content, message['content_type'], self._journal_sender(account, message, contact),
+                                       timestamp=self._journal_timestamp(message), id=message['message_id'],
+                                       disposition=message.get('disposition'), direction=message['direction'])
+        encryption = self.check_encryption(history_message.content_type, history_message.content)
+        self._journal_store(account, message, history_message, message['contact'], encryption=encryption, state=message.get('state'))
+        if message['direction'] == 'incoming':
+            contacts[contact.uri.uri] += 1
+        session = self._journal_session(contact)
+        if session is not None:
+            if message['direction'] == 'incoming' and 'positive-delivery' in (history_message.disposition or ()):
+                self.send_imdn_message(session, history_message.id, history_message.timestamp, 'delivered')
+            NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, account=account))
+            if encryption == 'OpenPGP':
+                if session.fake_streams.get('messages').can_decrypt:
+                    session.fake_streams.get('messages').decrypt(history_message)
+                else:
+                    self._incoming_encrypted_message_queue.append((history_message, account, contact))
+        return 'texts'
+
+    def _journal_inert(self, account, message, content_type, first_sync, contacts):
+        """Stored as it is and never unread: locations, metadata companions, call records and
+        types this version does not know. Their own handling comes with later patches."""
+        if message.get('contact') is None:
+            return 'failed'
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(message['contact'])
+        history_message = BlinkMessage(message.get('content') or '', message['content_type'], self._journal_sender(account, message, contact),
+                                       timestamp=self._journal_timestamp(message), id=message['message_id'],
+                                       disposition=message.get('disposition'), direction=message['direction'])
+        self._journal_store(account, message, history_message, message['contact'], state=message.get('state'))
+        return f'stored as {content_type}'
 
     @run_in_gui_thread
     def handle_notification(self, notification):

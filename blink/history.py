@@ -90,6 +90,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, name='SIPAccountManagerDidRemoveAccount')
         notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
+        notification_center.add_observer(self, name='BlinkJournalDidApply')
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
 
     @run_in_thread('file-io')
@@ -253,16 +254,17 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history.add_from_server_history(account, **notification.data.__dict__)
 
     def _NH_BlinkGotHistoryMessageDelete(self, notification):
-        self.message_history.remove_message(notification.data)
-        self.download_history.remove(notification.data)
+        # removed on another device: hidden, not erased (the file stays on disk)
+        account_id = str(notification.sender.id) if isinstance(notification.sender, (Account, BonjourAccount)) else None
+        self.message_history.tombstone_message(notification.data, account_id=account_id, source='removed on another device')
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
             self.message_history.get_all_contacts()
 
     def _NH_BlinkGotHistoryConversationRemove(self, notification):
+        # removed on another device: hidden up to the removal time, not erased
         data = notification.data
-        self.message_history.remove_contact_messages(notification.sender, data.contact, data.timestamp)
-        self.download_history.remove_contact_files(notification.sender, data.contact)
+        self.message_history.tombstone_conversation(str(data.contact), before_time=data.timestamp, account_id=str(notification.sender.id))
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
             self.message_history.get_all_contacts()
@@ -302,10 +304,16 @@ class HistoryManager(object, metaclass=Singleton):
             self.message_history.remove_conversation(contact, data.timestamp, notification.sender)
             self.download_history.remove_contact_files(None, contact)
         else:
-            self.message_history.remove_contact_messages(notification.sender.account, contact, data.timestamp, notification.sender)
-            self.download_history.remove_contact_files(notification.sender.account, contact)
+            # removed on another device while the conversation is open: hidden up to the removal time
+            self.message_history.tombstone_conversation(contact, before_time=data.timestamp, account_id=str(notification.sender.account.id), session=notification.sender)
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
+            self.message_history.get_all_contacts()
+
+    def _NH_BlinkJournalDidApply(self, notification):
+        # after a journal run: unread counts and the Messages group come from history
+        self.message_history.get_unread_messages()
+        if BlinkSettings().interface.show_messages_group:
             self.message_history.get_all_contacts()
 
     def _NH_BlinkSessionConfirmReadMessages(self, notification):
@@ -786,6 +794,22 @@ class MessageHistory(object, metaclass=Singleton):
             return content_type not in cls.__key_content_types__
         return content_type in cls.__file_transfer_content_types__
 
+    @staticmethod
+    def _content_fields(content_type, content):
+        """category and has_link for a new row, from its cleartext (an encrypted body
+        gets them when it is decrypted, update_decrypted_message)."""
+        fields = {}
+        try:
+            category = classify_category(content_type, content)
+        except Exception:
+            category = None
+        if category is not None:
+            fields['category'] = category
+        if category == 'text':
+            link = has_link(content_type, content)
+            fields['has_link'] = link
+        return fields
+
     @classmethod
     def _initial_read(cls, direction, content_type, state=None):
         """0 for an incoming message the user has not seen yet, else 1."""
@@ -882,7 +906,7 @@ class MessageHistory(object, metaclass=Singleton):
         ActivityLog().info(f'[db] Message {message_id} is not stored yet, its removal is kept until it arrives' + (f' ({source})' if source else ''))
 
     @run_in_thread('db')
-    def tombstone_conversation(self, remote_uri, before_time=None, when=None, account_id=None):
+    def tombstone_conversation(self, remote_uri, before_time=None, when=None, account_id=None, session=None):
         """Hide a conversation up to the moment it was removed.
 
         `before_time` is when the removal was made, not when it arrived: a removal
@@ -902,6 +926,8 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().error(f'[db] Removing the conversation with {remote_uri} failed: {e}')
             return
         ActivityLog().info(f'[db] Conversation with {remote_uri} marked deleted: {count} rows' + (f' up to {floor}' if floor is not None else '') + (f' for account {account_id}' if account_id else ''))
+        if session is not None:
+            self.load(remote_uri, session)
 
     @run_in_thread('db')
     def restore_conversation(self, remote_uri):
@@ -1424,6 +1450,7 @@ class MessageHistory(object, metaclass=Singleton):
         if state is not None:
             optional_fields['state'] = state
         optional_fields['read'] = cls._initial_read(message.direction, message.content_type, state)
+        optional_fields.update(cls._content_fields(message.content_type, message.content))
 
         if encryption is not None:
             optional_fields['encryption_type'] = str([f'{encryption}'])
@@ -1495,6 +1522,7 @@ class MessageHistory(object, metaclass=Singleton):
         if state is not None:
             optional_fields['state'] = state
         optional_fields['read'] = cls._initial_read(direction, message.content_type, state)
+        optional_fields.update(cls._content_fields(message.content_type, message.content))
         if session.chat_type is not None:
             chat_info = session.info.streams.chat
 
