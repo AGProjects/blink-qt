@@ -334,7 +334,8 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history.mark_conversation_read(key)
 
     def _NH_BlinkConfirmReadMessagesOnOtherDevice(self, notification):
-        self.message_history.mark_conversation_read(str(notification.data.remote_uri), source='another device')
+        data = notification.data
+        self.message_history.mark_conversation_read(str(data.remote_uri), source='another device', before_time=getattr(data, 'timestamp', None))
 
     def _NH_BlinkGotDispositionNotification(self, notification):
         data = notification.data
@@ -1278,11 +1279,40 @@ class MessageHistory(object, metaclass=Singleton):
             except (OSError, ValueError) as e:
                 activity.warning(f'[db] Cannot add the database counts to {stats_path}: {e}')
 
+    def _conversation_keys(self, remote_uri):
+        """The keys a conversation may be filed under, for a peer address as another device
+        spells it (sip:alice@example.com;transport=tls, a phone number, a Bonjour id)."""
+        text = str(remote_uri or '').strip()
+        keys = {text}
+        address = text
+        for scheme in ('sips:', 'sip:'):
+            if address.lower().startswith(scheme):
+                address = address[len(scheme):]
+        address = address.split(';', 1)[0].split('?', 1)[0]
+        keys.add(address)
+        match = self.phone_number_re.match(address)
+        if match:
+            keys.add(match.group('number'))
+        try:
+            keys.add(canonical_uri(text))
+        except Exception:
+            pass
+        return sorted(key for key in keys if key)
+
     @run_in_thread('db')
-    def mark_conversation_read(self, remote_uri, source=None):
-        """Mark every incoming message of a conversation read, whatever account it was filed under."""
+    def mark_conversation_read(self, remote_uri, source=None, before_time=None):
+        """Mark the incoming messages of a conversation read, whatever account it was filed
+        under. With `before_time` (when it was read on another device) only those up to then:
+        what arrived after it is still unread here."""
         table = Message.sqlmeta.table
-        where = f"remote_uri = {self.db.sqlrepr(str(remote_uri))} and direction = 'incoming' and read = 0"
+        keys = self._conversation_keys(remote_uri)
+        where = f"remote_uri in ({', '.join(self.db.sqlrepr(key) for key in keys)}) and direction = 'incoming' and read = 0"
+        try:
+            floor = self._storage_time(before_time)
+        except (ValueError, OverflowError):
+            floor = None
+        if floor is not None:
+            where += f' and timestamp <= {self.db.sqlrepr(floor)}'
         try:
             count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
             if count:
@@ -1291,8 +1321,11 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().error(f'[db] Marking the conversation with {remote_uri} read failed: {e}')
             return
         if count:
-            ActivityLog().info(f'[db] Marked {count} messages read in the conversation with {remote_uri}' + (f' (read on {source})' if source else ''))
+            ActivityLog().info(f'[db] Marked {count} messages read in the conversation with {remote_uri}' + (f' up to {floor}' if floor is not None else '') + (f' (read on {source})' if source else ''))
         NotificationCenter().post_notification('BlinkMessageHistoryConversationWasRead', data=NotificationData(remote_uri=str(remote_uri), count=count))
+        if count and source:
+            # the badge is keyed as history files the conversation, not as the other device spelled it
+            self.get_unread_messages()
 
     def _upgrade_to_v7(self):
         """backfill message categories and links"""

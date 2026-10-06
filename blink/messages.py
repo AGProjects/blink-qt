@@ -1134,7 +1134,7 @@ class MessageManager(object, metaclass=Singleton):
         return 'messages removed'
 
     def _journal_conversation_read(self, account, message, content_type, first_sync, contacts):
-        NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=message['contact']))
+        NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=message['contact'], timestamp=message.get('timestamp')))
         return 'conversations read'
 
     def _journal_public_key(self, account, message, content_type, first_sync, contacts):
@@ -1496,7 +1496,8 @@ class MessageManager(object, metaclass=Singleton):
 
         if content_type.lower() == 'application/sylk-conversation-read':
             payload = json.loads(body)
-            NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=payload['contact']))
+            ActivityLog().info(f"[Message with {payload.get('contact')}] Conversation read on another device for account {account.id}")
+            NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=payload['contact'], timestamp=payload.get('timestamp')))
             return
 
         if content_type.lower() == 'application/sylk-conversation-remove':
