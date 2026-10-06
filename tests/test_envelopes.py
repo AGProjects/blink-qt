@@ -283,6 +283,26 @@ class CallRecordTests(unittest.TestCase):
         self.assertIsNone(env.call_summary({'direction': 'incoming', 'outcome': 'teleported'}))
         self.assertIsNone(env.call_summary(None))
 
+    def test_legacy_rows(self):
+        cases = [(str([""" (1'05")""", '', 'audio']), 'incoming', 'completed', 65, 'Incoming call (1:05)'),
+                 (str([""" (1h02'05")""", '', 'video']), 'outgoing', 'completed', 3725, 'Outgoing video call (1:02:05)'),
+                 (str([0, '', 'audio']), 'incoming', 'missed', 0, 'Missed call'),
+                 (str([0, 'Cancelled', 'audio']), 'outgoing', 'cancelled', 0, 'Cancelled call'),
+                 (str([0, 'Busy Here', 'audio']), 'outgoing', 'failed', 0, 'Call failed \u2014 Busy Here'),
+                 (str([0, '', 'audio']), 'outgoing', 'cancelled', 0, 'Cancelled call')]
+        for content, direction, outcome, duration, summary in cases:
+            record = env.legacy_call_record(content, direction, 'm1', timestamp='2026-01-02 03:04:05', remote_party='bob@example.com')
+            self.assertEqual((record['outcome'], record['duration'], record['source'], record['sessionId']), (outcome, duration, 'migrated', 'm1'), content)
+            self.assertEqual(env.call_summary(record), summary, content)
+        self.assertEqual(record['startTime'], '2026-01-02T03:04:05+00:00')
+        self.assertEqual(record['remoteParty'], 'bob@example.com')
+
+    def test_legacy_rows_are_not_evaluated(self):
+        for content in ("__import__('os').system('true')", '[1, 2]', 'garbage', '', None, b"[0, '', 'audio']"):
+            record = env.legacy_call_record(content, 'incoming', 'm1')
+            self.assertTrue(record is None or record['outcome'] == 'missed', content)
+        self.assertIsNone(env.legacy_call_record("__import__('os').system('true')", 'incoming', 'm1'))
+
     def test_dominant_media(self):
         self.assertEqual(env.dominant_media('audio, video'), 'video')
         self.assertEqual(env.dominant_media(['chat', 'audio']), 'audio')

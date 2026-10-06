@@ -9,6 +9,8 @@ import sys
 import json
 import platform
 
+from html import escape as html_escape
+
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QObject, QFileInfo, pyqtSlot
 from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
@@ -55,6 +57,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.history import HistoryManager
 from blink.logging import MessagingTrace as log
+from blink.message_envelopes import CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, call_needs_attention, call_record, call_summary, legacy_call_record, this_device_id
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import ApplicationData, IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter, IncomingDialogBase, RequestList, BlinkFileTransfer
@@ -2108,6 +2111,22 @@ class NoSessionsLabel(QLabel):
 ui_class, base_class = uic.loadUiType(Resources.get('chat_window.ui'))
 
 
+def call_event_content(message):
+    """The HTML for a call row in the chat, from its call detail record, or None.
+
+    A row not converted yet (application/blink-call-history) is read with
+    literal_eval, never eval: its body is data from the database.
+    """
+    record = call_record(message.content, getattr(message, 'metadata', None))
+    if record is None and message.content_type.lower() == LEGACY_CALL_CONTENT_TYPE:
+        record = legacy_call_record(message.content, message.direction, message.message_id)
+    summary = call_summary(record, this_device_id()) if record is not None else None
+    if not summary:
+        return None
+    color = '#800000' if call_needs_attention(record, this_device_id()) else '#000000'
+    return f'<div style="color: {color}">{html_escape(summary)}</div>'
+
+
 @implementer(IObserver)
 class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
@@ -3523,24 +3542,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if not content:
                     timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
                     continue
-            elif message.content_type.lower() == 'application/blink-call-history':
-                content_list = eval(message.content)
-
-                media_types = {'audio': translate('chat_window', 'audio'),
-                               'video': translate('chat_window', 'video'),
-                               'file-transfer': translate('chat_window', 'file-transfer')}
-                try:
-                    media_type = media_types[content_list[2]]
-                except KeyError:
-                    media_type = media_types['audio']
-                session_type = translate('chat_window', 'call') if media_type != 'file-transfer' else ''
-
-                if message.state != 'failed':
-                    content = '%s %s %s %s' % (message.direction.capitalize(), media_type, session_type, content_list[0])
-                    content = f'<div style="color: #000000">{content}</div>'
-                else:
-                    content = translate('chat_window', '%s %s %s failed (%s)') % (message.direction.capitalize(), media_type, session_type, content_list[1])
-                    content = f'<div style="color: #800000">{content}</div>'
+            elif message.content_type.lower() in (CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE):
+                content = call_event_content(message)
+                if content is None:
+                    continue
             else:
                 continue
 
@@ -3562,7 +3567,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
             if message.content_type.lower() == FTHTTPDocument.content_type:
                 chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account)
-            elif message.content_type.lower() == 'application/blink-call-history':
+            elif message.content_type.lower() in (CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE):
                 chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)
             else:
                 chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account)
@@ -3652,24 +3657,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if account is None or not account.enabled:
             return
 
-        if message.content_type.lower() == 'application/blink-call-history':
-            content_list = eval(message.content)
-
-            media_types = {'audio': translate('chat_window', 'audio'),
-                           'video': translate('chat_window', 'video'),
-                           'file-transfer': translate('chat_window', 'file-transfer')}
-            try:
-                media_type = media_types[content_list[2]]
-            except KeyError:
-                media_type = media_types['audio']
-            session_type = translate('chat_window', 'call') if media_type != 'file-transfer' else ''
-
-            if message.state != 'failed':
-                content = '%s %s %s %s' % (message.direction.capitalize(), media_type, session_type, content_list[0])
-                content = f'<div style="color: #000000">{content}</div>'
-            else:
-                content = translate('chat_window', '%s %s %s failed (%s)') % (message.direction.capitalize(), media_type, session_type, content_list[1])
-                content = f'<div style="color: #800000">{content}</div>'
+        if message.content_type.lower() in (CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE):
+            content = call_event_content(message)
+            if content is None:
+                return
 
             timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
             chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)

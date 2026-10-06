@@ -11,6 +11,7 @@ Pure functions, no Qt. pgpy is imported only by public_key_id, sipsimple
 only by this_device_id and the location layer only by classify_category.
 """
 
+import ast
 import json
 import re
 import unicodedata
@@ -36,7 +37,7 @@ __all__ = ['TEXT_CONTENT_TYPES', 'PGP_PUBLIC_KEY_CONTENT_TYPE', 'PGP_PRIVATE_KEY
            'call_recording_metadata', 'call_recording_envelope',
            'CALL_RECORD_VERSION', 'CALL_SOURCE_RANK', 'MISSED_CALL_OUTCOMES', 'CALL_ATTENTION_OUTCOMES', 'SIP_STATUS_PHRASES',
            'sip_status_phrase', 'dominant_media', 'build_call_record', 'merge_call_records', 'this_device_id', 'call_answered_elsewhere',
-           'call_record', 'format_call_duration', 'call_outcome', 'call_was_missed', 'call_needs_attention', 'call_lines', 'call_summary',
+           'call_record', 'legacy_call_record', 'format_call_duration', 'call_outcome', 'call_was_missed', 'call_needs_attention', 'call_lines', 'call_summary',
            'classify_category', 'has_link', 'public_key_id']
 
 
@@ -751,6 +752,52 @@ def call_record(body, metadata=None):
         if isinstance(record, dict) and record.get('sessionId'):
             return record
     return None
+
+
+# Duration as Blink Qt formatted it into the legacy row: " (1'05\")" or " (1h02'05\")"
+_LEGACY_DURATION_RE = re.compile(r"""\((?:(?P<hours>\d+)h)?(?P<minutes>\d+)'(?P<seconds>\d+)"\)""")
+
+
+def legacy_call_record(content, direction, message_id, timestamp=None, remote_party='', display_name=''):
+    """A call record rebuilt from an application/blink-call-history row, or None.
+
+    Blink Qt stored a call as str([duration, reason, media]): duration 0 or
+    " (1'05\")", reason '' or the failure reason title-cased, media 'audio',
+    'video' or 'file-transfer'. Read with literal_eval, never eval. The record
+    has source 'migrated', the lowest rank, so a real view of the same call
+    always wins a merge, and the row's message id as its session id.
+    """
+    if isinstance(content, bytes):
+        content = content.decode('utf-8', 'replace')
+    try:
+        values = ast.literal_eval(str(content or ''))
+    except (ValueError, SyntaxError, MemoryError, RecursionError):
+        return None
+    if not isinstance(values, (list, tuple)) or len(values) < 3:
+        return None
+    duration_text, reason, media = values[0], values[1], values[2]
+    duration = 0
+    if isinstance(duration_text, str):
+        match = _LEGACY_DURATION_RE.search(duration_text)
+        if match:
+            duration = int(match.group('hours') or 0) * 3600 + int(match.group('minutes')) * 60 + int(match.group('seconds'))
+    reason = str(reason or '').strip()
+    media = str(media or 'audio')
+    direction = 'outgoing' if direction == 'outgoing' else 'incoming'
+    if duration > 0:
+        outcome = 'completed'
+    elif direction == 'incoming':
+        outcome = 'missed'
+    elif reason.lower() == 'cancelled':
+        outcome = 'cancelled'
+    elif reason:
+        outcome = 'failed'
+    else:
+        outcome = 'cancelled'   # ended before it was answered, with nothing to say why
+    return build_call_record(message_id, direction, outcome, duration=duration,
+                             reason=reason if outcome == 'failed' else None,
+                             remote_party=remote_party, display_name=display_name,
+                             start_time=timestamp, media=[media], source='migrated')
 
 
 def format_call_duration(seconds):

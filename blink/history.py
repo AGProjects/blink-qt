@@ -1,6 +1,7 @@
 
 import bisect
 import glob
+import json
 import pickle as pickle
 import os
 import re
@@ -30,6 +31,7 @@ from sipsimple.util import ISOTimestamp
 from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
+from blink.message_envelopes import build_call_record, call_summary, dominant_media, legacy_call_record, this_device_id
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
@@ -205,7 +207,7 @@ class HistoryManager(object, metaclass=Singleton):
         bisect.insort(self.calls, entry)
         self.calls = self.calls[-self.history_size:]
         self.save()
-        self.message_history.add_call_history_entry(entry, session)
+        self.message_history.add_call_history_entry(entry, session, status=notification.data.code, failure_reason=notification.data.failure_reason)
 
     def _NH_ChatStreamGotMessage(self, notification):
         message = notification.data.message
@@ -572,7 +574,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 7
+    __version__ = 8
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -816,6 +818,35 @@ class MessageHistory(object, metaclass=Singleton):
 
         return changed
 
+    def _upgrade_to_v8(self):
+        """convert call history rows to call detail records"""
+        table = Message.sqlmeta.table
+        converted = unreadable = 0
+        last_id = 0
+        while True:
+            rows = self.db.queryAll(f"select id, message_id, direction, timestamp, remote_uri, display_name, content from {table}"
+                                    f" where id > {last_id} and content_type = '{LEGACY_CALL_CONTENT_TYPE}'"
+                                    f" order by id limit {self.__backfill_chunk__}")
+            if not rows:
+                break
+            last_id = rows[-1][0]
+            for row_id, message_id, direction, timestamp, remote_uri, display_name, content in rows:
+                record = legacy_call_record(content, direction, message_id, timestamp=timestamp, remote_party=remote_uri,
+                                            display_name=display_name if display_name != remote_uri else '')
+                if record is None:
+                    unreadable += 1
+                    continue
+                self.db.queryAll(f"update {table} set content_type = {self.db.sqlrepr(CALL_CONTENT_TYPE)},"
+                                 f" content = {self.db.sqlrepr(call_summary(record) or '')},"
+                                 f" metadata = {self.db.sqlrepr(json.dumps(record))},"
+                                 f" category = 'call', media_type = {self.db.sqlrepr(dominant_media(record.get('media')))}"
+                                 f" where id = {row_id}")
+                converted += 1
+        ActivityLog().info(f'[db] {converted} call history rows converted to call detail records')
+        if unreadable:
+            ActivityLog().warning(f'[db] {unreadable} call history rows could not be read and were left as they are')
+        return converted
+
     def _add_column(self, name, definition):
         try:
             self.db.queryAll(f'ALTER TABLE {Message.sqlmeta.table} ADD COLUMN {name} {definition}')
@@ -842,12 +873,12 @@ class MessageHistory(object, metaclass=Singleton):
 
     @classmethod
     @run_in_thread('db')
-    def add_call_history_entry(cls, entry, session):
+    def add_call_history_entry(cls, entry, session, status=None, failure_reason=None):
+        """Store a call as a call detail record (application/blink-call-detail-record)."""
         timestamp_native = entry.call_time
         timestamp_utc = timestamp_native.replace(tzinfo=timezone.utc)
         timestamp_fixed = timestamp_utc - entry.call_time.utcoffset()
         timestamp = parse(str(timestamp_fixed))
-        media = "audio"
 
         if not session.streams and not session.proposed_streams:
             return
@@ -856,26 +887,48 @@ class MessageHistory(object, metaclass=Singleton):
         if 'audio' not in streams and 'video' not in streams:
             return
 
-        media = 'video' if 'video' in streams else 'audio'
-        media = 'file-transfer' if 'file-transfer' in streams else media
+        duration = int(entry.duration.total_seconds()) if entry.duration else 0
+        if duration > 0:
+            outcome = 'completed'
+        elif entry.direction == 'incoming':
+            # not failed: cancelled with "Call completed elsewhere"
+            outcome = 'missed' if entry.failed else 'answered_elsewhere'
+        elif status == 487:
+            outcome = 'cancelled'
+        elif entry.failed:
+            outcome = 'failed'
+        else:
+            outcome = 'cancelled'
 
-        log.info(f"== Adding call history message to storage: {entry.direction} {media} to {entry.uri}")
+        invitation = getattr(session, '_invitation', None)
+        call_id = getattr(invitation, 'call_id', None)
+        call_id = call_id.decode() if isinstance(call_id, bytes) else call_id
+        stop_time = entry.call_time + entry.duration if entry.duration else None
+        device_id = this_device_id()
+        local = {'streams': streams}
+        if device_id:
+            local['deviceId'] = device_id
+        record = build_call_record(call_id or str(uuid.uuid4()), entry.direction, outcome, duration=duration,
+                                   status=status if status else None,
+                                   reason=(entry.reason or failure_reason) if outcome == 'failed' else None,
+                                   remote_party=str(entry.uri), display_name=entry.name or '',
+                                   start_time=entry.call_time, stop_time=stop_time, media=streams,
+                                   source='local', local=local,
+                                   answered_by=device_id if outcome == 'completed' and entry.direction == 'incoming' else None)
+        media_type = dominant_media(streams)
 
-        uri = str(entry.uri)
+        log.info(f"== Adding call detail record to storage: {entry.direction} {media_type} {outcome} to {entry.uri}")
 
-        result = 0
-        if entry.duration:
-            seconds = int(entry.duration.total_seconds())
-            if seconds >= 3600:
-                result = """ (%dh%02d'%02d")""" % (seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-            else:
-                result = """ (%d'%02d")""" % (seconds / 60, seconds % 60)
         try:
             message = Message(remote_uri=entry.uri,
                               display_name=entry.name,
-                              uri=uri,
-                              content=str([result, entry.reason.title() if entry.reason else '', media]),
-                              content_type='application/blink-call-history',
+                              uri=str(entry.uri),
+                              content=call_summary(record) or '',
+                              content_type=CALL_CONTENT_TYPE,
+                              metadata=json.dumps(record),
+                              category='call',
+                              media_type=media_type,
+                              sip_callid=call_id,
                               message_id=str(uuid.uuid4()),
                               account_id=str(entry.account_id),
                               direction=entry.direction,
@@ -1145,7 +1198,7 @@ class MessageHistory(object, metaclass=Singleton):
                 am.content_type not like "%pgp%"
                 and am.direction="incoming"
                 and am.content_type not like "%sylk-api%"
-                and am.content_type != "application/blink-call-history"
+                and am.content_type not in ("application/blink-call-history", "application/blink-call-detail-record")
                 and am.state not in ('deleted', 'displayed')
                 and {self._get_enabled_account_filter('am')}
                 group by am.remote_uri order by am.timestamp desc"""
@@ -1157,7 +1210,7 @@ class MessageHistory(object, metaclass=Singleton):
                 where
                 am.content_type not like "%pgp%"
                 and am.content_type not like "%sylk-api%"
-                and am.content_type != "application/blink-call-history"
+                and am.content_type not in ("application/blink-call-history", "application/blink-call-detail-record")
                 and am.state != 'deleted'
                 and {self._get_enabled_account_filter('am')}
                 group by am.remote_uri order by am.timestamp desc limit {Message.sqlrepr(number)}"""
@@ -1221,7 +1274,7 @@ class MessageHistory(object, metaclass=Singleton):
             where
             am.content_type not like '%pgp%'
             and not am.content_type like '%sylk-api%'
-            and am.content_type != "application/blink-call-history"
+            and am.content_type not in ("application/blink-call-history", "application/blink-call-detail-record")
             and am.state != 'deleted'
             and {self._get_enabled_account_filter('am')}
             group by am.remote_uri
