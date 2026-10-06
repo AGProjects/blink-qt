@@ -46,6 +46,7 @@ from sipsimple.util import ISOTimestamp
 from blink.configuration.datatypes import File
 from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
+from blink import key_escrow
 from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
@@ -728,6 +729,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
         notification_center.add_observer(self, name='BlinkMessageHistoryConversationDidRemove')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
+        KeyEscrowManager().start()
 
     @run_in_thread('file-io')
     def _save_pgp_key(self, data, uri):
@@ -1310,14 +1312,22 @@ class MessageManager(object, metaclass=Singleton):
         request.account.sms.public_key = f'{filename}.pubkey'
         request.account.save()
         ActivityLog().info(f'[pgp] Imported the PGP private key of account {request.account.id} from another device')
+        call_in_gui_thread(self._keys_installed, request.account)
 
-        for session in [session for session in self.sessions if session.account is request.account]:
+    def _keys_installed(self, account):
+        """A keypair was adopted for this account (imported, or restored from the escrow):
+        start using it and decrypt what waited for it."""
+        for request in list(self.pgp_requests[account, GeneratePGPKeyRequest]):
+            request.dialog.hide()
+            self.pgp_requests.remove(request)
+
+        for session in [session for session in self.sessions if session.account is account]:
             stream = session.fake_streams.get('messages')
             if stream and not stream.can_encrypt:
                 stream.enable_pgp()
 
         while self._incoming_encrypted_message_queue:
-            message, account, contact = self._incoming_encrypted_message_queue.popleft()
+            message, queued_account, contact = self._incoming_encrypted_message_queue.popleft()
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
             except StopIteration:
@@ -1335,6 +1345,24 @@ class MessageManager(object, metaclass=Singleton):
         contact, contact_uri = URIUtils.find_contact(account.uri)
         outgoing_message = OutgoingMessage(account, contact, message, 'text/pgp-private-key')
         self._send_message(outgoing_message)
+
+    def _offer_key_generation(self, account, scenario, session=None):
+        """The generate prompt, held until we know whether the server keeps this account's key:
+        generating one while the addressbook may still bring the real one orphans every message
+        encrypted to it (KeyEscrowManager.when_answered)."""
+        KeyEscrowManager().when_answered(account, lambda: self._show_generate_dialog(account, scenario, session))
+
+    def _show_generate_dialog(self, account, scenario, session=None):
+        if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
+            return      # restored from the escrow meanwhile, or PGP turned off
+        if self.pgp_requests[account, GeneratePGPKeyRequest]:
+            return
+        generate_dialog = GeneratePGPKeyDialog()
+        generate_request = GeneratePGPKeyRequest(generate_dialog, account, scenario, session)
+        generate_request.accepted.connect(self._SH_GeneratePGPKeys)
+        generate_request.finished.connect(self._SH_PGPRequestFinished)
+        bisect.insort_right(self.pgp_requests, generate_request)
+        generate_request.dialog.show()
 
     def _SH_GeneratePGPKeys(self, request):
         session = request.session
@@ -1429,12 +1457,7 @@ class MessageManager(object, metaclass=Singleton):
         if encryption == 'OpenPGP':
             if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
                 if not self.pgp_requests[account, GeneratePGPKeyRequest] and account is not BonjourAccount():
-                    generate_dialog = GeneratePGPKeyDialog()
-                    generate_request = GeneratePGPKeyRequest(generate_dialog, account, 0)
-                    generate_request.accepted.connect(self._SH_GeneratePGPKeys)
-                    generate_request.finished.connect(self._SH_PGPRequestFinished)
-                    bisect.insort_right(self.pgp_requests, generate_request)
-                    generate_request.dialog.show()
+                    self._offer_key_generation(account, 0)
             elif not account.sms.enable_pgp:
                 log.info(f"-- Skipping PGP encrypted message, PGP is disabled for {account.id}")
                 return
@@ -1817,12 +1840,7 @@ class MessageManager(object, metaclass=Singleton):
                 stream.generate_keys()
                 return
 
-            generate_dialog = GeneratePGPKeyDialog()
-            generate_request = GeneratePGPKeyRequest(generate_dialog, session.account, 1, session)
-            generate_request.accepted.connect(self._SH_GeneratePGPKeys)
-            generate_request.finished.connect(self._SH_PGPRequestFinished)
-            bisect.insort_right(self.pgp_requests, generate_request)
-            generate_request.dialog.show()
+            self._offer_key_generation(session.account, 1, session)
 
         elif session.account.sms.enable_pgp and not stream.can_decrypt_with_others:
             stream.enable_pgp()
@@ -1844,12 +1862,7 @@ class MessageManager(object, metaclass=Singleton):
                 stream.generate_keys()
                 return
 
-            generate_dialog = GeneratePGPKeyDialog()
-            generate_request = GeneratePGPKeyRequest(generate_dialog, session.account, 1, session)
-            generate_request.accepted.connect(self._SH_GeneratePGPKeys)
-            generate_request.finished.connect(self._SH_PGPRequestFinished)
-            bisect.insort_right(self.pgp_requests, generate_request)
-            generate_request.dialog.show()
+            self._offer_key_generation(session.account, 1, session)
 
 
     def _NH_PGPKeysDidGenerate(self, notification):
@@ -2154,3 +2167,155 @@ class MessageManager(object, metaclass=Singleton):
         if selected:
             NotificationCenter().post_notification('BlinkSessionIsSelected', sender=blink_session)
         return blink_session
+
+
+@implementer(IObserver)
+class KeyEscrowManager(object, metaclass=Singleton):
+    """The PGP key escrow on our own XCAP contact, as Blink for macOS keeps it (blink.key_escrow).
+
+    On every addressbook reload, per account:
+    - restore: no local private key and an escrow on our own contact -> adopt it
+      (decrypted with the account password). Latched on success, and a failure is
+      not repeated for the same escrow and password.
+    - report what our own contact carries, when it changed.
+    - repair: a local key and no escrow anywhere -> write one, once per session.
+      With no contact carrying our own address there is nowhere to write it, so
+      that contact is created first (as Sylk Mobile does), once per session.
+      The only automatic write: with nothing escrowed nobody's key is displaced;
+      every other difference between the local key and an escrow is the user's call.
+    Nothing written here is announced to the other devices: it is this device
+    catching up with the document it was handed.
+
+    Generating a key waits for the answer (when_answered): the addressbook has
+    loaded, the account has no XCAP, or 15 seconds have passed.
+    """
+
+    answer_timeout = 15.0
+
+    def __init__(self):
+        self._started = False
+        self.checked = set()            # accounts whose addressbook has answered
+        self.restore_done = set()
+        self.restore_failed = {}        # account id -> the escrow and password it failed against
+        self.repaired = set()
+        self.self_contact_created = set()
+        self._first_asked = {}
+        self._waiting = {}              # account id -> callbacks held until the answer
+
+    def start(self):
+        if not self._started:
+            self._started = True
+            NotificationCenter().add_observer(self, name='XCAPManagerDidReloadData')
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_XCAPManagerDidReloadData(self, notification):
+        account = getattr(notification.sender, 'account', None)
+        if not isinstance(account, Account):
+            return
+        self.checked.add(account.id)
+        from blink.contacts import AddressbookNotifier
+        with AddressbookNotifier().quiet():
+            # restore before reporting, so one pass tells one story
+            try:
+                self.restore(account)
+            except Exception as e:
+                ActivityLog().exception(f'[pgp] Key escrow restore failed for {account.id}: {e!r}')
+            try:
+                key_escrow.log_self_contact(account)
+            except Exception as e:
+                ActivityLog().error(f'[pgp] Key escrow inspection failed for {account.id}: {e!r}')
+            try:
+                self.repair(account)
+            except Exception as e:
+                ActivityLog().exception(f'[pgp] Key escrow repair failed for {account.id}: {e!r}')
+        self._release(account)
+
+    def restore(self, account):
+        if account.id in self.restore_done:
+            return
+        if account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+            return
+        record = key_escrow.read_self_keys(account)
+        if record is None:
+            return
+        password = (account.auth.password or '').strip()
+        signature = '%s#%s#%d#%d' % (account.id, record.get('timestamp', '?'), len(record.get('private_key') or ''), len(password))
+        if self.restore_failed.get(account.id) == signature:
+            return
+        restored, reason = key_escrow.restore_from_own_contact(account)
+        if restored:
+            self.restore_done.add(account.id)
+            self.restore_failed.pop(account.id, None)
+            ActivityLog().info(f'[pgp] The private key of {account.id} was restored from the server')
+            MessageManager()._keys_installed(account)
+        elif reason:
+            self.restore_failed[account.id] = signature
+            ActivityLog().info(f'[pgp] Key escrow: not restoring for {account.id}: {reason}')
+
+    def repair(self, account):
+        if not key_escrow.escrow_is_missing(account):
+            self.repaired.discard(account.id)
+            return
+        if account.id in self.repaired:
+            return
+        if not key_escrow.self_contact_elements(account):
+            # the escrow lives on our own contact, as Sylk Mobile keeps it: create it, and
+            # the escrow is written on the reload that brings it back from the server
+            self.create_self_contact(account)
+            return
+        self.repaired.add(account.id)
+        ActivityLog().info(f'[pgp] Key escrow: {account.id} holds a key but the server carries no escrow for it, saving it there')
+        written, reason = key_escrow.write_self_keys(account)
+        if not written:
+            ActivityLog().info(f'[pgp] Key escrow: could not save the key of {account.id} on the server: {reason}')
+
+    def create_self_contact(self, account):
+        if account.id in self.self_contact_created:
+            return
+        if key_escrow._resource_lists_element(account) is None:
+            return      # the document has not been fetched yet
+        if not (account.auth.password or '').strip():
+            return      # nothing to encrypt the escrow with, so no reason for the contact either
+        account_id = str(account.id).lower()
+        manager = AddressbookManager()
+        if any(str(uri.uri).lower().removeprefix('sip:') == account_id for contact in manager.get_contacts() for uri in contact.uris):
+            return      # saved here, not on the server yet
+        self.self_contact_created.add(account.id)
+        from sipsimple import addressbook
+        from blink import addressbook_origin
+        contact = addressbook.Contact()
+        contact.name = account.display_name or str(account.id)
+        contact.uris = [addressbook.ContactURI(uri=str(account.id), type='SIP')]
+        with addressbook_origin.reason('key-escrow'):
+            contact.save()
+        ActivityLog().info(f'[pgp] Key escrow: no contact carries {account.id}, created one ({contact.id}) to keep the key on')
+
+    def answered(self, account):
+        """Whether we know yet if the server keeps a key for this account."""
+        if account.id in self.checked or not account.xcap.enabled:
+            return True
+        first = self._first_asked.setdefault(account.id, time.time())
+        return time.time() - first > self.answer_timeout
+
+    def when_answered(self, account, callback):
+        if account is BonjourAccount() or self.answered(account):
+            callback()
+            return
+        waiting = self._waiting.get(account.id)
+        if waiting is None:
+            waiting = self._waiting[account.id] = []
+            elapsed = time.time() - self._first_asked[account.id]
+            ActivityLog().info(f'[pgp] Waiting for the addressbook of {account.id} before offering to generate a PGP key: it may carry one')
+            call_later(max(0.5, self.answer_timeout - elapsed + 0.1), self._release, account)
+        waiting.append(callback)
+
+    def _release(self, account):
+        for callback in self._waiting.pop(account.id, []):
+            try:
+                callback()
+            except Exception as e:
+                ActivityLog().exception(f'[pgp] Offering to generate a PGP key for {account.id} failed: {e!r}')
