@@ -44,7 +44,7 @@ from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
 from blink.logging import ActivityLog, MessagingTrace as log
-from blink.resources import Resources
+from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.uris import bare_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
@@ -837,7 +837,46 @@ class MessageManager(object, metaclass=Singleton):
         finally:
             self._syncing.discard(account.id)
 
+    journal_since_years = 5     # how far back a first sync (no cursor) asks, as sylk mobile does
+    journal_max_pages = 200     # pages per run; the next run continues from the cursor
+
+    def _journal_directory(self, account):
+        path = ApplicationData.get(f'journal/{account.id}')
+        makedirs(path)
+        return path
+
+    def _journal_page_url(self, account):
+        """The next journal page: after the cursor, or for a first sync `since` five years ago.
+
+        Without `since` and without a cursor the server answers with the last
+        three days only, and the older entries are never asked for.
+        """
+        base = str(account.sms.history_synchronization_url)
+        cursor = account.sms.history_synchronization_id
+        if cursor:
+            url = urllib.parse.urljoin(f'{base}/', cursor)
+            query = ''
+        else:
+            since = datetime.now(timezone.utc) - timedelta(days=365 * self.journal_since_years)
+            url = base
+            query = 'since=' + since.strftime('%Y-%m-%dT%H:%M:%S.') + f'{since.microsecond // 1000:03d}Z'
+        scheme, netloc, path, _, fragment = urlsplit(url)
+        return urlunsplit((scheme, netloc, quote(path), query, fragment))
+
+    @staticmethod
+    def _journal_file_name(messages):
+        # sorts chronologically: the page's last timestamp, then its last id
+        last = messages[-1]
+        stamp = re.sub(r'[^0-9A-Za-z]', '-', str(last.get('timestamp') or '')) or 'unknown'
+        return f"{stamp}-{last.get('message_id') or 'page'}.json"
+
     def _fetch_server_history(self, account, reason=None):
+        """Download the journal page by page to journal/<account>/, then apply the cached pages.
+
+        The download only writes files, so it runs at network speed. The cursor
+        moves only once a page is safely on disk, so an interruption costs at most
+        the page in flight; a page is deleted only once it has been applied.
+        """
         if not account.sms.enable_history_synchronization:
             if account.sms.history_synchronization_timestamp:
                 account.sms.history_synchronization_timestamp = None
@@ -851,47 +890,110 @@ class MessageManager(object, metaclass=Singleton):
         if not account.sms.history_synchronization_url:
             return
 
-        if account.sms.history_synchronization_id is not None:
-            url = urllib.parse.urljoin(f'{account.sms.history_synchronization_url}/', account.sms.history_synchronization_id)
-        else:
-            url = account.sms.history_synchronization_url
-
-        scheme, netloc, path, query, fragment = urlsplit(url)
-        path = quote(path)
-        url = urlunsplit((scheme, netloc, path, query, fragment))
+        directory = self._journal_directory(account)
         headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
-
-        log.info(f'Fetching message history for {account.id} from server {url}')
-        ActivityLog().info(f'[journal] Fetching the message journal of {account.id}' + (f' ({reason})' if reason else '') + (f' after {account.sms.history_synchronization_id}' if account.sms.history_synchronization_id else ' from the start'))
-
         settings = SIPSimpleSettings()
+        activity = ActivityLog()
+        first_sync = not account.sms.history_synchronization_id
+        activity.info(f'[journal] Fetching the message journal of {account.id}' + (f' ({reason})' if reason else '')
+                      + (f' since {self.journal_since_years} years ago' if first_sync else f' after {account.sms.history_synchronization_id}'))
+        started = time.monotonic()
+        pages = entries = transferred = 0
 
-        try:
-            r = requests.get(url, headers=headers, timeout=10, verify=settings.tls.verify_server)
-            r.raise_for_status()
-        except (requests.ConnectionError, requests.Timeout) as e:
-            log.warning(f'SylkServer API connection error: {e}')
-            ActivityLog().warning(f'[journal] Cannot reach the message journal of {account.id}: {e}')
-        except requests.HTTPError as e:
-            code = e.response.status_code
-            if code == 401:
-                ActivityLog().info(f'[journal] The API token of {account.id} was refused (401)')
-                self._request_history_synchronization_token(account, 'token refused')
-                return
-            log.warning(f'SylkServer API error {e}')
-        except requests.RequestException as e:
-            log.warning(f'SylkServer API error {e}')
-        else:
+        while pages < self.journal_max_pages:
+            cursor = account.sms.history_synchronization_id
+            url = self._journal_page_url(account)
+            log.info(f'Fetching message history for {account.id} from server {url}')
             try:
+                r = requests.get(url, headers=headers, timeout=20, verify=settings.tls.verify_server)
+                r.raise_for_status()
                 data = r.json()
-            except ValueError:
+            except requests.HTTPError as e:
+                if e.response.status_code == 401:
+                    activity.info(f'[journal] The API token of {account.id} was refused (401)')
+                    self._request_history_synchronization_token(account, 'token refused')
+                else:
+                    activity.warning(f'[journal] The message journal of {account.id} answered {e.response.status_code}, stopped after {pages} pages')
+                break
+            except (requests.ConnectionError, requests.Timeout) as e:
+                activity.warning(f'[journal] Cannot reach the message journal of {account.id}, stopped after {pages} pages: {e}')
+                break
+            except (requests.RequestException, ValueError) as e:
+                activity.warning(f'[journal] Bad answer from the message journal of {account.id}, stopped after {pages} pages: {e}')
+                break
+
+            messages = data.get('messages') if isinstance(data, dict) else None
+            if not messages:
+                break
+
+            name = self._journal_file_name(messages)
+            path = os.path.join(directory, name)
+            try:
+                with open(path + '.part', 'w', encoding='utf-8') as page_file:
+                    # the cursor as it stood before this page: the apply stage tells a
+                    # first-ever backfill from a catch-up by it
+                    json.dump({'cursor': cursor or '', 'messages': messages}, page_file)
+                os.replace(path + '.part', path)
+            except OSError as e:
+                activity.error(f'[journal] Cannot save journal page {path}: {e}')
+                break
+
+            pages += 1
+            entries += len(messages)
+            transferred += len(r.content)
+            log.info(f'Cached journal page {name} ({len(messages)} entries)')
+
+            last_id = messages[-1].get('message_id')
+            if not last_id:
+                break
+            account.sms.history_synchronization_id = last_id
+            account.save()
+        else:
+            activity.warning(f'[journal] Stopped the download of {account.id} at {self.journal_max_pages} pages, the rest follows on the next sync')
+
+        if pages:
+            activity.info(f'[journal] Downloaded {entries} journal entries of {account.id} in {pages} pages ({transferred} bytes, {time.monotonic() - started:.1f}s)')
+        self._apply_cached_journal(account)
+
+    def _apply_cached_journal(self, account):
+        """Apply cached journal pages oldest first; a page is deleted only after it was applied."""
+        directory = self._journal_directory(account)
+        try:
+            names = sorted(name for name in os.listdir(directory) if name.endswith('.json'))
+        except OSError as e:
+            ActivityLog().error(f'[journal] Cannot list {directory}: {e}')
+            return
+        if not names:
+            return
+        activity = ActivityLog()
+        activity.info(f'[journal] Applying {len(names)} cached journal pages of {account.id}')
+        started = time.monotonic()
+        applied = entries = 0
+        for name in names:
+            path = os.path.join(directory, name)
+            try:
+                with open(path, encoding='utf-8') as page_file:
+                    page = json.load(page_file)
+                messages = page.get('messages') or []
+                count = len(messages)
+                self._apply_server_history_messages(account, messages)
+            except Exception as e:
+                activity.exception(f'[journal] Applying journal page {name} of {account.id} failed, kept for the next sync: {e}')
+                break
+            try:
+                os.unlink(path)
+            except OSError:
                 pass
-            else:
-                notification_center = NotificationCenter()
-                notification_center.post_notification('BlinkServerHistoryWasFetched', sender=account, data=data)
+            applied += 1
+            entries += count
+        activity.info(f'[journal] Applied {entries} journal entries of {account.id} from {applied} of {len(names)} pages in {time.monotonic() - started:.1f}s')
 
     @run_in_thread('sync')
     def _process_server_history_messages(self, account, messages):
+        self._apply_server_history_messages(account, messages)
+
+    def _apply_server_history_messages(self, account, messages):
+        """Apply journal entries. Runs in the sync thread."""
         notification_center = NotificationCenter()
         last_id = None
         new_messages = 0
@@ -1073,8 +1175,7 @@ class MessageManager(object, metaclass=Singleton):
                         else:
                             self._incoming_encrypted_message_queue.append((history_message, account, contact))
 
-        if last_id is not None:
-            account.sms.history_synchronization_id = last_id
+        # the cursor is advanced by the download, once a page is on disk
         account.sms.history_synchronization_timestamp = ISOTimestamp.now()
         account.save()
 
