@@ -1108,9 +1108,14 @@ class MessageManager(object, metaclass=Singleton):
         payload = parse_payload(message.get('content'))
         if not payload or not payload.get('message_id'):
             return 'failed'
-        NotificationCenter().post_notification('BlinkGotHistoryMessageDelete', sender=account, data=payload['message_id'])
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(message['contact'])
+        # the entry time is when the removal was made: a removal kept for a message that is
+        # not stored yet (it can come later in the journal) is applied with that time
+        NotificationCenter().post_notification('BlinkGotHistoryMessageDelete', sender=account,
+                                               data=NotificationData(message_id=payload['message_id'], timestamp=message.get('timestamp'),
+                                                                     remote_uri=contact_uri.uri if contact_uri is not None else message.get('contact'),
+                                                                     source='removed on another device (journal)'))
         session = self._journal_session(contact)
         if session is not None:
             NotificationCenter().post_notification('BlinkGotMessageDelete', sender=session, data=payload['message_id'])
@@ -1431,7 +1436,10 @@ class MessageManager(object, metaclass=Singleton):
 
         if content_type == 'application/sylk-message-remove':
             payload = json.loads(body)
-            notification_center.post_notification('BlinkGotHistoryMessageDelete', data=payload['message_id'])
+            notification_center.post_notification('BlinkGotHistoryMessageDelete', sender=account,
+                                                  data=NotificationData(message_id=payload['message_id'], timestamp=payload.get('timestamp'),
+                                                                        remote_uri=contact_uri.uri if contact_uri is not None else None,
+                                                                        source='removed on another device'))
 
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)

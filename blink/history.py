@@ -254,9 +254,12 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history.add_from_server_history(account, **notification.data.__dict__)
 
     def _NH_BlinkGotHistoryMessageDelete(self, notification):
-        # removed on another device: hidden, not erased (the file stays on disk)
+        # removed on another device: hidden, not erased (the file stays on disk). A removal
+        # that comes before its message is kept and applied when the message is stored
+        data = notification.data
         account_id = str(notification.sender.id) if isinstance(notification.sender, (Account, BonjourAccount)) else None
-        self.message_history.tombstone_message(notification.data, account_id=account_id, source='removed on another device')
+        self.message_history.tombstone_message(data.message_id, when=data.timestamp, account_id=account_id,
+                                               remote_uri=data.remote_uri, source=data.source)
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
             self.message_history.get_all_contacts()
@@ -888,7 +891,16 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def tombstone_message(self, message_id, when=None, account_id=None, remote_uri=None, source=None):
         """Hide a message and everything filed against it. A removal whose message is
-        not stored yet (journal order, replication) is kept and applied on arrival."""
+        not stored yet (journal order, replication) is kept and applied on arrival.
+        `when` is when the removal was made: epoch seconds, a datetime or an ISO string."""
+        try:
+            removed_at = self._storage_time(when)
+        except (ValueError, OverflowError):
+            ActivityLog().warning(f'[db] Removal of message {message_id} has an unreadable time {when!r}, using now')
+            removed_at = None
+        if removed_at is None:
+            removed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        when = removed_at.replace(tzinfo=timezone.utc).timestamp()
         try:
             rows, sidecars = self._tombstone_message(message_id, when)
         except Exception as e:
@@ -897,7 +909,6 @@ class MessageHistory(object, metaclass=Singleton):
         if rows or sidecars:
             ActivityLog().info(f'[db] Message {message_id} marked deleted: {rows} rows' + (f', {sidecars} sidecars' if sidecars else '') + (f' ({source})' if source else ''))
             return
-        removed_at = self._storage_time(when) if when is not None else datetime.now(timezone.utc).replace(tzinfo=None)
         try:
             if not list(PendingRemoval.selectBy(message_id=str(message_id), account_id=str(account_id or ''))):
                 PendingRemoval(message_id=str(message_id), account_id=str(account_id or ''), remote_uri=str(remote_uri) if remote_uri else None,
@@ -1839,6 +1850,10 @@ class MessageHistory(object, metaclass=Singleton):
         count = Message.selectBy(account_id=account_id).count()
         Message.deleteBy(account_id=account_id)
         ActivityLog().info('[db] Removed %d messages of %s' % (count, account_id))
+        pending = PendingRemoval.selectBy(account_id=account_id).count()
+        if pending:
+            PendingRemoval.deleteBy(account_id=account_id)
+            ActivityLog().info('[db] Removed %d pending message removals of %s' % (pending, account_id))
 
     @run_in_thread('db')
     def remove_contact_messages(self, account, contact, timestamp=None, session=None):
