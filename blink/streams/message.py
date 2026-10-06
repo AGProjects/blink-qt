@@ -324,21 +324,30 @@ class MessageStream(object, metaclass=MediaStreamType):
                 log.debug(f'Decryption failed for {filename} with account key {account.id}, error: {error}')
                 continue
             else:
-                dir = os.path.dirname(filename)
-                full_decrypted_filepath = os.path.join(dir, decrypted_message.filename)
-                file_contents = decrypted_message.message if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode('latin1')
-                with open(full_decrypted_filepath, 'wb+') as output_file:
-                    output_file.write(file_contents)
-                correct_filepath = "%s/%s" % (dir, os.path.basename(filename)[:-4])
-                if full_decrypted_filepath != correct_filepath:
-                    # PGP messes up the filename, replacing _ with spaces
-                    log.info(f"Renaming decrypted file to {correct_filepath}")
-                    os.rename(full_decrypted_filepath, correct_filepath)
+                # The name is the transfer's own, without .asc. The name in the
+                # PGP literal data packet is not used: other clients leave it
+                # empty (which made it the download directory), PGP replaces _
+                # with spaces, and a name from the sender must not choose where
+                # the file is written.
+                basename = os.path.basename(filename)
+                decrypted_filepath = os.path.join(os.path.dirname(filename), basename[:-4] if basename.lower().endswith('.asc') and len(basename) > 4 else basename + '.decrypted')
+                message = decrypted_message.message
+                file_contents = bytes(message) if isinstance(message, (bytes, bytearray)) else message.encode('latin1')
+                temporary_filepath = decrypted_filepath + '.part'
+                try:
+                    with open(temporary_filepath, 'wb') as output_file:
+                        output_file.write(file_contents)
+                    os.replace(temporary_filepath, decrypted_filepath)
+                except OSError as e:
+                    log.warning(f'Cannot save decrypted file {decrypted_filepath}: {e}')
+                    unlink(temporary_filepath)
+                    notification_center.post_notification('PGPFileDidNotDecrypt', sender=transfer_session, data=NotificationData(filename=filename, error=str(e)))
+                    return
 
-                log.info(f'Decrypted file saved: {correct_filepath}')
+                log.info(f'Decrypted file saved: {decrypted_filepath}')
                 unlink(filename)
 
-                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=full_decrypted_filepath, account=account, must_open=must_open, id=id))
+                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=decrypted_filepath, account=account, must_open=must_open, id=id))
                 return
 
         log.warning(f'Decryption failed for {filename}, error: {error}')
