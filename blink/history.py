@@ -294,8 +294,13 @@ class HistoryManager(object, metaclass=Singleton):
         data = notification.data
         # a Bonjour conversation is filed under the neighbour's instance id, not its address
         contact = bare_instance_id(getattr(notification.sender, 'remote_instance_id', None)) or str(data.contact)
-        self.message_history.remove_contact_messages(notification.sender.account, contact, data.timestamp, notification.sender)
-        self.download_history.remove_contact_files(notification.sender.account, contact)
+        if getattr(data, 'all_accounts', False):
+            # removed by the user: the conversation is shown as one whatever account each message was filed under
+            self.message_history.remove_conversation(contact, data.timestamp, notification.sender)
+            self.download_history.remove_contact_files(None, contact)
+        else:
+            self.message_history.remove_contact_messages(notification.sender.account, contact, data.timestamp, notification.sender)
+            self.download_history.remove_contact_files(notification.sender.account, contact)
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
             self.message_history.get_all_contacts()
@@ -558,11 +563,16 @@ class DownloadHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def remove_contact_files(self, account, contact):
         contact = str(contact)
-        log.info(f'== Removing file entries and files from cache between {account.id} <-> {contact}')
-        result = DownloadedFiles.selectBy(remote_uri=contact, account_id=str(account.id))
+        where = f'account {account.id}' if account is not None else 'all accounts'
+        log.info(f'== Removing file entries and files from cache between {where} <-> {contact}')
+        if account is not None:
+            result = list(DownloadedFiles.selectBy(remote_uri=contact, account_id=str(account.id)))
+        else:
+            result = list(DownloadedFiles.selectBy(remote_uri=contact))
         for file in result:
             self.remove_cache_file(file)
             file.destroySelf()
+        ActivityLog().info(f'[db] Removed {len(result)} downloaded files of the conversation with {contact} for {where}')
 
     @run_in_thread('db')
     def update(self, id, state):
@@ -1196,11 +1206,14 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else uri
         try:
-            result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted')).orderBy('timestamp')[-entries:]
+            query = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted'))
+            total = query.count()
+            result = list(query.orderBy('timestamp')[-entries:])
         except Exception as e:
+            ActivityLog().error(f'[Message with {remote_uri}] Loading the conversation from history failed: {e}')
             notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
             return
-        log.debug(f"== Loaded {len(list(result))} messages for {remote_uri} from history")
+        ActivityLog().info(f'[Message with {remote_uri}] Loaded {len(result)} of {total} messages from history')
         notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
 
     @run_in_thread('db')
@@ -1356,12 +1369,44 @@ class MessageHistory(object, metaclass=Singleton):
         contact = str(contact)
         log.info(f'== Removing conversation between {account.id} <-> {contact} < {timestamp}')
         result = Message.selectBy(remote_uri=contact, account_id=str(account.id))
+        removed = kept = 0
         for message in result:
             if message.timestamp.replace(tzinfo=timezone.utc) <= timestamp:
                 message.destroySelf()
+                removed += 1
+            else:
+                kept += 1
+        ActivityLog().info(f'[db] Removed {removed} messages of the conversation with {contact} for account {account.id}' + (f', kept {kept} newer than {timestamp}' if kept else ''))
         if session:
             self.load(contact, session)
 
+
+    @run_in_thread('db')
+    def remove_conversation(self, contact, timestamp=None, session=None):
+        """Remove a conversation whatever account its messages were filed under."""
+        contact = str(contact)
+        if not timestamp:
+            timestamp = ISOTimestamp.now()
+        timestamp_utc = timestamp.replace(tzinfo=timezone.utc)
+        timestamp = parse(str(timestamp_utc - timestamp.utcoffset()))
+
+        removed = {}
+        kept = 0
+        for message in Message.selectBy(remote_uri=contact):
+            if message.timestamp.replace(tzinfo=timezone.utc) <= timestamp:
+                removed[message.account_id] = removed.get(message.account_id, 0) + 1
+                message.destroySelf()
+            else:
+                kept += 1
+        for account_id, count in sorted(removed.items()):
+            ActivityLog().info(f'[db] Removed {count} messages of the conversation with {contact} for account {account_id}')
+        if not removed:
+            ActivityLog().info(f'[db] Removed 0 messages of the conversation with {contact}')
+        if kept:
+            ActivityLog().info(f'[db] Kept {kept} messages of the conversation with {contact} newer than {timestamp}')
+        if session:
+            self.load(contact, session)
+        NotificationCenter().post_notification('BlinkMessageHistoryConversationDidRemove', data=NotificationData(contact=contact, accounts=sorted(removed)))
 
     @run_in_thread('db')
     def remove_message(self, id):

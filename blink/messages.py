@@ -674,6 +674,8 @@ class MessageManager(object, metaclass=Singleton):
         self._sync_queue = deque()
         self.pgp_requests = RequestList()
 
+        self._removing_conversations = {}  # conversation key -> session, while the user removes it
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
@@ -686,6 +688,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
+        notification_center.add_observer(self, name='BlinkMessageHistoryConversationDidRemove')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
 
     @run_in_thread('file-io')
@@ -876,6 +879,7 @@ class MessageManager(object, metaclass=Singleton):
                 from blink.contacts import URIUtils
                 contact, contact_uri = URIUtils.find_contact(message['content'])
                 timestamp = ISOTimestamp(message['timestamp'])
+                ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation removed on another device (from the journal), messages up to {timestamp} for account {account.id}')
                 try:
                     blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
                 except StopIteration:
@@ -1276,6 +1280,7 @@ class MessageManager(object, metaclass=Singleton):
             payload = json.loads(body)
             contact, contact_uri = URIUtils.find_contact(payload['contact'])
             timestamp = ISOTimestamp(payload['timestamp'])
+            ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation removed on another device, messages up to {timestamp} for account {account.id}')
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
             except StopIteration:
@@ -1679,15 +1684,39 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(session.account, contact, content, 'application/sylk-api-conversation-read', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
-    def send_conversation_remove(self, session):
-        if session.account is BonjourAccount():
+    def remove_conversation(self, blink_session):
+        """Remove a conversation here, under every account it was filed under, and through the server
+        on the other devices of each SIP account that had messages in it."""
+        peer = blink_session.remote_instance_id or str(blink_session.contact_uri.uri)
+        where = 'on this computer' if blink_session.remote_instance_id else 'on all devices'
+        ActivityLog().info(f'[Message with {peer}] Removing the conversation {where}')
+        self._removing_conversations[peer] = blink_session
+        NotificationCenter().post_notification('BlinkConversationWillRemove', sender=blink_session, data=NotificationData(contact=blink_session.contact_uri.uri, timestamp=ISOTimestamp.now(), all_accounts=True))
+
+    def _NH_BlinkMessageHistoryConversationDidRemove(self, notification):
+        blink_session = self._removing_conversations.pop(notification.data.contact, None)
+        if blink_session is None or blink_session.remote_instance_id:
+            return  # not removed by the user here, or a Bonjour neighbour: no server to tell
+        account_manager = AccountManager()
+        accounts = [account_manager.get_account(account_id) for account_id in notification.data.accounts if account_manager.has_account(account_id)]
+        if blink_session.account not in accounts:
+            accounts.append(blink_session.account)  # the server may hold messages not synced here yet
+        for account in accounts:
+            if account is BonjourAccount() or not account.enabled:
+                continue
+            self.send_conversation_remove(blink_session, account=account)
+
+    def send_conversation_remove(self, session, account=None):
+        account = session.account if account is None else account
+        if account is BonjourAccount():
             return  # no server behind a link-local network
         contact = str(session.contact.uri.uri)
+        ActivityLog().info(f'[Message with {contact}] Asking the server to remove the conversation from the other devices of {account.id}')
         payload = {'contact': contact, 'timestamp': str(ISOTimestamp.now())}
         content = json.dumps(payload)
         from blink.contacts import URIUtils
-        contact, contact_uri = URIUtils.find_contact(session.account.uri)
-        outgoing_message = OutgoingMessage(session.account, contact, content, 'application/sylk-api-conversation-remove', session=session, use_cpim=False)
+        contact, contact_uri = URIUtils.find_contact(account.uri)
+        outgoing_message = OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
@@ -1763,3 +1792,4 @@ class MessageManager(object, metaclass=Singleton):
 
         if selected:
             NotificationCenter().post_notification('BlinkSessionIsSelected', sender=blink_session)
+        return blink_session

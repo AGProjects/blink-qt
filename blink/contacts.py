@@ -13,7 +13,7 @@ from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, 
 from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
-from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QRadioButton, QTableView, QWidget
+from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QMessageBox, QRadioButton, QTableView, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -624,6 +624,20 @@ def remembered_bonjour_name(instance_id):
     if not isinstance(entry, dict) or not entry.get('name'):
         return None
     return '%s (%s)' % (entry['name'], entry['host']) if entry.get('host') else entry['name']
+
+
+def neighbour_instance_id(contact, uri=None):
+    """The instance id of a Bonjour neighbour, or of a placeholder standing in for one; else None.
+
+    What a neighbour's address is shown as: the transport address changes with
+    the network, the instance id is who they are.
+    """
+    if getattr(contact, 'type', None) == 'bonjour':
+        instance_id = bare_instance_id(contact.settings.id)
+        if is_instance_id(instance_id):
+            return instance_id
+        return None
+    return placeholder_instance_id(uri) if uri else None
 
 
 class BonjourPresence(object):
@@ -2424,16 +2438,19 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
 
         # draw the text
         if contact_uri.uri.uri:
+            instance_id = neighbour_instance_id(contact_uri.contact, contact_uri.uri.uri)
+            uri_text = instance_id or contact_uri.uri.uri
+            type_text = None if instance_id else contact_uri.uri.type
             color_group = QPalette.ColorGroup.Disabled if not option.state & QStyle.StateFlag.State_Enabled else QPalette.ColorGroup.Normal if option.state & QStyle.StateFlag.State_Active else QPalette.ColorGroup.Inactive
             text_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, option, widget)
             text_rect.setRight(option.rect.right() - 5)
-            if contact_uri.uri.type:
+            if type_text:
                 painter.setPen(option.palette.color(color_group, QPalette.ColorRole.HighlightedText if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Dark))
-                painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, contact_uri.uri.type)
-                text_rect.adjust(0, 0, -option.fontMetrics.size(Qt.TextFlag.TextSingleLine, contact_uri.uri.type).width() - 5, 0)
+                painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, type_text)
+                text_rect.adjust(0, 0, -option.fontMetrics.size(Qt.TextFlag.TextSingleLine, type_text).width() - 5, 0)
             text_color = option.palette.color(color_group, QPalette.ColorRole.HighlightedText if option.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Text)
             text_width = text_rect.width()
-            if option.fontMetrics.size(Qt.TextFlag.TextSingleLine, contact_uri.uri.uri).width() > text_width:
+            if option.fontMetrics.size(Qt.TextFlag.TextSingleLine, uri_text).width() > text_width:
                 fade_start = 1 - 50.0 / text_width if text_width > 50 else 0.0
                 gradient = QLinearGradient(text_rect.x(), 0, text_rect.right(), 0)
                 gradient.setColorAt(fade_start, text_color)
@@ -2442,7 +2459,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
                 painter.setPen(QPen(QBrush(gradient), 1.0))
             else:
                 painter.setPen(text_color)
-            painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, contact_uri.uri.uri)
+            painter.drawText(text_rect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, uri_text)
 
         painter.restore()
 
@@ -3381,7 +3398,10 @@ class ContactDetailModel(QAbstractListModel):
         if contact is None:
             self.items = []
         else:
-            self.items = [ContactDetail(contact)] + [ContactURI(contact, uri) for uri in contact.uris]
+            uris = list(contact.uris)
+            if neighbour_instance_id(contact) and contact.uris.default is not None:
+                uris = [contact.uris.default]  # one row: the neighbour, not one per transport
+            self.items = [ContactDetail(contact)] + [ContactURI(contact, uri) for uri in uris]
         self.endResetModel()
 
     contact = property(_get_contact, _set_contact)
@@ -3555,6 +3575,7 @@ class ContactListView(QListView):
         self.actions.request_screen = QAction(translate("contact_list", "Request Screen"), self, triggered=self._AH_RequestScreen)
         self.actions.share_my_screen = QAction(translate("contact_list", "Share My Screen"), self, triggered=self._AH_ShareMyScreen)
         self.actions.transfer_call = QAction(translate("contact_list", "Transfer Active Call"), self, triggered=self._AH_TransferCall)
+        self.actions.remove_conversation = QAction(translate("contact_list", "Remove Conversation"), self, triggered=self._AH_RemoveConversation)
         self.drop_indicator_index = QModelIndex()
         self.needs_restore = False
         self.doubleClicked.connect(self._SH_DoubleClicked)  # activated is emitted on single click
@@ -3716,6 +3737,8 @@ class ContactListView(QListView):
                 if isinstance(contact.settings, MessageContact):
                     menu.addAction(self.actions.add_item)
                 menu.addAction(self.actions.edit_item)
+                menu.addSeparator()
+                menu.addAction(self.actions.remove_conversation)
             else:
                 menu.addSeparator()
                 menu.addAction(self.actions.edit_item)
@@ -3973,6 +3996,20 @@ class ContactListView(QListView):
         except AttributeError:
             uri = uri
         session_manager.create_message_session(uri or contact.uri.uri)
+
+    def _AH_RemoveConversation(self):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        title = translate('contact_list', 'Remove Conversation')
+        if contact.type == 'bonjour' or placeholder_instance_id(contact.uri.uri):
+            message = translate('contact_list', 'Do you want to remove all messages exchanged with %s on this computer? This cannot be undone.') % contact.name
+        else:
+            message = translate('contact_list', 'Do you want to remove all messages exchanged with %s on all devices? This cannot be undone.') % contact.name
+        if QMessageBox.warning(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        message_manager = MessageManager()
+        blink_session = message_manager.create_message_session(contact.uri.uri, selected=False)
+        if blink_session is not None:
+            message_manager.remove_conversation(blink_session)
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
