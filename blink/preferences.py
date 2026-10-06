@@ -1504,7 +1504,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account.save()
 
     def _SH_PrefixButtonActivated(self, index):
-        text = self.idd_prefix_button.itemText(index)
+        text = self.prefix_button.itemText(index)
         self._update_pstn_example_label()
         account = self.selected_account
         prefix = None if text == 'None' else text
