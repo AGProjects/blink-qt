@@ -538,7 +538,8 @@ class OutgoingMessage(object):
             notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
 
     def _NH_SIPMessageDidFail(self, notification):
-        if self.__disabled_imdn_content_types__:
+        content_type = self.content_type.lower()
+        if content_type in self.__disabled_imdn_content_types__ or content_type.startswith('application/sylk-api'):
             return
 
         if self.session is None:
