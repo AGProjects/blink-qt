@@ -50,13 +50,14 @@ from sipsimple.threading import run_in_thread
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
 from blink import addressbook_origin
-from blink.group_kinds import STAMPED_KINDS, group_kind, stamp_plan
+from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, find_group, group_kind, is_group, stamp_plan
+from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
-from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_instance_id, placeholder_instance_id
+from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_fileable_address, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
@@ -81,14 +82,165 @@ def is_messages_group(group_settings):
 
 def is_fileable_key(key):
     """Whether a conversation key may become an addressbook contact: an address
-    (user@host) or a phone number. A Bonjour neighbour's instance id or loopback
-    placeholder is not one, and a neighbour never goes into the addressbook."""
+    (user@host) or a phone number (blink.uris.is_fileable_address). A Bonjour
+    neighbour's instance id or loopback placeholder is not one."""
     key = str(key or '').strip()
     if not key or is_instance_id(key) or placeholder_instance_id(key):
         return False
-    if '@' in key:
+    return is_fileable_address(key)
+
+
+# Groups the software keeps by itself: their membership is not the user's to
+# change by hand (macOS BlinkGroup add/remove_contact_allowed). Deleted is
+# patch 49's: removed conversations, membership set by removal and restore.
+DELETED_GROUP_ID = '_deleted'
+
+
+def is_managed_group(group_settings):
+    if group_settings is None:
+        return False
+    if is_messages_group(group_settings):
         return True
-    return re.match(r'^\+?\d{5,}$', key) is not None
+    if isinstance(group_settings, VirtualGroup):
+        return False
+    return getattr(group_settings, 'id', None) == DELETED_GROUP_ID or is_group(group_settings, CALLS) or is_group(group_settings, TEL)
+
+
+def publish_contact_for_groups(contact):
+    """Make a just-created contact safe to put in a group (macOS _publish_contact_for_groups).
+
+    sipsimple serialises a group from each member's __xcapcontact__, which only
+    the asynchronous save fills in. When several new contacts are added to a
+    group in one go, the group's save can run before a member's and the
+    file-io thread fails on a None member. Filling it now is what the save is
+    about to do anyway, with the same value.
+    """
+    try:
+        if getattr(contact, '__xcapcontact__', None) is None:
+            contact.__xcapcontact__ = contact.__toxcap__()
+    except Exception as e:
+        ActivityLog().warning(f'[contacts] Cannot prepare {contact.name} for its groups: {e!r}')
+
+
+def xcap_is_expected():
+    """Whether the addressbook is going to be filled from a server: then a missing group
+    may only not have arrived yet, and creating one is how an account gets two."""
+    try:
+        return any(account.enabled and account.xcap.enabled for account in AccountManager().get_accounts() if account is not BonjourAccount())
+    except Exception:
+        return True
+
+
+@implementer(IObserver)
+class CallsGroupFiler(object, metaclass=Singleton):
+    """File the other party of every audio or video call, as Blink for macOS and Sylk Mobile do.
+
+    A person goes into Calls, and into Tel as well when the address is a phone
+    number. A conference room goes into Conference only: it is a place, not
+    somebody called. An existing contact is only filed, never edited; a new
+    one is named after the party (a room after its number). Groups are found
+    by kind, name or reserved id and created when missing, but only once the
+    addressbook reflects the server.
+    """
+
+    settle_delay = 15  # seconds after the first XCAP reload
+
+    def __init__(self):
+        self.xcap_loaded = False
+        self._started = False
+
+    def start(self):
+        if self._started:
+            return
+        self._started = True
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPSessionDidEnd')
+        notification_center.add_observer(self, name='SIPSessionDidFail')
+        notification_center.add_observer(self, name='XCAPManagerDidReloadData')
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_XCAPManagerDidReloadData(self, notification):
+        if not self.xcap_loaded:
+            call_later(self.settle_delay, setattr, self, 'xcap_loaded', True)
+
+    def _NH_SIPSessionDidEnd(self, notification):
+        session = notification.sender
+        account = getattr(session, 'account', None)
+        if account is None or account is BonjourAccount():
+            return
+        streams = [stream.type for stream in (session.streams or session.proposed_streams or ())]
+        if 'audio' not in streams and 'video' not in streams:
+            return
+        identity = session.remote_identity
+        user, host = identity.uri.user, identity.uri.host
+        user = user.decode() if isinstance(user, bytes) else user
+        host = host.decode() if isinstance(host, bytes) else host
+        try:
+            self.file('%s@%s' % (user, host), identity.display_name, account)
+        except Exception as e:
+            ActivityLog().exception(f'[contacts] Filing the call with {user}@{host} failed: {e!r}')
+
+    _NH_SIPSessionDidFail = _NH_SIPSessionDidEnd
+
+    def ensure_group(self, identity, reserved_id):
+        """The group for `identity`, stamped with its kind if it has none, or created; None while it may not have arrived."""
+        groups = list(addressbook.AddressbookManager().get_groups())
+        group = find_group(groups, identity)
+        if group is not None:
+            if not group_kind(group):
+                with addressbook_origin.reason('group-kind'):
+                    group.kind = identity.kind
+                    group.save()
+                ActivityLog().info(f"[addressbook] Stamped group '{group.name}' (id={group.id}) with kind={identity.kind}")
+            return group
+        if not self.xcap_loaded and xcap_is_expected():
+            ActivityLog().info(f"[addressbook] No '{identity.name}' group yet, waiting for the addressbook to arrive before creating one")
+            return None
+        with addressbook_origin.reason('ensure-group'):
+            group = addressbook.Group(reserved_id) if reserved_id else addressbook.Group()
+            group.name = identity.name
+            group.kind = identity.kind
+            group.position = None
+            group.save()
+        ActivityLog().info(f"[addressbook] Created group '{group.name}' (id={group.id}) with kind={identity.kind}")
+        return group
+
+    def file(self, remote_uri, display_name, account):
+        activity = ActivityLog()
+        address = canonical_pstn_uri(remote_uri, account)
+        if not is_fileable_address(address, account):
+            activity.info(f'[contacts] Not filing the call with {remote_uri}: neither an address nor a number')
+            return None
+        conference = is_conference_uri(address, account)
+        e164 = pstn_e164(address, account)
+        with addressbook_origin.reason('call-history'):
+            contact, contact_uri = URIUtils.find_contact(address)
+            contact = contact.settings if contact.type == 'addressbook' else MessagesGroupFiler._find_by_canonical(address, addressbook.AddressbookManager().get_contacts())
+            created = contact is None
+            if created:
+                contact = addressbook.Contact()
+                contact.name = address.partition('@')[0] if conference else (display_name or address)
+                contact.uris = [addressbook.ContactURI(uri=address, type='tel' if e164 else 'SIP')]
+                contact.preferred_media = 'audio'
+                contact.save()
+                publish_contact_for_groups(contact)
+            targets = [(CONFERENCE, None)] if conference else [(CALLS, '_calls')] + ([(TEL, None)] if e164 else [])
+            joined = []
+            for identity, reserved_id in targets:
+                group = self.ensure_group(identity, reserved_id)
+                if group is None or contact.id in {member.id for member in group.contacts}:
+                    continue
+                with addressbook.AddressbookManager.transaction():
+                    group.contacts.add(contact)
+                    group.save()
+                joined.append(group.name)
+        if created or joined:
+            activity.info(f"[contacts] {'Created' if created else 'Filed'} contact {contact.name} <{address}>" + (f" -> {', '.join(joined)}" if joined else ''))
+        return contact
 
 
 @implementer(IObserver)
@@ -122,7 +274,8 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryAllContactsDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkJournalDidApply')
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=BlinkSettings())
+        # not sender=BlinkSettings(): the configuration is not started yet when the contact model is made
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -139,7 +292,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
             call_later(self.settle_delay, self._become_ready, 'the addressbook has loaded')
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
-        if 'interface.show_messages_group' in notification.data.modified and notification.sender.interface.show_messages_group:
+        if isinstance(notification.sender, BlinkSettings) and 'interface.show_messages_group' in notification.data.modified and notification.sender.interface.show_messages_group:
             self._request_conversations()
 
     def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
@@ -202,6 +355,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         new_contact.name = display_name or key
         new_contact.uris = [addressbook.ContactURI(uri=key, type='SIP' if '@' in key else 'tel')]
         new_contact.save()
+        publish_contact_for_groups(new_contact)    # several new members are added before the group saves
         existing.append(new_contact)
         created.append(new_contact)
         return new_contact
@@ -1831,7 +1985,8 @@ class Group(object):
 
     movable = True
     editable = True
-    deletable = property(lambda self: not self.virtual)
+    # the Messages and Deleted groups come back by themselves: not the user's to delete
+    deletable = property(lambda self: not self.virtual and not is_messages_group(self.settings) and getattr(self.settings, 'id', None) != DELETED_GROUP_ID)
 
     def __init__(self, group):
         self.settings = group
@@ -1953,9 +2108,9 @@ class Contact(object):
 
     native = property(lambda self: self.type == 'addressbook')
 
-    movable = property(lambda self: self.type == 'addressbook' and not is_messages_group(self.group.settings))
+    movable = property(lambda self: self.type == 'addressbook' and not is_managed_group(self.group.settings))
     editable = property(lambda self: self.type == 'addressbook')
-    deletable = property(lambda self: self.type == 'addressbook')
+    deletable = property(lambda self: self.type == 'addressbook' and not is_managed_group(self.group.settings))
 
     default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
 
@@ -3045,6 +3200,7 @@ class ContactModel(QAbstractListModel):
         AddressbookReloadLog().start()
         GroupKindStamper().start()
         MessagesGroupFiler().start()
+        CallsGroupFiler().start()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
@@ -4429,7 +4585,7 @@ class ContactListView(QListView):
         elif isinstance(item, Group):
             group = item
         selected_groups = set(model.items[index.row()].group for index in self.selectionModel().selectedIndexes() if model.items[index.row()].movable)
-        if not group.virtual and (event.source() is not self or len(selected_groups) > 1 or group not in selected_groups):
+        if not group.virtual and not is_managed_group(group.settings) and (event.source() is not self or len(selected_groups) > 1 or group not in selected_groups):
             group.widget.drop_indicator = self.DropIndicatorPosition.OnItem
         event.accept(rect)
 
