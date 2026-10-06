@@ -401,7 +401,10 @@ class MessageContactsGroup(VirtualGroup):
         handler(notification)
 
     def _NH_MessageContactsManagerDidActivate(self, notification):
-        notification.center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=self.contacts))
+        # pass a snapshot: the model handles this later in the GUI thread, and a
+        # contact added in the meantime would come both from the live list and
+        # from its own VirtualGroupDidAddContact
+        notification.center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=list(self.contacts)))
 
     def _NH_MessageContactsManagerDidDeactivate(self, notification):
         notification.center.post_notification('VirtualGroupWasDeactivated', sender=self)
@@ -2817,7 +2820,10 @@ class ContactModel(QAbstractListModel):
 
     def _NH_VirtualGroupDidAddContact(self, notification):
         group = self.items[GroupElement, notification.sender]
-        self.addContact(Contact(notification.data.contact, group))
+        try:
+            self.items[GroupContacts, notification.sender][notification.data.contact]
+        except KeyError:
+            self.addContact(Contact(notification.data.contact, group))
 
     def _NH_VirtualGroupDidRemoveContact(self, notification):
         contact = self.items[GroupContacts, notification.sender][notification.data.contact]
