@@ -1058,7 +1058,7 @@ class MessageManager(object, metaclass=Singleton):
             activity.info(f'[journal] Import statistics written to {stats_path}')
         # one notification for the whole run: unread counts and the Messages group are refreshed from
         # history, then the database is counted against this run
-        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=stats_path))
+        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=stats_path, first_sync=stats.first_sync))
 
     @run_in_thread('sync')
     def _process_server_history_messages(self, account, messages):

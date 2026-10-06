@@ -56,7 +56,7 @@ from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
-from blink.uris import bare_instance_id, bonjour_placeholder_uri, is_instance_id, placeholder_instance_id
+from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
@@ -66,6 +66,184 @@ from blink.widgets.util import ContextMenuActions
 __all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'URIUtils']
 
 translation_table = dict.fromkeys(map(ord, ' \t'), None)
+
+
+# The Messages group: a real addressbook group, shared through XCAP with Blink
+# for macOS (same reserved id), listing who this account has conversations with.
+MESSAGES_GROUP_ID = '_messages'
+MESSAGES_GROUP_NAME = 'Messages'
+
+
+def is_messages_group(group_settings):
+    """Whether a contact list group is the Messages group (the shared one, or the old virtual one)."""
+    return group_settings is not None and (getattr(group_settings, 'id', None) == MESSAGES_GROUP_ID or group_settings is MessageContactsGroup())
+
+
+def is_fileable_key(key):
+    """Whether a conversation key may become an addressbook contact: an address
+    (user@host) or a phone number. A Bonjour neighbour's instance id or loopback
+    placeholder is not one, and a neighbour never goes into the addressbook."""
+    key = str(key or '').strip()
+    if not key or is_instance_id(key) or placeholder_instance_id(key):
+        return False
+    if '@' in key:
+        return True
+    return re.match(r'^\+?\d{5,}$', key) is not None
+
+
+@implementer(IObserver)
+class MessagesGroupFiler(object, metaclass=Singleton):
+    """File the people this account has conversations with under the shared Messages group.
+
+    As on macOS: everyone with a conversation in history gets an addressbook
+    contact (an existing one, matched by canonical address, else a new one)
+    and is filed under the group '_messages', created when missing at the top
+    of the list. Membership is only added here and the group is saved only
+    when it changed. Nothing is filed before the addressbook has loaded from
+    XCAP (or straight away when no account uses XCAP), so a contact the
+    server document already holds is found, not created twice. Bonjour
+    neighbours are never filed: they live in the Bonjour group.
+    """
+
+    settle_delay = 15  # seconds after the first XCAP reload
+
+    def __init__(self):
+        self.ready = False
+        self.pending = {}           # conversation key -> display name (or None)
+        self._started = False
+
+    def start(self):
+        if self._started:
+            return
+        self._started = True
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='XCAPManagerDidReloadData')
+        notification_center.add_observer(self, name='BlinkMessageHistoryAllContactsDidSucceed')
+        notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
+        notification_center.add_observer(self, name='BlinkJournalDidApply')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=BlinkSettings())
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        accounts = [account for account in AccountManager().get_accounts() if account is not BonjourAccount() and account.enabled]
+        if not any(account.xcap.enabled for account in accounts):
+            call_later(2, self._become_ready, 'no account uses XCAP')
+
+    def _NH_XCAPManagerDidReloadData(self, notification):
+        if not self.ready:
+            call_later(self.settle_delay, self._become_ready, 'the addressbook has loaded')
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if 'interface.show_messages_group' in notification.data.modified and notification.sender.interface.show_messages_group:
+            self._request_conversations()
+
+    def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
+        for display_name, uri in notification.data.contacts:
+            self.pending.setdefault(str(uri), display_name or None)
+        self._flush()
+
+    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        self.pending.setdefault(str(notification.data.remote_uri), None)
+        self._flush()
+
+    def _NH_BlinkJournalDidApply(self, notification):
+        if getattr(notification.data, 'first_sync', False):
+            # the group has just been filled with everyone the journal mentioned: put it where the user looks
+            NotificationCenter().post_notification('BlinkMessagesGroupShouldPromote', sender=self)
+
+    def _become_ready(self, reason):
+        if self.ready:
+            return
+        self.ready = True
+        ActivityLog().info(f'[contacts] Filing conversations under the Messages group: {reason}')
+        self._request_conversations()
+        self._flush()
+
+    def _request_conversations(self):
+        if self.ready and BlinkSettings().interface.show_messages_group:
+            from blink.history import HistoryManager
+            HistoryManager().message_history.get_all_contacts()
+
+    def _flush(self):
+        if not self.ready or not self.pending or not BlinkSettings().interface.show_messages_group:
+            return
+        keys, self.pending = self.pending, {}
+        try:
+            self._file(keys)
+        except Exception as e:
+            ActivityLog().exception(f'[contacts] Filing conversations under the Messages group failed: {e!r}')
+
+    @staticmethod
+    def _find_by_canonical(key, contacts):
+        wanted = canonical_uri(key)
+        if not wanted:
+            return None
+        for contact in contacts:
+            for uri in contact.uris:
+                if canonical_uri(uri.uri) == wanted:
+                    return contact
+        return None
+
+    def _contact_for(self, key, display_name, existing, created):
+        contact, contact_uri = URIUtils.find_contact(key)
+        if contact.type == 'addressbook':
+            return contact.settings
+        if contact.type in ('bonjour', 'google'):
+            return None             # a neighbour, or a contact that cannot be put in an XCAP group
+        found = self._find_by_canonical(key, existing)
+        if found is not None:
+            return found
+        new_contact = addressbook.Contact()
+        new_contact.name = display_name or key
+        new_contact.uris = [addressbook.ContactURI(uri=key, type='SIP' if '@' in key else 'tel')]
+        new_contact.save()
+        existing.append(new_contact)
+        created.append(new_contact)
+        return new_contact
+
+    def _file(self, keys):
+        from blink import addressbook_origin
+        activity = ActivityLog()
+        manager = addressbook.AddressbookManager()
+        existing = list(manager.get_contacts())
+        added, created, skipped = [], [], []
+        with addressbook_origin.reason('messages'), addressbook.AddressbookManager.transaction():
+            try:
+                group = manager.get_group(MESSAGES_GROUP_ID)
+                new_group = False
+            except KeyError:
+                group = addressbook.Group(id=MESSAGES_GROUP_ID)
+                group.name = MESSAGES_GROUP_NAME
+                group.position = None       # a new group goes to the top of the list
+                new_group = True
+            members = set(group.contacts)
+            for key, display_name in keys.items():
+                if not is_fileable_key(key):
+                    skipped.append(key)
+                    continue
+                contact = self._contact_for(key, display_name, existing, created)
+                if contact is None:
+                    skipped.append(key)
+                    continue
+                if contact not in members:
+                    group.contacts.add(contact)
+                    members.add(contact)
+                    added.append(contact)
+            if new_group or added:
+                group.save()
+        if new_group:
+            activity.info(f'[contacts] Created the Messages group ({MESSAGES_GROUP_ID})')
+        for contact in created:
+            activity.info(f'[contacts] Created contact {contact.name} <{next(iter(contact.uris)).uri}> for a conversation')
+        if added:
+            activity.info(f'[contacts] Added {len(added)} contacts to the Messages group: ' + ', '.join(sorted(str(contact.name) for contact in added)))
+        if skipped:
+            log.debug(f'Not filed under the Messages group (not an address, or a Bonjour neighbour): {", ".join(sorted(skipped))}')
 
 
 @implementer(IObserver)
@@ -394,19 +572,18 @@ class MessageContactsManager(object, metaclass=Singleton):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    # The virtual Messages group is retired: the shared addressbook group '_messages'
+    # (MessagesGroupFiler) lists conversations now, as on macOS. This manager stays
+    # inactive and ignores what history reports.
     def _NH_CFGSettingsObjectDidChange(self, notification):
-        if 'interface.show_messages_group' in notification.data.modified:
-            if notification.sender.interface.show_messages_group:
-                self.active = True
-            else:
-                self.active = False
+        pass
 
     def _NH_SIPApplicationDidStart(self, notification):
-        settings = BlinkSettings()
-        if settings.interface.show_messages_group:
-            self.active = True
+        pass
 
     def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
+        if not self.active:
+            return
         contacts = notification.data.contacts
         found_contacts = []
         seen_ids = set()
@@ -1776,7 +1953,7 @@ class Contact(object):
 
     native = property(lambda self: self.type == 'addressbook')
 
-    movable = property(lambda self: self.type == 'addressbook' and self.group.settings is not MessageContactsGroup())
+    movable = property(lambda self: self.type == 'addressbook' and not is_messages_group(self.group.settings))
     editable = property(lambda self: self.type == 'addressbook')
     deletable = property(lambda self: self.type == 'addressbook')
 
@@ -1878,7 +2055,7 @@ class Contact(object):
         try:
             # In the Messages group a row is a conversation, and a Bonjour
             # conversation is the neighbour's instance id.
-            in_messages_group = getattr(self.group, 'settings', None) is MessageContactsGroup()
+            in_messages_group = is_messages_group(getattr(self.group, 'settings', None))
             instance_id = neighbour_instance_id(self, str(self.uri.uri) if self.uri is not None else None)
             if instance_id and (in_messages_group or self.type != 'bonjour'):
                 return instance_id
@@ -2867,6 +3044,7 @@ class ContactModel(QAbstractListModel):
         self.virtual_group_manager = VirtualGroupManager()
         AddressbookReloadLog().start()
         GroupKindStamper().start()
+        MessagesGroupFiler().start()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')
@@ -2884,6 +3062,15 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='VirtualGroupDidAddContact')
         notification_center.add_observer(self, name='VirtualGroupDidRemoveContact')
         notification_center.add_observer(self, name='BlinkContactDidChange')
+        notification_center.add_observer(self, name='BlinkMessagesGroupShouldPromote')
+
+    def _NH_BlinkMessagesGroupShouldPromote(self, notification):
+        groups = self.items[GroupList]
+        group = next((group for group in groups if getattr(group.settings, 'id', None) == MESSAGES_GROUP_ID), None)
+        if group is None or groups[0] is group:
+            return
+        self.moveGroup(group, groups[0])
+        ActivityLog().info('[contacts] Moved the Messages group to the top of the contact list')
 
     @property
     def bonjour_group(self):
@@ -3886,11 +4073,15 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.transfer_call)
                 self.actions.transfer_call.setEnabled(can_transfer)
 
-            if contact.group.settings is MessageContactsGroup():
+            if is_messages_group(contact.group.settings):
                 menu.addSeparator()
                 if isinstance(contact.settings, MessageContact):
                     menu.addAction(self.actions.add_item)
                 menu.addAction(self.actions.edit_item)
+                menu.addSeparator()
+                menu.addAction(self.actions.remove_conversation)
+            elif contact.type == 'bonjour':
+                # a neighbour's conversation is not in the Messages group (never in the addressbook)
                 menu.addSeparator()
                 menu.addAction(self.actions.remove_conversation)
             else:
@@ -3917,7 +4108,7 @@ class ContactListView(QListView):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
-                if item.group.settings is MessageContactsGroup():
+                if is_messages_group(item.group.settings):
                     session_manager = MessageManager()
                     session_manager.create_message_session(item.uri.uri)
                 else:
@@ -4256,7 +4447,7 @@ class ContactListView(QListView):
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Contact):
-            if item.group.settings is MessageContactsGroup():
+            if is_messages_group(item.group.settings):
                 session_manager = MessageManager()
                 session_manager.create_message_session(item.uri.uri)
             else:
@@ -4383,7 +4574,7 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.share_my_screen)
             menu.addAction(self.actions.transfer_call)
             menu.addSeparator()
-            if contact.group.settings is MessageContactsGroup():
+            if is_messages_group(contact.group.settings):
                 if isinstance(contact.settings, MessageContact):
                     menu.addAction(self.actions.add_item)
             menu.addAction(self.actions.edit_item)
@@ -4422,7 +4613,7 @@ class ContactSearchListView(QListView):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact):
-                if item.group.settings is MessageContactsGroup():
+                if is_messages_group(item.group.settings):
                     session_manager = MessageManager()
                     session_manager.create_message_session(item.uri.uri)
                 else:
@@ -4610,7 +4801,7 @@ class ContactSearchListView(QListView):
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Contact):
-            if item.group.settings is MessageContactsGroup():
+            if is_messages_group(item.group.settings):
                 session_manager = MessageManager()
                 session_manager.create_message_session(item.uri.uri)
             else:
@@ -4766,7 +4957,7 @@ class ContactDetailView(QListView):
                 selected_uri = item.uri
             else:
                 selected_uri = contact.uri
-            if item.group.settings is MessageContactsGroup():
+            if is_messages_group(item.group.settings):
                 session_manager = MessageManager()
                 session_manager.create_message_session(selected_uri)
             else:
@@ -4976,7 +5167,7 @@ class ContactDetailView(QListView):
             selected_uri = item.uri
         else:
             selected_uri = contact.uri
-        if item.group.settings is MessageContactsGroup():
+        if is_messages_group(item.group.settings):
             session_manager = MessageManager()
             session_manager.create_message_session(selected_uri)
         else:
