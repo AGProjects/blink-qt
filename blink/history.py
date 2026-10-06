@@ -32,7 +32,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_summary, dominant_media, legacy_call_record, this_device_id
-from blink.message_envelopes import METADATA_CONTENT_TYPE, reply_metadata
+from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link, reply_metadata
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
@@ -617,7 +617,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 9
+    __version__ = 10
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -798,6 +798,31 @@ class MessageHistory(object, metaclass=Singleton):
         if content_type.startswith('text/'):
             return content_type not in cls.__key_content_types__
         return content_type in cls.__file_transfer_content_types__
+
+    @staticmethod
+    def _related_fields(content_type, content):
+        """related_msg_id and related_action of a metadata companion (reply, label,
+        peaks, call recording): filed against its message, never a bubble or unread."""
+        if content_type != METADATA_CONTENT_TYPE:
+            return {}
+        link = metadata_link(content)
+        if link is None:
+            return {}
+        return {'related_msg_id': link[0], 'related_action': link[1]}
+
+    @classmethod
+    def _stored_companion(cls, message_id, fields):
+        """After a metadata companion is stored: log it, and hide it at once if its
+        message was removed already. Caller is in the db thread."""
+        target = fields.get('related_msg_id')
+        if not target:
+            ActivityLog().info(f'[db] Metadata message {message_id} stored, it names no message it belongs to')
+            return
+        db = Message._connection
+        removed = db.queryOne(f'select deleted_time from {Message.sqlmeta.table} where message_id = {db.sqlrepr(target)} and deleted = 1')
+        if removed is not None:
+            cls._set_deleted(f'message_id = {db.sqlrepr(str(message_id))}', True, removed[0] or None)
+        ActivityLog().info(f'[db] Metadata message {message_id} ({fields["related_action"]}) stored for message {target}' + (', which was removed: hidden too' if removed is not None else ''))
 
     @staticmethod
     def _content_fields(content_type, content):
@@ -1371,6 +1396,27 @@ class MessageHistory(object, metaclass=Singleton):
             duplicates += left
         return moved + duplicates
 
+    def _upgrade_to_v10(self):
+        """file metadata companions against their message"""
+        # Companions stored before this version (from the journal or live, as inert rows)
+        # carry no related_msg_id. Those whose message is removed are hidden as well.
+        table = Message.sqlmeta.table
+        rows = self.db.queryAll(f"select id, message_id, content from {table}"
+                                f" where content_type = '{METADATA_CONTENT_TYPE}' and (related_msg_id is null or related_msg_id = '')")
+        linked = hidden = 0
+        for row_id, message_id, content in rows:
+            link = metadata_link(content)
+            if link is None:
+                continue
+            target, action = link
+            self.db.queryAll(f'update {table} set related_msg_id = {self.db.sqlrepr(target)}, related_action = {self.db.sqlrepr(action)} where id = {int(row_id)}')
+            linked += 1
+            removed = self.db.queryOne(f'select deleted_time from {table} where message_id = {self.db.sqlrepr(target)} and deleted = 1')
+            if removed is not None:
+                hidden += self._set_deleted(f'id = {int(row_id)}', True, removed[0] or None)
+        ActivityLog().info(f'[db] {linked} of {len(rows)} metadata messages filed against their message, {hidden} hidden with their removed message')
+        return linked
+
     def _add_column(self, name, definition):
         try:
             self.db.queryAll(f'ALTER TABLE {Message.sqlmeta.table} ADD COLUMN {name} {definition}')
@@ -1498,6 +1544,7 @@ class MessageHistory(object, metaclass=Singleton):
             optional_fields['state'] = state
         optional_fields['read'] = cls._initial_read(message.direction, message.content_type, state)
         optional_fields.update(cls._content_fields(message.content_type, message.content))
+        optional_fields.update(cls._related_fields(message.content_type, message.content))
 
         if encryption is not None:
             optional_fields['encryption_type'] = str([f'{encryption}'])
@@ -1524,7 +1571,9 @@ class MessageHistory(object, metaclass=Singleton):
             pass
         else:
             cls._apply_pending_removal(message.id)
-            if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
+            if message.content_type == METADATA_CONTENT_TYPE:
+                cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh
+            elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
                 notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction))
 
@@ -1570,6 +1619,7 @@ class MessageHistory(object, metaclass=Singleton):
             optional_fields['state'] = state
         optional_fields['read'] = cls._initial_read(direction, message.content_type, state)
         optional_fields.update(cls._content_fields(message.content_type, message.content))
+        optional_fields.update(cls._related_fields(message.content_type, message.content))
         if session.chat_type is not None:
             chat_info = session.info.streams.chat
 
@@ -1612,7 +1662,9 @@ class MessageHistory(object, metaclass=Singleton):
                 log.info(f"Message {message.id} from {remote_uri} stored")
             cls._apply_pending_removal(message.id)
 
-            if message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
+            if message.content_type == METADATA_CONTENT_TYPE:
+                cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh
+            elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
                 notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=session.account, data=NotificationData(remote_uri=remote_uri, state=state, direction=direction))
 

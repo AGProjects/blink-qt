@@ -34,7 +34,7 @@ __all__ = ['TEXT_CONTENT_TYPES', 'PGP_PUBLIC_KEY_CONTENT_TYPE', 'PGP_PRIVATE_KEY
            'transfer_error_note', 'merge_transfer_error',
            'quote_digest', 'conversation_preview',
            'reply_metadata', 'reply_envelope', 'label_metadata', 'label_envelope', 'peaks_metadata', 'peaks_envelope',
-           'call_recording_metadata', 'call_recording_envelope',
+           'call_recording_metadata', 'call_recording_envelope', 'METADATA_ACTIONS', 'metadata_link',
            'CALL_RECORD_VERSION', 'CALL_SOURCE_RANK', 'MISSED_CALL_OUTCOMES', 'CALL_ATTENTION_OUTCOMES', 'SIP_STATUS_PHRASES',
            'sip_status_phrase', 'dominant_media', 'build_call_record', 'merge_call_records', 'this_device_id', 'call_answered_elsewhere',
            'call_record', 'legacy_call_record', 'format_call_duration', 'call_outcome', 'call_was_missed', 'call_needs_attention', 'call_lines', 'call_summary',
@@ -1075,6 +1075,35 @@ def call_recording_metadata(body, decrypt=None):
     except (TypeError, ValueError):
         duration = None
     return {'transfer_id': transfer_id, 'uri': uri, 'display_name': str(value.get('display_name') or '') or None, 'duration': duration}
+
+
+METADATA_ACTIONS = (REPLY_ACTION, LABEL_ACTION, PEAKS_ACTION, CALL_RECORDING_ACTION)
+
+
+def metadata_link(body):
+    """(message id, action) of the message a metadata companion belongs to, or None.
+
+    reply, label and peaks name it in messageId (the reply, the transfer),
+    call_recording in fileTransferId. Nothing is decrypted: both fields are
+    in clear, only a call recording's party is armoured. Stored as the
+    companion's related_msg_id and related_action, so it comes with its
+    message (related_messages) and goes when the message is removed.
+    """
+    body = _text(body)
+    if body is None or '"action"' not in body:
+        return None
+    try:
+        envelope = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    action = envelope.get('action')
+    if action not in METADATA_ACTIONS:
+        return None
+    target = envelope.get('fileTransferId' if action == CALL_RECORDING_ACTION else 'messageId')
+    target = str(target).strip() if isinstance(target, (str, int)) else ''
+    return (target, action) if target else None
 
 
 # Category and link columns

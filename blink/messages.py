@@ -44,6 +44,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
+from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link
 from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
@@ -1210,6 +1211,9 @@ class MessageManager(object, metaclass=Singleton):
                                        timestamp=self._journal_timestamp(message), id=message['message_id'],
                                        disposition=message.get('disposition'), direction=message['direction'])
         self._journal_store(account, message, history_message, message['contact'], state=message.get('state'))
+        if content_type == METADATA_CONTENT_TYPE:
+            link = metadata_link(history_message.content)
+            return f'metadata {link[1]}' if link is not None else 'metadata (unlinked)'
         return f'stored as {content_type}'
 
     @run_in_gui_thread
@@ -1504,7 +1508,12 @@ class MessageManager(object, metaclass=Singleton):
             notification_center.post_notification('BlinkGotHistoryMessage', sender=account,
                                                   data=NotificationData(remote_uri=remote_uri, message=message, encryption=encryption, state='accepted'))
             known = content_type.lower() in KNOWN_INERT_CONTENT_TYPES
-            ActivityLog().info(f'[Message with {remote_uri}] {content_type.lower()} message {message_id} stored, not shown' + ('' if known else ' (a type this version does not know)'))
+            link = metadata_link(body) if content_type.lower() == METADATA_CONTENT_TYPE else None
+            if link is not None:
+                what = f': {link[1]} for message {link[0]}'
+            else:
+                what = '' if known else ' (a type this version does not know)'
+            ActivityLog().info(f'[Message with {remote_uri}] {content_type.lower()} message {message_id} stored, not shown{what}')
             return
 
         try:

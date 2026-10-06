@@ -160,6 +160,17 @@ class SidecarTests(unittest.TestCase):
         clear = json.dumps({'fileTransferId': 't1', 'action': 'call_recording', 'value': '{"uri": "bob@example.com"}', 'timestamp': '1'})
         self.assertIsNone(env.call_recording_metadata(clear, decrypt=decrypt))  # a party in clear is refused
 
+    def test_metadata_link(self):
+        armour = lambda text: '-----BEGIN PGP MESSAGE-----\n%s\n-----END PGP MESSAGE-----' % text
+        self.assertEqual(env.metadata_link(env.reply_envelope('r1', 'o1', 'md1', 'u', 1)), ('r1', 'reply'))
+        self.assertEqual(env.metadata_link(env.label_envelope('t1', 'md2', 'Sunset', 'u', 1)), ('t1', 'label'))
+        self.assertEqual(env.metadata_link(env.peaks_envelope('t2', 'md3', {'l': [1]}, None, 'u', 1).encode()), ('t2', 'peaks'))
+        self.assertEqual(env.metadata_link(env.call_recording_envelope('t3', 'bob@example.com', '', 0, 1, encrypt=armour)), ('t3', 'call_recording'))
+        for body in (None, '', 'garbage', '[1]', json.dumps({'action': 'reply'}), json.dumps({'action': 'reply', 'messageId': ' '}),
+                     json.dumps({'action': 'mystery', 'messageId': 'x'}), json.dumps({'action': 'label', 'messageId': {'a': 1}}),
+                     armour('{"action": "label", "messageId": "x"}')):
+            self.assertIsNone(env.metadata_link(body), body)
+
 
 class CategoryTests(unittest.TestCase):
     def test_categories(self):
