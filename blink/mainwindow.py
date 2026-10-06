@@ -5,7 +5,7 @@ import os
 from functools import partial
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QSettings, QUrl, QTranslator
+from PyQt6.QtCore import Qt, QSettings, QSize, QUrl, QTranslator
 from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QActionGroup, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
 from PyQt6.QtWidgets import QMessageBox
@@ -35,6 +35,7 @@ from blink.presence import PendingWatcherDialog
 from blink.resources import ApplicationData, IconManager, Resources, themed_icon
 from blink.util import run_in_gui_thread, translate
 from blink.widgets.buttons import AccountState, SwitchViewButton
+from blink.widgets.color import follow_theme
 
 
 __all__ = ['MainWindow']
@@ -89,6 +90,8 @@ class MainWindow(base_class, ui_class):
 
         self.default_icon_path = Resources.get('icons/default-avatar.png')
         self.default_icon = themed_icon(self.default_icon_path)
+        self._set_button_icons()
+        follow_theme(self)
         self.last_icon_directory = Path('~').normalized
         self.set_user_icon(icon_manager.get('avatar'))
         self.enable_call_buttons(False)
@@ -297,7 +300,26 @@ class MainWindow(base_class, ui_class):
             self.contact_list.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def set_user_icon(self, icon):
+        self._user_icon = icon
         self.account_state.setIcon(icon or self.default_icon)
+
+    def apply_theme(self):
+        self.default_icon = themed_icon(self.default_icon_path)
+        self.set_user_icon(getattr(self, '_user_icon', None))
+        self._set_button_icons()
+
+    def _set_button_icons(self):
+        """The bottom bar's glyphs are dark: light copies under a dark theme."""
+        for button, filename in ((self.add_contact_button, 'icons/plus18.svg'), (self.audio_call_button, 'icons/handset.png'),
+                                 (self.video_call_button, 'icons/camera.png'), (self.chat_session_button, 'icons/chat.png'),
+                                 (self.screen_sharing_button, 'icons/screen.png')):
+            button.setIcon(themed_icon(Resources.get(filename), '#d0d0d0'))
+        bell = themed_icon(Resources.get('icons/bell-on.png'), '#d0d0d0')
+        bell.addFile(Resources.get('icons/bell-off.png'), QSize(), QIcon.Mode.Normal, QIcon.State.On)     # silent stays red
+        self.silent_button.setIcon(bell)
+        microphone = themed_icon(Resources.get('icons/mic-on.svg'), '#d0d0d0')
+        microphone.addFile(Resources.get('icons/mic-off.svg'), QSize(), QIcon.Mode.Normal, QIcon.State.On)
+        self.mute_button.setIcon(microphone)
 
     def enable_call_buttons(self, enabled):  # todo: review this
         self.audio_call_button.setEnabled(enabled)

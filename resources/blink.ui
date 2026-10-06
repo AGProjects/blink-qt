@@ -671,26 +671,26 @@ padding: 2px;</string>
            <number>5</number>
           </property>
           <property name="topMargin">
-           <number>1</number>
+           <number>5</number>
           </property>
           <property name="rightMargin">
            <number>5</number>
           </property>
           <property name="bottomMargin">
-           <number>3</number>
+           <number>6</number>
           </property>
           <item>
            <widget class="QToolButton" name="add_contact_button">
             <property name="minimumSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>30</width>
+              <height>30</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>30</width>
+              <height>30</height>
              </size>
             </property>
             <property name="toolTip">
@@ -705,8 +705,8 @@ padding: 2px;</string>
             </property>
             <property name="iconSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>18</width>
+              <height>18</height>
              </size>
             </property>
             <property name="autoRaise">
@@ -730,7 +730,7 @@ padding: 2px;</string>
           <item>
            <layout class="QHBoxLayout" name="dial_buttons_layout">
             <property name="spacing">
-             <number>0</number>
+             <number>2</number>
             </property>
             <item>
              <widget class="QToolButton" name="audio_call_button">
@@ -742,14 +742,14 @@ padding: 2px;</string>
               </property>
               <property name="minimumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="toolTip">
@@ -761,8 +761,8 @@ padding: 2px;</string>
               </property>
               <property name="iconSize">
                <size>
-                <width>30</width>
-                <height>30</height>
+                <width>20</width>
+                <height>20</height>
                </size>
               </property>
               <property name="autoRaise">
@@ -774,14 +774,14 @@ padding: 2px;</string>
              <widget class="ToolButton" name="video_call_button">
               <property name="minimumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="toolTip">
@@ -793,8 +793,8 @@ padding: 2px;</string>
               </property>
               <property name="iconSize">
                <size>
-                <width>30</width>
-                <height>30</height>
+                <width>23</width>
+                <height>23</height>
                </size>
               </property>
               <property name="autoRaise">
@@ -806,14 +806,14 @@ padding: 2px;</string>
              <widget class="ToolButton" name="chat_session_button">
               <property name="minimumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="toolTip">
@@ -825,8 +825,8 @@ padding: 2px;</string>
               </property>
               <property name="iconSize">
                <size>
-                <width>30</width>
-                <height>30</height>
+                <width>23</width>
+                <height>23</height>
                </size>
               </property>
               <property name="autoRaise">
@@ -838,14 +838,14 @@ padding: 2px;</string>
              <widget class="ToolButton" name="screen_sharing_button">
               <property name="minimumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>26</width>
-                <height>26</height>
+                <width>30</width>
+                <height>30</height>
                </size>
               </property>
               <property name="toolTip">
@@ -857,8 +857,8 @@ padding: 2px;</string>
               </property>
               <property name="iconSize">
                <size>
-                <width>25</width>
-                <height>25</height>
+                <width>18</width>
+                <height>18</height>
                </size>
               </property>
               <property name="popupMode">
@@ -888,14 +888,14 @@ padding: 2px;</string>
            <widget class="QToolButton" name="silent_button">
             <property name="minimumSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>30</width>
+              <height>30</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>30</width>
+              <height>30</height>
              </size>
             </property>
             <property name="font">
@@ -916,8 +916,8 @@ padding: 2px;</string>
             </property>
             <property name="iconSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>21</width>
+              <height>21</height>
              </size>
             </property>
             <property name="checkable">
@@ -974,26 +974,26 @@ padding: 2px;</string>
            <number>5</number>
           </property>
           <property name="topMargin">
-           <number>1</number>
+           <number>5</number>
           </property>
           <property name="rightMargin">
            <number>5</number>
           </property>
           <property name="bottomMargin">
-           <number>3</number>
+           <number>6</number>
           </property>
           <item>
            <widget class="QToolButton" name="hangup_all_button">
             <property name="minimumSize">
              <size>
               <width>85</width>
-              <height>24</height>
+              <height>30</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
               <width>16777215</width>
-              <height>24</height>
+              <height>30</height>
              </size>
             </property>
             <property name="font">
@@ -1017,13 +1017,13 @@ padding: 2px;</string>
             <property name="minimumSize">
              <size>
               <width>85</width>
-              <height>24</height>
+              <height>30</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
               <width>16777215</width>
-              <height>24</height>
+              <height>30</height>
              </size>
             </property>
             <property name="font">
@@ -1068,14 +1068,14 @@ padding: 2px;</string>
            <widget class="QToolButton" name="mute_button">
             <property name="minimumSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>30</width>
+              <height>30</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>26</width>
-              <height>26</height>
+              <width>30</width>
+              <height>30</height>
              </size>
             </property>
             <property name="toolTip">
@@ -1085,6 +1085,12 @@ padding: 2px;</string>
              <iconset>
               <normaloff>icons/mic-on.svg</normaloff>
               <normalon>icons/mic-off.svg</normalon>icons/mic-on.svg</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>21</width>
+              <height>21</height>
+             </size>
             </property>
             <property name="checkable">
              <bool>true</bool>

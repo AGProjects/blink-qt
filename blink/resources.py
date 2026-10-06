@@ -22,15 +22,17 @@ from blink.util import run_in_gui_thread
 __all__ = ['ApplicationData', 'Resources', 'IconManager', 'themed_icon']
 
 
-def themed_icon(filename, dark_color='#b4b4b4'):
-    """QIcon of a dark monochrome glyph (the default avatar), redrawn light under a dark theme
-    where the original disappears into the background."""
+def themed_icon(filename, dark_color='#b4b4b4', size=64):
+    """QIcon of a dark monochrome glyph (the default avatar, the call buttons), redrawn light
+    under a dark theme where the original disappears into the background. A vector image is
+    drawn at `size` pixels first, so the light copy stays sharp at any button size."""
+    from PyQt6.QtCore import QSize
     from PyQt6.QtGui import QColor, QPainter, QPalette
     from PyQt6.QtWidgets import QApplication
     application = QApplication.instance()
     if application is None or application.palette().color(QPalette.ColorRole.Window).lightness() >= 128:
         return QIcon(filename)
-    pixmap = QPixmap(filename)
+    pixmap = QIcon(filename).pixmap(QSize(size, size)) if filename.endswith('.svg') else QPixmap(filename)
     if pixmap.isNull():
         return QIcon(filename)
     painter = QPainter(pixmap)

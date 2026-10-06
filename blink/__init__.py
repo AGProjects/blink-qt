@@ -17,9 +17,20 @@ from threading import Thread
 # is imported/initialized below.
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = ("--disable-logging " + os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")).strip()
 
-from PyQt6.QtCore import Qt, QEvent, QLocale, QTranslator, QLoggingCategory, QSocketNotifier
+# On GNOME under Wayland Qt draws the window frame itself (GNOME offers no server-side
+# decorations), in colours it takes from the platform theme when the window is made; a
+# light/dark switch never reaches it, so the title bar and border stay in the wrong mode.
+# Through XWayland GNOME draws the frame like any other window's and switches it with the
+# system. Only when the user has not chosen a platform and XWayland is there to use.
+WAYLAND_FRAME_WORKAROUND = (platform.system() == 'Linux' and 'QT_QPA_PLATFORM' not in os.environ
+                            and os.environ.get('XDG_SESSION_TYPE') == 'wayland' and bool(os.environ.get('DISPLAY'))
+                            and 'GNOME' in os.environ.get('XDG_CURRENT_DESKTOP', '').upper())
+if WAYLAND_FRAME_WORKAROUND:
+    os.environ['QT_QPA_PLATFORM'] = 'xcb'
+
+from PyQt6.QtCore import Qt, QEvent, QLocale, QTimer, QTranslator, QLoggingCategory, QSocketNotifier
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QPalette
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData
@@ -165,6 +176,18 @@ class Blink(QApplication, metaclass=QSingleton):
         self.setApplicationName("Blink")
         self.setApplicationVersion(__version__)
         self.setWindowIcon(QIcon(Resources.get('icons/blink.png')))
+        try:
+            self.styleHints().colorSchemeChanged.connect(lambda scheme: QTimer.singleShot(100, self._match_color_scheme))
+        except AttributeError:
+            pass        # Qt older than 6.5: the palette change alone
+        self._own_palette = None        # 'dark' or 'light' while we set the palette ourselves
+        self._platform_palettes = {}    # 'dark'/'light' -> the palette the platform gave us for it
+        from blink.widgets.color import PortalColorScheme
+        PortalColorScheme.instance().changed.connect(lambda scheme: QTimer.singleShot(100, self._match_color_scheme))
+        self._match_color_scheme()
+        self._log_theme('Theme at start')
+        if WAYLAND_FRAME_WORKAROUND:
+            ActivityLog().info('[ui] GNOME on Wayland: running through XWayland so the window frame follows light/dark (set QT_QPA_PLATFORM=wayland to override)')
 
         self.main_window = MainWindow()
         self.chat_window = ChatWindow()
@@ -331,6 +354,55 @@ class Blink(QApplication, metaclass=QSingleton):
         if video_devices:
             activity.info('Available video cameras: %s' % ', '.join(video_devices))
         activity.info('Using video camera %s' % settings.video.device)
+
+    def event(self, event):
+        if event.type() == QEvent.Type.ApplicationPaletteChange and not getattr(self, '_theme_change_pending', False):
+            self._theme_change_pending = True     # one per burst: a change arrives as several palette events
+            QTimer.singleShot(0, self._theme_did_change)
+        return super(Blink, self).event(event)
+
+    def _theme_did_change(self):
+        self._theme_change_pending = False
+        if self._match_color_scheme():
+            return          # our own palette is coming, with its own change
+        from blink.widgets.color import apply_theme_change
+        self._log_theme('The theme changed')
+        apply_theme_change()
+
+    def _log_theme(self, what):
+        from blink.widgets.color import color_scheme, is_dark_theme
+        window = self.palette().color(QPalette.ColorRole.Window).name()
+        from blink.widgets.color import PortalColorScheme
+        portal = PortalColorScheme.instance()
+        portal_text = (portal.value or 'no preference') if portal.available else 'not available'
+        ActivityLog().info(f"[ui] {what}: system scheme {color_scheme() or 'unknown'} (desktop portal: {portal_text}), palette {'dark' if is_dark_theme() else 'light'} (window {window}"
+                           f"{', set by Blink' if self._own_palette else ''}), platform {self.platformName()}, style {self.style().name()}, "
+                           f"platform theme {os.environ.get('QT_QPA_PLATFORMTHEME') or '-'}, desktop {os.environ.get('XDG_CURRENT_DESKTOP') or '-'}")
+
+    def _match_color_scheme(self):
+        """Make the palette agree with the system's light/dark scheme. Returns True when it set one.
+
+        Some platform themes report the scheme but keep handing out a light palette (seen on
+        Linux: every switch produced a light palette, dark included). Then Blink sets the
+        palette itself: its own dark or light one (the style's standard palette is the platform theme's, dark under gtk2)."""
+        from blink.widgets.color import color_scheme, dark_palette, is_dark_theme, light_palette
+        scheme = color_scheme()
+        if scheme is None:
+            return False
+        if self._own_palette is None:
+            # the platform's own palette, kept to be put back: it is the desktop's look
+            # (gtk2 reads Yaru), where ours is only Fusion's
+            self._platform_palettes.setdefault('dark' if is_dark_theme() else 'light', QPalette(self.palette()))
+            if (scheme == 'dark') == is_dark_theme():
+                return False    # the platform follows the scheme: leave it the platform's palette
+        if self._own_palette == scheme:
+            return False
+        self._own_palette = scheme
+        palette = self._platform_palettes.get(scheme)
+        source = "the desktop's, kept from earlier" if palette is not None else "Blink's own"
+        ActivityLog().info(f"[ui] The system scheme is {scheme} and the palette did not follow, setting a {scheme} palette ({source})")
+        self.setPalette(palette if palette is not None else dark_palette() if scheme == 'dark' else light_palette())
+        return True
 
     def eventFilter(self, watched, event):
         if watched in (self.main_window, self.chat_window):

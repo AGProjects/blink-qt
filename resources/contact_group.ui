@@ -50,7 +50,7 @@ border-width: 0;
      <property name="maximumSize">
       <size>
        <width>16777215</width>
-       <height>24</height>
+       <height>16777215</height>
       </size>
      </property>
      <property name="styleSheet">
@@ -186,7 +186,7 @@ border-width: 0;
          <property name="maximumSize">
           <size>
            <width>16777215</width>
-           <height>22</height>
+           <height>16777215</height>
           </size>
          </property>
          <property name="styleSheet">

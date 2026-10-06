@@ -1,5 +1,12 @@
 
-from PyQt6.QtCore import Qt
+import weakref
+
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, pyqtSlot
+try:
+    from PyQt6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage, QDBusVariant
+except ImportError:     # PyQt6 built without QtDBus: no portal, Qt's own scheme only
+    QDBusConnection = QDBusInterface = QDBusVariant = None
+    QDBusMessage = object
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication
 
@@ -8,7 +15,153 @@ from application.python.decorator import decorator, preserve_signature
 from math import fmod, isnan
 
 
-__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin', 'is_dark_theme', 'secondary_text_color']
+__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin', 'is_dark_theme', 'secondary_text_color', 'follow_theme', 'apply_theme_change', 'dark_palette', 'light_palette', 'color_scheme', 'PortalColorScheme']
+
+
+# Objects that draw with colours or images chosen for the theme at the time they were made.
+# Each has apply_theme(), called when the application palette changes; theme_order (default
+# 10) orders them, so caches (icons) are dropped before the widgets that read them redraw.
+_theme_followers = weakref.WeakSet()
+
+
+class PortalColorScheme(QObject):
+    """The desktop's light/dark preference, from the XDG desktop portal (org.freedesktop.appearance
+    color-scheme), for platform themes that do not tell Qt (gtk2 on GNOME does not). value is
+    'dark', 'light' or None; changed is emitted with the new value."""
+
+    changed = pyqtSignal(object)
+
+    service = 'org.freedesktop.portal.Desktop'
+    path = '/org/freedesktop/portal/desktop'
+    interface = 'org.freedesktop.portal.Settings'
+    namespace = 'org.freedesktop.appearance'
+    key = 'color-scheme'
+
+    _instance = None
+
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def __init__(self):
+        super(PortalColorScheme, self).__init__()
+        self.value = None
+        self.available = False
+        if QDBusConnection is None:
+            return
+        bus = QDBusConnection.sessionBus()
+        if not bus.isConnected():
+            return
+        settings = QDBusInterface(self.service, self.path, self.interface, bus)
+        for method in ('ReadOne', 'Read'):
+            reply = settings.call(method, self.namespace, self.key)
+            arguments = reply.arguments()
+            if arguments:
+                self.value = self._scheme(arguments[0])
+                self.available = True
+                break
+        bus.connect(self.service, self.path, self.interface, 'SettingChanged', self._setting_changed)
+
+    @staticmethod
+    def _scheme(value):
+        while isinstance(value, QDBusVariant):     # Read wraps it twice
+            value = value.variant()
+        try:
+            # 0 is "no preference": GNOME's Default (light) style, what applications draw when not asked for dark
+            return {0: 'light', 1: 'dark', 2: 'light'}.get(int(value))
+        except (TypeError, ValueError):
+            return None
+
+    @pyqtSlot(QDBusMessage)
+    def _setting_changed(self, message):
+        arguments = message.arguments()
+        if len(arguments) < 3 or arguments[0] != self.namespace or arguments[1] != self.key:
+            return
+        self.available = True
+        value = self._scheme(arguments[2])
+        if value != self.value:
+            self.value = value
+            self.changed.emit(value)
+
+
+def color_scheme():
+    """'dark', 'light' or None: what the system says it is using, as Qt knows it (6.5 and
+    later) or else as the desktop portal says."""
+    try:
+        scheme = {Qt.ColorScheme.Dark: 'dark', Qt.ColorScheme.Light: 'light'}.get(QApplication.styleHints().colorScheme())
+    except AttributeError:
+        scheme = None
+    return scheme or PortalColorScheme.instance().value
+
+
+def dark_palette():
+    """A dark palette for when the system says dark and the platform gives us a light one."""
+    palette = QPalette()
+    colors = {QPalette.ColorRole.Window: '#353535', QPalette.ColorRole.WindowText: '#e8e8e8',
+              QPalette.ColorRole.Base: '#2a2a2a', QPalette.ColorRole.AlternateBase: '#323232',
+              QPalette.ColorRole.ToolTipBase: '#454545', QPalette.ColorRole.ToolTipText: '#e8e8e8',
+              QPalette.ColorRole.PlaceholderText: '#8c8c8c', QPalette.ColorRole.Text: '#e8e8e8',
+              QPalette.ColorRole.Button: '#3c3c3c', QPalette.ColorRole.ButtonText: '#e8e8e8',
+              QPalette.ColorRole.BrightText: '#ff5555', QPalette.ColorRole.Light: '#505050',
+              QPalette.ColorRole.Midlight: '#454545', QPalette.ColorRole.Mid: '#2d2d2d',
+              QPalette.ColorRole.Dark: '#1e1e1e', QPalette.ColorRole.Shadow: '#262626',
+              QPalette.ColorRole.Highlight: '#2a82da', QPalette.ColorRole.HighlightedText: '#ffffff',
+              QPalette.ColorRole.Link: '#5aa0e6', QPalette.ColorRole.LinkVisited: '#a07ad0'}
+    if hasattr(QPalette.ColorRole, 'Accent'):
+        colors[QPalette.ColorRole.Accent] = '#2a82da'
+    for role, color in colors.items():
+        palette.setColor(role, QColor(color))
+    for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText):
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor('#7f7f7f'))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, QColor('#505050'))
+    return palette
+
+
+# Fusion's light palette as Qt builds it without a platform theme (QStyleFactory.create('Fusion')
+# .standardPalette() offscreen): (active and inactive, disabled) per role.
+_FUSION_LIGHT = {'WindowText': ('#000000', '#bebebe'), 'Button': ('#efefef', '#efefef'), 'Light': ('#ffffff', '#ffffff'),
+                 'Midlight': ('#cacaca', '#cacaca'), 'Dark': ('#9f9f9f', '#bebebe'), 'Mid': ('#b8b8b8', '#b8b8b8'),
+                 'Text': ('#000000', '#bebebe'), 'BrightText': ('#ffffff', '#ffffff'), 'ButtonText': ('#000000', '#bebebe'),
+                 'Base': ('#ffffff', '#efefef'), 'Window': ('#efefef', '#efefef'), 'Shadow': ('#767676', '#b1b1b1'),
+                 'Highlight': ('#308cc6', '#919191'), 'HighlightedText': ('#ffffff', '#ffffff'), 'Link': ('#0000ff', '#0000ff'),
+                 'LinkVisited': ('#ff00ff', '#ff00ff'), 'AlternateBase': ('#f7f7f7', '#f7f7f7'), 'ToolTipBase': ('#ffffdc', '#ffffdc'),
+                 'ToolTipText': ('#000000', '#000000'), 'PlaceholderText': ('#000000', '#000000'), 'Accent': ('#308cc6', '#919191')}
+
+
+def light_palette():
+    """Fusion's light palette, spelled out: the style's standardPalette() is the platform theme's,
+    which under gtk2 stays the dark one it read at start."""
+    palette = QPalette()
+    for name, (normal, disabled) in _FUSION_LIGHT.items():
+        role = getattr(QPalette.ColorRole, name, None)
+        if role is None:
+            continue            # Accent is Qt 6.6 and later
+        palette.setColor(QPalette.ColorGroup.Active, role, QColor(normal))
+        palette.setColor(QPalette.ColorGroup.Inactive, role, QColor(normal))
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(disabled))
+    return palette
+
+
+def follow_theme(obj):
+    _theme_followers.add(obj)
+
+
+def apply_theme_change():
+    for obj in sorted(list(_theme_followers), key=lambda obj: getattr(obj, 'theme_order', 10)):
+        try:
+            obj.apply_theme()
+        except Exception as e:
+            from blink.logging import ActivityLog
+            ActivityLog().warning(f'[ui] Cannot apply the new theme to {obj.__class__.__name__}: {e!r}')
+    # A widget with its own style sheet keeps the palette it was polished with (palette(dark)
+    # in a border, the background behind it): setting the sheet again polishes it anew.
+    for widget in QApplication.allWidgets():
+        if widget.styleSheet():
+            widget.setStyleSheet(widget.styleSheet())
+    for widget in QApplication.topLevelWidgets():
+        widget.update()
 
 
 def is_dark_theme():

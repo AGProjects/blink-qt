@@ -12,7 +12,7 @@ import time
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
 from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
-from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
 from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QMessageBox, QRadioButton, QTableView, QWidget
@@ -65,8 +65,8 @@ from blink.messages import MessageManager
 from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_fileable_address, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
-from blink.widgets.color import ColorHelperMixin, is_dark_theme, secondary_text_color
-from blink.widgets.util import ContextMenuActions
+from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme, secondary_text_color
+from blink.widgets.util import ContextMenuActions, FontScaledSize, badge_font
 
 
 __all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'URIUtils']
@@ -2706,7 +2706,7 @@ class RelocationInfo(object):
 @implementer(IObserver)
 class Group(object):
 
-    size_hint = QSize(200, 24)
+    size_hint = FontScaledSize(200, 24, lines=1, padding=8)
 
     virtual = property(lambda self: isinstance(self.settings, VirtualGroup))
 
@@ -2811,8 +2811,14 @@ class Group(object):
 
 
 class ContactIconDescriptor(object):
+    theme_order = 0     # the default avatar is drawn for the theme (themed_icon)
+
     def __init__(self, filename):
         self.filename = filename
+        self.icon = None
+        follow_theme(self)
+
+    def apply_theme(self):
         self.icon = None
 
     def __get__(self, instance, owner):
@@ -2831,7 +2837,7 @@ class ContactIconDescriptor(object):
 @implementer(IObserver)
 class Contact(object):
 
-    size_hint = QSize(220, 42)
+    size_hint = FontScaledSize(220, 42, lines=2, padding=6)
 
     native = property(lambda self: self.type == 'addressbook')
 
@@ -2844,11 +2850,18 @@ class Contact(object):
 
     stylish_icons = True
 
+    theme_order = 1
+
     def __init__(self, contact, group):
         self.settings = contact
         self.group = group
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
+        follow_theme(self)
+
+    def apply_theme(self):
+        self.__dict__.pop('icon', None)
+        self.__dict__.pop('pixmap', None)
 
     def __gt__(self, other):
         if isinstance(other, Contact):
@@ -3026,7 +3039,7 @@ class Contact(object):
 @implementer(IObserver)
 class ContactDetail(object):
 
-    size_hint = QSize(200, 36)
+    size_hint = FontScaledSize(200, 36, lines=2, padding=4)
 
     native = property(lambda self: self.type == 'addressbook')
 
@@ -3037,10 +3050,17 @@ class ContactDetail(object):
 
     stylish_icons = True
 
+    theme_order = 1
+
     def __init__(self, contact):
         self.settings = contact
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
+        follow_theme(self)
+
+    def apply_theme(self):
+        self.__dict__.pop('icon', None)
+        self.__dict__.pop('pixmap', None)
 
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, self.settings)
@@ -3184,7 +3204,7 @@ class ContactDetail(object):
 @implementer(IObserver)
 class ContactURI(object):
 
-    size_hint = QSize(200, 24)
+    size_hint = FontScaledSize(200, 24, lines=1, padding=8)
 
     native = property(lambda self: isinstance(self.contact, addressbook.Contact))
 
@@ -3246,6 +3266,7 @@ class ContactWidget(base_class, ui_class):
         super(ContactWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        self.unread_label.setFont(badge_font(self.font()))
         if is_dark_theme():
             palette = self.info_label.palette()
             for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
@@ -3298,12 +3319,13 @@ class GroupWidget(base_class, ui_class):
         with Resources.directory:
             self.setupUi(self)
         font = self.name_label.font()
-        font.setBold(True)
+        font.setWeight(QFont.Weight(550))         # between medium and semi-bold: above the contacts' regular weight, softer than bold
         self.name_label.setFont(font)
         self.name_editor.setFont(font)
         self.selected = False
         self.drop_indicator = None
         self._disable_dnd = False
+        follow_theme(self)
         self.label_widget.setFocusProxy(self)
         self.name_view.setCurrentWidget(self.label_widget)
         self.name_editor.editingFinished.connect(self._end_editing)
@@ -3326,14 +3348,19 @@ class GroupWidget(base_class, ui_class):
     def _get_selected(self):
         return self.__dict__['selected']
 
+    def apply_theme(self):
+        selected = self.__dict__.get('selected', False)
+        self.__dict__['selected'] = None
+        self.selected = selected
+
     def _set_selected(self, value):
         if self.__dict__.get('selected', None) == value:
             return
         self.__dict__['selected'] = value
         if value:
-            self.name_label.setStyleSheet("color: #ffffff; font-weight: bold;")
+            self.name_label.setStyleSheet("color: #ffffff; font-weight: 550;")
         else:
-            self.name_label.setStyleSheet("color: #e0e0e0; font-weight: bold;" if is_dark_theme() else "color: #000000; font-weight: bold;")
+            self.name_label.setStyleSheet("color: #e0e0e0; font-weight: 550;" if is_dark_theme() else "color: #000000; font-weight: 550;")
         # self.name_label.setForegroundRole(QPalette.ColorRole.BrightText if value else QPalette.ColorRole.WindowText)
         self.update()
 
@@ -3463,7 +3490,14 @@ del ui_class, base_class
 class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
     def __init__(self, parent=None):
         super(ContactDelegate, self).__init__(parent)
+        self._create_widgets()
+        follow_theme(self)
 
+    def apply_theme(self):
+        self._create_widgets()
+
+    def _create_widgets(self):
+        """The three widgets rows are rendered from (odd, even, selected), coloured for the current theme."""
         self.contact_oddline_widget  = ContactWidget(None)
         self.contact_evenline_widget = ContactWidget(None)
         self.contact_selected_widget = ContactWidget(None)
@@ -3628,6 +3662,13 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
 class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
     def __init__(self, parent=None):
         super(ContactDetailDelegate, self).__init__(parent)
+        self._create_widget()
+        follow_theme(self)
+
+    def apply_theme(self):
+        self._create_widget()
+
+    def _create_widget(self):
         self.widget = ContactWidget(None)
         self.widget.setBackgroundRole(QPalette.ColorRole.Base)
         # No theme except Oxygen honors the BackgroundRole
@@ -5830,12 +5871,16 @@ class ContactSearchListView(QListView):
 @implementer(IObserver)
 class ContactDetailView(QListView):
 
+    def apply_theme(self):
+        palette = QPalette()            # the application's
+        if not is_dark_theme():
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor('#eeeeee'))
+        self.setPalette(palette)
+
     def __init__(self, contact_list):
         super(ContactDetailView, self).__init__(contact_list.parent())
-        if not is_dark_theme():
-            palette = self.palette()
-            palette.setColor(QPalette.ColorRole.AlternateBase, QColor('#eeeeee'))
-            self.setPalette(palette)
+        self.apply_theme()
+        follow_theme(self)
         self.contact_list = contact_list
         self.setItemDelegate(ContactDetailDelegate(self))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)

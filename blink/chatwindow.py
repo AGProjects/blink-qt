@@ -62,7 +62,7 @@ from blink.messages import MessageManager, BlinkMessage
 from blink.resources import ApplicationData, IconManager, Resources
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter, IncomingDialogBase, RequestList, BlinkFileTransfer
 from blink.util import run_in_gui_thread, call_later, translate, copy_transfer_file
-from blink.widgets.color import ColorHelperMixin
+from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme
 from blink.widgets.graph import Graph
 from blink.widgets.otr import OTRWidget
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
@@ -2091,6 +2091,10 @@ del ui_class, base_class
 
 
 class NoSessionsLabel(QLabel):
+    def apply_theme(self):
+        background, color = ('palette(base)', '#9a9a9a') if is_dark_theme() else ('white', '#545454')
+        self.setStyleSheet(f"""QLabel {{ border: 1px inset palette(dark); border-radius: 3px; background-color: {background}; color: {color}; }}""")
+
     def __init__(self, chat_window):
         super(NoSessionsLabel, self).__init__(chat_window.session_panel)
         self.chat_window = chat_window
@@ -2098,7 +2102,8 @@ class NoSessionsLabel(QLabel):
         font.setPointSize(20)
         self.setFont(font)
         self.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.setStyleSheet("""QLabel { border: 1px inset palette(dark); border-radius: 3px; background-color: white; color: #545454; }""")
+        self.apply_theme()
+        follow_theme(self)
         self.setText(translate('chat_window', "No Sessions"))
         chat_window.session_panel.installEventFilter(self)
 
@@ -2134,10 +2139,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     __streamtypes__ = {'chat', 'screen-sharing', 'video'}  # the stream types for which we show the chat window
 
+    def apply_theme(self):
+        self.session_widget.setPalette(QPalette() if is_dark_theme() else self._session_widget_palette)
+
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)
         with Resources.directory:
             self.setupUi()
+
+        # chat_window.ui paints the session area white; under a dark theme it takes the theme's colours
+        self._session_widget_palette = QPalette(self.session_widget.palette())
+        self.apply_theme()
+        follow_theme(self)
 
         self.selected_item = None
         self.session_model = ChatSessionModel(self)

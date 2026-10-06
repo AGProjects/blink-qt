@@ -58,8 +58,8 @@ from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
 from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status, StateColor
-from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key, is_dark_theme, secondary_text_color
-from blink.widgets.util import ContextMenuActions, QtDynamicProperty
+from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key, follow_theme, is_dark_theme, secondary_text_color
+from blink.widgets.util import ContextMenuActions, FontScaledSize, QtDynamicProperty, badge_font
 from blink.widgets.zrtp import ZRTPWidget
 from blink.streams.message import MessageStream
 from blink.pstn_normalize import pstn_dial_username
@@ -3257,24 +3257,45 @@ class ChatSessionIconLabel(QLabel):
         style.drawItemPixmap(painter, rect, align, pixmap)
 
 
-def adapt_list_item_palettes(palettes):
-    """Make a list item's standard and alternate palettes readable under a dark theme.
+def build_list_item_palettes(widget):
+    """The standard, alternate and selected palettes of a list item widget, for the current theme.
 
-    The item .ui files fix AlternateBase to a light blue, and secondary lines are drawn in
-    Dark, which is near black in a dark theme. A light theme is left as designed."""
-    if not is_dark_theme():
-        return
+    What the item's .ui file set is kept (with its resolve mask) and the rest is taken from the
+    application palette each time, so a theme change rebuilds them. Under a dark theme the light
+    blue AlternateBase the .ui files fix is replaced by the theme's, and Dark, which secondary
+    lines are drawn in and is near black there, becomes a readable grey. We set Window ourselves
+    because only the Oxygen theme honors the BackgroundRole."""
+    if not hasattr(widget, '_ui_palette'):
+        widget._ui_palette = QPalette(widget.palette())
     application_palette = QApplication.palette()
-    for palette in (palettes.standard, palettes.alternate):
-        palette.setColor(QPalette.ColorRole.AlternateBase, application_palette.color(QPalette.ColorRole.AlternateBase))
+    base = widget._ui_palette.resolve(application_palette)
+    if is_dark_theme():
+        base.setColor(QPalette.ColorRole.AlternateBase, application_palette.color(QPalette.ColorRole.AlternateBase))
         for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
-            palette.setColor(color_group, QPalette.ColorRole.Dark, secondary_text_color(application_palette, color_group))
+            base.setColor(color_group, QPalette.ColorRole.Dark, secondary_text_color(application_palette, color_group))
+    palettes = Container()
+    palettes.standard = QPalette(base)
+    palettes.alternate = QPalette(base)
+    palettes.selected = QPalette(base)
+    palettes.standard.setColor(QPalette.ColorRole.Window, base.color(QPalette.ColorRole.Base))
+    palettes.alternate.setColor(QPalette.ColorRole.Window, base.color(QPalette.ColorRole.AlternateBase))
+    palettes.selected.setColor(QPalette.ColorRole.Window, base.color(QPalette.ColorRole.Highlight))
+    widget.palettes = palettes
+
+
+class ListItemThemeMixin(object):
+    def apply_theme(self):
+        build_list_item_palettes(self)
+        mode = self.__dict__.get('display_mode', None)
+        if mode is not None:
+            self.__dict__['display_mode'] = None      # re-applied even though the mode is the same
+            self.display_mode = mode
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
 
 
-class ChatSessionWidget(base_class, ui_class):
+class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
     class StandardDisplayMode(metaclass=MarkerType):  pass
     class AlternateDisplayMode(metaclass=MarkerType): pass
     class SelectedDisplayMode(metaclass=MarkerType):  pass
@@ -3283,14 +3304,9 @@ class ChatSessionWidget(base_class, ui_class):
         super(ChatSessionWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.palettes = Container()
-        self.palettes.standard = self.palette()
-        self.palettes.alternate = self.palette()
-        self.palettes.selected = self.palette()
-        adapt_list_item_palettes(self.palettes)
-        self.palettes.standard.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.ColorRole.Window, self.palettes.standard.color(QPalette.ColorRole.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        self.unread_label.setFont(badge_font(self.font()))
+        build_list_item_palettes(self)
+        follow_theme(self)
         self.setBackgroundRole(QPalette.ColorRole.Window)
         self.display_mode = self.StandardDisplayMode
         self.hold_icon.installEventFilter(self)
@@ -3375,7 +3391,12 @@ del ui_class, base_class
 @implementer(IObserver)
 class ChatSessionItem(object):
 
-    size_hint = QSize(200, 36)
+    size_hint = FontScaledSize(200, 36, lines=2, padding=4)
+
+    theme_order = 20    # after the contacts dropped their avatars and the widget rebuilt its palettes
+
+    def apply_theme(self):
+        self.widget.update_content(self)
 
     def __init__(self, blink_session, timestamp=None):
         self.timestamp = timestamp or ISOTimestamp.now().replace(tzinfo=tzlocal())
@@ -3388,6 +3409,7 @@ class ChatSessionItem(object):
         self.files_model = FileListModel(blink_session)
         self.widget = ChatSessionWidget(None)
         self.widget.update_content(self)
+        follow_theme(self)
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=blink_session)
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
@@ -4684,7 +4706,7 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
 ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_item.ui'))
 
 
-class FileTransferItemWidget(base_class, ui_class):
+class FileTransferItemWidget(ListItemThemeMixin, base_class, ui_class):
     class StandardDisplayMode(metaclass=MarkerType):  pass
     class AlternateDisplayMode(metaclass=MarkerType): pass
     class SelectedDisplayMode(metaclass=MarkerType):  pass
@@ -4693,14 +4715,8 @@ class FileTransferItemWidget(base_class, ui_class):
         super(FileTransferItemWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.palettes = Container()
-        self.palettes.standard = self.palette()
-        self.palettes.alternate = self.palette()
-        self.palettes.selected = self.palette()
-        adapt_list_item_palettes(self.palettes)
-        self.palettes.standard.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.ColorRole.Window, self.palettes.standard.color(QPalette.ColorRole.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        build_list_item_palettes(self)
+        follow_theme(self)
 
         self.pixmaps = Container()
         self.pixmaps.incoming_transfer = QPixmap(Resources.get('icons/folder-downloads.png'))
@@ -5116,7 +5132,7 @@ ui_class, base_class = uic.loadUiType(Resources.get('filelist_item.ui'))
 
 # Chat file list
 
-class FileListItemWidget(base_class, ui_class):
+class FileListItemWidget(ListItemThemeMixin, base_class, ui_class):
     class StandardDisplayMode(metaclass=MarkerType):  pass
     class AlternateDisplayMode(metaclass=MarkerType): pass
     class SelectedDisplayMode(metaclass=MarkerType):  pass
@@ -5125,14 +5141,8 @@ class FileListItemWidget(base_class, ui_class):
         super(FileListItemWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        self.palettes = Container()
-        self.palettes.standard = self.palette()
-        self.palettes.alternate = self.palette()
-        self.palettes.selected = self.palette()
-        adapt_list_item_palettes(self.palettes)
-        self.palettes.standard.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Base))           # We modify the palettes because only the Oxygen theme honors the BackgroundRole if set
-        self.palettes.alternate.setColor(QPalette.ColorRole.Window, self.palettes.standard.color(QPalette.ColorRole.AlternateBase))  # AlternateBase set to #f0f4ff or #e0e9ff by designer
-        self.palettes.selected.setColor(QPalette.ColorRole.Window,  self.palettes.standard.color(QPalette.ColorRole.Highlight))      # #0066cc #0066d5 #0066dd #0066aa (0, 102, 170) '#256182' (37, 97, 130), #2960a8 (41, 96, 168), '#2d6bbc' (45, 107, 188), '#245897' (36, 88, 151) #0044aa #0055d4
+        build_list_item_palettes(self)
+        follow_theme(self)
 
         self.pixmaps = Container()
         self.pixmaps.encrypted_transfer = QPixmap(Resources.get('icons/lock-green-18.svg'))
