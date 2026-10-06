@@ -32,7 +32,7 @@ from zope.interface import implementer
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import AddressbookManager
 from sipsimple.configuration.settings import SIPSimpleSettings
-from sipsimple.core import SIPURI, FromHeader, ToHeader, Message, RouteHeader
+from sipsimple.core import SIPURI, FromHeader, Header, ToHeader, Message, RouteHeader
 from sipsimple.core._core import PJSIPError
 from sipsimple.lookup import DNSLookup
 from sipsimple.payloads import ParserError
@@ -344,6 +344,22 @@ class OTRInternalMessage(BlinkMessage):
         super(OTRInternalMessage, self).__init__(content, 'text/plain')
 
 
+def can_use_cpim(content_type):
+    """Requests to the server API and public keys go out bare, as Blink for macOS and
+    Sylk Mobile send them: the server reads their body, not a CPIM wrapper."""
+    content_type = str(content_type or '').lower()
+    return not (content_type.startswith('application/sylk-api') or content_type == 'text/pgp-public-key')
+
+
+def skip_journal_headers(content, otr=False):
+    """[X-Sylk-Skip-Journal] for an OTR message, else []. An OTR ciphertext is bound to
+    the session that made it: replayed from the journal on another device it can never
+    be read. SylkServer checks for the header's presence, on both sides of the relay."""
+    if otr or (isinstance(content, bytes) and content.startswith(b'?OTR')):
+        return [Header('X-Sylk-Skip-Journal', 'yes')]
+    return []
+
+
 @implementer(IObserver)
 class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
@@ -362,7 +378,7 @@ class OutgoingMessage(object):
         self.contact = contact
         self.is_secure = False
         self.dns_failed_reason = None
-        self.use_cpim = use_cpim
+        self.use_cpim = use_cpim and can_use_cpim(content_type)
 
     @property
     def message(self):
@@ -420,7 +436,9 @@ class OutgoingMessage(object):
                             return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
-            additional_sip_headers = []
+            additional_sip_headers = skip_journal_headers(content)
+            if additional_sip_headers:
+                ActivityLog().info(f'[Message with {self._peer}] Sending {self.content_type} message {self.id} without journalling it (OTR)')
             if self.account.sms.use_cpim and self.use_cpim:
                 ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
                 additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
@@ -590,7 +608,7 @@ class InternalOTROutgoingMessage(OutgoingMessage):
             from_uri = self.account.uri
             content = self.content
             content = content if isinstance(content, bytes) else content.encode()
-            additional_sip_headers = []
+            additional_sip_headers = skip_journal_headers(content, otr=True)   # OTR protocol traffic
             if self.account.sms.use_cpim:
                 ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
                 additional_headers = [CPIMHeader('Message-ID', ns, self.id)]
