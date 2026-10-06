@@ -65,6 +65,33 @@ class Language(object):
         self.language_code = match[2]
 
 
+# Codec lists
+#
+def available_codecs(kind='audio'):
+    """The codecs the running SIP engine was built with, or an empty set when it is not running."""
+    try:
+        ua = SIPApplication.engine._ua
+        codecs = ua.available_codecs if kind == 'audio' else ua.available_video_codecs
+    except Exception:
+        return set()
+    return {codec.decode() if isinstance(codec, bytes) else str(codec) for codec in codecs or ()}
+
+
+def codec_list_item(codec, list_widget, enabled, kind='audio'):
+    """A codec row: checked when enabled, greyed out when this build of the SDK lacks it.
+
+    The configured order and enabled flags are kept as they are, so a build
+    that has the codec uses them unchanged.
+    """
+    item = QListWidgetItem(codec, list_widget)
+    item.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+    available = available_codecs(kind)
+    if available and codec not in available:
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+        item.setToolTip(translate('preferences_window', '%s is not available in this build of the SIP SIMPLE SDK') % codec)
+    return item
+
+
 # LineEdit and ComboBox validators
 #
 class IDDPrefixValidator(QRegularExpressionValidator):
@@ -732,8 +759,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         with blocked_qt_signals(self.audio_codecs_list):
             self.audio_codecs_list.clear()
             for codec in settings.rtp.audio_codec_order:
-                item = QListWidgetItem(codec, self.audio_codecs_list)
-                item.setCheckState(Qt.CheckState.Checked if codec in settings.rtp.audio_codec_list else Qt.CheckState.Unchecked)
+                codec_list_item(codec, self.audio_codecs_list, codec in settings.rtp.audio_codec_list, 'audio')
 
         # Answering Machine settings
         self.enable_answering_machine_button.setChecked(settings.answering_machine.enabled)
@@ -753,8 +779,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         with blocked_qt_signals(self.video_codecs_list):
             self.video_codecs_list.clear()
             for codec in settings.rtp.video_codec_order:
-                item = QListWidgetItem(codec, self.video_codecs_list)
-                item.setCheckState(Qt.CheckState.Checked if codec in settings.rtp.video_codec_list else Qt.CheckState.Unchecked)
+                codec_list_item(codec, self.video_codecs_list, codec in settings.rtp.video_codec_list, 'video')
 
         self.h264_profile_button.setCurrentIndex(self.h264_profile_button.findData(str(settings.video.h264.profile)))
         self.video_codec_bitrate_button.setCurrentIndex(self.video_codec_bitrate_button.findData(settings.video.max_bitrate))
@@ -887,16 +912,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             audio_codec_order = account.rtp.audio_codec_order or settings.rtp.audio_codec_order
             audio_codec_list = account.rtp.audio_codec_list or settings.rtp.audio_codec_list
             for codec in audio_codec_order:
-                item = QListWidgetItem(codec, self.account_audio_codecs_list)
-                item.setCheckState(Qt.CheckState.Checked if codec in audio_codec_list else Qt.CheckState.Unchecked)
+                codec_list_item(codec, self.account_audio_codecs_list, codec in audio_codec_list, 'audio')
 
         with blocked_qt_signals(self.account_video_codecs_list):
             self.account_video_codecs_list.clear()
             video_codec_order = account.rtp.video_codec_order or settings.rtp.video_codec_order
             video_codec_list = account.rtp.video_codec_list or settings.rtp.video_codec_list
             for codec in video_codec_order:
-                item = QListWidgetItem(codec, self.account_video_codecs_list)
-                item.setCheckState(Qt.CheckState.Checked if codec in video_codec_list else Qt.CheckState.Unchecked)
+                codec_list_item(codec, self.account_video_codecs_list, codec in video_codec_list, 'video')
 
         self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_order is not None)
         self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_order is not None)
@@ -1267,8 +1290,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             audio_codec_order = settings.rtp.audio_codec_order
             audio_codec_list = settings.rtp.audio_codec_list
             for codec in audio_codec_order:
-                item = QListWidgetItem(codec, self.account_audio_codecs_list)
-                item.setCheckState(Qt.CheckState.Checked if codec in audio_codec_list else Qt.CheckState.Unchecked)
+                codec_list_item(codec, self.account_audio_codecs_list, codec in audio_codec_list, 'audio')
 
         account.rtp.audio_codec_list  = DefaultValue
         account.rtp.audio_codec_order = DefaultValue
@@ -1297,8 +1319,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             video_codec_order = settings.rtp.video_codec_order
             video_codec_list = settings.rtp.video_codec_list
             for codec in video_codec_order:
-                item = QListWidgetItem(codec, self.account_video_codecs_list)
-                item.setCheckState(Qt.CheckState.Checked if codec in video_codec_list else Qt.CheckState.Unchecked)
+                codec_list_item(codec, self.account_video_codecs_list, codec in video_codec_list, 'video')
 
         account.rtp.video_codec_list  = DefaultValue
         account.rtp.video_codec_order = DefaultValue
