@@ -653,6 +653,8 @@ class MessageHistory(object, metaclass=Singleton):
                 self.table_versions.set_version(PendingRemoval.sqlmeta.table, PendingRemoval.__version__)
                 ActivityLog().info('[db] Created table %s' % PendingRemoval.sqlmeta.table)
 
+        self._vacuum_if_needed()
+
     def _check_table_version(self):
         """Upgrade the messages table one version at a time.
 
@@ -1038,6 +1040,118 @@ class MessageHistory(object, metaclass=Singleton):
             return []
         query = f"related_msg_id in ({', '.join(self.db.sqlrepr(message_id) for message_id in message_ids)}) and {NOT_DELETED_SQL}"
         return list(Message.select(query, orderBy=['timestamp', 'id']))
+
+    # Updates
+
+    _missing_message_bodies = set()  # ids reported missing once, not once per location tick
+
+    @run_in_thread('db')
+    def update_message_body(self, message_id, body, merge=None):
+        """Replace the stored body of a message; with `merge`, store merge(stored, new) instead.
+
+        The read-modify-write runs in the db thread, where writers cannot interleave:
+        a live location share is written by whichever path sees a tick first (live,
+        replicated, journal) and only the stored row holds the accumulated trail
+        (blink.location.merge_location_bodies).
+        """
+        rows = list(Message.selectBy(message_id=str(message_id)))
+        if not rows:
+            if message_id not in self._missing_message_bodies:
+                self._missing_message_bodies.add(message_id)
+                log.debug(f'No stored message {message_id} to update the body of')
+            return
+        for row in rows:
+            new_body = body
+            if merge is not None:
+                try:
+                    new_body = merge(row.content, body)
+                except Exception as e:
+                    ActivityLog().error(f'[db] Merging the body of message {message_id} failed: {e}')
+                    continue
+            if new_body is not None and new_body != row.content:
+                row.content = new_body
+
+    @run_in_thread('db')
+    def update_decrypted_message(self, message_id, plaintext):
+        """Store the plaintext of a decrypted message in place of its ciphertext.
+
+        This is the first moment an encrypted file transfer or text can be
+        classified, so a missing category and the link flag are filled in here.
+        """
+        rows = list(Message.selectBy(message_id=str(message_id)))
+        if not rows:
+            log.debug(f'No stored message {message_id} to store the decrypted body of')
+            return
+        for row in rows:
+            row.content = plaintext
+            row.decrypted = '1'
+            row.decryption_error = ''
+            if row.category is None:
+                category = classify_category(row.content_type, plaintext, row.related_action, row.metadata)
+                if category is not None:
+                    row.category = category
+            if row.category == 'text' and not row.has_link:
+                row.has_link = has_link(row.content_type, plaintext) or 0
+
+    @run_in_thread('db')
+    def move_conversation(self, old_key, new_key, account_id=None):
+        """File every message of one conversation under another key.
+
+        For keys that turn out to be one party: a neighbour back under a new instance
+        id, a number stored in two spellings. A message present under both keys is
+        kept once. Downloaded files follow.
+        """
+        old_key, new_key = str(old_key or ''), str(new_key or '')
+        if not old_key or not new_key or old_key == new_key:
+            return
+        table = Message.sqlmeta.table
+        where = f'remote_uri = {self.db.sqlrepr(old_key)}' + (f' and account_id = {self.db.sqlrepr(str(account_id))}' if account_id else '')
+        try:
+            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            self.db.queryAll(f'update or ignore {table} set remote_uri = {self.db.sqlrepr(new_key)} where {where}')
+            duplicates = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            self.db.queryAll(f'delete from {table} where {where}')
+            files_where = f'remote_uri = {self.db.sqlrepr(old_key)}' + (f' and account_id = {self.db.sqlrepr(str(account_id))}' if account_id else '')
+            self.db.queryAll(f'update or ignore {DownloadedFiles.sqlmeta.table} set remote_uri = {self.db.sqlrepr(new_key)} where {files_where}')
+        except Exception as e:
+            ActivityLog().error(f'[db] Moving the conversation {old_key} to {new_key} failed: {e}')
+            return
+        ActivityLog().info(f'[db] Conversation {old_key} moved to {new_key}: {count - duplicates} messages' + (f', {duplicates} duplicates dropped' if duplicates else ''))
+
+    @run_in_thread('db')
+    def move_message(self, message_id, old_key, new_key):
+        """File one message under another conversation (a call recording whose
+        placement note arrived after it)."""
+        moved = 0
+        for row in Message.selectBy(message_id=str(message_id), remote_uri=str(old_key)):
+            try:
+                row.remote_uri = str(new_key)
+                moved += 1
+            except dberrors.DuplicateEntryError:
+                row.destroySelf()
+        if moved:
+            ActivityLog().info(f'[db] Message {message_id} moved from {old_key} to {new_key}')
+
+    def _vacuum_if_needed(self):
+        """Compact the database at startup when much of it is free pages.
+
+        Never after each delete (a macOS defect): a VACUUM rewrites the whole
+        file, which for a large history is seconds of a blocked db thread.
+        """
+        try:
+            pages = self.db.queryOne('PRAGMA page_count')[0]
+            free = self.db.queryOne('PRAGMA freelist_count')[0]
+        except Exception:
+            return
+        if free < 1000 or free * 4 < pages:
+            return
+        started = time.monotonic()
+        try:
+            self.db.queryAll('VACUUM')
+        except Exception as e:
+            ActivityLog().warning(f'[db] Compacting the message history failed: {e}')
+            return
+        ActivityLog().info(f'[db] Compacted the message history: {free} of {pages} pages were free, {time.monotonic() - started:.2f}s')
 
     @run_in_thread('db')
     def mark_conversation_read(self, remote_uri, source=None):
