@@ -4,6 +4,7 @@ import glob
 import pickle as pickle
 import os
 import re
+import time
 import uuid
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
@@ -568,51 +569,68 @@ class MessageHistory(object, metaclass=Singleton):
             self._check_table_version()
 
     def _check_table_version(self):
-        db_table_version = self.table_versions.version(Message.sqlmeta.table)
-        if self.__version__ != db_table_version:
-            if db_table_version == 1:
-                query = f'CREATE UNIQUE INDEX messages_msg_id ON {Message.sqlmeta.table} (message_id, account_id, remote_uri)'
-                try:
-                    self.db.queryAll(query)
-                except (dberrors.IntegrityError, dberrors.DuplicateEntryError):
-                    fix_query = f'select message_id from {Message.sqlmeta.table} group by message_id having count(id) > 1'
-                    result = self.db.queryAll(fix_query)
-                    for row in result:
-                        messages = Message.selectBy(message_id=row[0])
-                        for message in list(messages)[1:]:
-                            message.destroySelf()
-                    try:
-                        self.db.queryAll(query)
-                    except (dberrors.IntegrityError, dberrors.DuplicateEntryError):
-                        pass
-                    else:
-                        self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
-                else:
-                    self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
-            elif db_table_version == 2:
-                query = "delete from messages where content_type='application/sylk-api-pgp-key-lookup'"
-                try:
-                    self.db.queryAll(query)
-                except (dberrors.IntegrityError, dberrors.DuplicateEntryError):
-                    pass
-                else:
-                    self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+        """Upgrade the messages table one version at a time.
 
-            elif db_table_version == 3:
+        Each step is idempotent and the stored version is bumped after every
+        successful step, so an interrupted upgrade resumes where it stopped.
+        A failing step is logged and the upgrade stops there; it is retried
+        at the next start.
+        """
+        table = Message.sqlmeta.table
+        version = self.table_versions.version(table)
+        if version is None:
+            # table created by a build that did not record its version: run every step
+            version = 1
+        if version == self.__version__:
+            ActivityLog().info('[db] Table %s is at version %d' % (table, version))
+            return
+        ActivityLog().info('[db] Upgrading table %s from version %d to %d' % (table, version, self.__version__))
+        while version < self.__version__:
+            next_version = version + 1
+            step = getattr(self, '_upgrade_to_v%d' % next_version)
+            started = time.monotonic()
+            try:
+                rows = step()
+            except Exception as e:
+                ActivityLog().exception('[db] Upgrade of %s to version %d failed: %s' % (table, next_version, e))
+                return
+            duration = time.monotonic() - started
+            self.table_versions.set_version(table, next_version)
+            ActivityLog().info('[db] Upgraded %s to version %d (%s) in %.2fs, %d rows changed' % (table, next_version, step.__doc__, duration, rows))
+            version = next_version
 
-                query = "ALTER TABLE messages add column decrypted TEXT DEFAULT '0'"
-                try:
-                    self.db.queryAll(query)
-                except (dberrors.OperationalError):
-                    pass
+    def _upgrade_to_v2(self):
+        """unique index on message_id, account_id, remote_uri"""
+        table = Message.sqlmeta.table
+        removed = 0
+        duplicates = self.db.queryAll(f'select message_id from {table} group by message_id having count(id) > 1')
+        for (message_id,) in duplicates:
+            for message in list(Message.selectBy(message_id=message_id))[1:]:
+                message.destroySelf()
+                removed += 1
+        self.db.queryAll(f'CREATE UNIQUE INDEX IF NOT EXISTS messages_msg_id ON {table} (message_id, account_id, remote_uri)')
+        return removed
 
-                query = "ALTER TABLE messages add column decryption_error LONGTEXT DEFAULT ''"
-                try:
-                    self.db.queryAll(query)
-                except (dberrors.OperationalError):
-                    pass
+    def _upgrade_to_v3(self):
+        """remove stored PGP key lookup requests"""
+        table = Message.sqlmeta.table
+        content_type = 'application/sylk-api-pgp-key-lookup'
+        count = self.db.queryOne(f"select count(*) from {table} where content_type='{content_type}'")[0]
+        self.db.queryAll(f"delete from {table} where content_type='{content_type}'")
+        return count
 
-                self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
+    def _upgrade_to_v4(self):
+        """decryption state columns"""
+        self._add_column('decrypted', "TEXT DEFAULT '0'")
+        self._add_column('decryption_error', "LONGTEXT DEFAULT ''")
+        return 0
+
+    def _add_column(self, name, definition):
+        try:
+            self.db.queryAll(f'ALTER TABLE {Message.sqlmeta.table} ADD COLUMN {name} {definition}')
+        except dberrors.OperationalError as e:
+            if 'duplicate column name' not in str(e):
+                raise
 
     def _get_enabled_account_filter(self, prefix=None):
         account_manager = AccountManager()
