@@ -3138,9 +3138,19 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">{text}'
 
             if not file.already_exists:
-                if file.encrypted and not blink_session.fake_streams.get('messages').can_decrypt and not blink_session.fake_streams.get('messages').can_decrypt_with_others:
-                    content = translate('chat_window', "%s can't be decrypted. PGP is disabled") % os.path.basename(file.decrypted_filename)
-                    return content
+                if file.encrypted:
+                    # A conversation opened by the user renders its history
+                    # before anything has loaded the keys into its stream, so
+                    # load them now rather than declare the file undecryptable.
+                    stream = blink_session.fake_streams.get('messages')
+                    if stream is not None and account.sms.enable_pgp and not (stream.can_decrypt or stream.can_decrypt_with_others):
+                        stream.enable_pgp()
+                    if stream is None or not (stream.can_decrypt or stream.can_decrypt_with_others):
+                        if account.sms.enable_pgp:
+                            content = translate('chat_window', "%s can't be decrypted. There is no private key for this account") % os.path.basename(file.decrypted_filename)
+                        else:
+                            content = translate('chat_window', "%s can't be decrypted. PGP is disabled") % os.path.basename(file.decrypted_filename)
+                        return content
 
                 if from_history or not session.chat_widget.history_loaded:
                     file.downloading = True
