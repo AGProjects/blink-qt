@@ -1398,8 +1398,19 @@ class ChatWidget(base_class, ui_class):
                 pass
             return
         id = str(uuid.uuid4())
+        # plain text unless the user actually formatted something, as Sylk
+        # Mobile and Blink for macOS do; the input box always produces a full
+        # Qt rich text document, which other clients render badly
+        if self._has_formatting(doc):
+            content_type = 'text/html'
+            text = self._html_body(text)
+            payload = text
+        else:
+            content_type = 'text/plain'
+            payload = plain_text
+            text = QTextDocument(plain_text).toHtml()
         try:
-            msg_id = self.send_message(text, content_type='text/html', id=id)
+            msg_id = self.send_message(payload, content_type=content_type, id=id)
         except Exception as e:
             self.add_message(ChatStatus(translate('chat_window', 'Error sending message: %s') % e))
             log.error('Error sending message:  %s' % str(e))
@@ -1411,6 +1422,36 @@ class ChatWidget(base_class, ui_class):
             content = HtmlProcessor.autolink(text)
             sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
             self.add_message(ChatMessage(content, sender, 'outgoing', id=id))
+
+    @staticmethod
+    def _has_formatting(document):
+        """True if the text has formatting a plain text message would lose.
+
+        Font family and size are not counted: the input box applies them to
+        everything, and pasted text brings its own.
+        """
+        block = document.begin()
+        while block.isValid():
+            if block.textList() is not None:
+                return True
+            iterator = block.begin()
+            while not iterator.atEnd():
+                fragment = iterator.fragment()
+                if fragment.isValid():
+                    char_format = fragment.charFormat()
+                    if (char_format.fontWeight() > 400 or char_format.fontItalic() or char_format.fontUnderline() or
+                            char_format.fontStrikeOut() or char_format.isAnchor() or char_format.isImageFormat() or
+                            char_format.foreground().style() != Qt.BrushStyle.NoBrush):
+                        return True
+                iterator += 1
+            block = block.next()
+        return False
+
+    @staticmethod
+    def _html_body(html):
+        """The content of the body element of a Qt rich text document."""
+        match = re.search(r'<body[^>]*>(.*)</body>', html, re.DOTALL | re.IGNORECASE)
+        return match.group(1).strip() if match else html
 
     def _SH_ChatInputLockReleased(self, lock_type):
         blink_session = self.session.blink_session
