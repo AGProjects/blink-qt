@@ -4,6 +4,7 @@ import json
 import os
 import re
 import requests
+import time
 import random
 import urllib
 import uuid
@@ -46,7 +47,7 @@ from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.uris import bare_instance_id, placeholder_instance_id
-from blink.util import run_in_gui_thread, translate
+from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 
 __all__ = ['MessageManager', 'BlinkMessage']
 
@@ -672,6 +673,9 @@ class MessageManager(object, metaclass=Singleton):
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
         self._sync_queue = deque()
+        self._token_requested = {}      # account id -> monotonic time of the last API token request
+        self._token_retry_pending = set()
+        self._syncing = set()           # account ids with a history download in progress
         self.pgp_requests = RequestList()
 
         self._removing_conversations = {}  # conversation key -> session, while the user removes it
@@ -770,12 +774,37 @@ class MessageManager(object, metaclass=Singleton):
 
         notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message, account=account))
 
-    def _request_history_synchronization_token(self, account):
-        log.debug('Requesting SylkServer API token')
+    token_request_interval = 30     # seconds between API token requests of one account
+    sync_registration_delay = 10    # seconds after registration before the history is fetched
+
+    @run_in_gui_thread
+    def _request_history_synchronization_token(self, account, reason='no token'):
+        """Ask the server for an API token, at most once per interval per account.
+
+        A request inside the interval is not dropped: one retry is scheduled for
+        when the interval ends, so a 401 always leads to a new token.
+        """
+        if account is BonjourAccount() or not account.enabled:
+            return
+        now = time.monotonic()
+        elapsed = now - self._token_requested.get(account.id, -self.token_request_interval)
+        if elapsed < self.token_request_interval:
+            if account.id not in self._token_retry_pending:
+                self._token_retry_pending.add(account.id)
+                delay = self.token_request_interval - elapsed
+                log.debug(f'API token for {account.id} requested {elapsed:.0f}s ago, asking again in {delay:.0f}s')
+                call_later(delay, self._retry_token_request, account, reason)
+            return
+        self._token_requested[account.id] = now
+        ActivityLog().info(f'[journal] Requesting an API token for account {account.id} ({reason})')
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(account.uri)
         outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token', use_cpim=False)
         self._send_message(outgoing_message)
+
+    def _retry_token_request(self, account, reason):
+        self._token_retry_pending.discard(account.id)
+        self._request_history_synchronization_token(account, reason)
 
     def _send_message(self, outgoing_message):
         self._own_message_ids[outgoing_message.id] = None
@@ -798,7 +827,17 @@ class MessageManager(object, metaclass=Singleton):
             message.send()
 
     @run_in_thread('sync')
-    def _sync_messages(self, account):
+    def _sync_messages(self, account, reason=None):
+        if account.id in self._syncing:
+            log.debug(f'History synchronization for {account.id} already in progress')
+            return
+        self._syncing.add(account.id)
+        try:
+            self._fetch_server_history(account, reason)
+        finally:
+            self._syncing.discard(account.id)
+
+    def _fetch_server_history(self, account, reason=None):
         if not account.sms.enable_history_synchronization:
             if account.sms.history_synchronization_timestamp:
                 account.sms.history_synchronization_timestamp = None
@@ -806,7 +845,7 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if not account.sms.history_synchronization_token:
-            self._request_history_synchronization_token(account)
+            self._request_history_synchronization_token(account, 'no token')
             return
 
         if not account.sms.history_synchronization_url:
@@ -822,14 +861,8 @@ class MessageManager(object, metaclass=Singleton):
         url = urlunsplit((scheme, netloc, path, query, fragment))
         headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
 
-        if account.sms.history_synchronization_timestamp is not None:
-            last_sync = ISOTimestamp(account.sms.history_synchronization_timestamp)
-            expired_time = ISOTimestamp.now() - last_sync
-            if expired_time.total_seconds() < 500:
-                log.debug(f'History synchronization skipped for {account.id}, will only sync on interval > 500s ({expired_time.total_seconds()})')
-                return
-
         log.info(f'Fetching message history for {account.id} from server {url}')
+        ActivityLog().info(f'[journal] Fetching the message journal of {account.id}' + (f' ({reason})' if reason else '') + (f' after {account.sms.history_synchronization_id}' if account.sms.history_synchronization_id else ' from the start'))
 
         settings = SIPSimpleSettings()
 
@@ -838,11 +871,12 @@ class MessageManager(object, metaclass=Singleton):
             r.raise_for_status()
         except (requests.ConnectionError, requests.Timeout) as e:
             log.warning(f'SylkServer API connection error: {e}')
+            ActivityLog().warning(f'[journal] Cannot reach the message journal of {account.id}: {e}')
         except requests.HTTPError as e:
             code = e.response.status_code
             if code == 401:
-                log.debug('SylkServer API token expired')
-                self._request_history_synchronization_token(account)
+                ActivityLog().info(f'[journal] The API token of {account.id} was refused (401)')
+                self._request_history_synchronization_token(account, 'token refused')
                 return
             log.warning(f'SylkServer API error {e}')
         except requests.RequestException as e:
@@ -1120,15 +1154,19 @@ class MessageManager(object, metaclass=Singleton):
         self.pgp_requests.remove(request)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
-        if isinstance(notification.sender, Account) and 'sms.enable_history_synchronization' in notification.data.modified:
-            self._sync_messages(notification.sender)
+        if not isinstance(notification.sender, Account):
+            return
+        modified = notification.data.modified
+        if 'sms.enable_history_synchronization' in modified:
+            self._sync_messages(notification.sender, 'history synchronization enabled')
+        elif 'sms.enable_message_replication' in modified and notification.sender.sms.enable_message_replication:
+            self._sync_messages(notification.sender, 'replication enabled')
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
-        if notification.sender is not BonjourAccount():
-            self._sync_queue.append(notification.sender)
-            while self._sync_queue:
-                sender = self._sync_queue.popleft()
-                self._sync_messages(sender)
+        account = notification.sender
+        if account is not BonjourAccount():
+            # give the registration a moment to settle (and the server to see the device)
+            call_later(self.sync_registration_delay, self._sync_messages, account, 'registered')
 
     def _NH_SIPEngineGotMessage(self, notification):
         account_manager = AccountManager()
@@ -1219,11 +1257,13 @@ class MessageManager(object, metaclass=Singleton):
             except KeyError:
                 return
 
+            changed = token != account.sms.history_synchronization_token or url != account.sms.history_synchronization_url
             account.sms.history_synchronization_token = token
             account.sms.history_synchronization_url = url
             account.sms.history_synchronization_timestamp = None
             account.save()
-            self._sync_messages(account)
+            ActivityLog().info(f'[journal] Received {"a new" if changed else "the same"} API token for account {account.id}, journal at {url}')
+            self._sync_messages(account, 'token received')
             return
 
         if content_type.lower() == 'text/pgp-private-key':
