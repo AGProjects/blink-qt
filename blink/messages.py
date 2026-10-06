@@ -1152,10 +1152,14 @@ class MessageManager(object, metaclass=Singleton):
 
         log.info(f'Message {message_id} {enc_text}{content_type.lower()} for account {account.id} from {sender.uri}')
         if content_type.lower() not in (IsComposingDocument.content_type, IMDNDocument.content_type):
+            def aor(uri):
+                # SIP headers carry bytes, CPIM headers str
+                user, host = (part.decode(errors='replace') if isinstance(part, bytes) else part for part in (uri.user, uri.host))
+                return f'{user}@{host}'
             if x_replicated_message is not Null:
-                peer, what = f'{to_header.uri.user}@{to_header.uri.host}', 'Replicated outgoing'
+                peer, what = aor(to_header.uri), 'Replicated outgoing'
             else:
-                peer, what = instance_id or f'{sender.uri.user}@{sender.uri.host}', 'Incoming'
+                peer, what = instance_id or aor(sender.uri), 'Incoming'
             ActivityLog().info(f'[Message with {peer}] {what} {enc_text}{content_type.lower()} message {message_id} for account {account.id}')
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
