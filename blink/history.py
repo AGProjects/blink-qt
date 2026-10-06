@@ -874,7 +874,8 @@ class MessageHistory(object, metaclass=Singleton):
             value = datetime.fromtimestamp(value, timezone.utc)
         if value.tzinfo is not None:
             value = value.astimezone(timezone.utc).replace(tzinfo=None)
-        return value
+        # a plain datetime: sqlrepr knows no subclass (ISOTimestamp from the journal or a live removal)
+        return datetime(value.year, value.month, value.day, value.hour, value.minute, value.second, value.microsecond)
 
     @staticmethod
     def _set_deleted(where, deleted, when=None):
