@@ -50,7 +50,7 @@ from sipsimple.streams.msrp.screensharing import ExternalVNCServerHandler, Exter
 from sipsimple.threading import run_in_thread, run_in_twisted_thread
 from sipsimple.util import ISOTimestamp
 
-from blink.logging import MessagingTrace as message_log
+from blink.logging import ActivityLog, MessagingTrace as message_log
 from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources

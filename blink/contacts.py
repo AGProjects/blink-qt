@@ -172,13 +172,13 @@ class CallsGroupFiler(object, metaclass=Singleton):
         account = getattr(session, 'account', None)
         if account is None or account is BonjourAccount():
             return
-        streams = [stream.type for stream in (session.streams or session.proposed_streams or ())]
-        if 'audio' not in streams and 'video' not in streams:
-            return
         identity = session.remote_identity
         user, host = identity.uri.user, identity.uri.host
         user = user.decode() if isinstance(user, bytes) else user
         host = host.decode() if isinstance(host, bytes) else host
+        streams = [stream.type for stream in (session.streams or session.proposed_streams or ())]
+        if 'audio' not in streams and 'video' not in streams and not is_conference_uri('%s@%s' % (user, host), account):
+            return      # not a call; a conference room is filed whatever the media (Join Conference with chat only)
         try:
             self.file('%s@%s' % (user, host), identity.display_name, account)
         except Exception as e:
@@ -352,7 +352,8 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         if found is not None:
             return found
         new_contact = addressbook.Contact()
-        new_contact.name = display_name or key
+        # a conference room is named after itself: the room, not the whole address
+        new_contact.name = key.partition('@')[0] if is_conference_uri(key) else (display_name or key)
         new_contact.uris = [addressbook.ContactURI(uri=key, type='SIP' if '@' in key else 'tel')]
         new_contact.save()
         publish_contact_for_groups(new_contact)    # several new members are added before the group saves

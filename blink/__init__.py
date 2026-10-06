@@ -128,7 +128,8 @@ class Blink(QApplication, metaclass=QSingleton):
                                   'SIPAccountRegistrationDidSucceed', 'SIPAccountRegistrationDidFail', 'SIPAccountRegistrationDidEnd',
                                   'SIPAccountRegistrationGotAnswer',
                                   'TLSTransportHasChanged', 'XCAPManagerDidDiscoverServerCapabilities', 'XCAPManagerClientError',
-                                  'SystemIPAddressDidChange')
+                                  'SystemIPAddressDidChange',
+                                  'SIPSessionNewOutgoing', 'SIPSessionNewIncoming', 'SIPSessionDidStart', 'SIPSessionDidEnd', 'SIPSessionDidFail')
 
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
@@ -554,6 +555,68 @@ class Blink(QApplication, metaclass=QSingleton):
         if not refused:
             activity.info('[tls] Every address of %s verifies here with %s and name %s; the SIP stack checks something else (see the PJSIP trace)'
                           % (host, ca_file or 'the system CA store', server_name))
+
+    # Calls, one line when they start, are answered, and end or fail
+
+    @staticmethod
+    def _call_party(session):
+        identity = getattr(session, 'remote_identity', None)
+        uri = getattr(identity, 'uri', None)
+        if uri is None:
+            return '?'
+        user, host = uri.user, uri.host
+        user = user.decode(errors='replace') if isinstance(user, bytes) else user
+        host = host.decode(errors='replace') if isinstance(host, bytes) else host
+        name = getattr(identity, 'display_name', None)
+        return f'{name} <{user}@{host}>' if name else f'{user}@{host}'
+
+    @staticmethod
+    def _call_info(session, streams=None):
+        streams = streams if streams is not None else (session.streams or session.proposed_streams or ())
+        media = ', '.join(stream.type for stream in streams) or 'no media'
+        call_id = getattr(getattr(session, '_invitation', None), 'call_id', None)
+        call_id = call_id.decode(errors='replace') if isinstance(call_id, bytes) else call_id
+        account = getattr(getattr(session, 'account', None), 'id', '?')
+        return f'{media}, account {account}' + (f', Call-ID {call_id}' if call_id else '')
+
+    @staticmethod
+    def _call_duration(session):
+        start, end = getattr(session, 'start_time', None), getattr(session, 'end_time', None)
+        if not start or not end:
+            return ''
+        seconds = int((end - start).total_seconds())
+        return f' after {seconds // 3600}h{seconds % 3600 // 60:02d}m{seconds % 60:02d}s' if seconds >= 3600 else f' after {seconds // 60}m{seconds % 60:02d}s'
+
+    def _NH_SIPSessionNewOutgoing(self, notification):
+        session = notification.sender
+        streams = getattr(notification.data, 'streams', None)
+        ActivityLog().info(f'[call] Outgoing call to {self._call_party(session)} ({self._call_info(session, streams)})')
+
+    def _NH_SIPSessionNewIncoming(self, notification):
+        session = notification.sender
+        streams = getattr(notification.data, 'streams', None)
+        ActivityLog().info(f'[call] Incoming call from {self._call_party(session)} ({self._call_info(session, streams)})')
+
+    def _NH_SIPSessionDidStart(self, notification):
+        session = notification.sender
+        ActivityLog().info(f'[call] Call with {self._call_party(session)} started ({self._call_info(session)})')
+
+    def _NH_SIPSessionDidEnd(self, notification):
+        session = notification.sender
+        originator = getattr(notification.data, 'originator', None)
+        by = f' by {originator}' if originator else ''
+        ActivityLog().info(f'[call] Call with {self._call_party(session)} ended{by}{self._call_duration(session)} ({self._call_info(session)})')
+
+    def _NH_SIPSessionDidFail(self, notification):
+        session = notification.sender
+        data = notification.data
+        code = getattr(data, 'code', None)
+        reason = getattr(data, 'reason', None)
+        failure = getattr(data, 'failure_reason', None)
+        originator = getattr(data, 'originator', None)
+        what = ' '.join(str(part) for part in (code, reason) if part) or 'no answer'
+        detail = f', {failure}' if failure and failure != reason else ''
+        ActivityLog().warning(f'[call] Call with {self._call_party(session)} failed{f" ({originator})" if originator else ""}: {what}{detail} ({self._call_info(session)})')
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
         account = notification.sender
