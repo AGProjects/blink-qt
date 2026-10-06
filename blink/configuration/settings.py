@@ -3,6 +3,7 @@
 
 __all__ = ['BlinkSettings', 'SIPSimpleSettingsExtension']
 
+import os
 import platform
 import sys
 
@@ -81,11 +82,20 @@ class SoundSettings(SettingsGroup):
     play_message_alerts = Setting(type=bool, default=True)
 
 
+# The system CA bundle is kept current by the distribution; the bundled one is
+# not (it still has the expired DST Root CA X3 chain and lacks the current
+# Let's Encrypt roots), so it is only the fallback.
+_system_ca_bundles = ('/etc/ssl/certs/ca-certificates.crt',     # Debian, Ubuntu
+                      '/etc/pki/tls/certs/ca-bundle.crt',       # Fedora, RHEL
+                      '/etc/ssl/ca-bundle.pem',                 # openSUSE
+                      '/etc/ssl/cert.pem')                      # macOS, BSD, Alpine
+_default_ca_list = next((path for path in _system_ca_bundles if os.path.isfile(path)), Resources.get('tls/ca.crt'))
+
 try:
     from blink.configuration._tls import TLSSettingsExtension
 except ImportError:
     class TLSSettingsExtension(TLSSettings):
-        ca_list = Setting(type=ApplicationDataPath, default=ApplicationDataPath(Resources.get('tls/ca.crt')), nillable=True)
+        ca_list = Setting(type=ApplicationDataPath, default=ApplicationDataPath(_default_ca_list), nillable=True)
         certificate = Setting(type=ApplicationDataPath, default=ApplicationDataPath(Resources.get('tls/default.crt')), nillable=True)
         verify_server = Setting(type=bool, default=True)
 

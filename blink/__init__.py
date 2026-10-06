@@ -472,7 +472,8 @@ class Blink(QApplication, metaclass=QSingleton):
             unverified.verify_mode = ssl.CERT_NONE
             from gnutls.crypto import X509Certificate
             certificate = X509Certificate(ssl.DER_cert_to_PEM_cert(connect(unverified)).encode())
-            details = '; certificate for %s, issued by %s, valid until %s' % (certificate.subject, certificate.issuer, certificate.expiration_time)
+            until = time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(certificate.expiration_time))
+            details = '; certificate for %s, issued by %s, valid until %s' % (certificate.subject, certificate.issuer, until)
         except Exception:
             pass
         system_store = ''
