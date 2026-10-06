@@ -36,7 +36,7 @@ from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
 
-from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, is_instance_id
+from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, is_instance_id, placeholder_instance_id
 from blink.util import run_in_gui_thread, translate
 import traceback
 
@@ -1056,6 +1056,8 @@ class MessageHistory(object, metaclass=Singleton):
             domain = domain.decode() if isinstance(domain, bytes) else domain
 
             remote_uri = '%s@%s' % (user, domain)
+            # a neighbour who is away is addressed by placeholder; the conversation is its instance id
+            remote_uri = placeholder_instance_id(remote_uri) or remote_uri
             match = cls.phone_number_re.match(remote_uri)
             if match:
                 remote_uri = match.group('number')
@@ -1204,7 +1206,7 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def load(self, uri, session, entries=100):
         notification_center = NotificationCenter()
-        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else uri
+        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(uri)
         try:
             query = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted'))
             total = query.count()
@@ -1219,7 +1221,7 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def reload_pending_encrypted(self, uri, session, entries=100):
         notification_center = NotificationCenter()
-        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else uri
+        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(uri)
         try:
             result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', Message.q.decrypted == '3')).orderBy('timestamp')[-entries:]
         except Exception as e:

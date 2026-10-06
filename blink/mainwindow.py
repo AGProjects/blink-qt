@@ -871,12 +871,13 @@ class MainWindow(base_class, ui_class):
 
     @run_in_gui_thread
     def _NH_BlinkSessionConfirmReadMessages(self, notification):
-        uri = str(notification.sender.uri).partition(':')[2]
-        try:
-            del(self.unread_messages[uri])
-        except KeyError:
-            pass
-        else:
+        session = notification.sender
+        # history keys a Bonjour neighbour by its instance id, everyone else by user@host
+        keys = {str(session.uri).partition(':')[2], str(session.contact_uri.uri).partition(';')[0]}
+        if session.remote_instance_id:
+            keys.add(session.remote_instance_id)
+        removed = [self.unread_messages.pop(key) for key in keys if key in self.unread_messages]
+        if removed:
             NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
 
     @run_in_gui_thread

@@ -787,6 +787,14 @@ class MessageManager(object, metaclass=Singleton):
     def _send_outgoing_messages(self):
         while self._outgoing_message_queue:
             message = self._outgoing_message_queue.popleft()
+            instance_id = placeholder_instance_id(message.uri)
+            if instance_id:
+                # A Bonjour neighbour who is not on the network has no address: keep the
+                # message unsent (failed-local) and send it when the neighbour is back.
+                log.info(f'Message {message.id} to Bonjour neighbour {instance_id} kept until the neighbour is on the network')
+                if message.session is not None and not message._disabled_imdn_content_type:
+                    NotificationCenter().post_notification('BlinkMessageDidFail', sender=message.session, data=NotificationData(reason='Neighbour is not on the network', originator='local', id=message.id, code=None))
+                continue
             message.send()
 
     @run_in_thread('sync')
@@ -1581,6 +1589,9 @@ class MessageManager(object, metaclass=Singleton):
             from blink.contacts import URIUtils
             contact, contact_uri = URIUtils.find_contact(message.remote_uri)
 
+            if placeholder_instance_id(contact_uri.uri):
+                continue  # a Bonjour neighbour who is away: retried when it is back
+
             if contact_uri.uri in created_views:
                 # creation of message views take time, so we need to skip duplicates here
                 continue
@@ -1766,7 +1777,7 @@ class MessageManager(object, metaclass=Singleton):
         account = BonjourAccount() if instance_id else AccountManager().default_account
 
         try:
-            blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id) or (contact.type == 'dummy' and uri in session.contact.uris))
+            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id) or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
             log.info(f"Create message view from session for {contact_uri.uri} with instance_id {instance_id}")
             ActivityLog().info(f'[Message with {instance_id or contact_uri.uri}] Conversation opened by the user for account {account.id}')

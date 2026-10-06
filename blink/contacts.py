@@ -290,8 +290,20 @@ class MessageContactsManager(object, metaclass=Singleton):
     def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
         contacts = notification.data.contacts
         found_contacts = []
+        seen_ids = set()
         for (display_name, uri) in contacts:
             contact, contact_uri = URIUtils.find_contact(uri)
+            if contact_uri is None:
+                # a contact with no address left (a neighbour whose last announcement went away)
+                ActivityLog().warning(f'[contacts] No address for the conversation with {uri}, not listed in the Messages group')
+                continue
+            # Several conversation keys can be one party: a neighbour's old and new keys,
+            # whether it is online (one contact) or away (a placeholder per key).
+            identity = neighbour_instance_id(contact, str(contact_uri.uri)) or (contact.settings.id if contact.type != 'dummy' else None)
+            if identity is not None:
+                if identity in seen_ids:
+                    continue
+                seen_ids.add(identity)
             if contact.type in ['dummy']:
                 display_name = self._fallback_name(uri, contact_uri, display_name)
                 contact = Contact(MessageContact(display_name, [contact_uri], uri), None)
@@ -312,6 +324,21 @@ class MessageContactsManager(object, metaclass=Singleton):
         for id in deleted_contact_ids:
             contact = self.contacts.pop(id)
             notification.center.post_notification('MessageContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+        self._log_members(found_contacts, removed=len(deleted_contact_ids))
+
+    @staticmethod
+    def _log_members(contacts, removed=0):
+        activity = ActivityLog()
+        activity.info(f'[contacts] Messages group has {len(contacts)} contacts' + (f', {removed} removed' if removed else ''))
+        for contact in sorted(contacts, key=lambda item: str(item.name or '').lower()):
+            try:
+                kind = contact.type
+            except Exception:
+                kind = 'unknown'
+            kind = 'history' if isinstance(contact.settings, MessageContact) else kind
+            uri = contact.uri.uri if contact.uri is not None else ''
+            key = neighbour_instance_id(contact, str(uri)) or uri
+            activity.info(f'[contacts]   {contact.name} <{key}> ({kind})')
 
     @staticmethod
     def _fallback_name(uri, contact_uri, display_name=None):
@@ -1730,6 +1757,12 @@ class Contact(object):
     @property
     def info(self):
         try:
+            # In the Messages group a row is a conversation, and a Bonjour
+            # conversation is the neighbour's instance id.
+            in_messages_group = getattr(self.group, 'settings', None) is MessageContactsGroup()
+            instance_id = neighbour_instance_id(self, str(self.uri.uri) if self.uri is not None else None)
+            if instance_id and (in_messages_group or self.type != 'bonjour'):
+                return instance_id
             if self.type == 'bonjour':
                 return bonjour_info(self.settings)
             return self.note or self.uri.uri
@@ -5332,7 +5365,7 @@ class URIUtils(object):
             host = host.rsplit(':', 1)[0] if host.count(':') == 1 else host
         if not user or not host:
             return None
-        for contact in (contact for contact in contact_model.iter_contacts() if contact.type == 'bonjour'):
+        for contact in (contact for contact in contact_model.iter_contacts() if contact.type == 'bonjour' and contact.uri is not None):
             for contact_uri in contact.uris:
                 neighbour_user, neighbour_host = contact_uri.uri.user, contact_uri.uri.host
                 neighbour_user = neighbour_user.decode() if isinstance(neighbour_user, bytes) else neighbour_user
@@ -5356,7 +5389,7 @@ class URIUtils(object):
                 uri = bonjour_placeholder_uri(neighbour_id)
         if instance_id:
             bare_id = bare_instance_id(instance_id)
-            for contact in (contact for contact in contact_model.iter_contacts() if contact.type == 'bonjour'):
+            for contact in (contact for contact in contact_model.iter_contacts() if contact.type == 'bonjour' and contact.uri is not None):
                 if bare_instance_id(contact.settings.id) == bare_id:
                     return contact, contact.uri
         else:

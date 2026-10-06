@@ -62,7 +62,7 @@ from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, back
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.zrtp import ZRTPWidget
 from blink.streams.message import MessageStream
-from blink.uris import bare_instance_id
+from blink.uris import bare_instance_id, placeholder_instance_id
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
@@ -687,6 +687,17 @@ class BlinkSession(BlinkSessionBase):
             self.items.chat.timestamp = timestamp if timestamp else ISOTimestamp.now().replace(tzinfo=tzlocal())
             # TODO should we reorder the tiles?
 
+    @staticmethod
+    def _instance_id(contact, contact_uri, remote_instance_id=None):
+        # One spelling, or a neighbour is two conversations; and every session with a
+        # Bonjour neighbour, online or standing in by placeholder, knows its instance
+        # id, whichever action created it.
+        if not remote_instance_id and getattr(contact, 'type', None) == 'bonjour':
+            remote_instance_id = contact.settings.id
+        if not remote_instance_id and contact_uri is not None:
+            remote_instance_id = placeholder_instance_id(contact_uri.uri)
+        return bare_instance_id(remote_instance_id) or None
+
     def init_incoming(self, sip_session, streams, contact, contact_uri, reinitialize=False, remote_instance_id=None):
         assert self.state in (None, 'initialized', 'ended')
         assert self.contact is None or contact.settings is self.contact.settings
@@ -700,7 +711,7 @@ class BlinkSession(BlinkSessionBase):
         self.sip_session = sip_session
         self.account = sip_session.account
         self.contact = contact
-        self.remote_instance_id = bare_instance_id(remote_instance_id) or None  # one spelling, or a neighbour is two conversations
+        self.remote_instance_id = self._instance_id(contact, contact_uri, remote_instance_id)
         self.contact_uri = contact_uri
         self.uri = self._parse_uri(contact_uri.uri)
         self.streams.extend(streams)
@@ -728,7 +739,7 @@ class BlinkSession(BlinkSessionBase):
         self.account = account
         self.contact = contact
         self.contact_uri = contact_uri
-        self.remote_instance_id = bare_instance_id(remote_instance_id) or None  # one spelling, or a neighbour is two conversations
+        self.remote_instance_id = self._instance_id(contact, contact_uri, remote_instance_id)
         self.uri = self._normalize_uri(contact_uri.uri)
         # reevaluate later, after we add the .active/.proposed attributes to streams, if creating the sip session and the streams at this point is desirable -Dan
         # note: creating the sip session early also need the test in hold/unhold/end to change from sip_session is (not) None to sip_session.state is (not) None -Dan
@@ -3372,7 +3383,8 @@ class ChatSessionItem(object):
 
     @property
     def info(self):
-        return self.blink_session.contact.note or self.blink_session.contact_uri.uri
+        # a Bonjour conversation is the neighbour's instance id, not today's transport address
+        return self.blink_session.remote_instance_id or self.blink_session.contact.note or self.blink_session.contact_uri.uri
 
     @property
     def state(self):
