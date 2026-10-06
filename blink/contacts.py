@@ -155,6 +155,7 @@ class CallsGroupFiler(object, metaclass=Singleton):
             return
         self._started = True
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPSessionDidStart')
         notification_center.add_observer(self, name='SIPSessionDidEnd')
         notification_center.add_observer(self, name='SIPSessionDidFail')
         notification_center.add_observer(self, name='XCAPManagerDidReloadData')
@@ -180,22 +181,41 @@ class CallsGroupFiler(object, metaclass=Singleton):
             except Exception as e:
                 ActivityLog().exception(f'[contacts] Filing the call with {remote_uri} failed: {e!r}')
 
-    def _NH_SIPSessionDidEnd(self, notification):
-        session = notification.sender
-        account = getattr(session, 'account', None)
-        if account is None or account is BonjourAccount():
-            return
-        identity = session.remote_identity
+    @staticmethod
+    def _session_party(session):
+        """The other party of a SIP session as user@host, or None."""
+        identity = getattr(session, 'remote_identity', None)
+        if identity is None:
+            return None
         user, host = identity.uri.user, identity.uri.host
         user = user.decode() if isinstance(user, bytes) else user
         host = host.decode() if isinstance(host, bytes) else host
-        streams = [stream.type for stream in (session.streams or session.proposed_streams or ())]
-        if 'audio' not in streams and 'video' not in streams and not is_conference_uri('%s@%s' % (user, host), account):
-            return      # not a call; a conference room is filed whatever the media (Join Conference with chat only)
+        return '%s@%s' % (user, host)
+
+    def _file_session(self, session):
+        account = getattr(session, 'account', None)
+        party = self._session_party(session)
+        if account is None or account is BonjourAccount() or party is None:
+            return
         try:
-            self.file('%s@%s' % (user, host), identity.display_name, account)
+            self.file(party, session.remote_identity.display_name, account)
         except Exception as e:
-            ActivityLog().exception(f'[contacts] Filing the call with {user}@{host} failed: {e!r}')
+            ActivityLog().exception(f'[contacts] Filing the call with {party} failed: {e!r}')
+
+    def _NH_SIPSessionDidStart(self, notification):
+        # A conference room is filed as soon as it is joined: hanging up its audio
+        # leaves the chat stream going, so the session may not end for a long time.
+        session = notification.sender
+        if is_conference_uri(self._session_party(session), getattr(session, 'account', None)):
+            self._file_session(session)
+
+    def _NH_SIPSessionDidEnd(self, notification):
+        # A call (audio or video) is filed when it ends or fails, answered or not.
+        # A conference room is filed whatever the media: Join Conference may be chat only.
+        session = notification.sender
+        streams = [stream.type for stream in (session.streams or session.proposed_streams or ())]
+        if 'audio' in streams or 'video' in streams or is_conference_uri(self._session_party(session), getattr(session, 'account', None)):
+            self._file_session(session)
 
     _NH_SIPSessionDidFail = _NH_SIPSessionDidEnd
 
