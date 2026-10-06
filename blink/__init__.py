@@ -1,6 +1,8 @@
 
 import os
 import sys
+import signal
+import socket
 import platform
 
 # QtWebEngine's embedded Chromium spams stderr with harmless errors on systems
@@ -12,7 +14,7 @@ import platform
 # is imported/initialized below.
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = ("--disable-logging " + os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")).strip()
 
-from PyQt6.QtCore import Qt, QEvent, QLocale, QTranslator, QLoggingCategory
+from PyQt6.QtCore import Qt, QEvent, QLocale, QTranslator, QLoggingCategory, QSocketNotifier
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QIcon
 
@@ -23,6 +25,7 @@ from application.system import host, makedirs
 from eventlib import api
 from zope.interface import implementer
 
+from sipsimple import __version__ as sdk_version
 from sipsimple.application import SIPApplication
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import Contact, Group
@@ -45,7 +48,7 @@ from blink.logswindow import LogsWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink.configuration.addressbook import ContactExtension, GroupExtension
 from blink.configuration.settings import SIPSimpleSettingsExtension
-from blink.logging import LogManager
+from blink.logging import ActivityLog, LogManager
 from blink.mainwindow import MainWindow
 from blink.presence import PresenceManager
 from blink.resources import ApplicationData, Resources
@@ -115,12 +118,23 @@ class IPAddressMonitor(object):
 @implementer(IObserver)
 class Blink(QApplication, metaclass=QSingleton):
 
+    # Notifications logged to the Activity log, matching what Blink for macOS logs
+    __activity_notifications__ = ('SIPAccountManagerWillStart', 'SIPAccountDidActivate', 'SIPAccountDidDeactivate',
+                                  'SIPAccountRegistrationDidSucceed', 'SIPAccountRegistrationDidFail', 'SIPAccountRegistrationDidEnd',
+                                  'TLSTransportHasChanged', 'XCAPManagerDidDiscoverServerCapabilities', 'XCAPManagerClientError',
+                                  'SystemIPAddressDidChange')
+
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
+        self._log_versions()
+        self.registrar_addresses = {}
+        self.contact_addresses = {}
         self.setAttribute(Qt.ApplicationAttribute.AA_DontShowIconsInMenus, False)
         self.sip_application = SIPApplication()
         self.first_run = False
         self.reinit = False
+        self.quitting = False
+        self._pending_signal = None
 
         translator = QTranslator(self)
         system_language = QLocale.system().name().split('_')[0]
@@ -188,21 +202,65 @@ class Blink(QApplication, metaclass=QSingleton):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=self.sip_application)
+        for name in self.__activity_notifications__:
+            notification_center.add_observer(self, name=name)
 
         branding.setup(self)
 
     def run(self):
         self.first_run = not os.path.exists(ApplicationData.get('config'))
+        self._install_signal_handlers()
         self.sip_application.start(FileStorage(ApplicationData.directory))
         self.exec()
+        self.quitting = True
+        activity = ActivityLog()
+        activity.info('User interface closed, stopping the SIP application')
         self.update_manager.shutdown()
         self.sip_application.stop()
         self.sip_application.thread.join()
+        activity.info('SIP application stopped')
         self.log_manager.stop()
         if self.reinit:
             os.execl(sys.executable, sys.executable, *sys.argv)
 
+    def _install_signal_handlers(self):
+        # Python only runs signal handlers when the interpreter gets control,
+        # which may not happen while Qt sits in its event loop. The wakeup fd
+        # makes the event loop notice the signal immediately.
+        self._signal_rsock, self._signal_wsock = socket.socketpair()
+        self._signal_rsock.setblocking(False)
+        self._signal_wsock.setblocking(False)
+        signal.set_wakeup_fd(self._signal_wsock.fileno())
+        self._signal_notifier = QSocketNotifier(self._signal_rsock.fileno(), QSocketNotifier.Type.Read, self)
+        self._signal_notifier.activated.connect(self._SH_SignalWakeup)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+
+    def _signal_handler(self, signum, frame):
+        name = signal.Signals(signum).name
+        if self.quitting:
+            # second signal while shutting down (e.g. the SIP stack waits for
+            # unregistration to time out): give up waiting
+            ActivityLog().warning('Received %s during shutdown, exiting immediately' % name)
+            os._exit(1)
+        # quit from the event loop (see _SH_SignalWakeup), not from inside
+        # whatever code the handler interrupted
+        self._pending_signal = name
+
+    def _SH_SignalWakeup(self):
+        try:
+            while self._signal_rsock.recv(64):
+                pass
+        except BlockingIOError:
+            pass
+        name, self._pending_signal = self._pending_signal, None
+        if name is not None and not self.quitting:
+            ActivityLog().info('Received %s, quitting' % name)
+            self.quitting = True
+            self.quit()
+
     def quit(self):
+        ActivityLog().info('Quit requested')
         self.chat_window.close()
         self.main_window.close()
         super(Blink, self).quit()
@@ -224,6 +282,38 @@ class Blink(QApplication, metaclass=QSingleton):
             return list(codec.decode() for codec in SIPApplication.engine._ua.available_video_codecs)
         else:
             return []
+
+    def _log_versions(self):
+        from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR
+        activity = ActivityLog()
+        activity.info('Starting Blink %s (%s)' % (__version__, __date__))
+        activity.info('Running on %s %s (%s), Python %s, PyQt %s, Qt %s' % (platform.system(), platform.release(), platform.machine(), platform.python_version(), PYQT_VERSION_STR, QT_VERSION_STR))
+        try:
+            from sipsimple.core import CORE_REVISION, PJ_VERSION, PJ_SVN_REVISION
+        except ImportError:
+            activity.info('Using SIP SIMPLE SDK version %s' % sdk_version)
+        else:
+            pj_version = PJ_VERSION.decode() if isinstance(PJ_VERSION, bytes) else PJ_VERSION
+            activity.info('Using SIP SIMPLE SDK version %s, core version %s, PJSIP version %s (rev %s)' % (sdk_version, CORE_REVISION, pj_version, PJ_SVN_REVISION))
+        activity.info('Data directory: %s' % ApplicationData.directory)
+
+    def _log_media(self):
+        settings = SIPSimpleSettings()
+        activity = ActivityLog()
+        activity.info('SIP device ID: %s' % settings.instance_id)
+        activity.info('Core audio codecs: %s' % ', '.join(self.available_codecs))
+        activity.info('Configured audio codecs: %s' % ', '.join(settings.rtp.audio_codec_list))
+        activity.info('Core video codecs: %s' % ', '.join(self.available_video_codecs))
+        activity.info('Configured video codecs: %s' % ', '.join(settings.rtp.video_codec_list))
+        activity.info('Audio devices: input %s, output %s, alert %s' % (settings.audio.input_device, settings.audio.output_device, settings.audio.alert_device))
+        engine = SIPApplication.engine
+        try:
+            video_devices = [device for device in engine.video_devices if device not in ('system_default', None)]
+        except Exception:
+            video_devices = []
+        if video_devices:
+            activity.info('Available video cameras: %s' % ', '.join(video_devices))
+        activity.info('Using video camera %s' % settings.video.device)
 
     def eventFilter(self, watched, event):
         if watched in (self.main_window, self.chat_window):
@@ -271,13 +361,74 @@ class Blink(QApplication, metaclass=QSingleton):
         if not accounts or (self.first_run and accounts == [BonjourAccount()]):
             self.main_window.preferences_window.show_create_account_dialog()
         self.update_manager.initialize()
+        self._log_media()
         msg = 'Available audio codecs: %s\n' % ", ".join(self.available_codecs)
         NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
         msg = 'Available video codecs: %s\n' % ", ".join(self.available_video_codecs)
         NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
 
     def _NH_SIPApplicationWillEnd(self, notification):
+        ActivityLog().info('Stopping Blink')
         self.ip_address_monitor.stop()
+
+    def _NH_SIPAccountManagerWillStart(self, notification):
+        if getattr(notification.data, 'bonjour_available', False):
+            ActivityLog().info('Bonjour discovery is available')
+        else:
+            ActivityLog().info('Bonjour discovery is not available')
+
+    def _NH_SIPAccountDidActivate(self, notification):
+        ActivityLog().info('Account %s activated' % notification.sender.id)
+
+    def _NH_SIPAccountDidDeactivate(self, notification):
+        ActivityLog().info('Account %s deactivated' % notification.sender.id)
+
+    def _NH_SIPAccountRegistrationDidSucceed(self, notification):
+        account = notification.sender
+        data = notification.data
+        address = '%s:%s;transport=%s' % (data.registrar.address, data.registrar.port, data.registrar.transport)
+        contact = str(data.contact_header.uri)
+        registrar_changed = self.registrar_addresses.get(account.id) != address
+        contact_changed = self.contact_addresses.get(account.id) != contact
+        if registrar_changed and contact_changed:
+            ActivityLog().info('Account %s registered contact %s at %s for %d seconds' % (account.id, contact, address, data.expires))
+        elif contact_changed:
+            ActivityLog().debug('Account %s changed contact to %s' % (account.id, contact))
+        elif registrar_changed:
+            ActivityLog().debug('Account %s changed registrar to %s' % (account.id, address))
+        self.registrar_addresses[account.id] = address
+        self.contact_addresses[account.id] = contact
+        if account.contact.public_gruu is not None:
+            ActivityLog().debug('Account %s has public SIP GRUU %s' % (account.id, account.contact.public_gruu))
+
+    def _NH_SIPAccountRegistrationDidFail(self, notification):
+        ActivityLog().warning('Account %s failed to register: %s' % (notification.sender.id, notification.data.error))
+
+    def _NH_SIPAccountRegistrationDidEnd(self, notification):
+        account = notification.sender
+        ActivityLog().info('Account %s was unregistered' % account.id)
+        self.registrar_addresses.pop(account.id, None)
+        self.contact_addresses.pop(account.id, None)
+
+    def _NH_TLSTransportHasChanged(self, notification):
+        data = notification.data
+        ActivityLog().info('TLS transport verify server: %s' % data.verify_server)
+        ActivityLog().info('TLS transport certificate: %s' % data.certificate)
+        ActivityLog().info('TLS transport authorities: %s' % data.ca_file)
+
+    def _NH_XCAPManagerDidDiscoverServerCapabilities(self, notification):
+        manager = notification.sender
+        if manager.xcap_root is None:
+            return
+        ActivityLog().debug('Using XCAP root %s for account %s' % (manager.xcap_root, manager.account.id))
+        ActivityLog().debug('XCAP server capabilities: %s' % ', '.join(notification.data.auids))
+
+    def _NH_XCAPManagerClientError(self, notification):
+        manager = notification.sender
+        ActivityLog().error('XCAP error for account %s (%s): %s' % (manager.account.id, manager.xcap_root, notification.data.error))
+
+    def _NH_SystemIPAddressDidChange(self, notification):
+        ActivityLog().info('IP address changed from %s to %s' % (notification.data.old_ip_address, notification.data.new_ip_address))
 
     def _NH_SIPApplicationDidEnd(self, notification):
         self.presence_manager.stop()
@@ -285,5 +436,6 @@ class Blink(QApplication, metaclass=QSingleton):
     @run_in_gui_thread
     def _NH_SIPApplicationGotFatalError(self, notification):
         log.error('Fatal error:\n{}'.format(notification.data.traceback))
+        ActivityLog().error('Fatal error:\n%s' % notification.data.traceback)
         QMessageBox.critical(self.main_window, "Fatal Error", "A fatal error occurred, {} will now exit.".format(self.applicationName()))
         sys.exit(1)

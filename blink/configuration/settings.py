@@ -65,6 +65,7 @@ class LogsSettingsExtension(LogsSettings):
     trace_msrp = Setting(type=bool, default=False)
     trace_xcap = Setting(type=bool, default=False)
     trace_notifications = Setting(type=bool, default=False)
+    activity_debug = Setting(type=bool, default=False)
 
 
 class ServerSettings(SettingsGroup):

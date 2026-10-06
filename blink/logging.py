@@ -1,6 +1,8 @@
 
 import os
 import sys
+import threading
+import traceback
 
 from collections import deque
 from datetime import datetime
@@ -19,7 +21,107 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from blink.resources import ApplicationData
 
 
-__all__ = ['LogManager', 'MessagingTrace']
+__all__ = ['ActivityLog', 'LogManager', 'MessagingTrace']
+
+
+class ActivityLog(object, metaclass=Singleton):
+    """Application activity log, the equivalent of BlinkLogger in Blink for macOS.
+
+    Every line goes to logs/activity.txt (always on, no setting), to stdout
+    and to the Activity tab of the logs window when one is attached.  The
+    file is written from the calling thread under a lock, so it keeps
+    growing even when the GUI thread is busy or stuck.
+
+    Subsystems prefix their lines so the file can be grepped, e.g.
+    '[journal]', '[db]', '[ab]', '[ab] [origin]', '[escrow]'.
+    """
+
+    backlog_size = 5000
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._file = None
+        self._gui_logger = None
+        self._backlog = deque(maxlen=self.backlog_size)
+
+    @property
+    def filename(self):
+        return os.path.join(ApplicationData.directory, 'logs', 'activity.txt')
+
+    def info(self, message):
+        self._log('INFO', message)
+
+    def warning(self, message):
+        self._log('WARN', message)
+
+    warn = warning
+
+    def error(self, message):
+        self._log('ERROR', message)
+
+    def exception(self, message):
+        self._log('ERROR', '%s\n%s' % (message, traceback.format_exc().rstrip()))
+
+    def debug(self, message):
+        try:
+            enabled = SIPSimpleSettings().logs.activity_debug
+        except Exception:
+            # settings not loaded yet
+            return
+        if enabled:
+            self._log('DEBUG', message)
+
+    def set_gui_logger(self, logger):
+        """Attach a callable(level, timestamp, message) and replay the backlog to it."""
+        with self._lock:
+            backlog = list(self._backlog)
+            self._backlog.clear()
+            self._gui_logger = logger
+        for line in backlog:
+            logger(*line)
+
+    def detach_gui_logger(self):
+        """Keep lines in the in-memory backlog instead of sending them to the window."""
+        with self._lock:
+            self._gui_logger = None
+
+    def _log(self, level, message):
+        try:
+            text = message if isinstance(message, str) else str(message)
+        except Exception:
+            return
+        timestamp = datetime.now()
+        prefix = '' if level == 'INFO' else '%s: ' % level.capitalize()
+        print('%s%s' % (prefix, text), flush=True)
+        with self._lock:
+            self._write(timestamp, level, text)
+            gui_logger = self._gui_logger
+            if gui_logger is None:
+                self._backlog.append((level, timestamp, text))
+        if gui_logger is not None:
+            try:
+                gui_logger(level, timestamp, text)
+            except Exception:
+                pass
+
+    def _write(self, timestamp, level, text):
+        if self._file is None:
+            try:
+                makedirs(os.path.dirname(self.filename))
+                # explicit UTF-8, never raise on a character that cannot be encoded
+                self._file = open(self.filename, 'a', encoding='utf-8', errors='replace')
+            except Exception:
+                # filesystem not ready, retry on the next line
+                return
+        try:
+            self._file.write('%s [%s] %s\n' % (timestamp, level, text))
+            self._file.flush()
+        except Exception:
+            try:
+                self._file.close()
+            except Exception:
+                pass
+            self._file = None
 
 
 @implementer(IObserver)
