@@ -1163,6 +1163,7 @@ padding: 2px;</string>
      </property>
     </widget>
     <addaction name="redial_action"/>
+    <addaction name="join_conference_action"/>
     <addaction name="voicemail_menu"/>
     <addaction name="transfer_menu"/>
     <addaction name="auto_answer_action"/>
@@ -1180,7 +1181,6 @@ padding: 2px;</string>
     <addaction name="export_pgp_key_action"/>
     <addaction name="generate_pgp_key"/>
     <addaction name="separator"/>
-    <addaction name="join_conference_action"/>
     <addaction name="auto_accept_chat_action"/>
     <addaction name="separator"/>
     <addaction name="received_messages_sound_action"/>
@@ -1443,7 +1443,7 @@ padding: 2px;</string>
   </action>
   <action name="join_conference_action">
    <property name="text">
-    <string>&amp;Join a MSRP conference...</string>
+    <string>&amp;Join Conference...</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+J</string>
