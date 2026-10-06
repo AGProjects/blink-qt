@@ -32,6 +32,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_summary, dominant_media, legacy_call_record, this_device_id
+from blink.message_envelopes import METADATA_CONTENT_TYPE, reply_metadata
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
@@ -920,6 +921,123 @@ class MessageHistory(object, metaclass=Singleton):
                  f' where deleted = 1 and remote_uri not in (select remote_uri from {table} where {NOT_DELETED_SQL})'
                  f' group by remote_uri')
         return {remote_uri: (int(count or 0), int(removed or 0)) for remote_uri, count, removed in self.db.queryAll(query) if remote_uri}
+
+    # Paging and previews
+    #
+    # Plain queries for the db thread (callers come with the journal and UI
+    # patches). Conversation keys are remote_uri; `accounts` narrows to account
+    # ids: None means every account, an empty list means none.
+
+    # rows that hang off another row and are never bubbles of their own
+    __trail_actions__ = ('location_update', 'meeting_update')
+    # how many of a conversation's newest text rows a preview looks at
+    __preview_candidates__ = 5
+
+    def _in_sql(self, column, values):
+        if values is None:
+            return ''
+        if isinstance(values, str):
+            return f' and {column} = {self.db.sqlrepr(values)}'
+        values = list(values)
+        if not values:
+            return ' and 0'
+        return f" and {column} in ({', '.join(self.db.sqlrepr(str(value)) for value in values)})"
+
+    @staticmethod
+    def _category_sql(category):
+        # 'links' is text with a link in it (has_link), not a category of its own
+        if not category:
+            return ''
+        if category == 'links':
+            return " and category = 'text' and has_link = 1"
+        return f" and category = {Message.sqlrepr(category)}"
+
+    def last_message_times(self, accounts=None, include_calls=False):
+        """{conversation key: newest message time} for ordering conversations."""
+        query = (f'select remote_uri, max(timestamp) from {Message.sqlmeta.table}'
+                 f' where {NOT_DELETED_SQL} and category is not null' + ('' if include_calls else " and category != 'call'")
+                 + self._in_sql('account_id', accounts) + ' group by remote_uri')
+        return {str(remote_uri): str(newest) for remote_uri, newest in self.db.queryAll(query) if remote_uri and newest}
+
+    def last_message_accounts(self, accounts=None):
+        """{conversation key: account id of its newest message}, the account a conversation continues on."""
+        table = Message.sqlmeta.table
+        where = f' where {NOT_DELETED_SQL} and category is not null' + self._in_sql('account_id', accounts)
+        query = (f'select m.remote_uri, m.account_id from {table} m'
+                 f' join (select remote_uri, max(timestamp) as newest from {table}{where} group by remote_uri) latest'
+                 f' on m.remote_uri = latest.remote_uri and m.timestamp = latest.newest'
+                 f' group by m.remote_uri')
+        return {str(remote_uri): str(account_id) for remote_uri, account_id in self.db.queryAll(query) if remote_uri and account_id}
+
+    def last_text_messages(self, accounts=None, remote_uri=None):
+        """([{remote_uri, account_id, message_id, timestamp, content_type, content}, ...], reaction ids)
+
+        The newest few text rows of every conversation, newest first, the
+        candidates for the preview line (blink.message_envelopes.conversation_preview
+        picks one; an encrypted body has to be decrypted first). Reaction ids are the
+        reply ids of reply links, so a one-tap emoji reply can be passed over.
+        """
+        table = Message.sqlmeta.table
+        where = (f" where {NOT_DELETED_SQL} and category = 'text'"
+                 + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri))
+        columns = 'remote_uri, account_id, message_id, timestamp, content_type, content'
+        try:
+            rows = self.db.queryAll(f'select {columns} from (select {columns}, row_number() over'
+                                    f' (partition by remote_uri order by timestamp desc, id desc) as rn from {table}{where})'
+                                    f' where rn <= {self.__preview_candidates__} order by remote_uri, timestamp desc')
+        except Exception as e:
+            # an SQLite without window functions (< 3.25): the newest row only
+            ActivityLog().warning(f'[db] Preview query fell back to the newest message only: {e}')
+            rows = self.db.queryAll(f'select m.remote_uri, m.account_id, m.message_id, m.timestamp, m.content_type, m.content from {table} m'
+                                    f' join (select remote_uri, max(timestamp) as newest from {table}{where} group by remote_uri) latest'
+                                    f' on m.remote_uri = latest.remote_uri and m.timestamp = latest.newest'
+                                    f" where m.category = 'text' and (m.deleted is null or m.deleted = 0)")
+        result = [dict(remote_uri=str(remote), account_id=str(account or ''), message_id=str(message_id or ''), timestamp=str(stamp),
+                       content_type=str(content_type or ''), content=content)
+                  for remote, account, message_id, stamp, content_type, content in rows if remote and stamp]
+        reaction_ids = set()
+        if result:
+            query = (f"select content from {table} where content_type = '{METADATA_CONTENT_TYPE}' and {NOT_DELETED_SQL} and content like '%reply%'"
+                     + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri))
+            for (content,) in self.db.queryAll(query):
+                link = reply_metadata(content)
+                if link:
+                    reaction_ids.add(link['reply_id'])
+        return result, reaction_ids
+
+    def present_categories(self, remote_uri, accounts=None):
+        """The category filters a conversation has messages for, 'links' included."""
+        where = (f' where {NOT_DELETED_SQL} and remote_uri = {self.db.sqlrepr(str(remote_uri))}' + self._in_sql('account_id', accounts))
+        table = Message.sqlmeta.table
+        found = {str(category) for (category,) in self.db.queryAll(f'select distinct category from {table}{where} and category is not null') if category}
+        if 'text' in found and self.db.queryAll(f"select 1 from {table}{where} and category = 'text' and has_link = 1 limit 1"):
+            found.add('links')
+        return found
+
+    def get_messages(self, remote_uri, before=None, after=None, category=None, limit=100, accounts=None, include_trail=False):
+        """A page of a conversation, newest first: up to `limit` messages older than
+        `before` (and newer than `after`), of one category if given. Location trail
+        ticks are left out unless asked for (they belong to their share's bubble) and
+        metadata sidecars always are."""
+        query = f'remote_uri = {self.db.sqlrepr(str(remote_uri))} and {NOT_DELETED_SQL}' + self._category_sql(category) + self._in_sql('account_id', accounts)
+        # sidecars (reply links, captions, waveforms) are not bubbles: they come with related_messages()
+        query += f" and content_type != '{METADATA_CONTENT_TYPE}'"
+        if not include_trail:
+            actions = ', '.join(self.db.sqlrepr(action) for action in self.__trail_actions__)
+            query += f' and (related_action is null or related_action not in ({actions}))'
+        if before is not None:
+            query += f' and timestamp < {self.db.sqlrepr(self._storage_time(before))}'
+        if after is not None:
+            query += f' and timestamp > {self.db.sqlrepr(self._storage_time(after))}'
+        return list(Message.select(query, orderBy=['-timestamp', '-id'], limit=int(limit)))
+
+    def related_messages(self, message_ids):
+        """The rows filed against a page of messages (location ticks, sidecars keyed by related_msg_id)."""
+        message_ids = [str(message_id) for message_id in message_ids if message_id]
+        if not message_ids:
+            return []
+        query = f"related_msg_id in ({', '.join(self.db.sqlrepr(message_id) for message_id in message_ids)}) and {NOT_DELETED_SQL}"
+        return list(Message.select(query, orderBy=['timestamp', 'id']))
 
     @run_in_thread('db')
     def mark_conversation_read(self, remote_uri, source=None):
