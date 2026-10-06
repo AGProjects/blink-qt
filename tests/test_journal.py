@@ -190,5 +190,30 @@ class SeenMessageIdsTests(unittest.TestCase):
         self.assertFalse(seen.seen('a'))
 
 
+class OwnMarkersTests(unittest.TestCase):
+    def setUp(self):
+        self.now = 1000.0
+        self.markers = journal.OwnMarkers(ttl=30, clock=lambda: self.now)
+
+    def test_device_id_settles_it(self):
+        self.assertTrue(self.markers.is_echo('a@b', 'me', 'me'))
+        self.assertFalse(self.markers.is_echo('a@b', 'phone', 'me'))
+        self.markers.note('a@b')
+        self.assertFalse(self.markers.is_echo('a@b', 'phone', 'me'))     # another device read it too
+
+    def test_without_device_id(self):
+        self.assertFalse(self.markers.is_echo('a@b', None, 'me'))
+        self.markers.note('a@b')
+        self.markers.note('a@b')
+        self.assertTrue(self.markers.is_echo('a@b', None, 'me'))
+        self.assertTrue(self.markers.is_echo('a@b', None, 'me'))         # one echo per send
+        self.assertFalse(self.markers.is_echo('a@b', None, 'me'))
+
+    def test_expiry(self):
+        self.markers.note('a@b')
+        self.now += 31
+        self.assertFalse(self.markers.is_echo('a@b', None, 'me'))
+
+
 if __name__ == '__main__':
     unittest.main()

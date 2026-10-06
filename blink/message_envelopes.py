@@ -37,6 +37,7 @@ __all__ = ['TEXT_CONTENT_TYPES', 'PGP_PUBLIC_KEY_CONTENT_TYPE', 'PGP_PRIVATE_KEY
            'call_recording_metadata', 'call_recording_envelope', 'METADATA_ACTIONS', 'metadata_link',
            'CALL_RECORD_VERSION', 'CALL_SOURCE_RANK', 'MISSED_CALL_OUTCOMES', 'CALL_ATTENTION_OUTCOMES', 'SIP_STATUS_PHRASES',
            'sip_status_phrase', 'dominant_media', 'build_call_record', 'merge_call_records', 'this_device_id', 'call_answered_elsewhere',
+           'conversation_read_envelope', 'conversation_read_marker',
            'call_record', 'foreign_call_record', 'legacy_call_record', 'format_call_duration', 'call_outcome', 'call_was_missed', 'call_needs_attention', 'call_lines', 'call_summary',
            'classify_category', 'has_link', 'public_key_id']
 
@@ -922,6 +923,44 @@ def call_summary(record, device_id=None):
     if phrase:
         parts.append('— %s' % phrase)
     return ' '.join(parts)
+
+
+# Conversation read markers
+#
+def conversation_read_envelope(contact, device_id=None):
+    """The body of an application/sylk-api-conversation-read request: the server
+    replicates it to the account's devices as application/sylk-conversation-read.
+    device_id tells the copy fanned back to this device from another device's."""
+    payload = {'contact': str(contact)}
+    if device_id:
+        payload['device_id'] = str(device_id)
+    return json.dumps(payload)
+
+
+def conversation_read_marker(body):
+    """(contact, device_id) of a conversation read marker, or (None, None).
+
+    Two shapes: {"contact", "device_id"} as sent, and a bare address as the
+    journal replays it (as for conversation removes). device_id is the bare
+    instance id, or None when the sender did not say.
+    """
+    text = _text(body)
+    text = text.strip() if text else ''
+    if not text:
+        return None, None
+    if text.startswith('{'):
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            return None, None
+        if not isinstance(payload, dict):
+            return None, None
+        contact = str(payload.get('contact') or '').strip() or None
+        device = str(payload.get('device_id') or '').strip()
+        if device.lower().startswith('urn:uuid:'):
+            device = device[9:]
+        return contact, (device or None) if contact else None
+    return (text, None) if '@' in text else (None, None)
 
 
 # Metadata sidecars (application/sylk-message-metadata)

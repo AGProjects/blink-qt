@@ -44,13 +44,13 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.message_envelopes import CALL_CONTENT_TYPE, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, foreign_call_record, metadata_link, this_device_id
+from blink.message_envelopes import CALL_CONTENT_TYPE, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
-from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, SeenMessageIds, journal_action, parse_payload
+from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
-from blink.uris import bare_instance_id, placeholder_instance_id
+from blink.uris import bare_instance_id, canonical_uri, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 
 __all__ = ['MessageManager', 'BlinkMessage']
@@ -680,6 +680,7 @@ class MessageManager(object, metaclass=Singleton):
         self.sessions = []
         self._own_message_ids = OrderedDict()  # ids of messages sent by this device, to recognise their replicated copies
         self.seen_message_ids = SeenMessageIds(self.seen_message_ids_size)  # handled live or from the journal, whichever came first
+        self._own_conversation_reads = OwnMarkers(ttl=30)  # read markers this device sent, to recognise their echo
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
         self._sync_queue = deque()
@@ -1134,7 +1135,12 @@ class MessageManager(object, metaclass=Singleton):
         return 'messages removed'
 
     def _journal_conversation_read(self, account, message, content_type, first_sync, contacts):
-        NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=message['contact'], timestamp=message.get('timestamp')))
+        # the conversation is in the payload; the entry's own contact is the fallback
+        contact, device = conversation_read_marker(message.get('content'))
+        contact = contact or message.get('contact')
+        if not contact:
+            return 'failed'
+        NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=contact, timestamp=message.get('timestamp')))
         return 'conversations read'
 
     def _journal_public_key(self, account, message, content_type, first_sync, contacts):
@@ -1495,9 +1501,16 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if content_type.lower() == 'application/sylk-conversation-read':
-            payload = json.loads(body)
-            ActivityLog().info(f"[Message with {payload.get('contact')}] Conversation read on another device for account {account.id}")
-            NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=payload['contact'], timestamp=payload.get('timestamp')))
+            contact, device = conversation_read_marker(body)
+            if contact is None:
+                ActivityLog().error(f'[Message] Cannot read the conversation read marker {message_id} for account {account.id}: {body[:200]!r}')
+                return
+            if self._own_conversation_reads.is_echo(canonical_uri(contact, account), device, this_device_id()):
+                # this device's own marker fanned back by the server: already applied here
+                log.debug(f'Ignoring the echo of our conversation read marker for {contact}')
+                return
+            ActivityLog().info(f"[Message with {contact}] Conversation read on another device{f' ({device})' if device else ''} for account {account.id}")
+            NotificationCenter().post_notification('BlinkConfirmReadMessagesOnOtherDevice', data=NotificationData(remote_uri=contact, timestamp=None))
             return
 
         if content_type.lower() == 'application/sylk-conversation-remove':
@@ -1928,11 +1941,18 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def send_conversation_read(self, session):
-        if session.account is BonjourAccount():
+        """Tell this account's other devices the conversation was read here. Sent to the
+        server API from the account to itself; the server replicates it to every device
+        as application/sylk-conversation-read, this one included (the echo is ignored)."""
+        account = session.account
+        if account is BonjourAccount():
             return  # no server behind a link-local network
+        if not account.sms.enable_message_replication:
+            return  # no other devices to tell
         contact = str(session.contact.uri.uri)
-        payload = {'contact': contact}
-        content = json.dumps(payload)
+        content = conversation_read_envelope(contact, this_device_id())
+        self._own_conversation_reads.note(canonical_uri(contact, account))
+        ActivityLog().info(f'[Message with {contact}] Announcing that the conversation was read: {content}')
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(session.account.uri)
         outgoing_message = OutgoingMessage(session.account, contact, content, 'application/sylk-api-conversation-read', session=session, use_cpim=False)

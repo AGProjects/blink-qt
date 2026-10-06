@@ -326,6 +326,20 @@ class CallRecordTests(unittest.TestCase):
 
 
 @unittest.skipIf(pgpy is None, 'pgpy is not available')
+class ConversationReadTests(unittest.TestCase):
+    def test_round_trip(self):
+        body = env.conversation_read_envelope('alice@example.com', 'd1')
+        self.assertEqual(json.loads(body), {'contact': 'alice@example.com', 'device_id': 'd1'})
+        self.assertEqual(env.conversation_read_marker(body), ('alice@example.com', 'd1'))
+        self.assertEqual(env.conversation_read_marker(env.conversation_read_envelope('alice@example.com')), ('alice@example.com', None))
+        self.assertEqual(env.conversation_read_marker('{"contact": "a@b", "device_id": "urn:uuid:D2"}'.encode()), ('a@b', 'D2'))
+
+    def test_journal_shape_and_garbage(self):
+        self.assertEqual(env.conversation_read_marker(' sip:alice@example.com '), ('sip:alice@example.com', None))
+        for body in (None, '', 'garbage', '{', '[1]', '{"device_id": "d1"}'):
+            self.assertEqual(env.conversation_read_marker(body), (None, None), body)
+
+
 class ForeignCallRecordTests(unittest.TestCase):
     def test_rules(self):
         record = env.build_call_record('c1', 'incoming', 'completed', duration=5, remote_party='bob@example.com',
