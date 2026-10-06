@@ -571,7 +571,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 5
+    __version__ = 6
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -710,6 +710,33 @@ class MessageHistory(object, metaclass=Singleton):
             # same index names sqlobject uses when it creates the table
             self.db.queryAll(f'CREATE INDEX IF NOT EXISTS {table}_{name} ON {table} ({columns})')
         return 0
+
+    # content types that are messages a user reads (counted as unread, filed in the Messages group)
+    __readable_sql__ = ("(content_type like 'text/%' and content_type not in ('text/pgp-public-key', 'text/pgp-private-key')"
+                        " or content_type in ('application/sylk-file-transfer', 'application/vnd.gsma.rcs-ft-http+xml'))")
+
+    def _upgrade_to_v6(self):
+        """backfill read state, tombstones, media type and CPIM parties"""
+        table = Message.sqlmeta.table
+        statements = [
+            # unread: incoming readable messages never displayed
+            (f"read = 0 where direction = 'incoming' and state != 'displayed' and state != 'deleted' and {self.__readable_sql__}"),
+            # tombstones: the old soft delete
+            ("deleted = 1, deleted_time = cast(strftime('%s', 'now') as integer) where state = 'deleted' and deleted = 0"),
+            # media type: SIP messages and files; call rows get theirs when converted to call records
+            (f"media_type = 'sms' where media_type is null and {self.__readable_sql__}"),
+            # CPIM parties by direction
+            ("cpim_from = remote_uri, cpim_to = account_id where cpim_from is null and direction = 'incoming'"),
+            ("cpim_from = account_id, cpim_to = remote_uri where cpim_from is null and direction = 'outgoing'"),
+        ]
+        changed = 0
+        for statement in statements:
+            assignments, where = statement.split(' where ', 1)
+            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            self.db.queryAll(f'update {table} set {assignments} where {where}')
+            ActivityLog().info(f'[db] {count} rows: set {assignments}')
+            changed += count
+        return changed
 
     def _add_column(self, name, definition):
         try:
