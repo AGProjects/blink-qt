@@ -17,7 +17,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>Join MSRP Conference</string>
+   <string>Join Conference</string>
   </property>
   <layout class="QGridLayout" name="grid_layout">
    <property name="leftMargin">
@@ -35,7 +35,7 @@
    <item row="0" column="0">
     <widget class="QLabel" name="room_label">
      <property name="text">
-      <string>Room name:</string>
+      <string>Room:</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
