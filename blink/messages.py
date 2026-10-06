@@ -45,6 +45,7 @@ from blink.configuration.datatypes import File
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
+from blink.uris import bare_instance_id, placeholder_instance_id
 from blink.util import run_in_gui_thread, translate
 
 __all__ = ['MessageManager', 'BlinkMessage']
@@ -524,6 +525,11 @@ class OutgoingMessage(object):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
 
+    @property
+    def _peer(self):
+        # a Bonjour neighbour by instance id, not by today's address
+        return getattr(self.session, 'remote_instance_id', None) or self.uri
+
     def _NH_SIPMessageDidSucceed(self, notification):
         notification_center = NotificationCenter()
         if self.content_type.lower() in self.__ignored_content_types__:
@@ -537,7 +543,7 @@ class OutgoingMessage(object):
         if self.session is not None:
             notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
         if not self._disabled_imdn_content_type:
-            ActivityLog().info(f'[Message with {self.uri}] Sent {self.content_type} message {self.id}')
+            ActivityLog().info(f'[Message with {self._peer}] Sent {self.content_type} message {self.id} from account {self.account.id}')
 
     def _NH_SIPMessageDidFail(self, notification):
         content_type = self.content_type.lower()
@@ -562,7 +568,7 @@ class OutgoingMessage(object):
             code = ''
 
         log.info(f'Message {self.id} to {self.session.contact_uri.uri} failed {originator}ly: {code} {reason}')
-        ActivityLog().warning(f'[Message with {self.uri}] Sending {self.content_type} message {self.id} failed {originator}ly: {code} {reason}')
+        ActivityLog().warning(f'[Message with {self._peer}] Sending {self.content_type} message {self.id} from account {self.account.id} failed {originator}ly: {code} {reason}')
 
 
 @implementer(IObserver)
@@ -644,6 +650,13 @@ class RequestList(list):
             return [item for item in self if item.account is account and isinstance(item, item_type)]
         else:
             return [item for item in self if item.account is key]
+
+
+def contact_instance_id(contact, contact_uri):
+    """The bare instance id of a Bonjour neighbour, or of the placeholder standing in for one; else None."""
+    if contact.type == 'bonjour':
+        return bare_instance_id(contact.settings.id) or None
+    return placeholder_instance_id(contact_uri.uri)
 
 
 @implementer(IObserver)
@@ -1570,7 +1583,7 @@ class MessageManager(object, metaclass=Singleton):
             session_manager = SessionManager()
             account = AccountManager().get_account(message.account_id)
 
-            instance_id = contact.settings.id if contact.type == 'bonjour' else None
+            instance_id = contact_instance_id(contact, contact_uri)
 
             try:
                 blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
@@ -1650,10 +1663,14 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def send_remove_message(self, session, id, account=None):
+        if (session.account if account is None else account) is BonjourAccount():
+            return  # no server behind a link-local network
         outgoing_message = OutgoingMessage(session.account if account is None else account, session.contact, id, 'application/sylk-api-message-remove', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
     def send_conversation_read(self, session):
+        if session.account is BonjourAccount():
+            return  # no server behind a link-local network
         contact = str(session.contact.uri.uri)
         payload = {'contact': contact}
         content = json.dumps(payload)
@@ -1663,6 +1680,8 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def send_conversation_remove(self, session):
+        if session.account is BonjourAccount():
+            return  # no server behind a link-local network
         contact = str(session.contact.uri.uri)
         payload = {'contact': contact, 'timestamp': str(ISOTimestamp.now())}
         content = json.dumps(payload)
@@ -1700,6 +1719,10 @@ class MessageManager(object, metaclass=Singleton):
 
     def send_message(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
+        if blink_session.remote_instance_id and account is not BonjourAccount():
+            # a Bonjour neighbour is only ever reached link-local, never through a SIP account's proxy
+            log.warning(f'Message to Bonjour neighbour {blink_session.remote_instance_id} was about to be sent from {account.id}, using the Bonjour account')
+            account = blink_session.account = BonjourAccount()
         blink_session.last_failed_reason = None
         blink_session.updateTimestamp()
         outgoing_message = OutgoingMessage(account, contact, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id, blink_session)
@@ -1709,12 +1732,12 @@ class MessageManager(object, metaclass=Singleton):
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(uri)
         session_manager = SessionManager()
-        account = AccountManager().default_account
-
-        instance_id = contact.settings.id if contact.type == 'bonjour' else None
+        instance_id = contact_instance_id(contact, contact_uri)
+        # a Bonjour neighbour is talked to from the Bonjour account
+        account = BonjourAccount() if instance_id else AccountManager().default_account
 
         try:
-            blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (contact.type == 'dummy' and uri in session.contact.uris))
+            blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id) or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
             log.info(f"Create message view from session for {contact_uri.uri} with instance_id {instance_id}")
             ActivityLog().info(f'[Message with {instance_id or contact_uri.uri}] Conversation opened by the user for account {account.id}')
@@ -1730,6 +1753,9 @@ class MessageManager(object, metaclass=Singleton):
 
             blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
         else:
+            if instance_id and blink_session.account is not BonjourAccount():
+                blink_session.account = BonjourAccount()
+                NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
             if blink_session.fake_streams.get('messages') is None:
                 blink_session.add_stream(StreamDescription('messages'))
                 if blink_session.account.sms.enable_pgp:

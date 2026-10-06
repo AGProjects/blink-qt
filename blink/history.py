@@ -36,6 +36,7 @@ from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
 
+from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, is_instance_id
 from blink.util import run_in_gui_thread, translate
 import traceback
 
@@ -291,8 +292,10 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkConversationWillRemove(self, notification):
         data = notification.data
-        self.message_history.remove_contact_messages(notification.sender.account, data.contact, data.timestamp, notification.sender)
-        self.download_history.remove_contact_files(notification.sender.account, data.contact)
+        # a Bonjour conversation is filed under the neighbour's instance id, not its address
+        contact = bare_instance_id(getattr(notification.sender, 'remote_instance_id', None)) or str(data.contact)
+        self.message_history.remove_contact_messages(notification.sender.account, contact, data.timestamp, notification.sender)
+        self.download_history.remove_contact_files(notification.sender.account, contact)
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
             self.message_history.get_all_contacts()
@@ -485,7 +488,7 @@ class DownloadHistory(object, metaclass=Singleton):
     @classmethod
     @run_in_thread('db')
     def add(cls, session):
-        remote_uri = str(session.contact_uri.uri)
+        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or str(session.contact_uri.uri)
         match = cls.phone_number_re.match(remote_uri)
         if match:
             remote_uri = match.group('number')
@@ -500,7 +503,7 @@ class DownloadHistory(object, metaclass=Singleton):
     @classmethod
     @run_in_thread('db')
     def add_file(cls, session, file):
-        remote_uri = str(session.contact_uri.uri)
+        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or str(session.contact_uri.uri)
         match = cls.phone_number_re.match(remote_uri)
         if match:
             remote_uri = match.group('number')
@@ -554,6 +557,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def remove_contact_files(self, account, contact):
+        contact = str(contact)
         log.info(f'== Removing file entries and files from cache between {account.id} <-> {contact}')
         result = DownloadedFiles.selectBy(remote_uri=contact, account_id=str(account.id))
         for file in result:
@@ -574,7 +578,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 8
+    __version__ = 9
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -847,6 +851,31 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().warning(f'[db] {unreadable} call history rows could not be read and were left as they are')
         return converted
 
+    def _upgrade_to_v9(self):
+        """key Bonjour conversations by the bare neighbour instance id"""
+        # Older builds filed a neighbour under '<instance id>@local', and under
+        # 'urn:uuid:<instance id>@local' when the conversation was opened from
+        # the contact list: two conversations for one neighbour. Both become the
+        # bare id, filed under the Bonjour account, as on macOS.
+        table = Message.sqlmeta.table
+        moved = duplicates = 0
+        keys = self.db.queryAll(f"select distinct remote_uri from {table}"
+                                f" where (remote_uri like '%@local' or remote_uri like 'urn:uuid:%') and remote_uri != '{BONJOUR_ACCOUNT_ID}'")
+        for (old_key,) in keys:
+            new_key = bare_instance_id(old_key[:-len('@local')] if old_key.endswith('@local') else old_key)
+            if new_key == old_key or not is_instance_id(new_key):
+                continue
+            count = self.db.queryOne(f'select count(*) from {table} where remote_uri = {self.db.sqlrepr(old_key)}')[0]
+            # a message stored under both spellings is kept once
+            self.db.queryAll(f"update or ignore {table} set remote_uri = {self.db.sqlrepr(new_key)}, account_id = '{BONJOUR_ACCOUNT_ID}'"
+                             f" where remote_uri = {self.db.sqlrepr(old_key)}")
+            left = self.db.queryOne(f'select count(*) from {table} where remote_uri = {self.db.sqlrepr(old_key)}')[0]
+            self.db.queryAll(f'delete from {table} where remote_uri = {self.db.sqlrepr(old_key)}')
+            ActivityLog().info(f'[db] Bonjour conversation {old_key} moved to {new_key}: {count - left} messages, {left} duplicates removed')
+            moved += count - left
+            duplicates += left
+        return moved + duplicates
+
     def _add_column(self, name, definition):
         try:
             self.db.queryAll(f'ALTER TABLE {Message.sqlmeta.table} ADD COLUMN {name} {definition}')
@@ -1008,7 +1037,7 @@ class MessageHistory(object, metaclass=Singleton):
             return
 
         if session.remote_instance_id:
-            remote_uri = '%s@local' % session.remote_instance_id
+            remote_uri = bare_instance_id(session.remote_instance_id)  # a Bonjour neighbour, keyed by its instance id
         else:
             user = session.uri.user
             domain = session.uri.host
@@ -1165,7 +1194,7 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def load(self, uri, session, entries=100):
         notification_center = NotificationCenter()
-        remote_uri = '%s@local' % session.remote_instance_id if session.remote_instance_id else uri
+        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else uri
         try:
             result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted')).orderBy('timestamp')[-entries:]
         except Exception as e:
@@ -1177,7 +1206,7 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def reload_pending_encrypted(self, uri, session, entries=100):
         notification_center = NotificationCenter()
-        remote_uri = '%s@local' % session.remote_instance_id if session.remote_instance_id else uri
+        remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else uri
         try:
             result = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', Message.q.decrypted == '3')).orderBy('timestamp')[-entries:]
         except Exception as e:
@@ -1324,6 +1353,7 @@ class MessageHistory(object, metaclass=Singleton):
         timestamp_fixed = timestamp_utc - timestamp.utcoffset()
         timestamp = parse(str(timestamp_fixed))
 
+        contact = str(contact)
         log.info(f'== Removing conversation between {account.id} <-> {contact} < {timestamp}')
         result = Message.selectBy(remote_uri=contact, account_id=str(account.id))
         for message in result:

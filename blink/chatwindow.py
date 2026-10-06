@@ -3282,7 +3282,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 session.chat_widget.add_message(chat_message)
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
-            if received_account is not None and received_account.enabled and received_account != blink_session.account:
+            if received_account is not None and received_account.enabled and received_account != blink_session.account and not blink_session.remote_instance_id:
                 blink_session.account = received_account
                 NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
                 NotificationCenter().post_notification('PGPKeysShouldReload', sender=blink_session)
@@ -3607,7 +3607,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             else:
                 self.render_after_load.append((found_session, received_account, message))
 
-        if blink_session.direction == 'outgoing' and last_account is not None and last_account.enabled and last_account != blink_session.account:
+        if blink_session.direction == 'outgoing' and last_account is not None and last_account.enabled and last_account != blink_session.account and not blink_session.remote_instance_id:
             blink_session.account = last_account
             NotificationCenter().post_notification('BlinkSessionMessageAccountChanged', sender=blink_session)
             NotificationCenter().post_notification('PGPKeysShouldReload', sender=blink_session)

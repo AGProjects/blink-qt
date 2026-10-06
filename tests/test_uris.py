@@ -85,6 +85,24 @@ class InstanceIdTests(unittest.TestCase):
         self.assertEqual(uris.bare_instance_id(None), '')
 
 
+class BonjourTests(unittest.TestCase):
+    def test_instance_ids(self):
+        self.assertTrue(uris.is_instance_id(UUID))
+        self.assertTrue(uris.is_instance_id('urn:uuid:%s' % UUID.upper()))
+        self.assertFalse(uris.is_instance_id('alice@example.com'))
+        self.assertFalse(uris.is_instance_id('%s@local' % UUID))
+        self.assertFalse(uris.is_instance_id(None))
+
+    def test_placeholder_round_trip(self):
+        uri = uris.bonjour_placeholder_uri('urn:uuid:%s' % UUID)
+        self.assertEqual(uri, 'sip:%s@bonjour.local' % UUID)
+        self.assertTrue(uris.is_placeholder_uri(uri))
+        self.assertEqual(uris.placeholder_instance_id(uri), UUID)
+        self.assertEqual(uris.placeholder_instance_id('%s@Bonjour.Local;transport=tls' % UUID), UUID)
+        self.assertIsNone(uris.placeholder_instance_id('alice@bonjour.local'))
+        self.assertIsNone(uris.placeholder_instance_id('%s@example.com' % UUID))
+
+
 class PlaceholderTests(unittest.TestCase):
     def test_placeholders(self):
         for value in ('sip:%s@bonjour.local' % UUID, '%s@127.0.0.1' % UUID, 'sip:x@localhost:5060', 'SIPS:x@Bonjour.Local;transport=tls'):

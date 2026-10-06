@@ -62,6 +62,7 @@ from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, back
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.zrtp import ZRTPWidget
 from blink.streams.message import MessageStream
+from blink.uris import bare_instance_id
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
@@ -699,7 +700,7 @@ class BlinkSession(BlinkSessionBase):
         self.sip_session = sip_session
         self.account = sip_session.account
         self.contact = contact
-        self.remote_instance_id = remote_instance_id
+        self.remote_instance_id = bare_instance_id(remote_instance_id) or None  # one spelling, or a neighbour is two conversations
         self.contact_uri = contact_uri
         self.uri = self._parse_uri(contact_uri.uri)
         self.streams.extend(streams)
@@ -727,7 +728,7 @@ class BlinkSession(BlinkSessionBase):
         self.account = account
         self.contact = contact
         self.contact_uri = contact_uri
-        self.remote_instance_id = remote_instance_id
+        self.remote_instance_id = bare_instance_id(remote_instance_id) or None  # one spelling, or a neighbour is two conversations
         self.uri = self._normalize_uri(contact_uri.uri)
         # reevaluate later, after we add the .active/.proposed attributes to streams, if creating the sip session and the streams at this point is desirable -Dan
         # note: creating the sip session early also need the test in hold/unhold/end to change from sip_session is (not) None to sip_session.state is (not) None -Dan

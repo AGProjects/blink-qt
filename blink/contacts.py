@@ -1,4 +1,5 @@
 
+import json
 import pickle as pickle
 import locale
 import os
@@ -48,9 +49,11 @@ from sipsimple.threading import run_in_thread
 
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
+from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
 from blink.messages import MessageManager
+from blink.uris import bare_instance_id, bonjour_placeholder_uri, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
@@ -248,6 +251,8 @@ class MessageContactsManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=BlinkSettings())
         notification_center.add_observer(self, name='BlinkMessageHistoryAllContactsDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
+        notification_center.add_observer(self, name='BonjourNeighboursManagerDidAddContact')
+        notification_center.add_observer(self, name='BonjourNeighboursManagerDidRemoveContact')
         notification_center.add_observer(self, name='AddressbookContactWasCreated')
         notification_center.add_observer(self, name='AddressbookContactWasDeleted')
 
@@ -288,8 +293,7 @@ class MessageContactsManager(object, metaclass=Singleton):
         for (display_name, uri) in contacts:
             contact, contact_uri = URIUtils.find_contact(uri)
             if contact.type in ['dummy']:
-                if not display_name:
-                    display_name = uri
+                display_name = self._fallback_name(uri, contact_uri, display_name)
                 contact = Contact(MessageContact(display_name, [contact_uri], uri), None)
             found_contacts.append(contact)
 
@@ -309,16 +313,30 @@ class MessageContactsManager(object, metaclass=Singleton):
             contact = self.contacts.pop(id)
             notification.center.post_notification('MessageContactsManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
 
+    @staticmethod
+    def _fallback_name(uri, contact_uri, display_name=None):
+        instance_id = placeholder_instance_id(contact_uri.uri)
+        if instance_id:
+            # a Bonjour neighbour who is not on the network right now
+            return remembered_bonjour_name(instance_id) or display_name or translate('contact_list', 'Bonjour neighbour')
+        return display_name or uri
+
+    def _NH_BonjourNeighboursManagerDidAddContact(self, notification):
+        # a neighbour coming or going turns its conversation's row into the neighbour, or back
+        if self.active:
+            from blink.history import HistoryManager
+            HistoryManager().message_history.get_all_contacts()
+
+    _NH_BonjourNeighboursManagerDidRemoveContact = _NH_BonjourNeighboursManagerDidAddContact
+
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
         if not self.active:
-            return
-        if notification.sender is BonjourAccount():
             return
 
         uri = notification.data.remote_uri
         contact, contact_uri = URIUtils.find_contact(uri)
         if contact.type in ['dummy']:
-            display_name = uri
+            display_name = self._fallback_name(uri, contact_uri)
             contact = Contact(MessageContact(display_name, [contact_uri], uri), None)
         try:
             self.contacts[contact.settings.id]
@@ -505,7 +523,107 @@ class BonjourNeighbourURIList(object):
 
     @property
     def default(self):
-        return sorted(self, key=lambda item: 0 if item.uri.transport == 'tls' else 1 if item.uri.transport == 'tcp' else 2)[0] if self._uri_map else None
+        """The one address a neighbour is reached at, chosen as on macOS.
+
+        A neighbour announces itself once per transport. The transport set
+        for the Bonjour account wins; the others rank TLS, TCP, UDP so the
+        choice between them is stable. A transport this machine does not use
+        is taken only when the neighbour announced nothing else.
+        """
+        if not self._uri_map:
+            return None
+        try:
+            usable = set(SIPSimpleSettings().sip.transport_list)
+        except Exception:
+            usable = {'tls', 'tcp', 'udp'}
+        candidates = [uri for uri in self if str(uri.uri.transport).lower() in usable] or list(self)
+        return max(candidates, key=lambda item: bonjour_transport_rank(item.uri.transport))
+
+
+def bonjour_preferred_transport():
+    """The transport set for the Bonjour account, TCP when unset.
+
+    TCP rather than TLS by default: on a link-local network TLS has no name
+    to verify and no CA that knows a neighbour's self-signed certificate, so
+    it costs a handshake, proves nothing, and fails most often between
+    different builds.
+    """
+    try:
+        transport = str(BonjourAccount().sip.transport or '').lower()
+    except Exception:
+        transport = ''
+    return transport if transport in ('tcp', 'tls', 'udp') else 'tcp'
+
+
+def bonjour_transport_rank(transport):
+    """How much an announcement over this transport is wanted; higher wins."""
+    transport = str(transport or '').lower()
+    if transport == bonjour_preferred_transport():
+        return 3
+    return {'tls': 2, 'tcp': 1, 'udp': 0}.get(transport, -1)
+
+
+def bonjour_info(neighbour):
+    """The second line of a Bonjour neighbour's tile.
+
+    Their presence note, else their presence state, as on macOS. Never the
+    address: it is a transport detail that changes with the network, and the
+    computer is already in the name, "Name (computer)".
+    """
+    presence = neighbour.presence
+    if presence.note:
+        return presence.note
+    state = str(presence.state or '').strip()
+    if state:
+        return state.title()
+    return translate('contact_list', 'On the local network')
+
+
+# {instance id: {'name': ..., 'host': ...}} for every Bonjour neighbour ever
+# met, so a conversation still has a name while its neighbour is away. Local
+# on purpose, as on macOS: there is no server behind a link-local network.
+_bonjour_names = None
+
+
+def _bonjour_names_file():
+    return ApplicationData.get('bonjour_neighbours.json')
+
+
+def _load_bonjour_names():
+    global _bonjour_names
+    if _bonjour_names is None:
+        try:
+            with open(_bonjour_names_file(), encoding='utf-8') as names_file:
+                data = json.load(names_file)
+            _bonjour_names = data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            _bonjour_names = {}
+    return _bonjour_names
+
+
+def remember_bonjour_neighbour(instance_id, name, host):
+    instance_id = bare_instance_id(instance_id)
+    if not instance_id or not name:
+        return
+    names = _load_bonjour_names()
+    entry = {'name': str(name), 'host': str(host or '')}
+    if names.get(instance_id) == entry:
+        return
+    names[instance_id] = entry
+    try:
+        makedirs(ApplicationData.directory)
+        with open(_bonjour_names_file(), 'w', encoding='utf-8') as names_file:
+            json.dump(names, names_file, indent=1, sort_keys=True)
+    except OSError as e:
+        log.warning('Cannot save Bonjour neighbour names: %s' % e)
+
+
+def remembered_bonjour_name(instance_id):
+    """'Name (computer)' for a neighbour met before, or None."""
+    entry = _load_bonjour_names().get(bare_instance_id(instance_id))
+    if not isinstance(entry, dict) or not entry.get('name'):
+        return None
+    return '%s (%s)' % (entry['name'], entry['host']) if entry.get('host') else entry['name']
 
 
 class BonjourPresence(object):
@@ -576,21 +694,35 @@ class BonjourNeighboursManager(object, metaclass=Singleton):
             contact = self.contacts[contact_id]
         except KeyError:
             contact = BonjourNeighbour(contact_id, record.name, record.host, [contact_uri], BonjourPresence(record.presence.state, record.presence.note))
+            remember_bonjour_neighbour(contact_id, record.name, record.host)
             self.contacts.add(contact)
+            self._log_address(contact, None)
             notification.center.post_notification('BonjourNeighboursManagerDidAddContact', sender=self, data=NotificationData(contact=contact))
         else:
+            previous = contact.uris.default
             contact.uris.add(contact_uri)
+            self._log_address(contact, previous)
             notification.center.post_notification('BonjourNeighboursManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
 
     def _NH_BonjourAccountDidRemoveNeighbour(self, notification):
         contact_id = notification.data.record.id or notification.data.neighbour
         contact = self.contacts[contact_id]
+        previous = contact.uris.default
         contact.uris.pop(notification.data.neighbour, None)
+        if contact.uris:
+            self._log_address(contact, previous)
         if not contact.uris:
             self.contacts.remove(contact)
             notification.center.post_notification('BonjourNeighboursManagerDidRemoveContact', sender=self, data=NotificationData(contact=contact))
         else:
             notification.center.post_notification('BonjourNeighboursManagerDidUpdateContact', sender=self, data=NotificationData(contact=contact))
+
+    @staticmethod
+    def _log_address(contact, previous):
+        current = contact.uris.default
+        if current is None or current is previous:
+            return
+        ActivityLog().info('[bonjour] Neighbour %s (%s) is reached at %s' % (contact.name, bare_instance_id(contact.id), current.uri.__uri__))
 
     def _NH_BonjourAccountDidUpdateNeighbour(self, notification):
         neighbour, record = notification.data.neighbour, notification.data.record
@@ -598,6 +730,7 @@ class BonjourNeighboursManager(object, metaclass=Singleton):
         contact_uri = contact.uris[neighbour]
         contact.name = record.name
         contact.host = record.host
+        remember_bonjour_neighbour(contact.id, record.name, record.host)
         contact.presence.state = record.presence.state
         contact.presence.note = record.presence.note
         contact_uri.uri = record.uri
@@ -1583,7 +1716,9 @@ class Contact(object):
     @property
     def info(self):
         try:
-            return self.note or (self.uri.uri.split('@')[1] if self.type == 'bonjour' else self.uri.uri)
+            if self.type == 'bonjour':
+                return bonjour_info(self.settings)
+            return self.note or self.uri.uri
         except (AttributeError, TypeError):
             return ''
 
@@ -1739,8 +1874,10 @@ class ContactDetail(object):
     @property
     def info(self):
         try:
-            return self.note or ('@' + self.uri.uri.host if self.type == 'bonjour' else self.uri.uri)
-        except AttributeError:
+            if self.type == 'bonjour':
+                return bonjour_info(self.settings)
+            return self.note or self.uri.uri
+        except (AttributeError, TypeError):
             return ''
 
     @property
@@ -3494,7 +3631,9 @@ class ContactListView(QListView):
             can_call = account_manager.default_account is not None and contact.uri is not None
             can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
 
-            if len(contact.uris) > 1 and can_call:
+            # a Bonjour neighbour is reached at the one address its transport ranking picks (contact.uri)
+            many_uris = len(contact.uris) > 1 and contact.type != 'bonjour'
+            if many_uris and can_call:
                 call_submenu = menu.addMenu(translate('contact_list', 'Send Messages'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
@@ -3561,7 +3700,7 @@ class ContactListView(QListView):
                 self.actions.request_screen.setEnabled(can_call)
                 self.actions.share_my_screen.setEnabled(can_call)
 
-            if len(contact.uris) > 1 and can_transfer:
+            if many_uris and can_transfer:
                 call_submenu = menu.addMenu(translate('contact_list', 'Transfer Call'))
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
@@ -5139,9 +5278,58 @@ class URIUtils(object):
     def trim_number(cls, token):
         return cls.number_trim_re.sub('', token)
 
+    @staticmethod
+    def _bonjour_neighbour_at(contact_model, uri):
+        """The Bonjour neighbour announced at this user@host, or None."""
+        if isinstance(uri, BaseSIPURI):
+            user, host = uri.user, uri.host
+            user = user.decode() if isinstance(user, bytes) else user
+            host = host.decode() if isinstance(host, bytes) else host
+        else:
+            text = str(uri or '').strip()
+            for scheme in ('sips:', 'sip:'):
+                if text.lower().startswith(scheme):
+                    text = text[len(scheme):]
+                    break
+            user, _, host = text.split(';', 1)[0].rpartition('@')
+            host = host.rsplit(':', 1)[0] if host.count(':') == 1 else host
+        if not user or not host:
+            return None
+        for contact in (contact for contact in contact_model.iter_contacts() if contact.type == 'bonjour'):
+            for contact_uri in contact.uris:
+                neighbour_user, neighbour_host = contact_uri.uri.user, contact_uri.uri.host
+                neighbour_user = neighbour_user.decode() if isinstance(neighbour_user, bytes) else neighbour_user
+                neighbour_host = neighbour_host.decode() if isinstance(neighbour_host, bytes) else neighbour_host
+                if (neighbour_user, neighbour_host.lower()) == (user, host.lower()):
+                    return contact
+        return None
+
     @classmethod
     def find_contact(cls, uri, display_name=None, exact=True, instance_id=None):
         contact_model = QApplication.instance().main_window.contact_model
+
+        # A Bonjour conversation is keyed by the neighbour's instance id, whatever
+        # address the neighbour has on the network today. A key read back from
+        # history is the bare id; while the neighbour is away it is addressed by
+        # the sip:<id>@bonjour.local placeholder.
+        if not isinstance(uri, BaseSIPURI):
+            neighbour_id = bare_instance_id(uri) if is_instance_id(uri) else placeholder_instance_id(uri)
+            if neighbour_id:
+                instance_id = instance_id or neighbour_id
+                uri = bonjour_placeholder_uri(neighbour_id)
+        if instance_id:
+            bare_id = bare_instance_id(instance_id)
+            for contact in (contact for contact in contact_model.iter_contacts() if contact.type == 'bonjour'):
+                if bare_instance_id(contact.settings.id) == bare_id:
+                    return contact, contact.uri
+        else:
+            # An address a neighbour is announced at, typed or left over in
+            # history without its port and transport, is still that neighbour:
+            # it must be reached link-local, never through a SIP account.
+            neighbour = cls._bonjour_neighbour_at(contact_model, uri)
+            if neighbour is not None:
+                return neighbour, neighbour.uri
+
         if isinstance(uri, BaseSIPURI):
             uri = SIPURI.new(uri)
         else:

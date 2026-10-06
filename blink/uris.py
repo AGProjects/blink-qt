@@ -13,7 +13,10 @@ bare_instance_id, illegal_uri, isFileableAddress) and SMSViewController
 (is_placeholder_uri). No Qt; sipsimple only for parsing, and only if present.
 """
 
-__all__ = ['canonical_uri', 'bare_instance_id', 'is_placeholder_uri', 'illegal_uri', 'is_fileable_address']
+__all__ = ['canonical_uri', 'bare_instance_id', 'is_instance_id', 'bonjour_placeholder_uri', 'placeholder_instance_id',
+           'is_placeholder_uri', 'illegal_uri', 'is_fileable_address', 'BONJOUR_ACCOUNT_ID']
+
+import re
 
 from blink.pstn_normalize import canonical_pstn_uri, pstn_e164
 
@@ -32,6 +35,13 @@ _SCHEMES = ('sips:', 'sip:', 'tel:')
 _PLACEHOLDER_HOSTS = ('bonjour.local', '127.0.0.1', 'localhost')
 
 _URN_UUID = 'urn:uuid:'
+_INSTANCE_ID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
+# What the link-local account is called, and so the account every Bonjour
+# history row is filed under. The remote party of such a row is the
+# neighbour's bare instance id, never an address: addresses change with the
+# network, the instance id does not.
+BONJOUR_ACCOUNT_ID = 'bonjour@local'
 
 
 def _default_account():
@@ -61,6 +71,25 @@ def bare_instance_id(value):
     if text.lower().startswith(_URN_UUID):
         text = text[len(_URN_UUID):]
     return text
+
+
+def is_instance_id(value):
+    """Whether this is a Bonjour instance id (a uuid, bare or as a urn:uuid: URN)."""
+    return bool(_INSTANCE_ID_RE.match(bare_instance_id(value)))
+
+
+def bonjour_placeholder_uri(instance_id):
+    """The address standing in for a neighbour who is not on the network (sip:<id>@bonjour.local)."""
+    return 'sip:%s@bonjour.local' % bare_instance_id(instance_id)
+
+
+def placeholder_instance_id(uri):
+    """The instance id behind a Bonjour placeholder address, or None."""
+    text = _strip_scheme(str(uri or '').strip())
+    user, _, host = text.partition(';')[0].partition('@')
+    if host.lower() != 'bonjour.local' or not is_instance_id(user):
+        return None
+    return bare_instance_id(user)
 
 
 def canonical_uri(raw_uri, account=None):
