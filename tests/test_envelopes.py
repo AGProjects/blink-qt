@@ -180,8 +180,8 @@ class CategoryTests(unittest.TestCase):
         for content_type, body, expected in cases:
             self.assertEqual(env.classify_category(content_type, body), expected, content_type)
 
-    def test_location_without_location_module(self):
-        # blink.location arrives in a later patch; until then a location is unclassified
+    def test_location_without_action(self):
+        # loaded standalone blink.location is not importable, and an envelope without an action is unclassified anyway
         self.assertIsNone(env.classify_category(env.LOCATION_CONTENT_TYPE, '{}'))
 
     def test_category_names(self):

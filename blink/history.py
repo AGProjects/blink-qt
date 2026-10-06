@@ -29,6 +29,7 @@ from sipsimple.util import ISOTimestamp
 
 from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog, MessagingTrace as log
+from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
@@ -571,7 +572,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 6
+    __version__ = 7
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -736,6 +737,83 @@ class MessageHistory(object, metaclass=Singleton):
             self.db.queryAll(f'update {table} set {assignments} where {where}')
             ActivityLog().info(f'[db] {count} rows: set {assignments}')
             changed += count
+        return changed
+
+    __backfill_chunk__ = 500
+
+    def _upgrade_to_v7(self):
+        """backfill message categories and links"""
+        table = Message.sqlmeta.table
+        changed = 0
+
+        # text and calls need no parsing: one statement each
+        statements = [
+            ("category = 'text' where category is null and (content_type = 'text' or content_type like 'text/%')"
+             " and content_type not in ('text/pgp-public-key', 'text/pgp-private-key')"),
+            (f"category = 'call' where category is null and content_type in ('{CALL_CONTENT_TYPE}', '{LEGACY_CALL_CONTENT_TYPE}')"),
+        ]
+        for statement in statements:
+            assignments, where = statement.split(' where ', 1)
+            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            self.db.queryAll(f'update {table} set {assignments} where {where}')
+            ActivityLog().info(f"[db] {count} rows: set {assignments}")
+            changed += count
+
+        # files and locations are classified from their envelope, in chunks
+        content_types = ', '.join(f"'{content_type}'" for content_type in FILE_TRANSFER_CONTENT_TYPES + (LOCATION_CONTENT_TYPE,))
+        counts = {}
+        unclassified = 0
+        last_id = 0
+        while True:
+            rows = self.db.queryAll(f'select id, content_type, content, related_action, metadata from {table}'
+                                    f' where id > {last_id} and category is null and content_type in ({content_types})'
+                                    f' order by id limit {self.__backfill_chunk__}')
+            if not rows:
+                break
+            last_id = rows[-1][0]
+            by_category = {}
+            for row_id, content_type, content, related_action, metadata in rows:
+                category = classify_category(content_type, content, related_action, metadata)
+                if category is None:
+                    unclassified += 1  # an encrypted envelope, classified when it is decrypted
+                else:
+                    by_category.setdefault(category, []).append(row_id)
+            for category, ids in by_category.items():
+                self.db.queryAll(f"update {table} set category = '{category}' where id in ({', '.join(map(str, ids))})")
+                counts[category] = counts.get(category, 0) + len(ids)
+        for category, count in sorted(counts.items()):
+            ActivityLog().info(f"[db] {count} rows: set category = '{category}'")
+            changed += count
+        if unclassified:
+            ActivityLog().info(f'[db] {unclassified} file or location rows left unclassified (encrypted or unreadable envelope)')
+
+        # links in plain text and HTML; an encrypted body is unknown (null) until decrypted.
+        # Only rows still at the default 0 are looked at, so a re-run changes nothing.
+        linked = encrypted = 0
+        last_id = 0
+        while True:
+            rows = self.db.queryAll(f"select id, content_type, content from {table}"
+                                    f" where id > {last_id} and category = 'text' and has_link = 0 and content_type in ('text/plain', 'text/html')"
+                                    f" order by id limit {self.__backfill_chunk__}")
+            if not rows:
+                break
+            last_id = rows[-1][0]
+            with_link, unknown = [], []
+            for row_id, content_type, content in rows:
+                value = has_link(content_type, content)
+                if value is None:
+                    unknown.append(str(row_id))
+                elif value:
+                    with_link.append(str(row_id))
+            if with_link:
+                self.db.queryAll(f"update {table} set has_link = 1 where id in ({', '.join(with_link)})")
+            if unknown:
+                self.db.queryAll(f"update {table} set has_link = null where id in ({', '.join(unknown)})")
+            linked += len(with_link)
+            encrypted += len(unknown)
+        ActivityLog().info(f'[db] {linked} rows: set has_link = 1, {encrypted} encrypted rows: set has_link = null')
+        changed += linked + encrypted
+
         return changed
 
     def _add_column(self, name, definition):
