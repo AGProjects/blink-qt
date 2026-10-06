@@ -37,7 +37,7 @@ __all__ = ['TEXT_CONTENT_TYPES', 'PGP_PUBLIC_KEY_CONTENT_TYPE', 'PGP_PRIVATE_KEY
            'call_recording_metadata', 'call_recording_envelope', 'METADATA_ACTIONS', 'metadata_link',
            'CALL_RECORD_VERSION', 'CALL_SOURCE_RANK', 'MISSED_CALL_OUTCOMES', 'CALL_ATTENTION_OUTCOMES', 'SIP_STATUS_PHRASES',
            'sip_status_phrase', 'dominant_media', 'build_call_record', 'merge_call_records', 'this_device_id', 'call_answered_elsewhere',
-           'call_record', 'legacy_call_record', 'format_call_duration', 'call_outcome', 'call_was_missed', 'call_needs_attention', 'call_lines', 'call_summary',
+           'call_record', 'foreign_call_record', 'legacy_call_record', 'format_call_duration', 'call_outcome', 'call_was_missed', 'call_needs_attention', 'call_lines', 'call_summary',
            'classify_category', 'has_link', 'public_key_id']
 
 
@@ -752,6 +752,36 @@ def call_record(body, metadata=None):
         if isinstance(record, dict) and record.get('sessionId'):
             return record
     return None
+
+
+def _aor(uri):
+    text = str(uri or '').strip().lower()
+    if '<' in text and '>' in text:
+        text = text[text.index('<') + 1:text.index('>')]
+    for scheme in ('sips:', 'sip:'):
+        if text.startswith(scheme):
+            text = text[len(scheme):]
+    return text.split(';', 1)[0].split('?', 1)[0]
+
+
+def foreign_call_record(body, metadata, party, account_id, device_id=None):
+    """(record, None) for a call detail record another of the user's devices sent, or
+    (None, why not) -- 'unreadable', 'not own account' or 'this device'.
+
+    A device publishes its calls as a message from the account to itself, so
+    the other party of a record worth taking is the account (anyone else
+    could forge one), and a record this device published comes back only as
+    its own copy.
+    """
+    record = call_record(body, metadata)
+    if record is None:
+        return None, 'unreadable'
+    if not account_id or _aor(party) != _aor(account_id):
+        return None, 'not own account'
+    local = record.get('local') if isinstance(record.get('local'), dict) else {}
+    if device_id and str(local.get('deviceId') or '').strip() == str(device_id).strip():
+        return None, 'this device'
+    return record, None
 
 
 # Duration as Blink Qt formatted it into the legacy row: " (1'05\")" or " (1h02'05\")"

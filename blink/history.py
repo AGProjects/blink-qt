@@ -31,14 +31,14 @@ from sipsimple.util import ISOTimestamp
 from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
-from blink.message_envelopes import build_call_record, call_summary, dominant_media, legacy_call_record, this_device_id
+from blink.message_envelopes import build_call_record, call_record, call_summary, dominant_media, legacy_call_record, merge_call_records, this_device_id
 from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link, reply_metadata
 from blink.location import storage_fields as location_storage_fields
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
 
-from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, is_instance_id, placeholder_instance_id
+from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, canonical_uri, is_instance_id, placeholder_instance_id
 from blink.util import run_in_gui_thread, translate
 import traceback
 
@@ -81,6 +81,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkDidSendDispositionNotification')
         notification_center.add_observer(self, name='BlinkGotHistoryMessage')
+        notification_center.add_observer(self, name='BlinkGotHistoryCallRecord')
         notification_center.add_observer(self, name='BlinkGotHistoryMessageDelete')
         notification_center.add_observer(self, name='BlinkGotHistoryMessageUpdate')
         notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
@@ -253,6 +254,10 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_BlinkGotHistoryMessage(self, notification):
         account = notification.sender
         self.message_history.add_from_server_history(account, **notification.data.__dict__)
+
+    def _NH_BlinkGotHistoryCallRecord(self, notification):
+        data = notification.data
+        self.message_history.store_call_record(notification.sender, data.record, message_id=data.message_id, origin=data.origin)
 
     def _NH_BlinkGotHistoryMessageDelete(self, notification):
         # removed on another device: hidden, not erased (the file stays on disk). A removal
@@ -1552,6 +1557,55 @@ class MessageHistory(object, metaclass=Singleton):
             pass
         else:
             NotificationCenter().post_notification('BlinkMessageHistoryCallHistoryDidStore', sender=session, data=NotificationData(message=message))
+
+    @run_in_thread('db')
+    def store_call_record(self, account, record, message_id=None, origin=''):
+        """A call another of the user's devices took part in (or the server saw),
+        merged with this device's row of the same call: one row per (account, Call-ID).
+        merge_call_records decides which view wins each field, by source rank."""
+        account_id = str(account.id)
+        call_id = str(record.get('sessionId') or '').strip()
+        what = f"{record.get('direction') or '?'} call {call_id or '(no Call-ID)'} with {record.get('remoteParty') or '?'}" + (f' ({origin})' if origin else '')
+        try:
+            rows = list(Message.select(f'account_id = {self.db.sqlrepr(account_id)} and sip_callid = {self.db.sqlrepr(call_id)}'
+                                       f" and content_type = '{CALL_CONTENT_TYPE}'", limit=1)) if call_id else []
+            if rows:
+                row = rows[0]
+                stored = call_record(row.content, row.metadata)
+                merged = merge_call_records(stored, record)
+                if merged == stored:
+                    ActivityLog().info(f'[db] Call record of {what} already stored, unchanged')
+                    return
+                row.set(metadata=json.dumps(merged), content=call_summary(merged) or '',
+                        media_type=dominant_media(merged.get('media') or []) or row.media_type)
+                ActivityLog().info(f"[db] Call record of {what} merged into the stored one: {(stored or {}).get('outcome')} -> {merged.get('outcome')}, source {merged.get('source')}")
+                return
+            remote_party = str(record.get('remoteParty') or '')
+            timestamp = self._storage_time(record.get('startTime')) or datetime.now(timezone.utc).replace(tzinfo=None)
+            Message(remote_uri=canonical_uri(remote_party, account) or remote_party,
+                    display_name=str(record.get('displayName') or ''),
+                    uri=remote_party,
+                    content=call_summary(record) or '',
+                    content_type=CALL_CONTENT_TYPE,
+                    metadata=json.dumps(record),
+                    category='call',
+                    media_type=dominant_media(record.get('media') or []),
+                    sip_callid=call_id or None,
+                    message_id=str(message_id or uuid.uuid4()),
+                    account_id=account_id,
+                    direction=str(record.get('direction') or 'outgoing'),
+                    timestamp=timestamp,
+                    decrypted='0',
+                    decryption_error='',
+                    disposition='',
+                    state='displayed',
+                    read=1)
+        except dberrors.DuplicateEntryError:
+            ActivityLog().info(f'[db] Call record message {message_id} of {what} already stored')
+        except Exception as e:
+            ActivityLog().error(f'[db] Storing the call record of {what} failed: {e!r}')
+        else:
+            ActivityLog().info(f"[db] Call record of {what} stored: {record.get('outcome')}, source {record.get('source')}")
 
     @classmethod
     @run_in_thread('db')

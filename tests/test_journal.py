@@ -56,7 +56,7 @@ class DispatchTests(unittest.TestCase):
                  'TEXT/HTML': 'text',
                  'application/sylk-location-sharing': 'inert',
                  'application/sylk-message-metadata': 'inert',
-                 'application/blink-call-detail-record': 'inert',
+                 'application/blink-call-detail-record': 'call_record',
                  'application/vnd.gsma.rcs-ft-http+xml': 'inert',
                  'application/x-future-thing': 'inert',
                  '': 'inert',

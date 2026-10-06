@@ -326,6 +326,19 @@ class CallRecordTests(unittest.TestCase):
 
 
 @unittest.skipIf(pgpy is None, 'pgpy is not available')
+class ForeignCallRecordTests(unittest.TestCase):
+    def test_rules(self):
+        record = env.build_call_record('c1', 'incoming', 'completed', duration=5, remote_party='bob@example.com',
+                                       source='device', local={'deviceId': 'mobile-1'})
+        body = json.dumps(record)
+        self.assertEqual(env.foreign_call_record(body, None, 'sip:Alice@example.com;transport=tls', 'alice@example.com', 'qt-1'), (record, None))
+        self.assertEqual(env.foreign_call_record('x', body, 'alice@example.com', 'alice@example.com', 'qt-1'), (record, None))   # from metadata
+        self.assertEqual(env.foreign_call_record(body, None, 'mallory@example.com', 'alice@example.com', 'qt-1'), (None, 'not own account'))
+        self.assertEqual(env.foreign_call_record(body, None, 'alice@example.com', 'alice@example.com', 'mobile-1'), (None, 'this device'))
+        self.assertEqual(env.foreign_call_record('{}', None, 'alice@example.com', 'alice@example.com', 'qt-1'), (None, 'unreadable'))
+        self.assertEqual(env.foreign_call_record(body, None, 'alice@example.com', 'alice@example.com'), (record, None))         # no device id
+
+
 class PublicKeyIdTests(unittest.TestCase):
     def test_key_id(self):
         from pgpy.constants import PubKeyAlgorithm, KeyFlags, HashAlgorithm, SymmetricKeyAlgorithm

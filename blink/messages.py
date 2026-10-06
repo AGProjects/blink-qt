@@ -44,7 +44,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.message_envelopes import LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, metadata_link
+from blink.message_envelopes import CALL_CONTENT_TYPE, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, MessagingTrace as log
@@ -1205,6 +1205,20 @@ class MessageManager(object, metaclass=Singleton):
                     self._incoming_encrypted_message_queue.append((history_message, account, contact))
         return 'texts'
 
+    def _take_call_record(self, account, body, metadata, party, message_id, origin):
+        """Hand a call detail record from another device to history; returns the journal outcome."""
+        record, refused = foreign_call_record(body, metadata, party, account.id, this_device_id())
+        if record is None:
+            ActivityLog().info(f'[Message] Call record message {message_id} for account {account.id} skipped ({origin}): {refused}')
+            return f'call records skipped ({refused})'
+        NotificationCenter().post_notification('BlinkGotHistoryCallRecord', sender=account,
+                                               data=NotificationData(record=record, message_id=message_id, origin=origin))
+        return 'call records'
+
+    def _journal_call_record(self, account, message, content_type, first_sync, contacts):
+        return self._take_call_record(account, message.get('content'), message.get('metadata'), message.get('contact'),
+                                      message.get('message_id'), 'from the journal')
+
     def _journal_inert(self, account, message, content_type, first_sync, contacts):
         """Stored as it is and never unread: locations, metadata companions, call records and
         types this version does not know. Their own handling comes with later patches."""
@@ -1511,6 +1525,13 @@ class MessageManager(object, metaclass=Singleton):
         if x_replicated_message is not Null:
             message.sender = account
             message.direction = "outgoing"
+
+        if content_type.lower() == CALL_CONTENT_TYPE:
+            # a call another device of this account took part in: published from the account to itself
+            party = to_header.uri if x_replicated_message is not Null else sender.uri
+            party = f'{party.user.decode() if isinstance(party.user, bytes) else party.user}@{party.host.decode() if isinstance(party.host, bytes) else party.host}'
+            self._take_call_record(account, body, metadata, party, message_id, 'replicated' if x_replicated_message is not Null else 'live')
+            return
 
         if journal_action(content_type) == 'inert' and content_type.lower() != FTHTTPDocument.content_type:
             # stored as it is and never unread, without opening a conversation: locations, metadata
