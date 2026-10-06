@@ -4,6 +4,9 @@ import sys
 import signal
 import socket
 import platform
+import time
+
+from threading import Thread
 
 # QtWebEngine's embedded Chromium spams stderr with harmless errors on systems
 # where it cannot export GPU buffers to a dma_buf (e.g. Raspberry Pi and other
@@ -128,6 +131,7 @@ class Blink(QApplication, metaclass=QSingleton):
         super(Blink, self).__init__(sys.argv)
         self._log_versions()
         self.registrar_addresses = {}
+        self._tls_diagnosed = {}
         self.contact_addresses = {}
         self.setAttribute(Qt.ApplicationAttribute.AA_DontShowIconsInMenus, False)
         self.sip_application = SIPApplication()
@@ -402,7 +406,85 @@ class Blink(QApplication, metaclass=QSingleton):
             ActivityLog().debug('Account %s has public SIP GRUU %s' % (account.id, account.contact.public_gruu))
 
     def _NH_SIPAccountRegistrationDidFail(self, notification):
-        ActivityLog().warning('Account %s failed to register: %s' % (notification.sender.id, notification.data.error))
+        account = notification.sender
+        error = notification.data.error
+        error = error.decode(errors='replace') if isinstance(error, bytes) else str(error)
+        ActivityLog().warning('Account %s failed to register: %s' % (account.id, error))
+        if 'ECERTVERIF' in error or 'certificate' in error.lower():
+            self._diagnose_tls(account)
+
+    tls_diagnosis_interval = 300  # seconds between certificate checks of one account
+
+    def _diagnose_tls(self, account):
+        """Find out why a TLS certificate was refused: PJSIP only says that it was.
+
+        The server is contacted again from Python with the same CA list and server
+        name, and the refusal reason (unknown issuer, name mismatch, expired) is
+        logged with who issued the certificate, for whom and until when.
+        """
+        now = time.monotonic()
+        if now - self._tls_diagnosed.get(account.id, -self.tls_diagnosis_interval) < self.tls_diagnosis_interval:
+            return
+        self._tls_diagnosed[account.id] = now
+        settings = SIPSimpleSettings()
+        ca_file = settings.tls.ca_list.normalized if settings.tls.ca_list is not None else None
+        server_name = account.sip.tls_name or account.id.domain
+        targets = []
+        registrar = self.registrar_addresses.get(account.id)
+        if registrar and registrar.endswith('transport=tls'):
+            host, _, port = registrar.partition(';')[0].rpartition(':')
+            targets.append((host, int(port)))
+        proxy = account.sip.outbound_proxy
+        if proxy is not None and proxy.transport == 'tls':
+            targets.append((proxy.host, proxy.port or 5061))
+        if not targets:
+            targets.append((account.id.domain, 5061))
+        Thread(target=self._check_tls_certificate, args=(account.id, targets[0], server_name, ca_file), name='tls-check', daemon=True).start()
+
+    @staticmethod
+    def _check_tls_certificate(account_id, target, server_name, ca_file):
+        import ssl
+        activity = ActivityLog()
+        host, port = target
+
+        def connect(context):
+            with socket.create_connection((host, port), timeout=10) as raw_socket:
+                with context.wrap_socket(raw_socket, server_hostname=server_name) as tls_socket:
+                    return tls_socket.getpeercert(binary_form=True)
+
+        try:
+            context = ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
+            connect(context)
+        except ssl.SSLCertVerificationError as e:
+            reason = e.verify_message or str(e)
+        except (OSError, ssl.SSLError) as e:
+            activity.warning('[tls] Cannot check the certificate of %s:%d for account %s: %s' % (host, port, account_id, e))
+            return
+        else:
+            activity.info('[tls] The certificate of %s:%d (%s) verifies here with %s; the SIP stack refused it, check the TLS settings of account %s'
+                          % (host, port, server_name, ca_file or 'the system CA store', account_id))
+            return
+
+        details = ''
+        try:
+            unverified = ssl.create_default_context()
+            unverified.check_hostname = False
+            unverified.verify_mode = ssl.CERT_NONE
+            from gnutls.crypto import X509Certificate
+            certificate = X509Certificate(ssl.DER_cert_to_PEM_cert(connect(unverified)).encode())
+            details = '; certificate for %s, issued by %s, valid until %s' % (certificate.subject, certificate.issuer, certificate.expiration_time)
+        except Exception:
+            pass
+        system_store = ''
+        if ca_file:
+            try:
+                connect(ssl.create_default_context())
+            except Exception:
+                pass
+            else:
+                system_store = ' (it does verify with the system CA store, so %s is missing its issuer)' % ca_file
+        activity.warning('[tls] The certificate of %s:%d was refused for account %s: %s (server name %s, CA list %s)%s%s'
+                         % (host, port, account_id, reason, server_name, ca_file or 'system', details, system_store))
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
         account = notification.sender
