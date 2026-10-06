@@ -9,7 +9,7 @@ import urllib
 import uuid
 import pgpy
 
-from collections import deque
+from collections import OrderedDict, deque
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
@@ -651,8 +651,11 @@ class MessageManager(object, metaclass=Singleton):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type,
                                  'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove', 'application/sylk-api'}
 
+    own_message_ids_size = 1000
+
     def __init__(self):
         self.sessions = []
+        self._own_message_ids = OrderedDict()  # ids of messages sent by this device, to recognise their replicated copies
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
         self._sync_queue = deque()
@@ -759,6 +762,9 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def _send_message(self, outgoing_message):
+        self._own_message_ids[outgoing_message.id] = None
+        while len(self._own_message_ids) > self.own_message_ids_size:
+            self._own_message_ids.popitem(last=False)
         self._outgoing_message_queue.append(outgoing_message)
         self._send_outgoing_messages()
 
@@ -1276,7 +1282,7 @@ class MessageManager(object, metaclass=Singleton):
             message.direction = "outgoing"
 
         try:
-            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or (instance_id and instance_id == session.remote_instance_id))
+            blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings or session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
         except StopIteration:
             blink_session = None
             if any(content_type.lower().startswith(prefix) for prefix in self.__ignored_content_types__):
