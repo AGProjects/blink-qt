@@ -3298,7 +3298,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if direction == 'incoming':
             if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
-                pass
+                # seen as it arrives: read in history too
+                NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=blink_session)
             else:
                 # unread counts are keyed like history: a Bonjour neighbour by its instance id
                 NotificationCenter().post_notification('BlinkMessageNewUnread', sender=blink_session.remote_instance_id or uri)

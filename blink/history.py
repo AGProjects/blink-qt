@@ -88,6 +88,8 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='MessageContactsManagerDidActivate')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, name='SIPAccountManagerDidRemoveAccount')
+        notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
+        notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
 
     @run_in_thread('file-io')
     def save(self):
@@ -304,6 +306,15 @@ class HistoryManager(object, metaclass=Singleton):
         settings = BlinkSettings()
         if settings.interface.show_messages_group:
             self.message_history.get_all_contacts()
+
+    def _NH_BlinkSessionConfirmReadMessages(self, notification):
+        # the user has the conversation in front of them; keyed as the chat window loads it
+        session = notification.sender
+        key = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(session.contact.uri.uri)
+        self.message_history.mark_conversation_read(key)
+
+    def _NH_BlinkConfirmReadMessagesOnOtherDevice(self, notification):
+        self.message_history.mark_conversation_read(str(notification.data.remote_uri), source='another device')
 
     def _NH_BlinkGotDispositionNotification(self, notification):
         data = notification.data
@@ -757,6 +768,49 @@ class MessageHistory(object, metaclass=Singleton):
 
     __backfill_chunk__ = 500
 
+    __key_content_types__ = ('text/pgp-public-key', 'text/pgp-private-key')
+    __file_transfer_content_types__ = ('application/sylk-file-transfer', 'application/vnd.gsma.rcs-ft-http+xml')
+
+    @classmethod
+    def _readable(cls, content_type):
+        """Python twin of __readable_sql__: a message a user reads."""
+        content_type = str(content_type or '').lower()
+        if content_type.startswith('text/'):
+            return content_type not in cls.__key_content_types__
+        return content_type in cls.__file_transfer_content_types__
+
+    @classmethod
+    def _initial_read(cls, direction, content_type, state=None):
+        """0 for an incoming message the user has not seen yet, else 1."""
+        if direction == 'incoming' and cls._readable(content_type) and state not in ('displayed', 'deleted'):
+            return 0
+        return 1
+
+    def unread_counts(self):
+        """{conversation key: unread incoming messages}, for enabled accounts. Caller is in the db thread."""
+        table = Message.sqlmeta.table
+        query = (f"select remote_uri, count(*) from {table}"
+                 f" where direction = 'incoming' and read = 0 and (deleted is null or deleted = 0)"
+                 f" and state != 'deleted' and {self.__readable_sql__} and {self._get_enabled_account_filter()}"
+                 f" group by remote_uri")
+        return {remote_uri: count for remote_uri, count in self.db.queryAll(query)}
+
+    @run_in_thread('db')
+    def mark_conversation_read(self, remote_uri, source=None):
+        """Mark every incoming message of a conversation read, whatever account it was filed under."""
+        table = Message.sqlmeta.table
+        where = f"remote_uri = {self.db.sqlrepr(str(remote_uri))} and direction = 'incoming' and read = 0"
+        try:
+            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            if count:
+                self.db.queryAll(f'update {table} set read = 1 where {where}')
+        except Exception as e:
+            ActivityLog().error(f'[db] Marking the conversation with {remote_uri} read failed: {e}')
+            return
+        if count:
+            ActivityLog().info(f'[db] Marked {count} messages read in the conversation with {remote_uri}' + (f' (read on {source})' if source else ''))
+        NotificationCenter().post_notification('BlinkMessageHistoryConversationWasRead', data=NotificationData(remote_uri=str(remote_uri), count=count))
+
     def _upgrade_to_v7(self):
         """backfill message categories and links"""
         table = Message.sqlmeta.table
@@ -1011,6 +1065,7 @@ class MessageHistory(object, metaclass=Singleton):
         optional_fields = {}
         if state is not None:
             optional_fields['state'] = state
+        optional_fields['read'] = cls._initial_read(message.direction, message.content_type, state)
 
         if encryption is not None:
             optional_fields['encryption_type'] = str([f'{encryption}'])
@@ -1080,6 +1135,7 @@ class MessageHistory(object, metaclass=Singleton):
         optional_fields = {}
         if state is not None:
             optional_fields['state'] = state
+        optional_fields['read'] = cls._initial_read(direction, message.content_type, state)
         if session.chat_type is not None:
             chat_info = session.info.streams.chat
 
@@ -1146,6 +1202,8 @@ class MessageHistory(object, metaclass=Singleton):
                 else:
                     log.info(f'Message {id} from {message.remote_uri} state changed {message.state} -> {state}')
                 message.state = state
+            if state == 'displayed' and message.direction == 'incoming' and not message.read:
+                message.read = 1
 
     @run_in_thread('db')
     def update_displayed_for_uri(self, remote_uri):
@@ -1294,15 +1352,11 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def get_unread_messages(self):
-        query = f"""select remote_uri, count(*) as c from messages where state != 'displayed' and direction='incoming' and {self._get_enabled_account_filter()} group by remote_uri"""
         try:
-            result = self.db.queryAll(query)
+            unread_messages = self.unread_counts()
         except Exception as e:
+            ActivityLog().error(f'[db] Counting unread messages failed: {e}')
             return
-
-        unread_messages = {}
-        for (remote_uri, c) in result:
-            unread_messages[remote_uri] = c
 
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageHistoryUnreadMessagesDidLoad', data=NotificationData(unread_messages=unread_messages))
