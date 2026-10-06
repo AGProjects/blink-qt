@@ -1,5 +1,3 @@
-import platform
-
 from PyQt6.QtCore import Qt, QCoreApplication, QLineF, QPointF, QRectF, QSize, QTimer, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt6.QtGui import QAction, QBrush, QColor, QLinearGradient, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWidgets import QCommonStyle, QMenu, QPushButton, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton
@@ -598,11 +596,11 @@ class StateButtonStyle(QCommonStyle, ColorHelperMixin):
             else:
                 right_offset = 0
             content_rect = QRectF(self.proxy().subControlRect(QStyle.ComplexControl.CC_ToolButton, option, QStyle.SubControl.SC_ToolButton, widget)).adjusted(margin, margin, -margin-right_offset, -margin)
-            pixmap_rect  = QRectF(pixmap.rect())
+            pixmap_rect  = QRectF(QPointF(0, 0), pixmap.deviceIndependentSize())
             pixmap_rect.moveCenter(content_rect.center())
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-            painter.drawPixmap(pixmap_rect.topLeft(), pixmap)
+            painter.drawPixmap(pixmap_rect, pixmap, QRectF(pixmap.rect()))
 
 
 class StateButton(QToolButton):
@@ -618,32 +616,31 @@ class StateButton(QToolButton):
         self.setStyle(StateButtonStyle())
 
     def pixmap(self, mode=QIcon.Mode.Normal, state=QIcon.State.Off):
-        pixmap = self.icon().pixmap(self.iconSize(), mode, state)
-        if pixmap.isNull():
-            return pixmap
+        # Returns a square, HiDPI-aware pixmap of iconSize() (in logical pixels) with the icon
+        # scaled to fit (keeping aspect ratio) and centered, clipped to a rounded rect.
+        size = self.iconSize()
+        ratio = self.devicePixelRatioF()
+        source = self.icon().pixmap(size, ratio, mode, state)
+        if source.isNull():
+            return source
 
-        size = max(pixmap.width(), pixmap.height())
-        offset_x = int((size - pixmap.width())/2)
-        offset_y = int((size - pixmap.height())/2)
-        if platform.system() == 'Darwin':
-            if size == 48:
-                # default icon
-                offset_x = offset_x + 8
-                offset_y = offset_y + 8
-            else:
-                # user chosen icon
-                offset_x = offset_x + 14
-                offset_y = offset_y + 16
+        side = min(size.width(), size.height())
+        source_size = source.deviceIndependentSize()
+        scale = min(side / source_size.width(), side / source_size.height())
+        target = QRectF(0, 0, source_size.width() * scale, source_size.height() * scale)
+        target.moveCenter(QPointF(side / 2, side / 2))
 
-        new_pixmap = QPixmap(size, size)
+        new_pixmap = QPixmap(round(side * ratio), round(side * ratio))
+        new_pixmap.setDevicePixelRatio(ratio)
         new_pixmap.fill(Qt.GlobalColor.transparent)
         path = QPainterPath()
-        path.addRoundedRect(0, 0, size, size, 3.7, 3.7)
+        path.addRoundedRect(QRectF(0, 0, side, side), 3.7, 3.7)
         painter = QPainter(new_pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.setClipPath(path)
-        painter.drawPixmap(offset_x, offset_y, pixmap)
+        painter.drawPixmap(target, source, QRectF(source.rect()))
         painter.end()
 
         return new_pixmap
