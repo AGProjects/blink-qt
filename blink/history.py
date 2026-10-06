@@ -342,9 +342,32 @@ class Message(SQLObject):
     decrypted       = StringCol(default='0')
     decryption_error= StringCol(sqlType='LONGTEXT')
     disposition     = StringCol(default='')
+    # version 5, names shared with Blink for macOS and Sylk Mobile
+    read            = IntCol(default=1, defaultSQL='1')  # 0 = incoming and not yet read
+    category        = StringCol(default=None)                 # text, audio, image, video, location, call, other
+    has_link        = IntCol(default=0, defaultSQL='0')  # text contains a link (Links filter)
+    metadata        = UnicodeCol(sqlType='LONGTEXT', default=None)  # cleartext envelope (location v2, call record, CPIM agp.Metadata)
+    related_msg_id  = StringCol(default=None)                 # owner of a location tick or metadata companion
+    related_action  = StringCol(default=None)
+    deleted         = IntCol(default=0, defaultSQL='0')  # tombstone
+    deleted_time    = IntCol(default=0, defaultSQL='0')  # epoch when the tombstone was set
+    journal_id      = StringCol(default=None)                 # SylkServer journal entry id
+    sip_callid      = StringCol(default=None)                 # call record merge key
+    media_type      = StringCol(default=None)                 # sms, chat, audio, video, ...
+    cpim_from       = UnicodeCol(length=128, default=None)
+    cpim_to         = UnicodeCol(length=128, default=None)
+    cpim_timestamp  = StringCol(default=None)                 # sender timestamp as received
+    private         = IntCol(default=0, defaultSQL='0')
+    expire_time     = IntCol(default=0, defaultSQL='0')  # reserved, Sylk Mobile 'expire'
     remote_idx      = DatabaseIndex('remote_uri')
     id_idx          = DatabaseIndex('message_id')
     unq_idx         = DatabaseIndex(message_id, account_id, remote_uri, unique=True)
+    account_idx     = DatabaseIndex('account_id')
+    remote_time_idx = DatabaseIndex('remote_uri', 'timestamp')
+    category_idx    = DatabaseIndex('remote_uri', 'category', 'timestamp')
+    link_idx        = DatabaseIndex('remote_uri', 'category', 'has_link', 'timestamp')
+    read_idx        = DatabaseIndex('read')
+    related_idx     = DatabaseIndex('related_msg_id')
 
 
 class DownloadedFiles(SQLObject):
@@ -529,7 +552,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 4
+    __version__ = 5
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -623,6 +646,40 @@ class MessageHistory(object, metaclass=Singleton):
         """decryption state columns"""
         self._add_column('decrypted', "TEXT DEFAULT '0'")
         self._add_column('decryption_error', "LONGTEXT DEFAULT ''")
+        return 0
+
+    # columns and indexes added in version 5, see Message
+    __v5_columns__ = (('read', 'INTEGER DEFAULT 1'),
+                      ('category', 'TEXT DEFAULT NULL'),
+                      ('has_link', 'INTEGER DEFAULT 0'),
+                      ('metadata', 'LONGTEXT DEFAULT NULL'),
+                      ('related_msg_id', 'TEXT DEFAULT NULL'),
+                      ('related_action', 'TEXT DEFAULT NULL'),
+                      ('deleted', 'INTEGER DEFAULT 0'),
+                      ('deleted_time', 'INTEGER DEFAULT 0'),
+                      ('journal_id', 'TEXT DEFAULT NULL'),
+                      ('sip_callid', 'TEXT DEFAULT NULL'),
+                      ('media_type', 'TEXT DEFAULT NULL'),
+                      ('cpim_from', 'VARCHAR(128) DEFAULT NULL'),
+                      ('cpim_to', 'VARCHAR(128) DEFAULT NULL'),
+                      ('cpim_timestamp', 'TEXT DEFAULT NULL'),
+                      ('private', 'INTEGER DEFAULT 0'),
+                      ('expire_time', 'INTEGER DEFAULT 0'))
+    __v5_indexes__ = (('account_idx', 'account_id'),
+                      ('remote_time_idx', 'remote_uri, timestamp'),
+                      ('category_idx', 'remote_uri, category, timestamp'),
+                      ('link_idx', 'remote_uri, category, has_link, timestamp'),
+                      ('read_idx', 'read'),
+                      ('related_idx', 'related_msg_id'))
+
+    def _upgrade_to_v5(self):
+        """read state, category, tombstone, metadata and CPIM columns"""
+        table = Message.sqlmeta.table
+        for name, definition in self.__v5_columns__:
+            self._add_column(name, definition)
+        for name, columns in self.__v5_indexes__:
+            # same index names sqlobject uses when it creates the table
+            self.db.queryAll(f'CREATE INDEX IF NOT EXISTS {table}_{name} ON {table} ({columns})')
         return 0
 
     def _add_column(self, name, definition):
