@@ -42,7 +42,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.logging import MessagingTrace as log
+from blink.logging import ActivityLog, MessagingTrace as log
 from blink.resources import Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.util import run_in_gui_thread, translate
@@ -536,6 +536,8 @@ class OutgoingMessage(object):
 
         if self.session is not None:
             notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
+        if not self._disabled_imdn_content_type:
+            ActivityLog().info(f'[Message with {self.uri}] Sent {self.content_type} message {self.id}')
 
     def _NH_SIPMessageDidFail(self, notification):
         content_type = self.content_type.lower()
@@ -560,6 +562,7 @@ class OutgoingMessage(object):
             code = ''
 
         log.info(f'Message {self.id} to {self.session.contact_uri.uri} failed {originator}ly: {code} {reason}')
+        ActivityLog().warning(f'[Message with {self.uri}] Sending {self.content_type} message {self.id} failed {originator}ly: {code} {reason}')
 
 
 @implementer(IObserver)
@@ -687,6 +690,7 @@ class MessageManager(object, metaclass=Singleton):
         directory = settings.chat.keys_directory.normalized
         filename = os.path.join(directory, id + '.pubkey')
         makedirs(directory)
+        ActivityLog().info(f'[pgp] Saved the PGP public key of {id}')
 
         with open(filename, 'wb') as f:
             data = data if isinstance(data, bytes) else data.encode()
@@ -1048,6 +1052,7 @@ class MessageManager(object, metaclass=Singleton):
         request.account.sms.private_key = f'{filename}.privkey'
         request.account.sms.public_key = f'{filename}.pubkey'
         request.account.save()
+        ActivityLog().info(f'[pgp] Imported the PGP private key of account {request.account.id} from another device')
 
         for session in [session for session in self.sessions if session.account is request.account]:
             stream = session.fake_streams.get('messages')
@@ -1140,12 +1145,19 @@ class MessageManager(object, metaclass=Singleton):
         enc_text = f'{encryption} encrypted ' if encryption else ''
 
         log.info(f'Message {message_id} {enc_text}{content_type.lower()} for account {account.id} from {sender.uri}')
+        if content_type.lower() not in (IsComposingDocument.content_type, IMDNDocument.content_type):
+            if x_replicated_message is not Null:
+                peer, what = f'{to_header.uri.user}@{to_header.uri.host}', 'Replicated outgoing'
+            else:
+                peer, what = instance_id or f'{sender.uri.user}@{sender.uri.host}', 'Incoming'
+            ActivityLog().info(f'[Message with {peer}] {what} {enc_text}{content_type.lower()} message {message_id} for account {account.id}')
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
 
-        if x_replicated_message is not Null:
-            pass
-            #log.debug(f'Message {message_id} is a replicated message from another device')
+        if x_replicated_message is not Null and message_id in self._own_message_ids:
+            # the server replicates a message to all devices of the sender, this one included
+            log.debug(f'Ignoring replicated copy of message {message_id} sent by this device')
+            return
 
         if encryption == 'OpenPGP':
             if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
@@ -1284,6 +1296,7 @@ class MessageManager(object, metaclass=Singleton):
                     log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to instance_id {instance_id}")
                 else:
                     log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to {contact_uri.uri}")
+                ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation opened for account {account.id} by a message sent from another device')
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
                 blink_session.direction = 'outgoing'
             else:
@@ -1292,6 +1305,7 @@ class MessageManager(object, metaclass=Singleton):
                 else:
                     log.info(f"Create incoming message {content_type.lower()} view for account {account.id} to {contact_uri.uri}")
 
+                ActivityLog().info(f'[Message with {instance_id or contact_uri.uri}] Conversation opened for account {account.id} by an incoming message')
                 blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False, remote_instance_id=instance_id)
                 # TODO session should have direction incoming, right now there is no way to create it without an event. We set the direction manually. -- Tijmen
                 blink_session.direction = 'incoming'
@@ -1493,6 +1507,11 @@ class MessageManager(object, metaclass=Singleton):
 
     def _NH_PGPKeysDidGenerate(self, notification):
         session = notification.sender
+        try:
+            key_id = notification.data.private_key.fingerprint.keyid
+        except AttributeError:
+            key_id = 'unknown'
+        ActivityLog().info(f'[pgp] Generated a new PGP key {key_id} for account {session.account.id}')
 
         outgoing_message = OutgoingMessage(session.account, session.contact, str(notification.data.public_key), 'text/pgp-public-key', session=session)
         self._send_message(outgoing_message)
@@ -1547,6 +1566,7 @@ class MessageManager(object, metaclass=Singleton):
                 blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
             except StopIteration:
                 log.info(f"Create message view from history for {contact_uri.uri} with instance_id {instance_id}")
+                ActivityLog().info(f'[Message with {instance_id or contact_uri.uri}] Conversation opened from message history for account {account.id}')
                 created_views.add(contact_uri.uri)
                 try:
                     ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
@@ -1687,6 +1707,7 @@ class MessageManager(object, metaclass=Singleton):
             blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (contact.type == 'dummy' and uri in session.contact.uris))
         except StopIteration:
             log.info(f"Create message view from session for {contact_uri.uri} with instance_id {instance_id}")
+            ActivityLog().info(f'[Message with {instance_id or contact_uri.uri}] Conversation opened by the user for account {account.id}')
             try:
                 ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
             except StopIteration:
