@@ -978,14 +978,19 @@ class MessageHistory(object, metaclass=Singleton):
         `before_time` is when the removal was made, not when it arrived: a removal
         replayed from the journal must not hide messages exchanged after it. Without
         `account_id` every account's rows are hidden, as the conversation is shown.
+        The tombstones are stamped with the removal time (`when`, else `before_time`):
+        it is the clock a later message is read against to bring the conversation back.
         """
         db = Message._connection
-        where = f'remote_uri = {db.sqlrepr(str(remote_uri))}'
+        keys = self._conversation_keys(remote_uri)
+        where = f"remote_uri in ({', '.join(db.sqlrepr(key) for key in keys)})"
         if account_id:
             where += f' and account_id = {db.sqlrepr(str(account_id))}'
         floor = self._storage_time(before_time)
         if floor is not None:
             where += f' and timestamp <= {db.sqlrepr(floor)}'
+            if when is None:
+                when = floor.replace(tzinfo=timezone.utc).timestamp()
         try:
             count = self._set_deleted(where, True, when)
         except Exception as e:
@@ -994,6 +999,30 @@ class MessageHistory(object, metaclass=Singleton):
         ActivityLog().info(f'[db] Conversation with {remote_uri} marked deleted: {count} rows' + (f' up to {floor}' if floor is not None else '') + (f' for account {account_id}' if account_id else ''))
         if session is not None:
             self.load(remote_uri, session)
+
+    @classmethod
+    def _revive_or_bury(cls, message_id, remote_uri, timestamp):
+        """A message was stored in a removed conversation (every other row a tombstone).
+        Newer than the removal, the conversation comes back: the rows that removal hid
+        are shown again. Not newer (a journal replay, a late delivery of something that
+        was there when it was removed), it is hidden too: an old message must not undo
+        a removal. Same rule as macOS and Sylk Mobile. Caller is in the db thread."""
+        db = Message._connection
+        table = Message.sqlmeta.table
+        others = f'remote_uri = {db.sqlrepr(str(remote_uri))} and message_id != {db.sqlrepr(str(message_id))}'
+        live, removed_at = db.queryOne(f'select sum(case when {NOT_DELETED_SQL} then 1 else 0 end), max(deleted_time) from {table} where {others}')
+        if live or not removed_at:
+            return
+        try:
+            stamp = timestamp.replace(tzinfo=timezone.utc).timestamp()
+        except Exception:
+            return
+        if stamp > removed_at:
+            count = cls._set_deleted(f'{others} and deleted_time = {int(removed_at)}', False)
+            ActivityLog().info(f'[db] Conversation with {remote_uri} came back: message {message_id} from {timestamp} is newer than its removal, {count} rows shown again')
+        else:
+            cls._set_deleted(f'message_id = {db.sqlrepr(str(message_id))} and remote_uri = {db.sqlrepr(str(remote_uri))}', True, removed_at)
+            ActivityLog().info(f'[db] Message {message_id} from {timestamp} hidden: the conversation with {remote_uri} was removed after it')
 
     @run_in_thread('db')
     def restore_conversation(self, remote_uri):
@@ -1699,6 +1728,8 @@ class MessageHistory(object, metaclass=Singleton):
             pass
         else:
             cls._apply_pending_removal(message.id)
+            if message.content_type != METADATA_CONTENT_TYPE:
+                cls._revive_or_bury(message.id, remote_uri, timestamp)
             if message.content_type == METADATA_CONTENT_TYPE:
                 cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh
             elif message.content_type == LOCATION_CONTENT_TYPE and optional_fields.get('related_action') in cls.__trail_actions__:
@@ -1793,6 +1824,8 @@ class MessageHistory(object, metaclass=Singleton):
             else:
                 log.info(f"Message {message.id} from {remote_uri} stored")
             cls._apply_pending_removal(message.id)
+            if message.content_type != METADATA_CONTENT_TYPE:
+                cls._revive_or_bury(message.id, remote_uri, timestamp)
 
             if message.content_type == METADATA_CONTENT_TYPE:
                 cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh

@@ -681,6 +681,7 @@ class MessageManager(object, metaclass=Singleton):
         self._own_message_ids = OrderedDict()  # ids of messages sent by this device, to recognise their replicated copies
         self.seen_message_ids = SeenMessageIds(self.seen_message_ids_size)  # handled live or from the journal, whichever came first
         self._own_conversation_reads = OwnMarkers(ttl=30)  # read markers this device sent, to recognise their echo
+        self._own_conversation_removes = OwnMarkers(ttl=60)  # conversation removals this device asked the server for
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
         self._sync_queue = deque()
@@ -1107,7 +1108,11 @@ class MessageManager(object, metaclass=Singleton):
 
     def _journal_conversation_remove(self, account, message, content_type, first_sync, contacts):
         from blink.contacts import URIUtils
-        contact, contact_uri = URIUtils.find_contact(message['content'])
+        # a bare address, or {"contact", "timestamp"}: the same two shapes as a read marker
+        address, device = conversation_read_marker(message.get('content'))
+        if not address:
+            return 'failed'
+        contact, contact_uri = URIUtils.find_contact(address)
         timestamp = ISOTimestamp(message['timestamp'])
         ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation removed on another device (from the journal), messages up to {timestamp} for account {account.id}')
         session = self._journal_session(contact)
@@ -1514,9 +1519,25 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         if content_type.lower() == 'application/sylk-conversation-remove':
-            payload = json.loads(body)
-            contact, contact_uri = URIUtils.find_contact(payload['contact'])
-            timestamp = ISOTimestamp(payload['timestamp'])
+            address, device = conversation_read_marker(body)
+            if address is None:
+                ActivityLog().error(f'[Message] Cannot read the conversation removal {message_id} for account {account.id}: {body[:200]!r}')
+                return
+            if self._own_conversation_removes.is_echo(canonical_uri(address, account), None, None):
+                # our own removal fanned back by the server: already applied here
+                log.debug(f'Ignoring the echo of our conversation removal for {address}')
+                return
+            payload = parse_payload(body) or {}
+            contact, contact_uri = URIUtils.find_contact(address)
+            try:
+                if payload.get('timestamp'):
+                    timestamp = ISOTimestamp(payload['timestamp'])    # when it was removed
+                elif cpim_message is not None and cpim_message.timestamp is not None:
+                    timestamp = ISOTimestamp(cpim_message.timestamp)  # a bare address: when it was sent
+                else:
+                    timestamp = ISOTimestamp.now()
+            except (ValueError, OverflowError):
+                timestamp = ISOTimestamp.now()
             ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation removed on another device, messages up to {timestamp} for account {account.id}')
             try:
                 blink_session = next(session for session in self.sessions if session.contact.settings is contact.settings)
@@ -1988,6 +2009,7 @@ class MessageManager(object, metaclass=Singleton):
         ActivityLog().info(f'[Message with {contact}] Asking the server to remove the conversation from the other devices of {account.id}')
         payload = {'contact': contact, 'timestamp': str(ISOTimestamp.now())}
         content = json.dumps(payload)
+        self._own_conversation_removes.note(canonical_uri(contact, account))
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(account.uri)
         outgoing_message = OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', session=session, use_cpim=False)
