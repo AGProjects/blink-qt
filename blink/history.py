@@ -1,5 +1,6 @@
 
 import bisect
+import glob
 import pickle as pickle
 import os
 import re
@@ -19,13 +20,14 @@ from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.addressbook import AddressbookManager
+from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.payloads.iscomposing import IsComposingDocument
 from sipsimple.payloads.imdn import IMDNDocument
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.settings import BlinkSettings
-from blink.logging import MessagingTrace as log
+from blink.logging import ActivityLog, MessagingTrace as log
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
@@ -80,6 +82,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageContactsDidChange')
         notification_center.add_observer(self, name='MessageContactsManagerDidActivate')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification_center.add_observer(self, name='SIPAccountManagerDidRemoveAccount')
 
     @run_in_thread('file-io')
     def save(self):
@@ -112,6 +115,49 @@ class HistoryManager(object, metaclass=Singleton):
             if 'enabled' in notification.data.modified:
                 self.message_history.get_unread_messages()
 
+
+    def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
+        account = notification.data.account
+        if account is BonjourAccount():
+            return
+        ActivityLog().info('[db] Account %s was deleted, removing its history' % account.id)
+        self.message_history.remove(account)
+        self.download_history.remove_account_files(account)
+        calls = [entry for entry in self.calls if entry.account_id != str(account.id)]
+        if len(calls) != len(self.calls):
+            ActivityLog().info('[db] Removed %d call history entries of %s' % (len(self.calls) - len(calls), account.id))
+            self.calls = calls
+            self.save()
+        self._remove_account_keys(account)
+        # the db thread runs these after the removal above
+        self.message_history.get_unread_messages()
+        if BlinkSettings().interface.show_messages_group:
+            self.message_history.get_all_contacts()
+
+    @run_in_thread('file-io')
+    def _remove_account_keys(self, account):
+        # own PGP keys: keys/private/<account>.{privkey,pubkey}, keys replaced earlier
+        # (<account>-<timestamp>-old.*), whatever the account settings point to,
+        # and our own public key if it was saved among the peer keys
+        directory = SIPSimpleSettings().chat.keys_directory.normalized
+        private_directory = os.path.join(directory, 'private')
+        filenames = set()
+        for name in {account.id, account.id.replace('/', '_')}:
+            base = glob.escape(os.path.join(private_directory, name))
+            filenames.update(glob.glob(base + '.privkey'))
+            filenames.update(glob.glob(base + '.pubkey'))
+            filenames.update(glob.glob(base + '-*-old.privkey'))
+            filenames.update(glob.glob(base + '-*-old.pubkey'))
+            filenames.add(os.path.join(directory, name + '.pubkey'))
+        for setting in (account.sms.private_key, account.sms.public_key):
+            if setting is not None:
+                filenames.add(setting.normalized)
+        removed = 0
+        for filename in filenames:
+            if os.path.isfile(filename):
+                unlink(filename)
+                removed += 1
+        ActivityLog().info('[db] Removed %d PGP key files of %s' % (removed, account.id))
 
     def _NH_SIPApplicationDidStart(self, notification):
         try:
@@ -451,6 +497,14 @@ class DownloadHistory(object, metaclass=Singleton):
             os.rmdir(os.path.dirname(cached_file))
         except OSError:
             pass
+
+    @run_in_thread('db')
+    def remove_account_files(self, account):
+        result = list(DownloadedFiles.selectBy(account_id=str(account.id)))
+        for file in result:
+            self.remove_cache_file(file)
+            file.destroySelf()
+        ActivityLog().info('[db] Removed %d downloaded files of %s' % (len(result), account.id))
 
     @run_in_thread('db')
     def remove_contact_files(self, account, contact):
@@ -993,7 +1047,10 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def remove(self, account):
-        Message.deleteBy(account=account)
+        account_id = str(account.id)
+        count = Message.selectBy(account_id=account_id).count()
+        Message.deleteBy(account_id=account_id)
+        ActivityLog().info('[db] Removed %d messages of %s' % (count, account_id))
 
     @run_in_thread('db')
     def remove_contact_messages(self, account, contact, timestamp=None, session=None):
