@@ -1832,7 +1832,69 @@
                  </property>
                 </widget>
                </item>
-               <item row="4" column="0" colspan="5">
+               <item row="4" column="0">
+                <widget class="QLabel" name="replace_leading_zero_label">
+                 <property name="text">
+                  <string>Replace leading 0 with:</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QLineEdit" name="replace_leading_zero_editor">
+                 <property name="toolTip">
+                  <string>Replace the single leading 0 of a national telephone number with this prefix, normally the international access code followed by your country code (e.g. 0031). Numbers already starting with 00 or + are left alone. It also tells Blink which country you are in.</string>
+                 </property>
+                 <property name="placeholderText">
+                  <string>e.g. 0031</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="2">
+                <widget class="QLabel" name="pstn_national_example_original_label">
+                 <property name="text">
+                  <string>02079460000</string>
+                 </property>
+                 <property name="indent">
+                  <number>25</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="3">
+                <widget class="QLabel" name="pstn_national_example_arrow_label">
+                 <property name="maximumSize">
+                  <size>
+                   <width>42</width>
+                   <height>32</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="pixmap">
+                  <pixmap>icons/transform.png</pixmap>
+                 </property>
+                 <property name="scaledContents">
+                  <bool>true</bool>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="margin">
+                  <number>6</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="4">
+                <widget class="QLabel" name="pstn_national_example_transformed_label">
+                 <property name="text">
+                  <string>02079460000</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="0" colspan="5">
                 <spacer name="pstn_spacer">
                  <property name="orientation">
                   <enum>Qt::Vertical</enum>
@@ -4071,6 +4133,7 @@
   <tabstop>subscribe_interval</tabstop>
   <tabstop>idd_prefix_button</tabstop>
   <tabstop>prefix_button</tabstop>
+  <tabstop>replace_leading_zero_editor</tabstop>
   <tabstop>audio_input_device_button</tabstop>
   <tabstop>audio_output_device_button</tabstop>
   <tabstop>audio_alert_device_button</tabstop>

@@ -84,3 +84,12 @@
 .failed-local {
     filter: invert(69%) sepia(55%) saturate(1038%) hue-rotate(336deg) brightness(105%) contrast(101%);
 }
+
+/* the lock is drawn edge to edge, unlike the tick icons which carry their own
+   padding, so at the tick size it looked twice as big: size it to the text */
+.stockholm > .status-icon.is-secure, .smooth > .status-icon.is-secure {
+    height: 0.9em;
+    margin-top: 0;
+    margin-right: 0;
+    vertical-align: baseline;
+}

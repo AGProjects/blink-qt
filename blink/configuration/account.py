@@ -38,6 +38,11 @@ class PresenceSettingsExtension(PresenceSettings):
 class PSTNSettings(SettingsGroup):
     idd_prefix = Setting(type=str, default=None, nillable=True)
     prefix = Setting(type=str, default=None, nillable=True)
+    # The "Replace Leading 0" dial rule, normally the international access
+    # code followed by the home country code (e.g. 0031): 0612345678 is dialled
+    # as 0031612345678. Same as Blink Cocoa pstn.replace_leading_zero and Sylk
+    # mobile replaceLeadingZero; read by blink.pstn_normalize.
+    replace_leading_zero = Setting(type=str, default=None, nillable=True)
 
 
 class RTPSettingsExtension(RTPSettings):

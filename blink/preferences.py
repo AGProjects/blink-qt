@@ -30,6 +30,7 @@ from blink.configuration.datatypes import FileURL
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
+from blink.pstn_normalize import pstn_apply_leading_zero_rule
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, translate
 
 
@@ -80,6 +81,11 @@ class PrefixValidator(QRegularExpressionValidator):
 
     def fixup(self, input):
         return super(PrefixValidator, self).fixup(input or 'None')
+
+
+class DigitsValidator(QRegularExpressionValidator):
+    def __init__(self, parent=None):
+        super(DigitsValidator, self).__init__(QRegularExpression('[0-9]*'), parent)
 
 
 class HostnameValidator(QRegularExpressionValidator):
@@ -286,6 +292,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.reregister_button.clicked.connect(self._SH_ReregisterButtonClicked)
         self.idd_prefix_button.activated[int].connect(self._SH_IDDPrefixButtonActivated)
         self.prefix_button.activated[int].connect(self._SH_PrefixButtonActivated)
+        self.replace_leading_zero_editor.textChanged.connect(self._update_pstn_example_label)
+        self.replace_leading_zero_editor.editingFinished.connect(self._SH_ReplaceLeadingZeroEditorEditingFinished)
         self.account_tls_name_editor.editingFinished.connect(self._SH_TLSPeerNameEditorEditingFinished)
 
         # Account sms settings
@@ -471,6 +479,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.conference_server_editor.setValidator(HostnameValidator(self))
         self.idd_prefix_button.setValidator(IDDPrefixValidator(self))
         self.prefix_button.setValidator(PrefixValidator(self))
+        self.replace_leading_zero_editor.setValidator(DigitsValidator(self))
 
         # Languages
         self.language_button.clear()
@@ -964,6 +973,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if index == -1:
                 self.prefix_button.addItem(item_text)
             self.prefix_button.setCurrentIndex(self.prefix_button.findText(item_text))
+            with blocked_qt_signals(self.replace_leading_zero_editor):
+                self.replace_leading_zero_editor.setText(account.pstn.replace_leading_zero or '')
             self._update_pstn_example_label()
 
             # Messages tab
@@ -1091,8 +1102,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def _update_pstn_example_label(self):
         prefix = self.prefix_button.currentText()
+        prefix = '' if prefix == 'None' else prefix
         idd_prefix = self.idd_prefix_button.currentText()
-        self.pstn_example_transformed_label.setText("%s%s442079460000" % ('' if prefix == 'None' else prefix, idd_prefix))
+        self.pstn_example_transformed_label.setText("%s%s442079460000" % (prefix, idd_prefix))
+        national = self.pstn_national_example_original_label.text()
+        replace_leading_zero = self.replace_leading_zero_editor.text().strip() or None
+        self.pstn_national_example_transformed_label.setText(prefix + pstn_apply_leading_zero_rule(national, replace_leading_zero, None if idd_prefix == '+' else idd_prefix))
 
     def _process_height(self, height, scroll=False):
         widget_height = self.style_view.size().height()
@@ -1495,6 +1510,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         prefix = None if text == 'None' else text
         if account.pstn.prefix != prefix:
             account.pstn.prefix = prefix
+            account.save()
+
+    def _SH_ReplaceLeadingZeroEditorEditingFinished(self):
+        account = self.selected_account
+        replace_leading_zero = self.replace_leading_zero_editor.text().strip() or None
+        if account.pstn.replace_leading_zero != replace_leading_zero:
+            account.pstn.replace_leading_zero = replace_leading_zero
             account.save()
 
     def _SH_TLSCertFileEditorLocationCleared(self):
