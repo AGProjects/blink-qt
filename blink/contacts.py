@@ -2706,7 +2706,7 @@ class RelocationInfo(object):
 @implementer(IObserver)
 class Group(object):
 
-    size_hint = QSize(200, 18)
+    size_hint = QSize(200, 24)
 
     virtual = property(lambda self: isinstance(self.settings, VirtualGroup))
 
@@ -3290,6 +3290,10 @@ class GroupWidget(base_class, ui_class):
         super(GroupWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        font = self.name_label.font()
+        font.setBold(True)
+        self.name_label.setFont(font)
+        self.name_editor.setFont(font)
         self.selected = False
         self.drop_indicator = None
         self._disable_dnd = False
@@ -3319,7 +3323,7 @@ class GroupWidget(base_class, ui_class):
         if self.__dict__.get('selected', None) == value:
             return
         self.__dict__['selected'] = value
-        self.name_label.setStyleSheet("color: #ffffff; font-weight: bold;" if value else "color: #000000;")
+        self.name_label.setStyleSheet("color: #ffffff; font-weight: bold;" if value else "color: #000000; font-weight: bold;")
         # self.name_label.setForegroundRole(QPalette.ColorRole.BrightText if value else QPalette.ColorRole.WindowText)
         self.update()
 
@@ -3408,12 +3412,14 @@ class GroupWidget(base_class, ui_class):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
 
+        # centred on the bar, sized to match the bold name
         if self.collapse_button.isChecked():
-            arrow = QPolygonF([QPointF(0, 0), QPointF(0, 9), QPointF(8, 4.5)])
-            arrow.translate(QPointF(5, 4))
+            arrow = QPolygonF([QPointF(0, 0), QPointF(0, 11), QPointF(9.5, 5.5)])
+            arrow.translate(QPointF(5, (rect.height() - 11) / 2))
         else:
-            arrow = QPolygonF([QPointF(0, 0), QPointF(9, 0), QPointF(4.5, 8)])
-            arrow.translate(QPointF(5, 5))
+            arrow = QPolygonF([QPointF(0, 0), QPointF(11, 0), QPointF(5.5, 9.5)])
+            arrow.translate(QPointF(4, (rect.height() - 9.5) / 2))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(foreground)
         painter.setPen(QPen(painter.brush(), 0, Qt.PenStyle.NoPen))
         painter.drawPolygon(arrow)
