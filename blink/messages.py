@@ -2042,6 +2042,26 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
+    def announce_conversation_removal(self, keys):
+        """Ask the server to remove these conversations from the other devices of every
+        account that replicates (a contact deleted permanently here). The echo the
+        server sends back is ignored (OwnMarkers)."""
+        keys = [str(key) for key in keys if key]
+        if not keys:
+            return
+        from blink.contacts import URIUtils
+        for account in AccountManager().get_accounts():
+            if account is BonjourAccount() or not account.enabled or not account.sms.enable_message_replication:
+                continue
+            for key in keys:
+                if key == str(account.id).lower():
+                    continue
+                ActivityLog().info(f'[Message with {key}] Asking the server to remove the conversation from the other devices of {account.id}')
+                content = json.dumps({'contact': key, 'timestamp': str(ISOTimestamp.now())})
+                self._own_conversation_removes.note(canonical_uri(key, account))
+                contact, contact_uri = URIUtils.find_contact(account.uri)
+                self._send_message(OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', use_cpim=False))
+
     def send_imdn_message(self, session, id, timestamp, state, account=None):
         if host.default_ip is None:
             return

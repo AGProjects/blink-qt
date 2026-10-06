@@ -104,7 +104,8 @@ def is_managed_group(group_settings):
         return True
     if isinstance(group_settings, VirtualGroup):
         return False
-    return getattr(group_settings, 'id', None) == DELETED_GROUP_ID or is_group(group_settings, CALLS) or is_group(group_settings, TEL)
+    return (getattr(group_settings, 'id', None) == DELETED_GROUP_ID or is_group(group_settings, CALLS) or
+            is_group(group_settings, TEL) or is_group(group_settings, CONFERENCE))
 
 
 def publish_contact_for_groups(contact):
@@ -130,6 +131,122 @@ def xcap_is_expected():
         return any(account.enabled and account.xcap.enabled for account in AccountManager().get_accounts() if account is not BonjourAccount())
     except Exception:
         return True
+
+
+class ContactTrash(object):
+    """Sylk Mobile's and Blink for macOS's two-stage contact delete.
+
+    Stage 1, Delete: the contact moves to the Deleted group ('_deleted') and out
+    of Messages, and every conversation under its addresses is tombstoned.
+    Nothing leaves the disk and nothing is said to the server: Restore puts it
+    back as it was, and a newer message brings it back by itself.
+    Stage 2, Delete Permanently (from inside Deleted): the contact is deleted
+    from XCAP, the history of every address no other contact lists is erased
+    (HistoryManager, on the deletion) and the other devices are asked to drop
+    those conversations. An address another contact lists gets its messages back.
+    """
+
+    @staticmethod
+    def _keys(contact):
+        keys = []
+        for uri in contact.uris:
+            key = canonical_uri(str(uri.uri))
+            if key and key not in keys and not is_instance_id(key):
+                keys.append(key)
+        return keys
+
+    @staticmethod
+    def deleted_group(create=False):
+        manager = addressbook.AddressbookManager()
+        try:
+            return manager.get_group(DELETED_GROUP_ID)
+        except KeyError:
+            if not create:
+                return None
+        group = addressbook.Group(id=DELETED_GROUP_ID)
+        group.name = 'Deleted'
+        group.position = None
+        group.save()
+        ActivityLog().info(f'[trash] Created the Deleted group ({DELETED_GROUP_ID})')
+        return group
+
+    @classmethod
+    def leave_deleted(cls, contact, why):
+        """Take a contact out of Deleted (it is back in use); caller saves nothing else."""
+        group = cls.deleted_group()
+        if group is not None and contact.id in {member.id for member in group.contacts}:
+            group.contacts.remove(contact)
+            group.save()
+            ActivityLog().info(f'[trash] Contact {contact.name or contact.id} left the Deleted group: {why}')
+
+    @classmethod
+    def soft_delete(cls, contacts):
+        from blink.history import HistoryManager
+        history = HistoryManager().message_history
+        with addressbook_origin.reason('delete'), addressbook.AddressbookManager.transaction():
+            deleted_group = cls.deleted_group(create=True)
+            try:
+                messages_group = addressbook.AddressbookManager().get_group(MESSAGES_GROUP_ID)
+            except KeyError:
+                messages_group = None
+            for contact in contacts:
+                keys = cls._keys(contact)
+                for key in keys:
+                    history.tombstone_conversation(key)
+                if contact.id not in {member.id for member in deleted_group.contacts}:
+                    deleted_group.contacts.add(contact)
+                if messages_group is not None and contact.id in {member.id for member in messages_group.contacts}:
+                    messages_group.contacts.remove(contact)
+                ActivityLog().info(f"[trash] Contact {contact.name or contact.id} moved to Deleted, conversations hidden: {', '.join(keys) or 'none'}")
+            deleted_group.save()
+            if messages_group is not None:
+                messages_group.save()
+
+    @classmethod
+    def restore(cls, contacts):
+        from blink.history import HistoryManager
+        history = HistoryManager().message_history
+        with addressbook_origin.reason('restore'), addressbook.AddressbookManager.transaction():
+            group = cls.deleted_group()
+            for contact in contacts:
+                for key in cls._keys(contact):
+                    history.restore_conversation(key)
+                if group is not None and contact.id in {member.id for member in group.contacts}:
+                    group.contacts.remove(contact)
+                ActivityLog().info(f'[trash] Contact {contact.name or contact.id} restored from Deleted')
+            if group is not None:
+                group.save()
+        # back into Messages when it has a conversation (MessagesGroupFiler files from history)
+        if BlinkSettings().interface.show_messages_group:
+            history.get_all_contacts()
+
+    @classmethod
+    def delete_permanently(cls, contacts):
+        from blink.history import HistoryManager
+        history = HistoryManager().message_history
+        going = {contact.id for contact in contacts}
+        claimed = set()
+        for other in addressbook.AddressbookManager().get_contacts():
+            if other.id not in going:
+                claimed.update(canonical_uri(str(uri.uri)) for uri in other.uris)
+        kept, purged = [], []
+        for contact in contacts:
+            for key in cls._keys(contact):
+                (kept if key in claimed else purged).append(key)
+        with addressbook_origin.reason('delete-permanently'), addressbook.AddressbookManager.transaction():
+            group = cls.deleted_group()
+            if group is not None:
+                for contact in contacts:
+                    if contact.id in {member.id for member in group.contacts}:
+                        group.contacts.remove(contact)
+                group.save()
+            for contact in contacts:
+                ActivityLog().info(f'[trash] Contact {contact.name or contact.id} deleted permanently')
+                contact.delete()       # HistoryManager erases the history no other contact claims
+        for key in kept:
+            ActivityLog().info(f'[trash] Keeping the conversation with {key}: another contact lists it')
+            history.restore_conversation(key)
+        MessageManager().announce_conversation_removal(sorted(set(purged)))
 
 
 @implementer(IObserver)
@@ -599,6 +716,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                     group.contacts.add(contact)
                     members.add(contact)
                     added.append(contact)
+                    ContactTrash.leave_deleted(contact, 'a newer message brought the conversation back')
             if new_group or added:
                 group.save()
         if new_group:
@@ -2321,7 +2439,8 @@ class Contact(object):
 
     movable = property(lambda self: self.type == 'addressbook' and not is_managed_group(self.group.settings))
     editable = property(lambda self: self.type == 'addressbook')
-    deletable = property(lambda self: self.type == 'addressbook' and not is_managed_group(self.group.settings))
+    # Delete moves an addressbook contact to Deleted from any group, as on macOS (ContactTrash); in Deleted it has its own actions
+    deletable = property(lambda self: self.type == 'addressbook' and getattr(self.group.settings, 'id', None) != DELETED_GROUP_ID)
 
     default_user_icon = ContactIconDescriptor(Resources.get('icons/default-avatar.png'))
 
@@ -3656,6 +3775,13 @@ class ContactModel(QAbstractListModel):
         self.addGroup(group)
         for contact in notification.sender.contacts:
             self.addContact(Contact(contact, group))
+        self._update_deleted_group_visibility()
+
+    def _update_deleted_group_visibility(self):
+        # the Deleted group is shown only while it holds somebody
+        for position, item in enumerate(self.items):
+            if isinstance(item, Group) and getattr(item.settings, 'id', None) == DELETED_GROUP_ID:
+                self.contact_list.setRowHidden(position, len(item.settings.contacts) == 0)
 
     def _NH_AddressbookGroupWasDeleted(self, notification):
         group = self.items[GroupElement, notification.sender]
@@ -3670,6 +3796,7 @@ class ContactModel(QAbstractListModel):
             self.removeContact(group_contacts[contact])
         for contact in notification.data.modified['contacts'].added:
             self.addContact(Contact(contact, group))
+        self._update_deleted_group_visibility()
 
     def _NH_VirtualGroupWasActivated(self, notification):
         group = Group(notification.sender)
@@ -4276,6 +4403,9 @@ class ContactListView(QListView):
         self.actions.delete_item = QAction(translate("contact_list", "Delete"), self, triggered=self._AH_DeleteSelection)
         self.actions.delete_selection = QAction(translate("contact_list", "Delete Selection"), self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction(translate("contact_list", "Undo Last Delete"), self, triggered=self._AH_UndoLastDelete)
+        self.actions.restore_contact = QAction(translate("contact_list", "Restore"), self, triggered=self._AH_RestoreContact)
+        self.actions.remove_from_group = QAction(translate("contact_list", "Remove from Group"), self, triggered=self._AH_RemoveFromGroup)
+        self.actions.delete_permanently = QAction(translate("contact_list", "Delete Permanently"), self, triggered=self._AH_DeletePermanently)
         self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
         self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
         self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
@@ -4331,12 +4461,10 @@ class ContactListView(QListView):
         if not selected_items:
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
-            menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         elif len(selected_items) > 1:
             menu.addAction(self.actions.delete_selection)
-            menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
@@ -4346,7 +4474,6 @@ class ContactListView(QListView):
         elif isinstance(selected_items[0], Group):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
-            menu.addAction(self.actions.undo_last_delete)
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
@@ -4354,6 +4481,10 @@ class ContactListView(QListView):
             self.actions.edit_item.setEnabled(selected_items[0].editable)
             self.actions.delete_item.setEnabled(selected_items[0].deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        elif isinstance(selected_items[0], Contact) and getattr(selected_items[0].group.settings, 'id', None) == DELETED_GROUP_ID:
+            # a deleted contact is not called or written to: it can only be restored or deleted for good
+            menu.addAction(self.actions.restore_contact)
+            menu.addAction(self.actions.delete_permanently)
         else:
             contact = selected_items[0]
             account_manager = AccountManager()
@@ -4446,6 +4577,8 @@ class ContactListView(QListView):
                 if isinstance(contact.settings, MessageContact):
                     menu.addAction(self.actions.add_item)
                 menu.addAction(self.actions.edit_item)
+                menu.addAction(self.actions.delete_item)
+                self.actions.delete_item.setEnabled(contact.deletable)
                 menu.addSeparator()
                 menu.addAction(self.actions.remove_conversation)
             elif contact.type == 'bonjour':
@@ -4455,8 +4588,9 @@ class ContactListView(QListView):
             else:
                 menu.addSeparator()
                 menu.addAction(self.actions.edit_item)
+                if contact.type == 'addressbook' and not contact.group.virtual and not is_managed_group(contact.group.settings):
+                    menu.addAction(self.actions.remove_from_group)
                 menu.addAction(self.actions.delete_item)
-                menu.addAction(self.actions.undo_last_delete)
                 self.actions.undo_last_delete.setText(undo_delete_text)
                 self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
                 self.actions.delete_item.setEnabled(contact.deletable)
@@ -4475,7 +4609,7 @@ class ContactListView(QListView):
         if event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
-            if isinstance(item, Contact):
+            if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
                 if is_messages_group(item.group.settings):
                     session_manager = MessageManager()
                     session_manager.create_message_session(item.uri.uri)
@@ -4646,7 +4780,52 @@ class ContactListView(QListView):
             QApplication.instance().main_window.contact_editor_dialog.open_for_edit(item.settings)
 
     def _AH_DeleteSelection(self):
-        self.model().removeItems(self.selectionModel().selectedIndexes())
+        indexes = self.selectionModel().selectedIndexes()
+        items = [index.data(Qt.ItemDataRole.UserRole) for index in indexes]
+        # an addressbook contact goes to Deleted first, whichever group it is selected in (Remove from
+        # Group is what takes it out of one user group only)
+        trash = [item for item in items if isinstance(item, Contact) and item.type == 'addressbook' and
+                 getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID]
+        rest = [index for index, item in zip(indexes, items) if item not in trash]
+        if trash:
+            contacts = list({item.settings.id: item.settings for item in trash}.values())
+            names = [contact.name or next(iter(contact.uris)).uri for contact in contacts]
+            question = (translate('contact_list', "Move '%s' to the Deleted group?") % names[0] if len(contacts) == 1 else
+                        translate('contact_list', 'Move %d contacts to the Deleted group?') % len(contacts))
+            text = question + '\n\n' + translate('contact_list', 'Their messages are hidden, not deleted, and can be restored from the Deleted group. Delete them permanently from there to remove them for good.')
+            if QMessageBox.question(self, translate('contact_list', 'Delete Contact'), text) == QMessageBox.StandardButton.Yes:
+                ContactTrash.soft_delete(contacts)
+        if rest:
+            self.model().removeItems(rest)
+        self.selectionModel().clearSelection()
+
+    def _AH_RemoveFromGroup(self):
+        indexes = [index for index in self.selectionModel().selectedIndexes()
+                   if isinstance(index.data(Qt.ItemDataRole.UserRole), Contact) and not is_managed_group(index.data(Qt.ItemDataRole.UserRole).group.settings)]
+        if indexes:
+            self.model().removeItems(indexes)
+        self.selectionModel().clearSelection()
+
+    def _selected_deleted_contacts(self):
+        items = [index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
+        return list({item.settings.id: item.settings for item in items if isinstance(item, Contact) and item.type == 'addressbook' and
+                     getattr(item.group.settings, 'id', None) == DELETED_GROUP_ID}.values())
+
+    def _AH_RestoreContact(self):
+        contacts = self._selected_deleted_contacts()
+        if contacts:
+            ContactTrash.restore(contacts)
+
+    def _AH_DeletePermanently(self):
+        contacts = self._selected_deleted_contacts()
+        if not contacts:
+            return
+        names = [contact.name or contact.id for contact in contacts]
+        question = (translate('contact_list', "Permanently delete '%s'?") % names[0] if len(contacts) == 1 else
+                    translate('contact_list', 'Permanently delete %d contacts?') % len(contacts))
+        text = question + '\n\n' + translate('contact_list', 'The contact is removed from the server address book, and its messages are deleted on all your devices. This cannot be undone.')
+        if QMessageBox.warning(self, translate('contact_list', 'Delete Permanently'), text, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            ContactTrash.delete_permanently(contacts)
         self.selectionModel().clearSelection()
 
     def _AH_UndoLastDelete(self):
@@ -4814,7 +4993,7 @@ class ContactListView(QListView):
 
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.ItemDataRole.UserRole)
-        if isinstance(item, Contact):
+        if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
             if is_messages_group(item.group.settings):
                 session_manager = MessageManager()
                 session_manager.create_message_session(item.uri.uri)
@@ -4922,12 +5101,10 @@ class ContactSearchListView(QListView):
         menu = self.context_menu
         menu.clear()
         if not selected_items:
-            menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         elif len(selected_items) > 1:
             menu.addAction(self.actions.delete_selection)
-            menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
@@ -4947,7 +5124,6 @@ class ContactSearchListView(QListView):
                     menu.addAction(self.actions.add_item)
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
-            menu.addAction(self.actions.undo_last_delete)
             self.actions.undo_last_delete.setText(undo_delete_text)
             account_manager = AccountManager()
             session_manager = SessionManager()
@@ -4980,7 +5156,7 @@ class ContactSearchListView(QListView):
         if event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
-            if isinstance(item, Contact):
+            if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
                 if is_messages_group(item.group.settings):
                     session_manager = MessageManager()
                     session_manager.create_message_session(item.uri.uri)
@@ -5075,8 +5251,19 @@ class ContactSearchListView(QListView):
         QApplication.instance().main_window.contact_editor_dialog.open_for_edit(contact.settings)
 
     def _AH_DeleteSelection(self):
+        # as in the contact list: an addressbook contact goes to Deleted (two-stage delete)
         model = self.model()
-        model.sourceModel().removeItems(model.mapToSource(index) for index in self.selectionModel().selectedIndexes())
+        indexes = [model.mapToSource(index) for index in self.selectionModel().selectedIndexes()]
+        items = [index.data(Qt.ItemDataRole.UserRole) for index in indexes]
+        contacts = list({item.settings.id: item.settings for item in items if isinstance(item, Contact) and item.type == 'addressbook' and
+                         getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID}.values())
+        if contacts:
+            names = [contact.name or next(iter(contact.uris)).uri for contact in contacts]
+            question = (translate('contact_list', "Move '%s' to the Deleted group?") % names[0] if len(contacts) == 1 else
+                        translate('contact_list', 'Move %d contacts to the Deleted group?') % len(contacts))
+            text = question + '\n\n' + translate('contact_list', 'Their messages are hidden, not deleted, and can be restored from the Deleted group. Delete them permanently from there to remove them for good.')
+            if QMessageBox.question(self, translate('contact_list', 'Delete Contact'), text) == QMessageBox.StandardButton.Yes:
+                ContactTrash.soft_delete(contacts)
 
     def _AH_UndoLastDelete(self):
         model = self.model().sourceModel()
@@ -5168,7 +5355,7 @@ class ContactSearchListView(QListView):
 
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.ItemDataRole.UserRole)
-        if isinstance(item, Contact):
+        if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
             if is_messages_group(item.group.settings):
                 session_manager = MessageManager()
                 session_manager.create_message_session(item.uri.uri)
