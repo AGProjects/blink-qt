@@ -49,12 +49,13 @@ from sipsimple.threading import run_in_thread
 
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
+from blink.group_kinds import STAMPED_KINDS, group_kind, stamp_plan
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager
 from blink.sessions import SessionManager, StreamDescription
 from blink.messages import MessageManager
 from blink.uris import bare_instance_id, bonjour_placeholder_uri, is_instance_id, placeholder_instance_id
-from blink.util import call_in_gui_thread, run_in_gui_thread, translate
+from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin
 from blink.widgets.util import ContextMenuActions
@@ -63,6 +64,63 @@ from blink.widgets.util import ContextMenuActions
 __all__ = ['Group', 'Contact', 'ContactModel', 'ContactSearchModel', 'ContactListView', 'ContactSearchListView', 'ContactEditorDialog', 'URIUtils']
 
 translation_table = dict.fromkeys(map(ord, ' \t'), None)
+
+
+@implementer(IObserver)
+class GroupKindStamper(object, metaclass=Singleton):
+    """Write `kind` onto the software's groups that exist without one, as Blink for macOS does.
+
+    Once per run, after the first XCAP reload (and a pause, so the addressbook
+    manager has applied it): only a group with no kind is written, one
+    attribute and nothing else (sipsimple sends only the modified keys, and
+    membership only when 'contacts' is among them). A kind someone else wrote
+    is never overwritten, and no group is created here.
+    """
+
+    settle_delay = 15  # seconds
+
+    def __init__(self):
+        self._started = False
+
+    def start(self):
+        if not self._started:
+            self._started = True
+            NotificationCenter().add_observer(self, name='XCAPManagerDidReloadData')
+
+    def handle_notification(self, notification):
+        if notification.name == 'XCAPManagerDidReloadData':
+            NotificationCenter().remove_observer(self, name='XCAPManagerDidReloadData')
+            call_in_gui_thread(call_later, self.settle_delay, self.stamp)
+
+    def stamp(self):
+        activity = ActivityLog()
+        try:
+            groups = list(addressbook.AddressbookManager().get_groups())
+        except Exception as e:
+            activity.warning(f'[addressbook] Cannot stamp group kinds, the addressbook is not readable: {e}')
+            return
+        if not groups:
+            activity.info('[addressbook] No groups in the addressbook yet, not stamping group kinds')
+            return
+        for group in sorted(groups, key=lambda group: str(group.name or '').lower()):
+            activity.info(f"[addressbook]   group '{group.name}' (id={group.id}, kind={group_kind(group) or '-'}, {len(group.contacts)} members)")
+        written = 0
+        with addressbook.AddressbookManager.transaction():
+            for identity, group, action in stamp_plan(groups, STAMPED_KINDS):
+                if action == 'missing':
+                    activity.info(f"[addressbook] No '{identity.name}' group to stamp, nothing is created here")
+                elif action == 'foreign':
+                    activity.info(f"[addressbook] Group '{group.name}' (id={group.id}) carries kind={group_kind(group)} already, leaving it alone (wanted {identity.kind})")
+                elif action == 'stamp':
+                    try:
+                        group.kind = identity.kind
+                        group.save()
+                    except Exception as e:
+                        activity.error(f"[addressbook] Cannot stamp group '{group.name}' (id={group.id}): {e}")
+                    else:
+                        written += 1
+                        activity.info(f"[addressbook] Stamped group '{group.name}' (id={group.id}) with kind={identity.kind}")
+        activity.info(f'[addressbook] Group kinds checked: {written} stamped')
 
 
 @implementer(IObserver)
@@ -2746,6 +2804,7 @@ class ContactModel(QAbstractListModel):
         self.deleted_items = []
         self.contact_list = parent.contact_list
         self.virtual_group_manager = VirtualGroupManager()
+        GroupKindStamper().start()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationWillStart')

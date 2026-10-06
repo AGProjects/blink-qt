@@ -63,6 +63,9 @@ class ContactURIExtension(ContactURIExtension):
 class GroupExtension(GroupExtension):
     position = Setting(type=int, nillable=True)
     collapsed = Setting(type=bool, default=False)
+    # what the group IS, shared with macOS and mobile: 'calls', 'tel', 'blocked',
+    # 'conference', 'favorites'; empty for a user's own group (blink.group_kinds)
+    kind = SharedSetting(type=str, default='')
 
 
 @implementer(IObserver)
