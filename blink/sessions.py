@@ -62,6 +62,7 @@ from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, back
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
 from blink.widgets.zrtp import ZRTPWidget
 from blink.streams.message import MessageStream
+from blink.pstn_normalize import pstn_dial_username
 from blink.uris import bare_instance_id, placeholder_instance_id
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
@@ -996,12 +997,14 @@ class BlinkSession(BlinkSessionBase):
 
         uri = SIPURI.parse(str(uri).translate(translation_table))
         if URIUtils.is_number(uri.user.decode()):
-            user = URIUtils.trim_number(uri.user.decode())
+            dialled = URIUtils.trim_number(uri.user.decode())
+            user = dialled
             if isinstance(self.account, Account):
-                if self.account.pstn.idd_prefix is not None:
-                    user = re.sub(r'^\+', self.account.pstn.idd_prefix, user)
-                if self.account.pstn.prefix is not None:
-                    user = self.account.pstn.prefix + user
+                # the account's dial plan: trunk-zero repair, Replace Leading 0, + -> IDD prefix, external line prefix
+                pstn = self.account.pstn
+                user = pstn_dial_username(dialled, idd_prefix=pstn.idd_prefix, prefix=pstn.prefix, replace_leading_zero=pstn.replace_leading_zero)
+                if user != dialled:
+                    ActivityLog().info(f'[call] Dial plan of {self.account.id}: {dialled} -> {user}')
             uri.user = user.encode()
         return uri
 
