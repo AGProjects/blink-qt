@@ -381,6 +381,25 @@ class DownloadedFiles(SQLObject):
     unq_idx            = DatabaseIndex(file_id, filename, account_id, unique=True)
 
 
+class PendingRemoval(SQLObject):
+    """A message removal whose target message has not been stored yet.
+
+    Removal notices can arrive before the message they remove (journal
+    order, replication). They are kept here and applied when the target
+    message is stored.
+    """
+    __version__ = 1
+
+    class sqlmeta:
+        table = 'pending_removals'
+    message_id         = StringCol()
+    account_id         = UnicodeCol(length=128)
+    remote_uri         = UnicodeCol(length=128, default=None)
+    removed_at         = DateTimeCol(default=None)            # when the removal was made (UTC)
+    source             = StringCol(default=None)              # 'journal' or 'live'
+    unq_idx            = DatabaseIndex(message_id, account_id, unique=True)
+
+
 class TableVersions(object, metaclass=Singleton):
     __version__ = 1
     __versions__ = {}
@@ -590,6 +609,16 @@ class MessageHistory(object, metaclass=Singleton):
                 self.table_versions.set_version(Message.sqlmeta.table, self.__version__)
         else:
             self._check_table_version()
+
+        PendingRemoval._connection = self.db
+        if not PendingRemoval.tableExists():
+            try:
+                PendingRemoval.createTable()
+            except Exception as e:
+                ActivityLog().error('[db] Could not create table %s: %s' % (PendingRemoval.sqlmeta.table, e))
+            else:
+                self.table_versions.set_version(PendingRemoval.sqlmeta.table, PendingRemoval.__version__)
+                ActivityLog().info('[db] Created table %s' % PendingRemoval.sqlmeta.table)
 
     def _check_table_version(self):
         """Upgrade the messages table one version at a time.
