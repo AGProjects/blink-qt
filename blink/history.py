@@ -94,6 +94,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
         notification_center.add_observer(self, name='BlinkJournalDidApply')
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
+        notification_center.add_observer(self, name='AddressbookContactWasDeleted')
 
     @run_in_thread('file-io')
     def save(self):
@@ -333,6 +334,33 @@ class HistoryManager(object, metaclass=Singleton):
         session = notification.sender
         key = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else str(session.contact.uri.uri)
         self.message_history.mark_conversation_read(key)
+
+    def _NH_AddressbookContactWasDeleted(self, notification):
+        # Removed on another device (or by applying the server document): the history stays,
+        # it may still be wanted here. Deleted here: the conversations under its addresses go,
+        # but only those no other contact still claims, and never a Bonjour neighbour's.
+        contact = notification.sender
+        name = getattr(contact, 'name', None) or contact.id
+        try:
+            addresses = [str(uri.uri) for uri in contact.uris]
+        except Exception:
+            addresses = []
+        if getattr(notification.data, 'remote', False):
+            ActivityLog().info(f'[db] Contact {name} ({contact.id}) was removed on another device, its history is kept ({len(addresses)} addresses)')
+            return
+        keys = {conversation_key(address) for address in addresses}
+        keys = {key for key in keys if key and not is_instance_id(key)}
+        claimed = set()
+        for other in AddressbookManager().get_contacts():
+            if other.id == contact.id:
+                continue
+            claimed.update(conversation_key(str(uri.uri)) for uri in other.uris)
+        kept = sorted(keys & claimed)
+        purge = sorted(keys - claimed)
+        ActivityLog().info(f'[db] Contact {name} ({contact.id}) deleted on this device: removing the history of {", ".join(purge) or "no address"}' +
+                           (f', keeping {", ".join(kept)} (another contact has it)' if kept else ''))
+        if purge:
+            self.message_history.purge_conversations(purge, reason=f'contact {name} deleted')
 
     def _NH_BlinkConfirmReadMessagesOnOtherDevice(self, notification):
         data = notification.data
@@ -1271,6 +1299,30 @@ class MessageHistory(object, metaclass=Singleton):
         ActivityLog().info(f'[db] Conversations filed under their canonical key: {conversations} keys changed, {moved} messages moved, {duplicates} duplicates dropped')
         if conversations:
             self.get_unread_messages()
+
+    @run_in_thread('db')
+    def purge_conversations(self, keys, reason=''):
+        """Erase the conversations filed under these keys, every spelling of each, in every
+        account: rows and downloaded file records, not tombstones. Only for a deletion made
+        here by the user; a removal from another device tombstones instead."""
+        table = Message.sqlmeta.table
+        total = 0
+        for key in keys:
+            spellings = self._conversation_keys(key)
+            where = f"remote_uri in ({', '.join(self.db.sqlrepr(spelling) for spelling in spellings)})"
+            try:
+                count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+                self.db.queryAll(f'delete from {table} where {where}')
+                self.db.queryAll(f'delete from {DownloadedFiles.sqlmeta.table} where {where}')
+            except Exception as e:
+                ActivityLog().error(f'[db] Removing the history of {key} failed: {e!r}')
+                continue
+            total += count
+            ActivityLog().info(f'[db] Removed {count} messages of the conversation with {key}' + (f' ({reason})' if reason else ''))
+        if total:
+            self.get_unread_messages()
+            if BlinkSettings().interface.show_messages_group:
+                self.get_all_contacts()
 
     @run_in_thread('db')
     def move_conversation(self, old_key, new_key, account_id=None):

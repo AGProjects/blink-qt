@@ -10,7 +10,7 @@ No Qt and no sipsimple: a contact is anything with name and uris (each with
 uri, and id).
 """
 
-__all__ = ['server_conference_uri', 'echoed_name_replacement', 'repair_plan']
+__all__ = ['server_conference_uri', 'echoed_name_replacement', 'repair_plan', 'is_user_named', 'merge_plan']
 
 from types import SimpleNamespace
 
@@ -86,6 +86,81 @@ def echoed_name_replacement(contact):
         if lowered_uri.partition('@')[0] == local_part:
             return replacement(address)
     return None
+
+
+def is_user_named(contact, key_of):
+    """Whether the contact carries a name somebody gave it: present and not one of its addresses
+    (a contact created for a conversation or a call is named after its address)."""
+    name = str(getattr(contact, 'name', '') or '').strip().lower()
+    if not name:
+        return False
+    for uri in contact.uris:
+        if name == key_of(uri.uri) or name == str(uri.uri).strip().lower():
+            return False
+    return True
+
+
+def merge_plan(contacts, key_of):
+    """Which contacts are one party, and how to make them one (macOS mergeMessagesGroupDuplicates).
+
+    Contacts sharing a canonical address (key_of) are one cluster, transitively:
+    A shares an address with B and B with C. Every client merging duplicates must
+    keep the same copy, or each deletes the one the other kept, so the survivor
+    is chosen from the document alone: the lowest id. What made another copy
+    worth keeping moves onto it instead: a user-given name (from the most
+    recently modified named copy, when the survivor's own name is only its
+    address) and every address it lacks. History is keyed by address, so no
+    conversation is orphaned.
+
+    Returns [{'survivor', 'losers', 'name' (donor or None), 'uris' [(uri, donor)]}],
+    one per cluster of two or more, in survivor id order.
+    """
+    members, parent, owner = {}, {}, {}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for contact in contacts:
+        keys = {key_of(uri.uri) for uri in contact.uris} - {'', None}
+        if not keys:
+            continue
+        members[contact.id] = contact
+        parent.setdefault(contact.id, contact.id)
+        for key in keys:
+            other = owner.setdefault(key, contact.id)
+            if other != contact.id:
+                a, b = find(other), find(contact.id)
+                if a != b:
+                    parent[max(a, b)] = min(a, b)
+
+    clusters = {}
+    for contact_id in members:
+        clusters.setdefault(find(contact_id), []).append(members[contact_id])
+
+    plan = []
+    for cluster in clusters.values():
+        if len(cluster) < 2:
+            continue
+        survivor = min(cluster, key=lambda contact: contact.id)
+        losers = sorted((contact for contact in cluster if contact.id != survivor.id), key=lambda contact: contact.id)
+        donor = None
+        if not is_user_named(survivor, key_of):
+            named = [contact for contact in losers if is_user_named(contact, key_of)]
+            if named:
+                donor = max(named, key=lambda contact: (str(getattr(contact, 'modified_at', '') or ''), contact.id))
+        have = {key_of(uri.uri) for uri in survivor.uris}
+        uris = []
+        for contact in losers:
+            for uri in contact.uris:
+                key = key_of(uri.uri)
+                if key and key not in have:
+                    uris.append((uri, contact))
+                    have.add(key)
+        plan.append({'survivor': survivor, 'losers': losers, 'name': donor, 'uris': uris})
+    return sorted(plan, key=lambda cluster: cluster['survivor'].id)
 
 
 def repair_plan(contact, account=None):

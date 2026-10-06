@@ -50,7 +50,7 @@ from sipsimple.threading import run_in_thread
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
 from blink import addressbook_origin
-from blink.contact_repair import repair_plan
+from blink.contact_repair import merge_plan, repair_plan
 from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
@@ -333,10 +333,11 @@ class ContactRepair(object, metaclass=Singleton):
         try:
             repaired = self.repair_contacts()
             filed = self.file_into_kind_groups()
+            merged = self.merge_messages_duplicates()
         except Exception as e:
             activity.exception(f'[addressbook] Repairing the addressbook failed: {e!r}')
             return
-        activity.info(f'[addressbook] Repair done: {repaired} contacts repaired, {filed} contacts filed into Tel or Conference')
+        activity.info(f'[addressbook] Repair done: {repaired} contacts repaired, {filed} contacts filed into Tel or Conference, {merged} duplicates merged')
 
     def repair_contacts(self):
         activity = ActivityLog()
@@ -373,6 +374,51 @@ class ContactRepair(object, metaclass=Singleton):
                 contact.save()
             repaired += 1
         return repaired
+
+    def merge_messages_duplicates(self):
+        """Merge contacts of the Messages group that share a canonical address, keeping the
+        lowest id, the rule every client uses so they all keep the same copy (blink.contact_repair.merge_plan)."""
+        activity = ActivityLog()
+        manager = addressbook.AddressbookManager()
+        try:
+            group = manager.get_group(MESSAGES_GROUP_ID)
+        except KeyError:
+            return 0
+        account = AccountManager().default_account
+        plan = merge_plan(list(group.contacts), lambda uri: canonical_uri(uri, account))
+        deleted = 0
+        with addressbook_origin.reason('merge'), addressbook.AddressbookManager.transaction():
+            for cluster in plan:
+                survivor, losers, donor = cluster['survivor'], cluster['losers'], cluster['name']
+                changes = []
+                if donor is not None:
+                    changes.append(f'name {survivor.name!r} -> {donor.name!r} (from {donor.id})')
+                    survivor.name = donor.name
+                for uri, owner in cluster['uris']:
+                    survivor.uris.add(addressbook.ContactURI(uri=uri.uri, type=uri.type))
+                    changes.append(f'+uri {uri.uri} (from {owner.id})')
+                activity.info(f"[addressbook] MERGE keep id={survivor.id} name={survivor.name!r} drop={','.join(loser.id for loser in losers)}" + (' -- ' + '; '.join(changes) if changes else ''))
+                if changes:
+                    try:
+                        survivor.save()
+                    except Exception as e:
+                        activity.error(f'[addressbook]   cannot save {survivor.id}, leaving this cluster alone: {e!r}')
+                        continue
+                for loser in losers:
+                    try:
+                        group.contacts.remove(loser)
+                    except Exception:
+                        pass
+                    try:
+                        loser.delete()
+                    except Exception as e:
+                        activity.error(f'[addressbook]   cannot delete {loser.id}: {e!r}')
+                    else:
+                        deleted += 1
+                        activity.info(f'[addressbook]   deleted id={loser.id} name={loser.name!r}')
+            if deleted:
+                group.save()
+        return deleted
 
     def file_into_kind_groups(self):
         """Every phone number in Tel, every conference room in Conference. Only adds."""
