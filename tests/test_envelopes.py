@@ -197,6 +197,103 @@ class CategoryTests(unittest.TestCase):
         self.assertIsNone(env.has_link('text/plain', '-----BEGIN PGP MESSAGE-----\nhttps://x\n-----END PGP MESSAGE-----'))
 
 
+class CallRecordTests(unittest.TestCase):
+    def test_build(self):
+        import datetime
+        record = env.build_call_record('s1', 'outgoing', 'completed', duration=65, status=200, remote_party='bob@example.com',
+                                       start_time=datetime.datetime(2026, 9, 8, 12, 0, 0), stop_time='2026-09-08 12:01:05',
+                                       media=['audio', 'video'], display_name='', proxy_ip=None)
+        self.assertEqual(record, {'version': 1, 'sessionId': 's1', 'direction': 'outgoing', 'outcome': 'completed', 'duration': 65,
+                                  'remoteParty': 'bob@example.com', 'source': 'local', 'status': '200',
+                                  'startTime': '2026-09-08T12:00:00+00:00', 'stopTime': '2026-09-08T12:01:05+00:00',
+                                  'media': ['audio', 'video']})
+
+    def test_call_time_keeps_offsets(self):
+        import datetime
+        aware = datetime.datetime(2026, 9, 8, 12, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
+        self.assertEqual(env._call_time(aware), '2026-09-08T12:00:00+02:00')
+        for text in ('2026-09-08T12:00:00Z', '2026-09-08T12:00:00+02:00', '2026-09-08T12:00:00-05:00'):
+            self.assertEqual(env._call_time(text), text)
+        self.assertIsNone(env._call_time(''))
+
+    def test_merge_ranks(self):
+        missed_here = env.build_call_record('s1', 'incoming', 'missed', remote_party='bob@example.com', local={'deviceId': 'me'})
+        answered = env.build_call_record('s1', 'incoming', 'completed', duration=30, answered_by='phone', source='device')
+        server = env.build_call_record('s1', 'incoming', 'completed', duration=31, proxy_ip='1.2.3.4', source='server')
+
+        merged = env.merge_call_records(missed_here, answered)
+        self.assertEqual((merged['outcome'], merged['duration'], merged['source']), ('completed', 30, 'device'))
+        self.assertEqual(merged['local'], {'deviceId': 'me'})              # never erased
+
+        # a lower ranked view cannot undo a higher one, but may add what it alone knows
+        again = env.merge_call_records(merged, env.build_call_record('s1', 'incoming', 'missed', display_name='Bob'))
+        self.assertEqual((again['outcome'], again['duration'], again['source'], again['displayName']), ('completed', 30, 'device', 'Bob'))
+
+        final = env.merge_call_records(again, server)
+        self.assertEqual((final['duration'], final['proxyIP'], final['source']), (31, '1.2.3.4', 'server'))
+        self.assertEqual(env.merge_call_records(final, answered)['source'], 'server')
+        self.assertEqual(env.merge_call_records(final, answered)['duration'], 31)
+
+        # equal rank updates normally
+        first = env.build_call_record('s2', 'outgoing', 'failed')
+        self.assertEqual(env.merge_call_records(first, env.build_call_record('s2', 'outgoing', 'completed', duration=5))['outcome'], 'completed')
+        self.assertIs(env.merge_call_records(None, first), first)
+        self.assertIs(env.merge_call_records(first, None), first)
+
+    def test_migrated_rank_is_lowest(self):
+        local = env.build_call_record('s1', 'incoming', 'completed', duration=10)
+        migrated = env.build_call_record('s1', 'incoming', 'missed', source='migrated')
+        self.assertEqual(env.merge_call_records(local, migrated)['outcome'], 'completed')
+
+    def test_call_record_lookup(self):
+        record = env.build_call_record('s1', 'incoming', 'missed')
+        self.assertEqual(env.call_record('Missed call', json.dumps(record)), record)
+        self.assertEqual(env.call_record(json.dumps(record).encode()), record)
+        self.assertIsNone(env.call_record('Missed call', '{"no": "session"}'))
+        self.assertIsNone(env.call_record(None))
+
+    def test_outcome_derivation(self):
+        self.assertEqual(env.call_outcome({'direction': 'incoming', 'duration': 3}), 'completed')
+        self.assertEqual(env.call_outcome({'direction': 'outgoing', 'status': '487'}), 'cancelled')
+        self.assertEqual(env.call_outcome({'direction': 'outgoing', 'status': '486'}), 'failed')
+        self.assertEqual(env.call_outcome({'direction': 'incoming'}), 'missed')
+
+    def test_missed_and_attention(self):
+        self.assertTrue(env.call_was_missed({'direction': 'incoming', 'outcome': 'voicemail'}))
+        self.assertFalse(env.call_was_missed({'direction': 'outgoing', 'outcome': 'missed'}))
+        self.assertFalse(env.call_was_missed(None))
+        elsewhere = {'direction': 'incoming', 'outcome': 'completed', 'answeredBy': 'phone', 'duration': 5}
+        self.assertFalse(env.call_needs_attention(elsewhere, 'laptop'))
+        self.assertTrue(env.call_needs_attention({'direction': 'outgoing', 'outcome': 'failed'}))
+        self.assertFalse(env.call_needs_attention({'direction': 'outgoing', 'outcome': 'cancelled'}))
+
+    def test_summary(self):
+        cases = [({'direction': 'incoming', 'outcome': 'completed', 'duration': 3725}, None, 'Incoming call (1:02:05)'),
+                 ({'direction': 'incoming', 'outcome': 'completed', 'duration': 65, 'answeredBy': 'phone'}, 'laptop', 'Answered on another device (1:05)'),
+                 ({'direction': 'incoming', 'outcome': 'completed', 'duration': 65, 'answeredBy': 'laptop'}, 'laptop', 'Incoming call (1:05)'),
+                 ({'direction': 'outgoing', 'outcome': 'failed', 'status': '486', 'reason': 'Busy'}, None, 'Call failed — Busy Here (486)'),
+                 ({'direction': 'outgoing', 'outcome': 'failed', 'status': '499', 'reason': 'Odd'}, None, 'Call failed — Odd'),
+                 ({'direction': 'outgoing', 'outcome': 'failed', 'status': '499'}, None, 'Call failed — 499'),
+                 ({'direction': 'outgoing', 'outcome': 'failed'}, None, 'Call failed'),
+                 ({'direction': 'incoming', 'outcome': 'missed', 'media': ['audio', 'video']}, None, 'Missed video call'),
+                 ({'direction': 'incoming', 'outcome': 'completed', 'duration': 9, 'media': ['video'], 'local': {'streams': ['audio']}}, None, 'Incoming call (0:09)'),
+                 ({'direction': 'outgoing', 'outcome': 'cancelled'}, None, 'Cancelled call')]
+        for record, device_id, expected in cases:
+            self.assertEqual(env.call_summary(record, device_id), expected, record)
+        self.assertIsNone(env.call_summary({'direction': 'incoming', 'outcome': 'teleported'}))
+        self.assertIsNone(env.call_summary(None))
+
+    def test_dominant_media(self):
+        self.assertEqual(env.dominant_media('audio, video'), 'video')
+        self.assertEqual(env.dominant_media(['chat', 'audio']), 'audio')
+        self.assertEqual(env.dominant_media(['chat']), 'chat')
+        self.assertEqual(env.dominant_media(None), 'audio')
+
+    def test_device_id_without_sipsimple_is_none_or_bare(self):
+        device_id = env.this_device_id()
+        self.assertTrue(device_id is None or not device_id.lower().startswith('urn:uuid:'))
+
+
 @unittest.skipIf(pgpy is None, 'pgpy is not available')
 class PublicKeyIdTests(unittest.TestCase):
     def test_key_id(self):
