@@ -95,6 +95,24 @@ def is_fileable_key(key):
     return is_fileable_address(key)
 
 
+def is_bonjour_address(uri):
+    """Whether this address is a Bonjour neighbour's, in any spelling: its instance
+    id, the placeholder standing in for it (sip:<id>@bonjour.local), or an address a
+    neighbour is announced at on this network. Never written to the addressbook: the
+    XCAP document is shared by every device of the account, a neighbour exists only
+    here and its link-local address means something else on any other network."""
+    text = str(uri or '').strip()
+    if not text:
+        return False
+    if is_instance_id(text) or placeholder_instance_id(text):
+        return True
+    try:
+        contact_model = QApplication.instance().main_window.contact_model
+    except AttributeError:
+        return False
+    return URIUtils._bonjour_neighbour_at(contact_model, text) is not None
+
+
 # Groups the software keeps by itself: their membership is not the user's to
 # change by hand (macOS BlinkGroup add/remove_contact_allowed). Deleted is
 # patch 49's: removed conversations, membership set by removal and restore.
@@ -369,6 +387,9 @@ class CallsGroupFiler(object, metaclass=Singleton):
         address = canonical_pstn_uri(remote_uri, account)
         if not is_fileable_address(address, account):
             activity.info(f'[contacts] Not filing the call with {remote_uri}: neither an address nor a number')
+            return None
+        if is_bonjour_address(address):
+            activity.info(f'[contacts] Not filing the call with {remote_uri}: a Bonjour neighbour is not written to the addressbook')
             return None
         conference = is_conference_uri(address, account)
         e164 = pstn_e164(address, account)
@@ -681,6 +702,9 @@ class MessagesGroupFiler(object, metaclass=Singleton):
             return contact.settings
         if contact.type in ('bonjour', 'google'):
             return None             # a neighbour, or a contact that cannot be put in an XCAP group
+        if is_bonjour_address(key):
+            ActivityLog().info(f'[contacts] Not filing the conversation with {key}: a Bonjour neighbour is not written to the addressbook')
+            return None
         found = self._find_by_canonical(key, existing)
         if found is not None:
             return found
@@ -5494,11 +5518,14 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.share_my_screen)
             menu.addAction(self.actions.transfer_call)
             menu.addSeparator()
-            if is_messages_group(contact.group.settings):
-                if isinstance(contact.settings, MessageContact):
-                    menu.addAction(self.actions.add_item)
-            menu.addAction(self.actions.edit_item)
-            menu.addAction(self.actions.delete_item)
+            if contact.type == 'bonjour':
+                pass                # a neighbour is not in the addressbook: nothing to add, edit or delete
+            else:
+                if is_messages_group(contact.group.settings):
+                    if isinstance(contact.settings, MessageContact):
+                        menu.addAction(self.actions.add_item)
+                menu.addAction(self.actions.edit_item)
+                menu.addAction(self.actions.delete_item)
             self.actions.undo_last_delete.setText(undo_delete_text)
             account_manager = AccountManager()
             session_manager = SessionManager()
@@ -6506,9 +6533,21 @@ class ContactEditorDialog(base_class, ui_class):
         else:
             contact = self.edited_contact
 
+        # A Bonjour neighbour's address is never added to the addressbook (is_bonjour_address);
+        # one the contact already carries is left as it is.
+        refused = [item.uri for item in self.contact_uri_model.items if item.uri and item.id not in contact.uris.ids() and is_bonjour_address(item.uri)]
+        if refused:
+            ActivityLog().info(f"[contacts] Not adding {', '.join(str(uri) for uri in refused)} to {self.name_editor.text() or 'a contact'}: a Bonjour neighbour is not written to the addressbook")
+            QMessageBox.information(self, translate('contact_editor', 'Bonjour Neighbour'),
+                                    translate('contact_editor', 'A Bonjour neighbour is reached on this network only, so it is not saved in the address book: %s') % ', '.join(str(uri) for uri in refused))
+        if self.edited_contact is None and not any(item.uri and item.uri not in refused for item in self.contact_uri_model.items):
+            self.contact_uri_model.reset()
+            self.target_group = None
+            return
+
         for id in set(contact.uris.ids()).difference(item.id for item in self.contact_uri_model.items):
             contact.uris.remove(contact.uris[id])
-        for item in (item for item in self.contact_uri_model.items if item.uri):
+        for item in (item for item in self.contact_uri_model.items if item.uri and item.uri not in refused):
             try:
                 contact_uri = contact.uris[item.id]
             except KeyError:
