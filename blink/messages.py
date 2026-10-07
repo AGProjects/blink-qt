@@ -48,7 +48,7 @@ from blink.file_transfer import base_url_from_transfer, derive_base_url
 from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
-from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
+from blink.journal import FIRST_SYNC_MARKER, KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, JournalLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
@@ -912,7 +912,7 @@ class MessageManager(object, metaclass=Singleton):
         makedirs(path)
         return path
 
-    journal_first_sync_marker = 'first-sync.marker'
+    journal_first_sync_marker = FIRST_SYNC_MARKER
     journal_progress_interval = 0.25        # seconds between progress updates while a page is read
 
     def _journal_read_page(self, account, response, before, expected):

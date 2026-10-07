@@ -20,7 +20,8 @@ from blink.message_envelopes import (ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTE
                                      RCS_FILE_TRANSFER_CONTENT_TYPE)
 
 
-__all__ = ['journal_action', 'parse_payload', 'JournalCache', 'JournalStats', 'SeenMessageIds', 'OwnMarkers', 'IGNORED_CONTENT_TYPES', 'KNOWN_INERT_CONTENT_TYPES', 'MAX_PAGE_ATTEMPTS']
+__all__ = ['journal_action', 'parse_payload', 'JournalCache', 'JournalStats', 'SeenMessageIds', 'OwnMarkers', 'IGNORED_CONTENT_TYPES', 'KNOWN_INERT_CONTENT_TYPES', 'MAX_PAGE_ATTEMPTS',
+           'FIRST_SYNC_MARKER']
 
 
 IMDN_CONTENT_TYPE = 'message/imdn'
@@ -36,6 +37,11 @@ KNOWN_INERT_CONTENT_TYPES = frozenset((LOCATION_CONTENT_TYPE, METADATA_CONTENT_T
 
 # A page that fails this many runs in a row is put aside so the pages after it are applied.
 MAX_PAGE_ATTEMPTS = 3
+
+# In journal/<account>/ while the account's first sync is not finished (written when it starts,
+# removed once the read state is settled): it is resumed as a first sync after a restart, and
+# its unread counts are not shown before they mean something.
+FIRST_SYNC_MARKER = 'first-sync.marker'
 
 
 def journal_action(content_type):

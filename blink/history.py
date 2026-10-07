@@ -32,6 +32,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.settings import BlinkSettings
+from blink.journal import FIRST_SYNC_MARKER
 from blink.logging import ActivityLog, JournalLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_record, call_summary, dominant_media, legacy_call_record, merge_call_records, this_device_id
@@ -989,13 +990,26 @@ class MessageHistory(object, metaclass=Singleton):
             return 0
         return 1
 
+    @staticmethod
+    def first_sync_accounts():
+        """Ids of the accounts whose first journal sync is not finished (journal/<account>/first-sync.marker)."""
+        directory = ApplicationData.get('journal')
+        return [str(account.id) for account in AccountManager().iter_accounts()
+                if account is not BonjourAccount() and os.path.exists(os.path.join(directory, str(account.id), FIRST_SYNC_MARKER))]
+
     def unread_counts(self):
-        """{conversation key: unread incoming messages}, for enabled accounts. Caller is in the db thread."""
+        """{conversation key: unread incoming messages}, for enabled accounts. Caller is in the db thread.
+
+        An account in its first sync counts nothing: its messages arrive unread and are
+        settled at the end (settle_first_sync_read), a count before that means nothing.
+        """
         table = Message.sqlmeta.table
+        syncing = self.first_sync_accounts()
         query = (f"select remote_uri, count(*) from {table}"
                  f" where direction = 'incoming' and read = 0 and {NOT_DELETED_SQL}"
                  f" and state != 'deleted' and {self.__readable_sql__} and {self._get_enabled_account_filter()}"
-                 f" group by remote_uri")
+                 + (f" and account_id not in ({', '.join(self.db.sqlrepr(account_id) for account_id in syncing)})" if syncing else '')
+                 + f" group by remote_uri")
         return {remote_uri: count for remote_uri, count in self.db.queryAll(query)}
 
     # Tombstones
