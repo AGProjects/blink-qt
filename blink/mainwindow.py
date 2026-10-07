@@ -8,7 +8,7 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, QSettings, QSize, QUrl, QTranslator
 from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QActionGroup, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import QMessageBox, QSplitter
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -27,6 +27,7 @@ from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSe
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
+from blink.messagepane import MessagePane
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
@@ -239,6 +240,7 @@ class MainWindow(base_class, ui_class):
         self.received_files_window_action.triggered.connect(self._AH_ReceivedFilesWindowActionTriggered)
         self.screenshots_window_action.triggered.connect(self._AH_ScreenshotsWindowActionTriggered)
         self.audio_recordings_action.triggered.connect(self._AH_AudioRecordingsActionTriggered)
+        self.message_pane_action.toggled.connect(self.set_message_pane_visible)
 
     def refresh_devices(self):
         SIPApplication.engine._ua.refresh_sound_devices()
@@ -280,7 +282,82 @@ class MainWindow(base_class, ui_class):
         wide_padding = self.identity.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option, QStyle.SubControl.SC_ComboBoxEditField, self.identity).height() < 10
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
+        # the message pane, right of the contact list (which becomes the conversation switcher);
+        # closed at start whatever it was when Blink quit, so starting never shows (and reads) a conversation
+        self.contacts_column = self.takeCentralWidget()
+        self.contacts_column.setMinimumWidth(self.contacts_column_minimum_width)
+        self.message_pane = MessagePane()
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        self.main_splitter.setObjectName('main_splitter')
+        self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.addWidget(self.contacts_column)
+        self.main_splitter.addWidget(self.message_pane)
+        self.main_splitter.setStretchFactor(0, 0)
+        self.main_splitter.setStretchFactor(1, 1)
+        self.main_splitter.splitterMoved.connect(self._SH_MainSplitterMoved)
+        self.setCentralWidget(self.main_splitter)
+        self.message_pane.hide()
+
+        self.message_pane_action = QAction(translate('main_window', 'Messages Pane'), self)
+        self.message_pane_action.setCheckable(True)
+        self.message_pane_action.setShortcut('Ctrl+4')
+        first_action = self.window_menu.actions()[0] if self.window_menu.actions() else None
+        self.window_menu.insertAction(first_action, self.message_pane_action)
+        self.window_menu.insertSeparator(first_action)
+        self.addAction(self.message_pane_action)     # the shortcut works with the menu bar hidden too
+
+    contacts_column_minimum_width = 274
+
+    @property
+    def message_pane_width(self):
+        try:
+            width = int(QSettings().value('main_window/message_pane_width', MessagePane.default_width))
+        except (TypeError, ValueError):
+            width = MessagePane.default_width
+        return max(width, MessagePane.minimum_width)
+
+    def _save_message_pane_width(self):
+        if self.message_pane.isVisible():
+            QSettings().setValue('main_window/message_pane_width', self.message_pane.width())
+
+    def _SH_MainSplitterMoved(self, position, index):
+        self._save_message_pane_width()
+
+    def set_message_pane_visible(self, visible):
+        """Open or close the message pane; the window grows or shrinks by its width, the contact list keeps its own."""
+        if self.message_pane_action.isChecked() != visible:
+            self.message_pane_action.setChecked(visible)     # comes back here through toggled
+            return
+        if visible == self.message_pane.isVisible():
+            return
+        resizable = not (self.isMaximized() or self.isFullScreen())
+        list_width = self.contacts_column.width()
+        handle = self.main_splitter.handleWidth()
+        if visible:
+            pane_width = self.message_pane_width
+            self.message_pane.show()
+            if resizable:
+                self.resize(list_width + handle + pane_width, self.height())
+                self._keep_on_screen()
+            self.main_splitter.setSizes([list_width, pane_width])
+        else:
+            self._save_message_pane_width()
+            self.message_pane.hide()
+            if resizable:
+                self.resize(list_width, self.height())
+
+    def _keep_on_screen(self):
+        screen = self.screen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        frame = self.frameGeometry()
+        if frame.right() > available.right():
+            self.move(max(available.left(), self.x() - (frame.right() - available.right())), self.y())
+
     def closeEvent(self, event):
+        # the geometry is kept without the pane, which is closed at the next start
+        self.set_message_pane_visible(False)
         QSettings().setValue("main_window/geometry", self.saveGeometry())
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
