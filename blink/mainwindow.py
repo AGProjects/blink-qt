@@ -1103,12 +1103,8 @@ class MainWindow(base_class, ui_class):
 
     @run_in_gui_thread
     def _NH_BlinkUnreadMessagesChanged(self, notification):
-        self.active_sessions_label.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
-        self.active_sessions_label.setVisible(bool(self.total_unread_messages))
-        self.open_unread_messages_button.setEnabled(bool(self.total_unread_messages))
-        self.open_unread_messages_button.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
-        self.open_unread_messages_button.setVisible(bool(self.total_unread_messages))
-        self.active_sessions_label.setVisible(False)
+        # the count is on the Messages group of the contact list (ContactModel), not above the call buttons
+        self.open_unread_messages_button.setVisible(False)
 
     def _NH_BlinkMessageNewUnread(self, notification):
         uri = conversation_key(notification.sender)     # keyed as history files the conversation

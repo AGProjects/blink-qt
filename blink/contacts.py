@@ -2866,6 +2866,7 @@ class Group(object):
         widget.collapse_button.setChecked(old_widget.collapse_button.isChecked() if old_widget is not Null else self.settings.collapsed)
         widget.name = self.name
         self.__dict__['widget'] = widget
+        self._show_unread()
 
     widget = property(_get_widget, _set_widget)
     del _get_widget, _set_widget
@@ -2877,6 +2878,23 @@ class Group(object):
     @property
     def position(self):
         return self.settings.position
+
+    unread = 0      # the Messages group: unread messages, shown as "Messages (4)" on another background
+
+    def set_unread(self, count):
+        if count == self.unread:
+            return
+        self.unread = count
+        self._show_unread()
+
+    def _show_unread(self):
+        widget = self.widget
+        if widget is Null:
+            return
+        if not widget.editing:
+            widget.name_label.setText(f'{self.name} ({self.unread})' if self.unread else self.name)
+        widget.highlighted = bool(self.unread)
+        widget.update()
 
     @property
     def collapsed(self):
@@ -2921,6 +2939,7 @@ class Group(object):
     def _NH_AddressbookGroupDidChange(self, notification):
         if 'name' in notification.data.modified:
             self.widget.name = notification.sender.name
+            self._show_unread()
 
 
 class ContactIconDescriptor(object):
@@ -3554,6 +3573,7 @@ class GroupWidget(base_class, ui_class):
         self.name_label.setFont(font)
         self.name_editor.setFont(font)
         self.selected = False
+        self.highlighted = False        # the Messages group with unread messages: another background
         self.drop_indicator = None
         self._disable_dnd = False
         follow_theme(self)
@@ -3640,7 +3660,18 @@ class GroupWidget(base_class, ui_class):
         rect = self.rect()
 
         background = QLinearGradient(0, 0, self.width(), self.height())
-        if is_dark_theme():
+        if self.highlighted and not self.selected:
+            if is_dark_theme():
+                background.setColorAt(0.0, QColor('#2d4a6b'))
+                background.setColorAt(1.0, QColor('#26405d'))
+                upper_color = QColor('#3a5a80')
+                lower_color = QColor('#1a2c40')
+            else:
+                background.setColorAt(0.0, QColor('#d6e6fb'))
+                background.setColorAt(1.0, QColor('#c2d8f5'))
+                upper_color = QColor('#e8f1fd')
+                lower_color = QColor('#a9c4ea')
+        elif is_dark_theme():
             if self.selected:
                 background.setColorAt(0.0, QColor('#5a5a5a'))
                 background.setColorAt(1.0, QColor('#4a4a4a'))
@@ -4265,6 +4296,7 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkContactDidChange')
         notification_center.add_observer(self, name='BlinkMessagesGroupShouldPromote')
         notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
+        notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
 
     def _NH_BlinkConversationPreviewsDidChange(self, notification):
         # Messages group rows quote the last message and show its time, Calls and Tel rows the last call's
@@ -4290,6 +4322,19 @@ class ContactModel(QAbstractListModel):
             self.endMoveRows()
         index = self.index(self.items.index(contact))
         self.dataChanged.emit(index, index)
+
+    def _NH_BlinkUnreadMessagesChanged(self, notification):
+        # the unread messages are counted on the Messages group ("Messages (4)", another background),
+        # which comes to the top of the list while there are any
+        groups = self.items[GroupList]
+        group = next((group for group in groups if getattr(group.settings, 'id', None) == MESSAGES_GROUP_ID), None)
+        if group is None:
+            return
+        total = QApplication.instance().main_window.total_unread_messages
+        group.set_unread(total)
+        if total and groups[0] is not group:
+            self.moveGroup(group, groups[0])
+            ActivityLog().info(f'[contacts] Moved the Messages group to the top of the contact list: {total} unread messages')
 
     def _NH_BlinkMessagesGroupShouldPromote(self, notification):
         groups = self.items[GroupList]
