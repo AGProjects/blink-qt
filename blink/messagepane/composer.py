@@ -12,7 +12,14 @@ In reply mode (set_reply) a line above the text says what is being answered,
 with a button to cancel; the next message sent is that reply. In edit mode
 (set_editing) the line says a message is being edited and the text is that
 message's; sending replaces it.
+
+The microphone records a voice note (blink.messagepane.recorder): while it
+records, a bar takes the place of the text with the clock, the level and
+stop/cancel; then a preview with its waveform to play, discard or send
+(voiceNote, with the file, its length and its peaks).
 """
+
+import os
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QTextOption
@@ -78,8 +85,38 @@ class ComposerEdit(QPlainTextEdit):
             self.insertPlainText(source.text())       # never formatting: messages are plain text
 
 
+class Waveform(QWidget):
+    """Bars of a recording (0..1 each), the played part in the accent colour."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.bars = []
+        self.played = 0.0
+        self.setMinimumSize(120, 28)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def paintEvent(self, event):
+        from PyQt6.QtCore import QRectF
+        from PyQt6.QtGui import QColor, QPainter
+        from blink.widgets.color import is_dark_theme, secondary_text_color
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        accent = QColor('#58a6ff') if is_dark_theme() else QColor('#1a73e8')
+        rest = secondary_text_color(self.palette())
+        bars = self.bars or [0.1] * 48
+        step = self.width() / len(bars)
+        for number, value in enumerate(bars):
+            height = max(2.0, value * self.height())
+            painter.setBrush(accent if (number + 0.5) / len(bars) <= self.played else rest)
+            bar = QRectF(number * step + step * 0.2, (self.height() - height) / 2, max(1.0, step * 0.6), height)
+            painter.drawRoundedRect(bar, bar.width() / 2, bar.width() / 2)
+        painter.end()
+
+
 class Composer(QWidget):
     sendText = pyqtSignal(str)
+    voiceNote = pyqtSignal(object)      # {'path', 'duration', 'peaks'} to send
     filesDropped = pyqtSignal(list)
     composing = pyqtSignal(str)         # 'active' / 'idle'
 
@@ -113,10 +150,12 @@ class Composer(QWidget):
         outer.addWidget(self.reply_bar)
         self.reply = None
         self.editing = None
-        row = QHBoxLayout()
+        self.input_row = QWidget(self)
+        row = QHBoxLayout(self.input_row)
         row.setContentsMargins(8, 6, 8, 6)
         row.setSpacing(6)
-        outer.addLayout(row)
+        outer.addWidget(self.input_row)
+        self._build_recorder_rows(outer)
         self.attach_button = QToolButton(self)
         self.attach_button.setAutoRaise(True)
         # a drawn clip, not the 📎 character: without a colour emoji font it is an empty box
@@ -133,6 +172,13 @@ class Composer(QWidget):
         self.send_button.setText(translate('message_pane', 'Send'))
         self.send_button.setToolTip(translate('message_pane', 'Send (Enter); Shift+Enter starts a new line'))
         self.send_button.setEnabled(False)
+        self.mic_button = QToolButton(self)
+        self.mic_button.setAutoRaise(True)
+        self.mic_button.setToolTip(translate('message_pane', 'Record a voice note'))
+        self.mic_button.clicked.connect(self._start_recording)
+        from blink.messagepane.recorder import recording_available
+        self.mic_button.setVisible(recording_available())
+        row.addWidget(self.mic_button, 0, Qt.AlignmentFlag.AlignBottom)
         row.addWidget(self.send_button, 0, Qt.AlignmentFlag.AlignBottom)
 
         self._composing_timer = QTimer(self)
@@ -152,6 +198,148 @@ class Composer(QWidget):
         size = self.edit.fontMetrics().height() + 4
         self.attach_button.setIcon(themed_icon(Resources.get('icons/paperclip.svg'), '#bdbdbd'))
         self.attach_button.setIconSize(QSize(size, size))
+        if hasattr(self, 'mic_button'):
+            self.mic_button.setIcon(themed_icon(Resources.get('icons/microphone.svg'), '#bdbdbd'))
+            self.mic_button.setIconSize(QSize(size, size))
+
+    # Voice notes
+
+    def _build_recorder_rows(self, outer):
+        from PyQt6.QtWidgets import QLabel, QProgressBar
+        def button(text, tip, slot, parent):
+            widget = QToolButton(parent)
+            widget.setAutoRaise(True)
+            widget.setText(text)
+            widget.setToolTip(tip)
+            widget.clicked.connect(slot)
+            return widget
+        self.record_row = QWidget(self)
+        row = QHBoxLayout(self.record_row)
+        row.setContentsMargins(8, 6, 8, 6)
+        row.setSpacing(8)
+        row.addWidget(button('✕', translate('message_pane', 'Cancel the recording'), self._cancel_recording, self.record_row))
+        self.record_clock = QLabel(self.record_row)
+        self.record_clock.setStyleSheet('color: #d93025; font-weight: 600;')
+        row.addWidget(self.record_clock)
+        self.record_level = QProgressBar(self.record_row)
+        self.record_level.setRange(0, 100)
+        self.record_level.setTextVisible(False)
+        self.record_level.setFixedHeight(8)
+        row.addWidget(self.record_level, 1)
+        row.addWidget(button('■', translate('message_pane', 'Stop recording'), self._stop_recording, self.record_row))
+        self.record_row.hide()
+        outer.addWidget(self.record_row)
+
+        self.preview_row = QWidget(self)
+        row = QHBoxLayout(self.preview_row)
+        row.setContentsMargins(8, 6, 8, 6)
+        row.setSpacing(8)
+        row.addWidget(button('✕', translate('message_pane', 'Discard the voice note'), self._discard_note, self.preview_row))
+        self.preview_play = button('▶', translate('message_pane', 'Listen'), self._play_note, self.preview_row)
+        row.addWidget(self.preview_play)
+        self.preview_wave = Waveform(self.preview_row)
+        row.addWidget(self.preview_wave, 1)
+        self.preview_clock = QLabel(self.preview_row)
+        row.addWidget(self.preview_clock)
+        send = QToolButton(self.preview_row)
+        send.setText(translate('message_pane', 'Send'))
+        send.clicked.connect(self._send_note)
+        row.addWidget(send)
+        self.preview_row.hide()
+        outer.addWidget(self.preview_row)
+        self.note = None
+
+    def _show_row(self, which):
+        for widget in (self.input_row, self.record_row, self.preview_row):
+            widget.setVisible(widget is which)
+
+    def _start_recording(self):
+        from blink.messagepane.recorder import VoiceRecorder
+        recorder = VoiceRecorder.instance()
+        if recorder.recording:
+            return          # one at a time, app-wide
+        recorder.progress.connect(self._SH_RecordProgress)
+        recorder.finished.connect(self._SH_RecordFinished)
+        if not recorder.start(self):
+            recorder.progress.disconnect(self._SH_RecordProgress)
+            recorder.finished.disconnect(self._SH_RecordFinished)
+            return
+        self.record_clock.setText('● 0:00')
+        self.record_level.setValue(0)
+        self._show_row(self.record_row)
+
+    def _SH_RecordProgress(self, seconds, level):
+        from blink.messagepane.format import format_clock
+        self.record_clock.setText('● ' + format_clock(seconds))
+        self.record_level.setValue(int(level * 100))
+
+    def _stop_recording(self):
+        from blink.messagepane.recorder import VoiceRecorder
+        VoiceRecorder.instance().stop()
+
+    def _cancel_recording(self):
+        from blink.messagepane.recorder import VoiceRecorder
+        VoiceRecorder.instance().cancel()
+
+    def _SH_RecordFinished(self, note):
+        from blink.messagepane.format import format_clock, waveform_bars
+        from blink.messagepane.recorder import VoiceRecorder
+        recorder = VoiceRecorder.instance()
+        recorder.progress.disconnect(self._SH_RecordProgress)
+        recorder.finished.disconnect(self._SH_RecordFinished)
+        self.note = note
+        if note is None:
+            self._show_row(self.input_row)
+            return
+        self.preview_wave.bars = waveform_bars(note['peaks'], 48)
+        self.preview_wave.played = 0.0
+        self.preview_wave.update()
+        self.preview_clock.setText(format_clock(note['duration']))
+        self._show_row(self.preview_row)
+
+    def _play_note(self):
+        from blink.messagepane.audio import AudioPlayer, audio_available
+        if self.note is None or not audio_available():
+            return
+        player = AudioPlayer.instance()
+        try:
+            player.changed.disconnect(self._SH_PreviewChanged)
+        except TypeError:
+            pass
+        player.changed.connect(self._SH_PreviewChanged)
+        player.toggle('voice-note-preview', self.note['path'])
+
+    def _SH_PreviewChanged(self, message_id):
+        from blink.messagepane.audio import AudioPlayer
+        player = AudioPlayer.instance()
+        fraction = player.fraction('voice-note-preview')
+        self.preview_wave.played = fraction or 0.0
+        self.preview_wave.update()
+        self.preview_play.setText('❚❚' if fraction is not None and player.playing else '▶')
+
+    def _stop_preview(self):
+        from blink.messagepane.audio import AudioPlayer, audio_available
+        if audio_available():
+            player = AudioPlayer.instance()
+            if player.is_current('voice-note-preview'):
+                player.stop()
+
+    def _discard_note(self):
+        self._stop_preview()
+        if self.note is not None:
+            try:
+                os.unlink(self.note['path'])
+            except OSError:
+                pass
+        self.note = None
+        self._show_row(self.input_row)
+
+    def _send_note(self):
+        self._stop_preview()
+        note, self.note = self.note, None
+        self._show_row(self.input_row)
+        if note is not None:
+            self.voiceNote.emit(note)
 
     def _fill_attach_menu(self):
         """Above the line what does not exist yet (a screenshot), below it what does (files, the clipboard)."""

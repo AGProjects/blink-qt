@@ -95,6 +95,7 @@ class MessagePane(QWidget):
         layout.addWidget(self.composer)
         self.composer.sendText.connect(self._send_text)
         self.composer.filesDropped.connect(self._send_files)
+        self.composer.voiceNote.connect(self._send_voice_note)
         self.composer.composing.connect(self._send_composing)
         self.header.fontStep.connect(self._step_font)
         self.unsent = {}            # conversation key: text typed and not sent
@@ -606,3 +607,28 @@ class MessagePane(QWidget):
             AudioPlayer.instance().toggle(item.id, path)
         else:
             AudioPlayer.instance().seek(item.id, path, fraction)
+
+    def _send_voice_note(self, note):
+        """Send a recorded voice note as a file transfer, with its waveform as a peaks companion (as mobile does)."""
+        import os
+        import uuid
+        from blink.message_envelopes import METADATA_CONTENT_TYPE, peaks_envelope
+        from blink.messages import MessageManager
+        from blink.messagepane.format import waveform_bars
+        from blink.sessions import SessionManager
+        if self.key is None:
+            return
+        try:
+            session = self._message_session()
+            account = self.header.account or session.account
+            transfer_id = str(uuid.uuid4())
+            SessionManager().send_file(session.contact, session.contact_uri, note['path'], transfer_id=transfer_id, account=account)
+            peaks = [round(value, 3) for value in waveform_bars(note['peaks'], 100)]
+            metadata_id = str(uuid.uuid4())
+            envelope = peaks_envelope(transfer_id, metadata_id, {'l': peaks, 'r': []}, None, str(self.uri.uri), ISOTimestamp.now())
+            MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
+        except Exception as e:
+            ActivityLog().error(f'[Message with {self.key}] Sending the voice note {note["path"]} failed: {e!r}')
+            return
+        ActivityLog().info(f'[Message with {self.key}] Sending voice note {os.path.basename(note["path"])} ({note["duration"]:.1f} s) as {transfer_id}')
+        self.transcript.follow_bottom()
