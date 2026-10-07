@@ -44,7 +44,8 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
+from blink.file_transfer import base_url_from_transfer, derive_base_url
+from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
 from blink.journal import KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
@@ -1189,6 +1190,7 @@ class MessageManager(object, metaclass=Singleton):
         return account
 
     def _journal_file_transfer(self, account, message, content_type, first_sync, contacts):
+        self.note_file_transfer_url(account, message.get('content'))
         document = parse_payload(message.get('content'))
         if not document or not document.get('filename'):
             return 'failed'
@@ -1387,6 +1389,51 @@ class MessageManager(object, metaclass=Singleton):
         if account is not BonjourAccount():
             # give the registration a moment to settle (and the server to see the device)
             call_later(self.sync_registration_delay, self._sync_messages, account, 'registered')
+            self.file_transfer_base_url(account)     # says where files will be uploaded, once per change
+
+    # file transfer endpoint
+
+    def file_transfer_base_url(self, account):
+        """Where this account uploads files, or None if we cannot tell.
+
+        What a received transfer told us (the server's own URL, kept on the account), else
+        what the journal URL implies, else nothing. A derived URL is logged when it changes.
+        """
+        if account is BonjourAccount():
+            return None
+        stored = account.sms.file_transfer_url
+        if stored:
+            self._log_transfer_url(account, str(stored), f'[transfer] File transfer URL of {account.id}: {stored} (learned from a received transfer)')
+            return str(stored)
+        history_url = account.sms.history_synchronization_url
+        if not history_url:
+            return None
+        derived = derive_base_url(history_url)
+        if derived is None:
+            self._log_transfer_url(account, None, f'[transfer] Cannot derive the file transfer URL of {account.id} from {history_url}; it will be learned from the first file received')
+        else:
+            self._log_transfer_url(account, derived, f'[transfer] File transfer URL of {account.id} derived from the journal URL: {derived}')
+        return derived
+
+    def _log_transfer_url(self, account, url, message):
+        logged = self.__dict__.setdefault('_transfer_url_logged', {})
+        if logged.get(account.id, False) == url:
+            return
+        logged[account.id] = url
+        ActivityLog().info(message)
+
+    def note_file_transfer_url(self, account, body):
+        """Learn the endpoint from a transfer that has just arrived (live or from the journal).
+        Returns at once from the second transfer on: the first one is kept."""
+        if account is BonjourAccount() or account.sms.file_transfer_url:
+            return
+        meta = file_transfer_envelope(body)
+        base = base_url_from_transfer(meta.get('url')) if meta else None
+        if not base:
+            return
+        account.sms.file_transfer_url = base
+        account.save()
+        ActivityLog().info(f'[transfer] File transfer URL of {account.id} learned from an incoming transfer: {base}')
 
     def _NH_SIPEngineGotMessage(self, notification):
         account_manager = AccountManager()
@@ -1478,6 +1525,9 @@ class MessageManager(object, metaclass=Singleton):
                 from blink.contacts import AddressbookNotifier
                 AddressbookNotifier().handle_tick(account, body, sender.uri)
             return
+
+        if content_type.lower() in FILE_TRANSFER_CONTENT_TYPES:
+            self.note_file_transfer_url(account, body)
 
         if content_type.lower() in self.__not_history_content_types__:
             # not history: acted on elsewhere or not at all. The other types the journal ignores

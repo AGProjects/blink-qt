@@ -82,6 +82,7 @@ class SMSSettingsExtension(SMSSettings):
     history_synchronization_token = Setting(type=str, default=None, nillable=True)
     history_synchronization_id = Setting(type=str, default=None, nillable=True)
     history_synchronization_timestamp = RuntimeSetting(type=str, default=None, nillable=True)
+    file_transfer_url = Setting(type=str, default=None, nillable=True)     # learned from the first incoming transfer (blink.file_transfer)
 
 
 class SoundSettings(SettingsGroup):
