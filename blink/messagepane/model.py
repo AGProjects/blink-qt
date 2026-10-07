@@ -170,9 +170,10 @@ def attach_replies(items):
         by_id[link['reply_id']].reply = reply
 
 
-def _uploads_for(key):
+def _uploads_for(keys):
     from blink.messagepane.uploads import Uploads
-    return Uploads.instance().for_key(key)
+    uploads = Uploads.instance()
+    return [upload for key in keys for upload in uploads.for_key(key)]
 
 
 def is_renderable(row):
@@ -182,7 +183,12 @@ def is_renderable(row):
 
 @implementer(IObserver)
 class ConversationModel(QAbstractListModel):
-    """One conversation (a conversation key, all accounts) for the transcript view."""
+    """One conversation (a conversation key, all accounts) for the transcript view.
+
+    For a contact with several addresses, keys are the conversation keys of all of
+    them: their messages are shown as one conversation (key is the one the model
+    was opened on, for the logs).
+    """
 
     MessageItemRole = Qt.ItemDataRole.UserRole
 
@@ -196,9 +202,10 @@ class ConversationModel(QAbstractListModel):
     initialLoadFinished = pyqtSignal()
     jumped = pyqtSignal(int)            # the row a jump to a day landed on
 
-    def __init__(self, key, parent=None):
+    def __init__(self, key, parent=None, keys=None):
         super().__init__(parent)
         self.key = key
+        self.keys = tuple(dict.fromkeys([key] + [other for other in (keys or ()) if other]))
         self.items = []
         self.ids = {}           # message id: item
         self.has_more = False
@@ -236,6 +243,15 @@ class ConversationModel(QAbstractListModel):
                      'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
                      'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore', 'BlinkMessageHistoryCallRecordDidStore'):
             notification_center.discard_observer(self, name=name)
+
+    @property
+    def history_key(self):
+        """What history is asked about: the key, or all of them."""
+        return self.key if len(self.keys) == 1 else list(self.keys)
+
+    @property
+    def name(self):
+        return self.key if len(self.keys) == 1 else f'{self.key} (+{len(self.keys) - 1} addresses)'
 
     # Qt model
 
@@ -275,9 +291,9 @@ class ConversationModel(QAbstractListModel):
     def _search(self, generation, text):
         from blink.history import MessageHistory
         try:
-            rows = MessageHistory().search_messages(self.key, text, limit=self.search_limit)
+            rows = MessageHistory().search_messages(self.history_key, text, limit=self.search_limit)
         except Exception as e:
-            log.warning(f'Searching the conversation with {self.key} failed: {e!r}')
+            log.warning(f'Searching the conversation with {self.name} failed: {e!r}')
             call_in_gui_thread(self._apply_failed, generation)
             return
         seen, found = set(), []
@@ -299,7 +315,7 @@ class ConversationModel(QAbstractListModel):
         self.has_more = False
         self.search_truncated = truncated
         self._set_loading(False)
-        ActivityLog().info(f'[Message with {self.key}] Search for {text!r}: {len(found)} messages' + (f' (the newest {self.search_limit})' if truncated else ''))
+        ActivityLog().info(f'[Message with {self.name}] Search for {text!r}: {len(found)} messages' + (f' (the newest {self.search_limit})' if truncated else ''))
         self.initialLoadFinished.emit()
 
     search_truncated = False
@@ -310,7 +326,7 @@ class ConversationModel(QAbstractListModel):
         if category == self.category:
             return
         self.category = category
-        ActivityLog().info(f'[Message with {self.key}] Showing ' + (f'{category} only' if category else 'all messages'))
+        ActivityLog().info(f'[Message with {self.name}] Showing ' + (f'{category} only' if category else 'all messages'))
         if not self.search_text:
             self.load()
 
@@ -348,7 +364,7 @@ class ConversationModel(QAbstractListModel):
         cursor = after
         try:
             while len(found) < self.page_size:
-                rows = history.get_messages(self.key, after=cursor, limit=self.fetch_size, oldest_first=True, category=self.category)
+                rows = history.get_messages(self.history_key, after=cursor, limit=self.fetch_size, oldest_first=True, category=self.category)
                 for row in rows:      # oldest first
                     if row.message_id not in seen and is_renderable(row):
                         seen.add(row.message_id)
@@ -359,7 +375,7 @@ class ConversationModel(QAbstractListModel):
                 last = rows[-1].timestamp
                 cursor = last if last - self._tick == cursor else last - self._tick
         except Exception as e:
-            log.warning(f'Loading newer messages of the conversation with {self.key} failed: {e!r}')
+            log.warning(f'Loading newer messages of the conversation with {self.name} failed: {e!r}')
             call_in_gui_thread(self._apply_failed, generation)
             return
         if len(found) > self.page_size:
@@ -380,7 +396,7 @@ class ConversationModel(QAbstractListModel):
             self.endInsertRows()
         self.has_newer = more and bool(newer)
         self._set_loading(False)
-        ActivityLog().info(f'[Message with {self.key}] Loaded {len(newer)} newer messages, {len(self.items)} shown' + (', newer ones available' if self.has_newer else ', up to the newest'))
+        ActivityLog().info(f'[Message with {self.name}] Loaded {len(newer)} newer messages, {len(self.items)} shown' + (', newer ones available' if self.has_newer else ', up to the newest'))
         if not self.has_newer:
             self._schedule_refresh()        # what arrived in the meantime (and the files being sent)
 
@@ -407,7 +423,7 @@ class ConversationModel(QAbstractListModel):
         cursor = before
         try:
             while len(found) < self.page_size:
-                rows = history.get_messages(self.key, before=cursor, limit=self.fetch_size, category=self.category)
+                rows = history.get_messages(self.history_key, before=cursor, limit=self.fetch_size, category=self.category)
                 for row in rows:      # newest first
                     if row.message_id not in seen and is_renderable(row):
                         seen.add(row.message_id)
@@ -419,7 +435,7 @@ class ConversationModel(QAbstractListModel):
                 # past the rows of the last time seen, unless a whole query was that one time
                 cursor = last if cursor is not None and last + self._tick == cursor else last + self._tick
         except Exception as e:
-            log.warning(f'Loading the conversation with {self.key} failed: {e!r}')
+            log.warning(f'Loading the conversation with {self.name} failed: {e!r}')
             call_in_gui_thread(self._apply_failed, generation)
             return
         if len(found) > self.page_size:
@@ -430,7 +446,7 @@ class ConversationModel(QAbstractListModel):
         newer = False
         if isinstance(kind, tuple):     # a jump: is there anything after the page?
             try:
-                newer = bool(history.get_messages(self.key, after=before - self._tick, limit=1, oldest_first=True, category=self.category)) if before is not None else False
+                newer = bool(history.get_messages(self.history_key, after=before - self._tick, limit=1, oldest_first=True, category=self.category)) if before is not None else False
             except Exception:
                 newer = True
         attach_replies(found)
@@ -455,7 +471,7 @@ class ConversationModel(QAbstractListModel):
             self.loaded = True
             self._set_loading(False)
             row = next((position for position, item in enumerate(found) if item.timestamp.astimezone().date() >= day), max(len(found) - 1, 0))
-            ActivityLog().info(f'[Message with {self.key}] Jumped to {day:%Y-%m-%d}: {len(found)} messages loaded' + (', newer ones available' if newer else ''))
+            ActivityLog().info(f'[Message with {self.name}] Jumped to {day:%Y-%m-%d}: {len(found)} messages loaded' + (', newer ones available' if newer else ''))
             self.jumped.emit(row)
             return
         if kind == 'initial':
@@ -469,7 +485,7 @@ class ConversationModel(QAbstractListModel):
             self.has_more = more
             self.loaded = True
             self._set_loading(False)
-            ActivityLog().info(f'[Message with {self.key}] Loaded {len(found)} ' + (f'{self.category} ' if self.category else '') + 'messages' + (f' from {found[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if found else '') + (', older ones available' if more else ', the whole conversation'))
+            ActivityLog().info(f'[Message with {self.name}] Loaded {len(found)} ' + (f'{self.category} ' if self.category else '') + 'messages' + (f' from {found[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if found else '') + (', older ones available' if more else ', the whole conversation'))
             self.initialLoadFinished.emit()
             return
         found = [item for item in found if item.id not in self.ids]
@@ -482,7 +498,7 @@ class ConversationModel(QAbstractListModel):
             self.endInsertRows()
         self.has_more = more and bool(older)
         self._set_loading(False)
-        ActivityLog().info(f'[Message with {self.key}] Loaded {len(older)} older messages' + (f' from {older[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if older else '') + f', {len(self.items)} shown' + (', older ones available' if self.has_more else ', the whole conversation'))
+        ActivityLog().info(f'[Message with {self.name}] Loaded {len(older)} older messages' + (f' from {older[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if older else '') + f', {len(self.items)} shown' + (', older ones available' if self.has_more else ', the whole conversation'))
 
     def row_of(self, message_id):
         item = self.ids.get(message_id)
@@ -511,9 +527,9 @@ class ConversationModel(QAbstractListModel):
     def _fetch_newest(self, generation):
         from blink.history import MessageHistory
         try:
-            rows = MessageHistory().get_messages(self.key, limit=self.fetch_size, category=self.category)
+            rows = MessageHistory().get_messages(self.history_key, limit=self.fetch_size, category=self.category)
         except Exception as e:
-            log.warning(f'Refreshing the conversation with {self.key} failed: {e!r}')
+            log.warning(f'Refreshing the conversation with {self.name} failed: {e!r}')
             return
         seen, found = set(), []
         for row in rows:
@@ -560,7 +576,7 @@ class ConversationModel(QAbstractListModel):
                 index = self.index(position)
                 self.dataChanged.emit(index, index)
         if not self.has_newer:
-            for upload in _uploads_for(self.key):
+            for upload in _uploads_for(self.keys):
                 if upload.id not in self.ids and self._shows(MessageItem.for_upload(upload)):
                     self._insert(MessageItem.for_upload(upload))
 
@@ -571,22 +587,24 @@ class ConversationModel(QAbstractListModel):
         from blink.messagepane.files import transfer_ids
         from blink.messagepane.uploads import Uploads
         uploads = Uploads.instance()
-        if not uploads.for_key(self.key):
+        if not any(uploads.for_key(key) for key in self.keys):
             return set()
         ids = set()
         for item in found:
             if item.category in ('image', 'audio', 'video', 'other'):
                 ids.update(transfer_ids(item))
-        settled = uploads.settle(self.key, ids)
+        settled = set()
+        for key in self.keys:
+            settled |= set(uploads.settle(key, ids) or ())
         if settled:
-            ActivityLog().info(f'[Message with {self.key}] Sent files now in history: {", ".join(sorted(settled))}')
+            ActivityLog().info(f'[Message with {self.name}] Sent files now in history: {", ".join(sorted(settled))}')
         return settled
 
     def _with_uploads(self, found):
         """found (a newest page) and the files being sent whose message is not there."""
         self._settle_uploads(found)
         known = {item.id for item in found}
-        uploads = [item for item in (MessageItem.for_upload(upload) for upload in _uploads_for(self.key) if upload.id not in known) if self._shows(item)]
+        uploads = [item for item in (MessageItem.for_upload(upload) for upload in _uploads_for(self.keys) if upload.id not in known) if self._shows(item)]
         return sorted(found + uploads, key=lambda item: item.sort_key) if uploads else found
 
     def _insert(self, item):
@@ -597,7 +615,7 @@ class ConversationModel(QAbstractListModel):
         self.endInsertRows()
 
     def _SH_UploadChanged(self, key, transfer_id):
-        if key != self.key or self.closed or not self.loaded or self.search_text or self.has_newer:
+        if key not in self.keys or self.closed or not self.loaded or self.search_text or self.has_newer:
             return
         from blink.messagepane.uploads import Uploads
         upload = Uploads.instance().get(transfer_id)
@@ -623,19 +641,19 @@ class ConversationModel(QAbstractListModel):
         handler(notification)
 
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
-        if str(notification.data.remote_uri) == self.key:
+        if str(notification.data.remote_uri) in self.keys:
             self._schedule_refresh()
 
     def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
-        if str(notification.data.message.remote_uri) == self.key:
+        if str(notification.data.message.remote_uri) in self.keys:
             self._schedule_refresh()
 
     def _NH_BlinkMessageHistoryCallRecordDidStore(self, notification):
-        if str(notification.data.remote_uri) == self.key:
+        if str(notification.data.remote_uri) in self.keys:
             self._schedule_refresh()     # a call merged with another view of it (the server's, another device's)
 
     def _NH_BlinkMessageHistoryConversationDidRemove(self, notification):
-        if str(notification.data.contact) == self.key:
+        if str(notification.data.contact) in self.keys:
             self.load()
 
     def _NH_BlinkGotHistoryMessageDelete(self, notification):

@@ -1196,6 +1196,16 @@ class MessageHistory(object, metaclass=Singleton):
             return ' and 0'
         return f" and {column} in ({', '.join(self.db.sqlrepr(str(value)) for value in values)})"
 
+    def _remote_uri_sql(self, remote_uri):
+        """remote_uri = x, or for a contact with several addresses (a list or tuple of
+        conversation keys) remote_uri in (...): its conversations shown as one."""
+        if isinstance(remote_uri, (list, tuple, set, frozenset)):
+            keys = sorted({str(key) for key in remote_uri if key})
+            if len(keys) != 1:
+                return f"remote_uri in ({', '.join(self.db.sqlrepr(key) for key in keys)})" if keys else '0'
+            remote_uri = keys[0]
+        return f'remote_uri = {self.db.sqlrepr(str(remote_uri))}'
+
     @staticmethod
     def _category_sql(category):
         # 'links' is text with a link in it (has_link), not a category of its own
@@ -1379,13 +1389,13 @@ class MessageHistory(object, metaclass=Singleton):
         """A conversation's text messages containing `text` (case-insensitive for ASCII), newest first.
         Encrypted bodies not yet decrypted cannot match."""
         pattern = '%' + str(text).replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-        query = (f"remote_uri = {self.db.sqlrepr(str(remote_uri))} and {NOT_DELETED_SQL} and category = 'text'"
+        query = (f"{self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL} and category = 'text'"
                  f" and content like {self.db.sqlrepr(pattern)} escape '\\'" + self._in_sql('account_id', accounts))
         return list(Message.select(query, orderBy=['-timestamp', '-id'], limit=int(limit)))
 
     def present_categories(self, remote_uri, accounts=None):
         """The category filters a conversation has messages for, 'links' included."""
-        where = (f' where {NOT_DELETED_SQL} and remote_uri = {self.db.sqlrepr(str(remote_uri))}' + self._in_sql('account_id', accounts))
+        where = (f' where {NOT_DELETED_SQL} and {self._remote_uri_sql(remote_uri)}' + self._in_sql('account_id', accounts))
         table = Message.sqlmeta.table
         found = {str(category) for (category,) in self.db.queryAll(f'select distinct category from {table}{where} and category is not null') if category}
         if 'text' in found and self.db.queryAll(f"select 1 from {table}{where} and category = 'text' and has_link = 1 limit 1"):
@@ -1398,7 +1408,7 @@ class MessageHistory(object, metaclass=Singleton):
         the oldest `limit` of them, oldest first (paging forwards). Location trail
         ticks are left out unless asked for (they belong to their share's bubble) and
         metadata sidecars always are."""
-        query = f'remote_uri = {self.db.sqlrepr(str(remote_uri))} and {NOT_DELETED_SQL}' + self._category_sql(category) + self._in_sql('account_id', accounts)
+        query = f'{self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL}' + self._category_sql(category) + self._in_sql('account_id', accounts)
         # sidecars (reply links, captions, waveforms) are not bubbles: they come with related_messages()
         query += f" and content_type != '{METADATA_CONTENT_TYPE}'"
         if not include_trail:
@@ -1416,7 +1426,7 @@ class MessageHistory(object, metaclass=Singleton):
         table = Message.sqlmeta.table
         actions = ', '.join(self.db.sqlrepr(action) for action in self.__trail_actions__)
         query = (f"select date(timestamp, 'localtime') as day, count(*) from {table}"
-                 f" where remote_uri = {self.db.sqlrepr(str(remote_uri))} and {NOT_DELETED_SQL} and category is not null"
+                 f" where {self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL} and category is not null"
                  f" and content_type != '{METADATA_CONTENT_TYPE}' and (related_action is null or related_action not in ({actions}))"
                  + self._in_sql('account_id', accounts) + ' group by day')
         return {str(day): int(count) for day, count in self.db.queryAll(query) if day}

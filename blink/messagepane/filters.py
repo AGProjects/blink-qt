@@ -77,13 +77,13 @@ class FilterBar(QWidget):
 
     def refresh(self):
         if self.key is not None:
-            self._load(self.key)
+            self._load(self.key, self.model.history_key)
 
     @run_in_thread('db')
-    def _load(self, key):
+    def _load(self, key, history_key):
         from blink.history import MessageHistory
         try:
-            present = MessageHistory().present_categories(key)
+            present = MessageHistory().present_categories(history_key)
         except Exception as e:
             log.warning(f'Cannot read the kinds of messages with {key}: {e!r}')
             return

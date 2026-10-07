@@ -123,12 +123,14 @@ class MessagePane(QWidget):
         self.unsent = {}            # conversation key: text typed and not sent
         self.setAcceptDrops(True)
         self._apply_font()
-        self.models = {}            # conversation key: ConversationModel, most recent last
+        self.models = {}            # view key (the conversation keys of a contact's addresses): ConversationModel, most recent last
+        self.chosen_addresses = {}  # view key: (uri, key) of the address chosen to send to
         self.stack.setCurrentWidget(self.empty_label)
 
         self.contact = None
         self.uri = None
-        self.key = None
+        self.key = None             # the conversation key messages are sent to (the address chosen)
+        self.view_key = None        # the conversation keys shown: all the contact's addresses
         self._displayed_sent = set()     # message ids a displayed notification went out for
         self._read_timer = QTimer(self)
         self._read_timer.setSingleShot(True)
@@ -139,7 +141,7 @@ class MessagePane(QWidget):
         self._calendar_timer = QTimer(self)
         self._calendar_timer.setSingleShot(True)
         self._calendar_timer.setInterval(2000)
-        self._calendar_timer.timeout.connect(lambda: self.key and self._load_day_counts(self.key))
+        self._calendar_timer.timeout.connect(lambda: self.key and self._load_day_counts(self.key, self.view_key))
 
         self.apply_theme()
         follow_theme(self)
@@ -157,24 +159,34 @@ class MessagePane(QWidget):
         self.empty_label.setPalette(palette)
 
     def show_conversation(self, contact, uri, key):
-        """Switch to the conversation with a contact, on one of its addresses (key: its conversation key).
-        With the pane closed nothing is loaded: the conversation is shown when the pane opens."""
+        """Switch to the conversation with a contact, sending to one of its addresses (key: its conversation key).
+
+        The messages of all the contact's addresses are shown, as one conversation; the
+        address only says where the next message goes (the one chosen last for the
+        contact, when there is one). With the pane closed nothing is loaded: the
+        conversation is shown when the pane opens."""
         if not self.isVisible():
             self._pending = (contact, uri, key)
             return
         self._pending = None
-        if contact is self.contact and key == self.key:
+        view_key = self._contact_keys(contact, key)
+        if contact is self.contact and view_key == self.view_key:
+            if key != self.key:
+                self._switch_address(uri, key)
             return
+        chosen_address = self.chosen_addresses.get(view_key)
+        if chosen_address is not None and chosen_address[1] in view_key:
+            uri, key = chosen_address
         self._keep_unsent()
-        self.contact, self.uri, self.key = contact, uri, key
+        self.contact, self.uri, self.key, self.view_key = contact, uri, key, view_key
         self.composer.set_text(self.unsent.get(key, ''))
         self.composer.show()
         chosen = self._account(self.chosen_accounts[key]) if key in self.chosen_accounts else None
         self.header.set_conversation(contact, uri, key, chosen or self._default_account())
         self.header.show()
-        cached = key in self.models
+        cached = view_key in self.models
         self.transcript.bubble_delegate.peer_avatar = self.header.avatar.draw
-        model = self._model(key)
+        model = self._model(view_key, key)
         self._follow_model(model)
         self.transcript.setModel(model)
         self.strip.set_conversation(model, self.transcript)
@@ -183,10 +195,46 @@ class MessagePane(QWidget):
         self.stack.setCurrentWidget(self.transcript)
         self._update_mode()
         self._find_account(key)
-        self._load_day_counts(key)
-        model = self.models[key]
+        self._load_day_counts(key, view_key)
         how = f'{len(model.items)} messages already loaded' if cached and model.loaded else 'loading'
-        ActivityLog().info(f'[Message with {key}] Conversation selected in the message pane ({uri.uri}, {how})')
+        also = [other for other in view_key if other != key]
+        ActivityLog().info(f'[Message with {key}] Conversation selected in the message pane ({uri.uri}, {how})' + (f', with the messages of {", ".join(also)}' if also else ''))
+
+    @staticmethod
+    def _contact_keys(contact, key):
+        """The conversation keys of all the addresses of a contact (key among them), sorted: the view key."""
+        keys = {key}
+        if contact is not None and getattr(contact, 'type', None) not in ('bonjour', None):
+            from blink.contacts import _conversation_key
+            account = AccountManager().default_account
+            try:
+                uris = list(contact.uris)
+            except (AttributeError, TypeError):
+                uris = []
+            for contact_uri in uris:
+                address = str(getattr(contact_uri, 'uri', '') or '')
+                if not address:
+                    continue
+                try:
+                    other = _conversation_key(address, account)
+                except Exception:
+                    continue
+                if other:
+                    keys.add(other)
+        return tuple(sorted(keys))
+
+    def _switch_address(self, uri, key):
+        """Send to another address of the contact: the conversation shown stays as it is."""
+        previous = self.key
+        self.uri, self.key = uri, key
+        self.chosen_addresses[self.view_key] = (uri, key)
+        if previous in self.unsent and key not in self.unsent:
+            self.unsent[key] = self.unsent.pop(previous)
+        chosen = self._account(self.chosen_accounts[key]) if key in self.chosen_accounts else None
+        self.header.set_conversation(self.contact, uri, key, chosen or self._default_account())
+        self._find_account(key)
+        self._load_day_counts(key, self.view_key)
+        ActivityLog().info(f'[Message with {key}] Messages are sent to {uri.uri} (was {previous})')
 
     def clear(self):
         """No conversation: the empty state."""
@@ -195,7 +243,7 @@ class MessagePane(QWidget):
             return
         self._keep_unsent()
         self.composer.hide()
-        self.contact = self.uri = self.key = None
+        self.contact = self.uri = self.key = self.view_key = None
         self._follow_model(None)
         self.header.hide()
         self.strip.hide()
@@ -204,12 +252,12 @@ class MessagePane(QWidget):
         self.transcript.setModel(None)
         self.stack.setCurrentWidget(self.empty_label)
 
-    def _model(self, key):
-        model = self.models.pop(key, None)
+    def _model(self, view_key, key):
+        model = self.models.pop(view_key, None)
         if model is None:
-            model = ConversationModel(key, self)
+            model = ConversationModel(key, self, keys=view_key)
             model.load()
-        self.models[key] = model
+        self.models[view_key] = model
         while len(self.models) > self.kept_conversations:
             oldest = next(iter(self.models))
             dropped = self.models.pop(oldest)
@@ -228,11 +276,13 @@ class MessagePane(QWidget):
         return AccountManager().default_account
 
     def _SH_AddressChosen(self, uri):
-        """Another address of the contact: its own conversation."""
+        """Another address of the contact: where the next message goes; the conversation shown stays."""
         from blink.contacts import _conversation_key
+        if self.contact is None:
+            return
         key = _conversation_key(str(uri.uri), AccountManager().default_account)
-        ActivityLog().info(f'[Message with {key}] Switched from {self.key} to the address {uri.uri}')
-        self.show_conversation(self.contact, uri, key)
+        if key != self.key:
+            self._switch_address(uri, key)
 
     def _SH_AccountChosen(self, account):
         if self.key is None:
@@ -250,7 +300,7 @@ class MessagePane(QWidget):
         account = self.header.account
         if account is None or account is BonjourAccount():
             return True
-        model = self.models.get(key)
+        model = self.models.get(self.view_key)
         if model is None or not model.loaded or model.items or model.has_more or model.category or model.search_text:
             return True             # not the first message (or not known yet)
         accounts = self.header.sending_accounts()
@@ -312,11 +362,11 @@ class MessagePane(QWidget):
 
     def _NH_BlinkConversationPreviewsDidChange(self, notification):
         keys = notification.data.keys
-        if self.key is not None and (keys is None or self.key in keys):
+        if self.view_key is not None and (keys is None or any(key in keys for key in self.view_key)):
             self.header.update_info()
 
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
-        if self.key is not None and str(notification.data.remote_uri) == self.key:
+        if self.view_key is not None and str(notification.data.remote_uri) in self.view_key:
             self._calendar_timer.start()
             self.filters.refresh_later()
 
@@ -371,15 +421,18 @@ class MessagePane(QWidget):
     def _read(self):
         if not self.is_reading():
             return
-        model = self.models.get(self.key)
+        model = self.models.get(self.view_key)
         if model is None or not model.loaded or model.search_text:
             return
         unread = [item for item in model.items if item.direction == 'incoming' and not item.read]
-        main_window = self.window()
-        badge = getattr(main_window, 'unread_messages', {}).get(self.key, 0)
+        badges = getattr(self.window(), 'unread_messages', {})
+        # each address of the contact is a conversation of its own in history and on the other devices
+        for key in self.view_key:
+            self._read_conversation(key, [item for item in unread if (item.remote_uri or self.key) == key], badges.get(key, 0))
+
+    def _read_conversation(self, key, unread, badge):
         if not unread and not badge:
             return
-        key = self.key
         from blink.history import MessageHistory
         MessageHistory().mark_conversation_read(key)
         NotificationCenter().post_notification('BlinkMessagePaneDidReadConversation', sender=self, data=NotificationData(remote_uri=key))
@@ -392,7 +445,7 @@ class MessagePane(QWidget):
         from blink.messages import MessageManager
         manager = MessageManager()
         try:
-            session = manager.create_message_session(str(self.uri.uri), selected=False)
+            session = self._session_for(key)
         except Exception as e:
             log.warning(f'Cannot reach the conversation with {key} to confirm reading it: {e!r}')
             return
@@ -417,17 +470,17 @@ class MessagePane(QWidget):
     # Calendar
 
     @run_in_thread('db')
-    def _load_day_counts(self, key):
+    def _load_day_counts(self, key, view_key=None):
         from blink.history import MessageHistory
         try:
-            counts = MessageHistory().day_counts(key)
+            counts = MessageHistory().day_counts(list(view_key) if view_key else key)
         except Exception as e:
             log.warning(f'Cannot count the days of the conversation with {key}: {e!r}')
             return
         call_in_gui_thread(self.header.set_day_counts, key, counts)
 
     def _jump_to(self, day):
-        model = self.models.get(self.key)
+        model = self.models.get(self.view_key)
         if model is None:
             return
         model.jump_to(day)
@@ -447,6 +500,14 @@ class MessagePane(QWidget):
     def _message_session(self):
         from blink.messages import MessageManager
         return MessageManager().create_message_session(str(self.uri.uri), selected=False)
+
+    def _session_for(self, key):
+        """The message session of one of the contact's addresses (a conversation key): the chosen
+        address's own, else one to that address (a message shown may be from another address)."""
+        if not key or key == self.key:
+            return self._message_session()
+        from blink.messages import MessageManager
+        return MessageManager().create_message_session(key, selected=False)
 
     def _send_text(self, text):
         if self.key is None:
@@ -482,7 +543,7 @@ class MessagePane(QWidget):
             self.composer.set_text(text)      # nothing lost
             return
         self.unsent.pop(self.key, None)
-        model = self.models.get(self.key)
+        model = self.models.get(self.view_key)
         if model is not None and (model.has_newer or model.search_text):
             model.search_text = ''
             model.load()                      # back to the newest, where the message goes
@@ -591,7 +652,7 @@ class MessagePane(QWidget):
     def _update_mode(self):
         """Tiles for pictures, videos and locations (when the grid is on), else the transcript."""
         from blink.messagepane.grid import GRID_CATEGORIES
-        model = self.models.get(self.key) if self.key is not None else None
+        model = self.models.get(self.view_key) if self.view_key is not None else None
         category = model.category if model is not None else None
         tiles = category in GRID_CATEGORIES
         grid = tiles and self.grid_button.isChecked()
@@ -700,7 +761,7 @@ class MessagePane(QWidget):
         """Go to the message a reply answers: in place when loaded, else load the day it is from."""
         if self.transcript.show_message(reply['id']):
             return
-        model = self.models.get(self.key)
+        model = self.models.get(self.view_key)
         if model is None or reply.get('timestamp') is None:
             return
         def landed(row, message_id=reply['id']):
@@ -736,7 +797,7 @@ class MessagePane(QWidget):
             return
         for_both = both is not None and both.isChecked()
         ActivityLog().info(f'[Message with {key}] Deleted {what} {item.id} from the message pane' + (', also for the other party' if for_both else ''))
-        self._remove_message(item.id, item.account_id, for_both, why='deleted here')
+        self._remove_message(item.id, item.account_id, for_both, why='deleted here', remote_uri=item.remote_uri)
 
     # Location: send the current one, ask for theirs
 
@@ -895,24 +956,25 @@ class MessagePane(QWidget):
             if item.upload is not None:
                 Uploads.instance().discard(item.id)
             else:
-                self._remove_message(item.id, item.account_id, for_both and item in own, why='deleted here')
+                self._remove_message(item.id, item.account_id, for_both and item in own, why='deleted here', remote_uri=item.remote_uri)
         self.grid.set_selecting(False)
 
-    def _remove_message(self, message_id, account_id, for_both, why):
-        """Hide a message here (with its downloaded file) and, for_both, ask the other party's devices to remove it."""
+    def _remove_message(self, message_id, account_id, for_both, why, remote_uri=None):
+        """Hide a message here (with its downloaded file) and, for_both, ask the other party's devices to
+        remove it (on the address it was exchanged with: remote_uri, else the one messages are sent to)."""
         from blink.history import HistoryManager, MessageHistory
-        key = self.key
+        key = remote_uri or self.key
         MessageHistory().tombstone_message(message_id, account_id=account_id, remote_uri=key, source=why)
         HistoryManager().download_history.remove(message_id)       # the downloaded file goes with it
         if for_both and account_id != 'bonjour@local':
             from blink.messages import MessageManager
             try:
-                session = self._message_session()
+                session = self._session_for(key)
                 account = self._account(account_id) or session.account
                 MessageManager().send_remove_message(session, message_id, account)
             except Exception as e:
                 ActivityLog().warning(f'[Message with {key}] Cannot ask the other party to remove message {message_id}: {e!r}')
-        model = self.models.get(key)
+        model = self.models.get(self.view_key)
         if model is not None:
             model.remove_item(message_id)
 
@@ -926,10 +988,10 @@ class MessagePane(QWidget):
         if not accepted or text.strip() == (item.caption or ''):
             return
         try:
-            session = self._message_session()
+            session = self._session_for(item.remote_uri)     # the address the picture went to
             account = self._account(item.account_id) or session.account
             metadata_id = str(uuid.uuid4())
-            envelope = label_envelope(item.id, metadata_id, text.strip(), str(self.uri.uri), ISOTimestamp.now())
+            envelope = label_envelope(item.id, metadata_id, text.strip(), str(session.contact_uri.uri), ISOTimestamp.now())
             MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
         except Exception as e:
             ActivityLog().error(f'[Message with {self.key}] Setting the caption of {item.id} failed: {e!r}')
@@ -948,7 +1010,7 @@ class MessagePane(QWidget):
             elif self.fetcher.progress(message_id) is None:
                 del self._forward_after_download[message_id]
                 ActivityLog().warning(f'[Message with {target}] Message {message_id} not forwarded: its file could not be downloaded')
-        model = self.models.get(self.key)
+        model = self.models.get(self.view_key)
         row = model.row_of(message_id) if model is not None else None
         if row is not None:
             index = model.index(row)
