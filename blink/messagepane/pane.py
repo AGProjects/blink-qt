@@ -73,6 +73,9 @@ class MessagePane(QWidget):
         self.strip = TranscriptStrip(self)
         self.strip.hide()
         layout.addWidget(self.strip)
+        from blink.messagepane.filters import FilterBar
+        self.filters = FilterBar(self)
+        layout.addWidget(self.filters)
         self.stack = QStackedWidget(self)
         layout.addWidget(self.stack, 1)
 
@@ -94,6 +97,14 @@ class MessagePane(QWidget):
         self.fetcher.changed.connect(self._SH_DownloadChanged)
         self.transcript.bubble_delegate.progress_of = self.fetcher.progress
         self.transcript.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
+        # pictures, videos and locations as tiles (blink.messagepane.grid), when the filter shows one of them
+        from blink.messagepane.grid import GridView
+        self.grid = GridView(self.stack)
+        self.stack.addWidget(self.grid)
+        self.grid.progress_of = self.fetcher.progress
+        self.grid.actionRequested.connect(self._SH_ActionRequested)
+        self.grid.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
+        self._make_grid_controls()
         self.composer = Composer(self)
         self.composer.hide()
         layout.addWidget(self.composer)
@@ -160,7 +171,9 @@ class MessagePane(QWidget):
         self.transcript.setModel(model)
         self.strip.set_conversation(model, self.transcript)
         self.strip.show()
+        self.filters.set_conversation(model)
         self.stack.setCurrentWidget(self.transcript)
+        self._update_mode()
         self._find_account(key)
         self._load_day_counts(key)
         model = self.models[key]
@@ -178,6 +191,8 @@ class MessagePane(QWidget):
         self._follow_model(None)
         self.header.hide()
         self.strip.hide()
+        self.filters.set_conversation(None)
+        self.grid.set_model(None)
         self.transcript.setModel(None)
         self.stack.setCurrentWidget(self.empty_label)
 
@@ -245,6 +260,7 @@ class MessagePane(QWidget):
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
         if self.key is not None and str(notification.data.remote_uri) == self.key:
             self._calendar_timer.start()
+            self.filters.refresh_later()
 
     def _NH_PGPKeysShouldReload(self, notification):
         self.header.update_lock()
@@ -474,6 +490,65 @@ class MessagePane(QWidget):
         event.acceptProposedAction()
         self._send_files(paths)
 
+    # The grid
+
+    def _make_grid_controls(self):
+        from PyQt6.QtWidgets import QSpinBox, QToolButton
+        self.grid_button = QToolButton(self.filters)
+        self.grid_button.setText(translate('message_pane', 'Grid'))
+        self.grid_button.setToolTip(translate('message_pane', 'Show pictures, videos and locations as tiles'))
+        self.grid_button.setCheckable(True)
+        self.grid_button.setChecked(QSettings().value('message_pane/grid', True, type=bool))
+        self.grid_button.toggled.connect(self._SH_GridToggled)
+        self.columns_box = QSpinBox(self.filters)
+        self.columns_box.setRange(self.grid.min_columns, self.grid.max_columns)
+        self.columns_box.setValue(self.grid.columns)
+        self.columns_box.setSuffix(translate('message_pane', ' columns'))
+        self.columns_box.valueChanged.connect(self.grid.set_columns)
+        self.download_button = QToolButton(self.filters)
+        self.download_button.setText(translate('message_pane', 'Download All'))
+        self.download_button.setToolTip(translate('message_pane', 'Download the videos in view'))
+        self.download_button.clicked.connect(self._download_visible)
+        for widget in (self.download_button, self.columns_box, self.grid_button):
+            self.filters.add_extra(widget)
+        self.filters.categoryChosen.connect(lambda category: self._update_mode())
+        self.grid_button.hide()
+        self.columns_box.hide()
+        self.download_button.hide()
+
+    def _SH_GridToggled(self, checked):
+        QSettings().setValue('message_pane/grid', checked)
+        self._update_mode()
+
+    def _update_mode(self):
+        """Tiles for pictures, videos and locations (when the grid is on), else the transcript."""
+        from blink.messagepane.grid import GRID_CATEGORIES
+        model = self.models.get(self.key) if self.key is not None else None
+        category = model.category if model is not None else None
+        tiles = category in GRID_CATEGORIES
+        grid = tiles and self.grid_button.isChecked()
+        self.grid_button.setVisible(tiles)
+        self.columns_box.setVisible(grid)
+        self.download_button.setVisible(grid and category == 'video')
+        if model is None:
+            return
+        if grid:
+            if self.grid.model is not model:
+                self.grid.set_model(model)
+            self.stack.setCurrentWidget(self.grid)
+        else:
+            self.grid.set_model(None)
+            self.stack.setCurrentWidget(self.transcript)
+        self.fetcher.schedule()
+
+    def _download_visible(self):
+        from blink.messagepane.files import local_file
+        items = [item for item in self.grid.visible_items() if not local_file(item)]
+        ActivityLog().info(f'[Message with {self.key}] Downloading {len(items)} files in view')
+        for item in items:
+            if self.fetcher.progress(item.id) is None:
+                self.fetcher.fetch(item, force=True)
+
     # Text size
 
     font_steps = (-3, 8)        # points smaller / larger than the system font
@@ -632,6 +707,7 @@ class MessagePane(QWidget):
 
     def _SH_DownloadChanged(self, message_id):
         self.transcript.bubble_delegate.forget(message_id)      # where its file is may have changed
+        self.grid.forget(message_id)
         model = self.models.get(self.key)
         row = model.row_of(message_id) if model is not None else None
         if row is not None:

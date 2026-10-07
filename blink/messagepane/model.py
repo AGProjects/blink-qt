@@ -17,6 +17,10 @@ instead (newest 200, oldest first); search('') goes back to the conversation.
 
 Files being sent over HTTP (blink.messagepane.uploads) are rows too, after the
 newest page, until a message of their transfer is in history.
+
+set_category(category) shows one category only (image, video, audio, other,
+location, call, text, or links: texts with a link), paged from history the same
+way; set_category(None) shows everything again.
 """
 
 import bisect
@@ -203,6 +207,7 @@ class ConversationModel(QAbstractListModel):
         self.loaded = False
         self.closed = False
         self.search_text = ''
+        self.category = None        # one category only (set_category), or all
         self._generation = 0    # a reload makes answers to earlier queries stale
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -299,6 +304,19 @@ class ConversationModel(QAbstractListModel):
 
     search_truncated = False
 
+    def set_category(self, category):
+        """Show one category only (None: everything), from the newest page."""
+        category = category or None
+        if category == self.category:
+            return
+        self.category = category
+        ActivityLog().info(f'[Message with {self.key}] Showing ' + (f'{category} only' if category else 'all messages'))
+        if not self.search_text:
+            self.load()
+
+    def _shows(self, item):
+        return self.category is None or item.category == self.category
+
     def load(self):
         """The newest page: what opening the conversation shows."""
         self._generation += 1
@@ -330,7 +348,7 @@ class ConversationModel(QAbstractListModel):
         cursor = after
         try:
             while len(found) < self.page_size:
-                rows = history.get_messages(self.key, after=cursor, limit=self.fetch_size, oldest_first=True)
+                rows = history.get_messages(self.key, after=cursor, limit=self.fetch_size, oldest_first=True, category=self.category)
                 for row in rows:      # oldest first
                     if row.message_id not in seen and is_renderable(row):
                         seen.add(row.message_id)
@@ -389,7 +407,7 @@ class ConversationModel(QAbstractListModel):
         cursor = before
         try:
             while len(found) < self.page_size:
-                rows = history.get_messages(self.key, before=cursor, limit=self.fetch_size)
+                rows = history.get_messages(self.key, before=cursor, limit=self.fetch_size, category=self.category)
                 for row in rows:      # newest first
                     if row.message_id not in seen and is_renderable(row):
                         seen.add(row.message_id)
@@ -412,7 +430,7 @@ class ConversationModel(QAbstractListModel):
         newer = False
         if isinstance(kind, tuple):     # a jump: is there anything after the page?
             try:
-                newer = bool(history.get_messages(self.key, after=before - self._tick, limit=1, oldest_first=True)) if before is not None else False
+                newer = bool(history.get_messages(self.key, after=before - self._tick, limit=1, oldest_first=True, category=self.category)) if before is not None else False
             except Exception:
                 newer = True
         attach_replies(found)
@@ -451,7 +469,7 @@ class ConversationModel(QAbstractListModel):
             self.has_more = more
             self.loaded = True
             self._set_loading(False)
-            ActivityLog().info(f'[Message with {self.key}] Loaded {len(found)} messages' + (f' from {found[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if found else '') + (', older ones available' if more else ', the whole conversation'))
+            ActivityLog().info(f'[Message with {self.key}] Loaded {len(found)} ' + (f'{self.category} ' if self.category else '') + 'messages' + (f' from {found[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if found else '') + (', older ones available' if more else ', the whole conversation'))
             self.initialLoadFinished.emit()
             return
         found = [item for item in found if item.id not in self.ids]
@@ -493,7 +511,7 @@ class ConversationModel(QAbstractListModel):
     def _fetch_newest(self, generation):
         from blink.history import MessageHistory
         try:
-            rows = MessageHistory().get_messages(self.key, limit=self.fetch_size)
+            rows = MessageHistory().get_messages(self.key, limit=self.fetch_size, category=self.category)
         except Exception as e:
             log.warning(f'Refreshing the conversation with {self.key} failed: {e!r}')
             return
@@ -543,7 +561,7 @@ class ConversationModel(QAbstractListModel):
                 self.dataChanged.emit(index, index)
         if not self.has_newer:
             for upload in _uploads_for(self.key):
-                if upload.id not in self.ids:
+                if upload.id not in self.ids and self._shows(MessageItem.for_upload(upload)):
                     self._insert(MessageItem.for_upload(upload))
 
     # Files being sent (blink.messagepane.uploads)
@@ -568,7 +586,7 @@ class ConversationModel(QAbstractListModel):
         """found (a newest page) and the files being sent whose message is not there."""
         self._settle_uploads(found)
         known = {item.id for item in found}
-        uploads = [MessageItem.for_upload(upload) for upload in _uploads_for(self.key) if upload.id not in known]
+        uploads = [item for item in (MessageItem.for_upload(upload) for upload in _uploads_for(self.key) if upload.id not in known) if self._shows(item)]
         return sorted(found + uploads, key=lambda item: item.sort_key) if uploads else found
 
     def _insert(self, item):
@@ -589,6 +607,8 @@ class ConversationModel(QAbstractListModel):
                 self.remove_item(transfer_id)
             return
         item = MessageItem.for_upload(upload)
+        if not self._shows(item):
+            return
         if current is None:
             self._insert(item)
         elif current.upload is not None:

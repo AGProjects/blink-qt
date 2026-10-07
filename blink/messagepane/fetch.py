@@ -62,6 +62,9 @@ class AutoFetcher(QObject):
     # What is on screen
 
     def _visible_items(self):
+        grid = getattr(self.pane, 'grid', None)
+        if grid is not None and grid.isVisible():
+            return grid.visible_items()
         view = self.pane.transcript
         model = view.model()
         if model is None or not view.isVisible():
