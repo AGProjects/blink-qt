@@ -897,6 +897,7 @@ class MessageHistory(object, metaclass=Singleton):
         if removed is not None:
             cls._set_deleted(f'message_id = {db.sqlrepr(str(message_id))}', True, removed[0] or None)
         ActivityLog().info(f'[db] Metadata message {message_id} ({fields["related_action"]}) stored for message {target}' + (', which was removed: hidden too' if removed is not None else ''))
+        NotificationCenter().post_notification('BlinkMessageHistoryCompanionDidStore', data=NotificationData(message_id=str(message_id), related_msg_id=str(target), related_action=fields['related_action']))
 
     @staticmethod
     def _content_fields(content_type, content):

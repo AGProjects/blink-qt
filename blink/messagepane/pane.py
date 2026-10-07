@@ -83,6 +83,7 @@ class MessagePane(QWidget):
         self.stack.addWidget(self.transcript)
         self.transcript.verticalScrollBar().valueChanged.connect(self.strip.update_text)
         self.transcript.actionRequested.connect(self._SH_ActionRequested)
+        self.transcript.quoteClicked.connect(self._SH_QuoteClicked)
         self.composer = Composer(self)
         self.composer.hide()
         layout.addWidget(self.composer)
@@ -362,7 +363,16 @@ class MessagePane(QWidget):
         try:
             session = self._message_session()
             account = self.header.account or session.account
-            MessageManager().send_message(account, session.contact, text, 'text/plain', id=str(uuid.uuid4()))
+            message_id = str(uuid.uuid4())
+            reply = self.composer.reply
+            if reply is not None:
+                # the link first, so the peer has it in hand when the reply arrives (as mobile and Blink for macOS do)
+                from blink.message_envelopes import METADATA_CONTENT_TYPE, reply_envelope
+                metadata_id = str(uuid.uuid4())
+                envelope = reply_envelope(message_id, reply['id'], metadata_id, str(self.uri.uri), ISOTimestamp.now())
+                MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
+                ActivityLog().info(f'[Message with {self.key}] Replying to message {reply["id"]} with {message_id}')
+            MessageManager().send_message(account, session.contact, text, 'text/plain', id=message_id)
         except Exception as e:
             ActivityLog().error(f'[Message with {self.key}] Sending a message from the message pane failed: {e!r}')
             self.composer.set_text(text)      # nothing lost
@@ -439,6 +449,24 @@ class MessagePane(QWidget):
     def _SH_ActionRequested(self, action, item):
         if action == 'delete':
             self._delete_message(item)
+        elif action == 'reply':
+            from blink.messagepane.format import plain_summary
+            name = translate('message_pane', 'yourself') if item.outgoing else (getattr(self.contact, 'name', '') or item.display_name or self.key)
+            self.composer.set_reply({'id': item.id, 'name': name, 'text': plain_summary(item)})
+
+    def _SH_QuoteClicked(self, reply):
+        """Go to the message a reply answers: in place when loaded, else load the day it is from."""
+        if self.transcript.show_message(reply['id']):
+            return
+        model = self.models.get(self.key)
+        if model is None or reply.get('timestamp') is None:
+            return
+        def landed(row, message_id=reply['id']):
+            model.jumped.disconnect(landed)
+            QTimer.singleShot(50, lambda: self.transcript.show_message(message_id))
+        model.jumped.connect(landed)
+        model.jump_to(reply['timestamp'].astimezone().date())
+        self.strip.set_conversation(model, self.transcript)
 
     def _delete_message(self, item):
         """Delete a message here, after asking; one's own message also for the other party

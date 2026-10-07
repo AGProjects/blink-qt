@@ -29,7 +29,8 @@ __all__ = ['TranscriptView']
 class TranscriptView(QListView):
     load_margin = 48        # pixels from the top that load the page before
 
-    actionRequested = pyqtSignal(str, object)      # ('delete', MessageItem)
+    actionRequested = pyqtSignal(str, object)      # ('delete' or 'reply', MessageItem)
+    quoteClicked = pyqtSignal(object)              # the reply dict of a clicked quote
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -164,7 +165,9 @@ class TranscriptView(QListView):
 
     def mouseMoveEvent(self, event):
         position = event.position().toPoint()
-        if self._link_at(position) or self._on_actions_button(position):
+        index = self.indexAt(position)
+        on_quote = index.isValid() and self.bubble_delegate.quote_at(index, self.visualRect(index), position) is not None
+        if self._link_at(position) or self._on_actions_button(position) or on_quote:
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         else:
             self.viewport().unsetCursor()
@@ -177,6 +180,11 @@ class TranscriptView(QListView):
                 index = self.indexAt(position)
                 rect = self.visualRect(index)
                 self._show_menu(index, position, self.viewport().mapToGlobal(position + QPoint(0, 12)))
+                return
+            index = self.indexAt(position)
+            reply = self.bubble_delegate.quote_at(index, self.visualRect(index), position) if index.isValid() else None
+            if reply is not None:
+                self.quoteClicked.emit(reply)
                 return
             anchor = self._link_at(position)
             if anchor:
@@ -208,6 +216,9 @@ class TranscriptView(QListView):
             menu.addSeparator()
             menu.addAction(translate('message_pane', 'Open'), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
             menu.addAction(translate('message_pane', 'Save As…'), lambda: self._save_as(path))
+        if bubble_kind(item) != 'note':
+            menu.addSeparator()
+            menu.addAction(translate('message_pane', 'Reply'), lambda: self.actionRequested.emit('reply', item))
         menu.addSeparator()
         delete = menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
         delete.setEnabled(bubble_kind(item) != 'note' or item.category is not None)
@@ -229,3 +240,14 @@ class TranscriptView(QListView):
         """Go to the newest message and stay there (after sending)."""
         self._stick = True
         QTimer.singleShot(0, self.scrollToBottom)
+
+    def show_message(self, message_id):
+        """Scroll to a loaded message and point it out; False when it is not loaded."""
+        model = self.model()
+        row = model.row_of(message_id) if model is not None else None
+        if row is None:
+            return False
+        self._stick = False
+        self.scrollTo(model.index(row, 0), QAbstractItemView.ScrollHint.PositionAtCenter)
+        self.bubble_delegate.flash(message_id)
+        return True

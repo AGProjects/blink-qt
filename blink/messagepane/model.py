@@ -29,7 +29,7 @@ from PyQt6.QtCore import Qt, QAbstractListModel, QModelIndex, QTimer, pyqtSignal
 from sipsimple.threading import run_in_thread
 
 from blink.logging import ActivityLog, MessagingTrace as log
-from blink.util import call_in_gui_thread, run_in_gui_thread
+from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 
 
 __all__ = ['ConversationModel', 'MessageItem']
@@ -40,7 +40,7 @@ class MessageItem(object):
 
     __slots__ = ('id', 'account_id', 'remote_uri', 'display_name', 'uri', 'timestamp', 'direction', 'content', 'content_type',
                  'state', 'encryption_type', 'decrypted', 'disposition', 'read', 'category', 'has_link', 'metadata',
-                 'related_msg_id', 'related_action', 'media_type', 'row_id')
+                 'related_msg_id', 'related_action', 'media_type', 'row_id', 'reply')
 
     def __init__(self, row):
         self.id = str(row.message_id)
@@ -65,6 +65,7 @@ class MessageItem(object):
         self.related_msg_id = row.related_msg_id
         self.related_action = row.related_action
         self.media_type = row.media_type
+        self.reply = None           # what it answers: {'id', 'timestamp', 'outgoing', 'name', 'text'} (attach_replies)
 
     @property
     def sort_key(self):
@@ -79,6 +80,38 @@ class MessageItem(object):
 
     def __repr__(self):
         return f'MessageItem({self.id!r}, {self.direction}, {self.content_type}, {self.timestamp.isoformat()})'
+
+
+def attach_replies(items):
+    """Fill in item.reply for the replies among items, from their reply links (metadata
+    companions filed against them) and the messages they answer. In the db thread."""
+    from blink.history import Message, MessageHistory
+    from blink.message_envelopes import reply_metadata
+    from blink.messagepane.format import plain_summary
+    if not items:
+        return
+    by_id = {item.id: item for item in items}
+    try:
+        companions = MessageHistory().related_messages(list(by_id))
+    except Exception as e:
+        log.warning(f'Cannot read the reply links of {len(items)} messages: {e!r}')
+        return
+    for companion in companions:
+        if companion.related_action != 'reply':
+            continue
+        link = reply_metadata(companion.content)
+        if link is None or link['reply_id'] not in by_id:
+            continue
+        original = by_id.get(link['original_id'])
+        if original is None:
+            rows = list(Message.selectBy(message_id=link['original_id']))
+            original = MessageItem(rows[0]) if rows else None
+        if original is None:
+            reply = {'id': link['original_id'], 'timestamp': None, 'outgoing': None, 'name': '', 'text': translate('message_pane', 'A message that is not here')}
+        else:
+            reply = {'id': original.id, 'timestamp': original.timestamp, 'outgoing': original.outgoing,
+                     'name': '' if original.outgoing else original.display_name, 'text': plain_summary(original)}
+        by_id[link['reply_id']].reply = reply
 
 
 def is_renderable(row):
@@ -122,7 +155,7 @@ class ConversationModel(QAbstractListModel):
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
                      'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
-                     'BlinkMessageHistoryConversationWasRead'):
+                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore'):
             notification_center.add_observer(self, name=name)
 
     def close(self):
@@ -135,7 +168,7 @@ class ConversationModel(QAbstractListModel):
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
                      'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
-                     'BlinkMessageHistoryConversationWasRead'):
+                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore'):
             notification_center.discard_observer(self, name=name)
 
     # Qt model
@@ -187,6 +220,7 @@ class ConversationModel(QAbstractListModel):
                 seen.add(row.message_id)
                 found.append(MessageItem(row))
         found.reverse()
+        attach_replies(found)
         call_in_gui_thread(self._apply_search, generation, text, found, len(rows) >= self.search_limit)
 
     def _apply_search(self, generation, text, found, truncated):
@@ -252,6 +286,7 @@ class ConversationModel(QAbstractListModel):
         if len(found) > self.page_size:
             found = found[:self.page_size]
             more = True
+        attach_replies(found)
         call_in_gui_thread(self._apply_newer, generation, found, more)
 
     def _apply_newer(self, generation, found, more):
@@ -319,6 +354,7 @@ class ConversationModel(QAbstractListModel):
                 newer = bool(history.get_messages(self.key, after=before - self._tick, limit=1, oldest_first=True)) if before is not None else False
             except Exception:
                 newer = True
+        attach_replies(found)
         call_in_gui_thread(self._apply_page, generation, kind, found, more, newer)
 
     def _apply_failed(self, generation):
@@ -368,6 +404,10 @@ class ConversationModel(QAbstractListModel):
         self._set_loading(False)
         ActivityLog().info(f'[Message with {self.key}] Loaded {len(older)} older messages' + (f' from {older[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if older else '') + f', {len(self.items)} shown' + (', older ones available' if self.has_more else ', the whole conversation'))
 
+    def row_of(self, message_id):
+        item = self.ids.get(message_id)
+        return self.items.index(item) if item is not None else None
+
     def remove_item(self, message_id):
         """Take a message out at once (deleted here), wherever it is in what is loaded."""
         item = self.ids.pop(message_id, None)
@@ -402,6 +442,7 @@ class ConversationModel(QAbstractListModel):
                 found.append(MessageItem(row))
         complete = len(rows) < self.fetch_size
         oldest = found[-1].sort_key if found and not complete else None
+        attach_replies(found)
         call_in_gui_thread(self._merge, generation, found, oldest)
 
     def _merge(self, generation, found, oldest):
@@ -468,6 +509,10 @@ class ConversationModel(QAbstractListModel):
     _NH_BlinkMessageDidFail = _NH_BlinkMessageDidSucceed
     _NH_BlinkGotDispositionNotification = _NH_BlinkMessageDidSucceed
     _NH_BlinkDidSendDispositionNotification = _NH_BlinkMessageDidSucceed
+
+    def _NH_BlinkMessageHistoryCompanionDidStore(self, notification):
+        if notification.data.related_msg_id in self.ids:
+            self._schedule_refresh()         # a reply link (or caption) for a message shown
 
     def _NH_BlinkMessageHistoryConversationWasRead(self, notification):
         if notification.data.count:

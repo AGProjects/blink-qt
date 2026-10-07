@@ -7,6 +7,9 @@ idle when the text is cleared). Pasting inserts plain text; pasted or dropped
 files are handed on (filesDropped) to be sent, as are the ones from the
 paperclip menu (as on Blink for macOS; Grab a Screenshot...,
 then Choose Files... and Paste from Clipboard).
+
+In reply mode (set_reply) a line above the text says what is being answered,
+with a button to cancel; the next message sent is that reply.
 """
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
@@ -89,6 +92,24 @@ class Composer(QWidget):
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
         outer.addWidget(line)
+        self.reply_bar = QWidget(self)
+        reply_row = QHBoxLayout(self.reply_bar)
+        reply_row.setContentsMargins(12, 4, 8, 0)
+        reply_row.setSpacing(6)
+        from blink.widgets.labels import ElidedLabel
+        self.reply_label = ElidedLabel(self.reply_bar)
+        self.reply_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.reply_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        reply_row.addWidget(self.reply_label, 1)
+        cancel = QToolButton(self.reply_bar)
+        cancel.setAutoRaise(True)
+        cancel.setText('✕')
+        cancel.setToolTip(translate('message_pane', 'Do not reply (Escape)'))
+        cancel.clicked.connect(lambda: self.set_reply(None))
+        reply_row.addWidget(cancel)
+        self.reply_bar.hide()
+        outer.addWidget(self.reply_bar)
+        self.reply = None
         row = QHBoxLayout()
         row.setContentsMargins(8, 6, 8, 6)
         row.setSpacing(6)
@@ -201,12 +222,30 @@ class Composer(QWidget):
             self.composing.emit('active')
             self._composing_timer.start()
 
+    def set_reply(self, reply):
+        """Reply mode: reply is {'id', 'name', 'text'} of the message answered, or None."""
+        self.reply = reply
+        if reply is None:
+            self.reply_bar.hide()
+            return
+        text = ' '.join(str(reply.get('text') or '').split())
+        self.reply_label.setText(translate('message_pane', 'Replying to %s: %s') % (reply.get('name') or translate('message_pane', 'the message'), text))
+        self.reply_bar.show()
+        self.edit.setFocus()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and self.reply is not None:
+            self.set_reply(None)
+            return
+        super().keyPressEvent(event)
+
     def _send(self):
         text = self.text().strip('\n')
         if not text.strip():
             return
         self._composing_timer.stop()
-        self.sendText.emit(text)
+        self.sendText.emit(text)       # reads self.reply, then it is cleared
+        self.set_reply(None)
         self._loading = True
         self.edit.clear()
         self._loading = False

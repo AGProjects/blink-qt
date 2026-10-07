@@ -10,7 +10,9 @@ body says so; anything else is summarised in a bubble until it gets a bubble
 of its own (docs/messaging/ui-plan.md, B4). The first message of a day has the
 day above it (Today, Yesterday, the weekday, the date); an outgoing message
 shows its delivery state after its time and a failed one is drawn in red.
-Under the mouse a bubble shows its actions button (three dots, beside it on
+A reply starts with a quote of what it answers (who, and the first line);
+clicking the quote goes to that message. A message being pointed out is
+flashed (flash()). Under the mouse a bubble shows its actions button (three dots, beside it on
 the side facing the middle), which opens the same menu as a right click.
 Layouts are cached per message, width and font.
 """
@@ -29,7 +31,7 @@ __all__ = ['BubbleDelegate']
 
 
 class BubbleLayout(object):
-    __slots__ = ('kind', 'run_start', 'day_text', 'document', 'text_size', 'bubble_size', 'size', 'time_text', 'mark', 'mark_kind', 'name_text')
+    __slots__ = ('kind', 'run_start', 'day_text', 'document', 'text_size', 'bubble_size', 'size', 'time_text', 'mark', 'mark_kind', 'name_text', 'quote_name', 'quote_text', 'quote_height')
 
 
 class BubbleDelegate(QStyledItemDelegate):
@@ -100,7 +102,9 @@ class BubbleDelegate(QStyledItemDelegate):
         run_start = self.is_run_start(index)
         day_text = self.day_text(index)
         search_text = getattr(index.model(), 'search_text', '')
-        key = (item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text)
+        reply = item.reply
+        key = (item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
+               (reply['id'], reply['text']) if reply else None)
         layout = self._cache.get(key)
         if layout is not None:
             return layout
@@ -112,6 +116,8 @@ class BubbleDelegate(QStyledItemDelegate):
         layout.day_text = day_text
         layout.time_text = item.timestamp.astimezone().strftime('%H:%M')
         layout.mark, layout.mark_kind = delivery_mark(item)
+        layout.quote_name = layout.quote_text = ''
+        layout.quote_height = 0
         layout.name_text = (item.display_name or '') if run_start and not item.outgoing and kind != 'note' else ''
         small = self._small_font(font)
         document = QTextDocument()
@@ -151,8 +157,17 @@ class BubbleDelegate(QStyledItemDelegate):
         else:
             time_metrics = QFontMetricsF(small)
             time_width = time_metrics.horizontalAdvance(layout.time_text + ('  ' + layout.mark if layout.mark else ''))
-            bubble_width = max(text_size.width(), time_width) + 2 * self.padding_h
-            bubble_height = text_size.height() + time_metrics.height() + 2 * self.padding_v
+            layout.quote_name = layout.quote_text = ''
+            layout.quote_height = 0
+            quote_width = 0
+            if reply:
+                limit = self._bubble_width_limit(width) - 2 * self.padding_h
+                layout.quote_name = translate('message_pane', 'You') if reply['outgoing'] else (reply['name'] or translate('message_pane', 'Them'))
+                layout.quote_text = time_metrics.elidedText(' '.join(str(reply['text']).split()), Qt.TextElideMode.ElideRight, limit - 14)
+                quote_width = min(limit, max(time_metrics.horizontalAdvance(layout.quote_text), time_metrics.horizontalAdvance(layout.quote_name)) + 14)
+                layout.quote_height = 2 * time_metrics.height() + 8 + 4      # two lines, padding, gap below
+            bubble_width = max(text_size.width(), time_width, quote_width) + 2 * self.padding_h
+            bubble_height = text_size.height() + time_metrics.height() + 2 * self.padding_v + layout.quote_height
             layout.bubble_size = QSizeF(bubble_width, bubble_height)
             height = bubble_height
             if layout.name_text:
@@ -197,7 +212,34 @@ class BubbleDelegate(QStyledItemDelegate):
     def text_origin(self, layout, bubble):
         if layout.kind == 'note':
             return bubble.topLeft()
-        return QPointF(bubble.left() + self.padding_h, bubble.top() + self.padding_v)
+        return QPointF(bubble.left() + self.padding_h, bubble.top() + self.padding_v + (layout.quote_height or 0))
+
+    def quote_rect(self, layout, bubble):
+        return QRectF(bubble.left() + self.padding_h, bubble.top() + self.padding_v, bubble.width() - 2 * self.padding_h, layout.quote_height - 4)
+
+    def quote_at(self, index, rect, position):
+        """The reply dict when a point of the view is on a reply's quote, else None."""
+        item = self._item(index)
+        if item is None or not item.reply:
+            return None
+        layout = self.layout(index, rect.width(), self.parent().font())
+        if not layout.quote_height:
+            return None
+        bubble = self.bubble_rect(layout, item, QRectF(rect))
+        return item.reply if self.quote_rect(layout, bubble).contains(QPointF(position)) else None
+
+    flashed_id = None
+
+    def flash(self, message_id):
+        """Point a message out for a moment (a quote was clicked)."""
+        from PyQt6.QtCore import QTimer
+        self.flashed_id = message_id
+        self.parent().viewport().update()
+        QTimer.singleShot(1200, self._end_flash)
+
+    def _end_flash(self):
+        self.flashed_id = None
+        self.parent().viewport().update()
 
     def anchor_at(self, index, rect, position):
         """The link under a point of the view (in viewport coordinates), or ''."""
@@ -265,6 +307,21 @@ class BubbleDelegate(QStyledItemDelegate):
         path = QPainterPath()
         path.addRoundedRect(bubble, self.radius, self.radius)
         painter.fillPath(path, fill)
+        if item.id == self.flashed_id:
+            painter.fillPath(path, QColor(255, 200, 0, 110))
+        if layout.quote_height:
+            quote = self.quote_rect(layout, bubble)
+            quote_path = QPainterPath()
+            quote_path.addRoundedRect(quote, 6, 6)
+            painter.fillPath(quote_path, QColor(0, 0, 0, 22) if not is_dark_theme() else QColor(255, 255, 255, 26))
+            accent = QColor('#58a6ff') if is_dark_theme() else QColor('#1a73e8')
+            painter.fillRect(QRectF(quote.left(), quote.top() + 3, 3, quote.height() - 6), accent)
+            metrics = QFontMetricsF(small)
+            painter.setFont(small)
+            painter.setPen(accent)
+            painter.drawText(QRectF(quote.left() + 9, quote.top() + 3, quote.width() - 12, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.quote_name)
+            painter.setPen(secondary)
+            painter.drawText(QRectF(quote.left() + 9, quote.top() + 3 + metrics.height(), quote.width() - 12, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.quote_text)
 
         context.palette = self._text_palette(palette, text_colour if layout.kind == 'text' else secondary)
         painter.save()
@@ -336,6 +393,11 @@ class BubbleDelegate(QStyledItemDelegate):
         painter.setPen(colour)
         painter.setFont(font)
         painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, text)
+
+
+def translate(context, text):
+    from blink.util import translate as _translate
+    return _translate(context, text)
 
 
 def _(text):
