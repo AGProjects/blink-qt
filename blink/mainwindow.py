@@ -245,16 +245,21 @@ class MainWindow(base_class, ui_class):
         self.message_pane_action.toggled.connect(self.set_message_pane_visible)
 
     def refresh_devices(self):
+        """Read the sound devices again; a chosen device that is gone falls back to the system default.
+        Each side is checked against its own list: a microphone need not be a speaker too."""
         SIPApplication.engine._ua.refresh_sound_devices()
         settings = SIPSimpleSettings()
-        in_out_devices = list(set(SIPApplication.engine.input_devices) & set(SIPApplication.engine.output_devices))
-        in_out_devices.append('system_default')
-        if settings.audio.input_device not in in_out_devices:
-            settings.audio.input_device = 'system_default'
-        if settings.audio.output_device not in in_out_devices:
-            settings.audio.output_device = 'system_default'
-
-        settings.save()
+        inputs = set(SIPApplication.engine.input_devices) | {'system_default', None}
+        outputs = set(SIPApplication.engine.output_devices) | {'system_default', None}
+        changed = False
+        for name, available in (('input_device', inputs), ('output_device', outputs), ('alert_device', outputs)):
+            device = getattr(settings.audio, name)
+            if device not in available:
+                ActivityLog().info(f'[audio] {name.replace("_", " ").capitalize()} {device} is gone, using the system default')
+                setattr(settings.audio, name, 'system_default')
+                changed = True
+        if changed:
+            settings.save()
         self._update_combined_audio_devices()
 
     def setupUi(self):
