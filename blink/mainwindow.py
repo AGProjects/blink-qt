@@ -5,8 +5,8 @@ import os
 from functools import partial
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QSettings, QSize, QTimer, QUrl, QTranslator
-from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QActionGroup, QShortcut
+from PyQt6.QtCore import Qt, QRectF, QSettings, QSize, QTimer, QUrl, QTranslator
+from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QAction, QActionGroup, QPainter, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
 from PyQt6.QtWidgets import QMessageBox, QProgressBar, QSplitter
 
@@ -26,6 +26,7 @@ from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSe
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
+from blink.launcher import LauncherBadge
 from blink.logging import ActivityLog
 from blink.messagepane import MessagePane
 from blink.preferences import PreferencesWindow
@@ -63,6 +64,12 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkFileTransferNewIncoming')
         notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
+        self.launcher_badge = LauncherBadge()       # the unread count on the dock icon
+        # an incoming message changes the unread counts: recounted from history, coalesced
+        self._unread_timer = QTimer(self)
+        self._unread_timer.setSingleShot(True)
+        self._unread_timer.setInterval(300)
+        self._unread_timer.timeout.connect(lambda: HistoryManager().message_history.get_unread_messages())
         notification_center.add_observer(self, name='ChatSessionUnreadMessagesCountChanged')
         notification_center.add_observer(self, name='BlinkMessageHistoryUnreadMessagesDidLoad')
         notification_center.add_observer(self, name='BlinkMessageNewUnread')
@@ -1103,8 +1110,43 @@ class MainWindow(base_class, ui_class):
 
     @run_in_gui_thread
     def _NH_BlinkUnreadMessagesChanged(self, notification):
-        # the count is on the Messages group of the contact list (ContactModel), not above the call buttons
+        # the count is on the Messages group of the contact list (ContactModel) and on the dock icon,
+        # not above the call buttons
         self.open_unread_messages_button.setVisible(False)
+        self.launcher_badge.set_count(self.total_unread_messages)
+        self._update_tray_icon(self.total_unread_messages)
+
+    _tray_count = 0
+
+    def _update_tray_icon(self, count):
+        """The unread count on the icon in the system tray (the top bar): a red badge with the number."""
+        if self.system_tray_icon is None or count == self._tray_count:
+            return
+        self._tray_count = count
+        icon = QIcon(Resources.get('icons/blink.png'))
+        if count:
+            size = 64
+            pixmap = icon.pixmap(size, size)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            text = str(count) if count < 100 else '99+'
+            font = painter.font()
+            font.setBold(True)
+            font.setPixelSize(int(size * (0.42 if len(text) < 3 else 0.32)))
+            painter.setFont(font)
+            diameter = int(size * 0.62)
+            width = max(diameter, painter.fontMetrics().horizontalAdvance(text) + int(size * 0.18))
+            badge = QRectF(size - width, 0, width, diameter)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor('#e0245e'))
+            painter.drawRoundedRect(badge, diameter / 2, diameter / 2)
+            painter.setPen(QColor('#ffffff'))
+            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
+            painter.end()
+            icon = QIcon(pixmap)
+        self.system_tray_icon.setIcon(icon)
+        self.system_tray_icon.setToolTip(translate('main_window', 'Blink: 1 unread message') if count == 1 else
+                                         translate('main_window', 'Blink: %d unread messages') % count if count else 'Blink')
 
     def _NH_BlinkMessageNewUnread(self, notification):
         uri = conversation_key(notification.sender)     # keyed as history files the conversation
@@ -1117,6 +1159,10 @@ class MainWindow(base_class, ui_class):
             self.unread_messages[uri] = self.unread_messages[uri] + 1
 
         NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
+
+    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        if getattr(notification.data, 'direction', None) == 'incoming':
+            self._unread_timer.start()
 
     def _NH_BlinkMessageHistoryUnreadMessagesDidLoad(self, notification):
         unread_messages = notification.data.unread_messages
