@@ -56,8 +56,8 @@ class LogsWindow(base_class, ui_class):
     def updateCheckedButton(self):
         settings = SIPSimpleSettings()
         current_tab = self.logsTabWidget.currentWidget().objectName()
-        if current_tab == 'activity':
-            # the activity log is always on
+        if current_tab in ('activity', 'rtp'):
+            # the activity and RTP logs are always on
             self.log_enabled_button.setVisible(False)
             return
         self.log_enabled_button.setVisible(True)

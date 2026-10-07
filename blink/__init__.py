@@ -238,6 +238,8 @@ class Blink(QApplication, metaclass=QSingleton):
                                    agent=lambda: SIPSimpleSettings().user_agent,
                                    log=lambda line: ActivityLog().info(line))
         SharedSettingsMigration().start()
+        from blink.rtp_log import RTPLog
+        RTPLog().start()        # the RTP Media tab of the logs window and logs/rtp_trace.txt
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
 
         notification_center = NotificationCenter()

@@ -125,6 +125,36 @@
       </property>
      </widget>
     </widget>
+    <widget class="QWidget" name="rtp">
+     <attribute name="title">
+      <string>RTP Media</string>
+     </attribute>
+     <widget class="QPlainTextEdit" name="rtp_logs_view">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>795</width>
+        <height>520</height>
+       </rect>
+      </property>
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="undoRedoEnabled">
+       <bool>false</bool>
+      </property>
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
+      <property name="plainText">
+       <string notr="true"/>
+      </property>
+     </widget>
+    </widget>
     <widget class="QWidget" name="msrp">
      <attribute name="title">
       <string>MSRP Protocol</string>
