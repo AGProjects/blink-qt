@@ -2932,6 +2932,15 @@ class Contact(object):
             return self.settings.name
 
     @property
+    def display_name(self):
+        """The first line in the contact list: the name, then the organization in brackets."""
+        name = self.name or ''
+        organization = (getattr(self.settings, 'organization', None) or '').strip() if self.type == 'addressbook' else ''
+        if not organization or organization.lower() == name.lower():
+            return name
+        return f'{name} ({organization})' if name else organization
+
+    @property
     def unread_messages(self):
         main_window = QApplication.instance().main_window
         try:
@@ -3292,7 +3301,7 @@ class ContactWidget(base_class, ui_class):
             painter.end()
 
     def init_from_contact(self, contact):
-        self.name_label.setText(contact.name)
+        self.name_label.setText(getattr(contact, 'display_name', contact.name))
         self.info_label.setText(contact.info)
         self.icon_label.setPixmap(contact.pixmap)
         self.state_label.state = contact.state
@@ -6574,6 +6583,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.target_group = target_group
         self.contact_uri_model.init_with_address(sip_address)
         self.name_editor.setText('')
+        self.organization_editor.setText('')
         self.icon_selector.init_with_contact(None)
         self.presence.setChecked(True)
         self.preferred_media.setCurrentIndex(0)
@@ -6587,6 +6597,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.edited_contact = contact
         self.contact_uri_model.init_with_contact(contact)
         self.name_editor.setText(contact.name)
+        self.organization_editor.setText(contact.organization or '')
         self.icon_selector.init_with_contact(contact)
         self.presence.setChecked(contact.presence.subscribe)
         self.auto_answer.setChecked(contact.auto_answer)
@@ -6637,6 +6648,7 @@ class ContactEditorDialog(base_class, ui_class):
                 contact.uris.default = contact_uri
 
         contact.name = self.name_editor.text()
+        contact.organization = self.organization_editor.text().strip()     # shared with the other clients (ag-projects:sipsimple)
         contact.preferred_media = self.preferred_media.itemData(self.preferred_media.currentIndex())
         if self.presence.isChecked():
             contact.presence.policy = 'allow'

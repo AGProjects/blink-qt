@@ -52,6 +52,26 @@
      </property>
     </widget>
    </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="organization_label">
+     <property name="text">
+      <string>Organization:</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="LineEdit" name="organization_editor">
+     <property name="inactiveText" stdset="0">
+      <string>Company or organization</string>
+     </property>
+     <property name="widgetSpacing" stdset="0">
+      <number>0</number>
+     </property>
+    </widget>
+   </item>
    <item row="0" column="2" rowspan="2">
     <widget class="IconSelector" name="icon_selector">
      <property name="sizePolicy">
@@ -293,6 +313,7 @@
  </customwidgets>
  <tabstops>
   <tabstop>name_editor</tabstop>
+  <tabstop>organization_editor</tabstop>
   <tabstop>addresses_table</tabstop>
   <tabstop>presence</tabstop>
   <tabstop>preferred_media</tabstop>
