@@ -1383,8 +1383,19 @@ class MainWindow(base_class, ui_class):
                     self.export_pgp_key_action.setEnabled(True)
 
 
+    # domains whose SIP servers present the certificate of another domain: the TLS name an
+    # account of the domain gets when it has none (added, or loaded at start)
+    tls_name_exceptions = {'sylk.link': 'sip2sip.info'}
+
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
+
+        if account is not BonjourAccount() and not account.sip.tls_name:
+            tls_name = self.tls_name_exceptions.get(account.id.domain.lower())
+            if tls_name:
+                account.sip.tls_name = tls_name
+                account.save()
+                ActivityLog().info(f'[accounts] TLS name of {account.id} set to {tls_name}, the certificate of {account.id.domain} servers')
 
         action = self.accounts_menu.addAction(account.id if account is not BonjourAccount() else 'Bonjour')
         action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
