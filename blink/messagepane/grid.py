@@ -10,6 +10,13 @@ a movie has the play badge and its length, a location its map
 its download got. The file's size is on a pill at the bottom left, the info
 button at the top right. A click opens the file (or fetches it), a location
 its map window; the context menu has Open, Save As, Info and Delete.
+
+Tiles can be ticked: the round box at the top left (shown under the mouse, and
+on every tile while selecting), or Select; while selecting a click ticks a tile
+and shift-click ticks the ones from the last tick to it. The bar at the bottom
+says how many are ticked and offers Forward, Delete (all at once, after one
+question) and Done (Escape). Ticked files that are here can be dragged out, to
+a folder or another application.
 """
 
 import math
@@ -17,9 +24,9 @@ import os
 
 from datetime import datetime
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, QSettings, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFontMetricsF, QPainter, QPainterPath, QPen
-from PyQt6.QtWidgets import QAbstractScrollArea, QMenu
+from PyQt6.QtCore import QMimeData, QPoint, QPointF, QRectF, QSettings, QSize, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor, QDrag, QFontMetricsF, QPainter, QPainterPath, QPalette, QPen
+from PyQt6.QtWidgets import QAbstractScrollArea, QApplication, QHBoxLayout, QLabel, QMenu, QPushButton, QWidget
 
 from blink.util import translate
 from blink.widgets.color import is_dark_theme, secondary_text_color
@@ -33,6 +40,9 @@ GRID_CATEGORIES = ('image', 'video', 'location')
 
 class GridView(QAbstractScrollArea):
     actionRequested = pyqtSignal(str, object)      # as TranscriptView's: 'open', 'info', 'delete', 'location', MessageItem
+    deleteRequested = pyqtSignal(list)              # the ticked MessageItems
+    forwardRequested = pyqtSignal(list)
+    selectingChanged = pyqtSignal(bool)
 
     margin = 10
     gap = 4
@@ -50,6 +60,12 @@ class GridView(QAbstractScrollArea):
         self._paths = {}
         self._anchor = None             # distance from the bottom before rows were inserted at the top
         self._stick = True
+        self.selecting = False
+        self.selected = []              # ticked message ids, in the order they were ticked
+        self._last_ticked = None
+        self._hover_id = None
+        self._press = None              # (position, item) of a press that may become a drag
+        self.selection_bar = self._make_selection_bar()
         self.setFrameShape(QAbstractScrollArea.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.viewport().setMouseTracking(True)
@@ -76,6 +92,7 @@ class GridView(QAbstractScrollArea):
         self.model = model
         self._paths = {}
         self._stick = True
+        self.set_selecting(False)
         if model is not None:
             for signal, slot in self._connections(model):
                 signal.connect(slot)
@@ -83,17 +100,22 @@ class GridView(QAbstractScrollArea):
 
     def _connections(self, model):
         return ((model.modelReset, self._SH_Reset), (model.rowsAboutToBeInserted, self._SH_AboutToInsert), (model.rowsInserted, self._relayout),
-                (model.rowsRemoved, self._relayout), (model.dataChanged, self._SH_DataChanged), (model.layoutChanged, self._relayout))
+                (model.rowsRemoved, self._SH_Removed), (model.dataChanged, self._SH_DataChanged), (model.layoutChanged, self._relayout))
 
     def _SH_Reset(self):
         self._paths = {}
         self._stick = True
+        self._prune_selection()
         self._relayout()
 
     def _SH_AboutToInsert(self, parent, first, last):
         scrollbar = self.verticalScrollBar()
         if first == 0 and self.model.rowCount() > 0:
             self._anchor = scrollbar.maximum() - scrollbar.value()
+
+    def _SH_Removed(self, *args):
+        self._prune_selection()
+        self._relayout()
 
     def _SH_DataChanged(self, *args):
         self.viewport().update()
@@ -109,6 +131,106 @@ class GridView(QAbstractScrollArea):
             self.columns = columns
             QSettings().setValue('message_pane/grid_columns', columns)
             self._relayout()
+
+    # Selection
+
+    def _make_selection_bar(self):
+        bar = QWidget(self)
+        bar.setAutoFillBackground(True)
+        bar.setBackgroundRole(QPalette.ColorRole.Window)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(10, 6, 10, 6)
+        self.selection_label = QLabel(bar)
+        layout.addWidget(self.selection_label, 1)
+        self.forward_button = QPushButton(translate('message_pane', 'Forward…'), bar)
+        self.forward_button.clicked.connect(lambda: self.forwardRequested.emit(self.selected_items()))
+        self.delete_button = QPushButton(translate('message_pane', 'Delete'), bar)
+        self.delete_button.clicked.connect(lambda: self.deleteRequested.emit(self.selected_items()))
+        done = QPushButton(translate('message_pane', 'Done'), bar)
+        done.clicked.connect(lambda: self.set_selecting(False))
+        for button in (self.forward_button, self.delete_button, done):
+            layout.addWidget(button)
+        bar.hide()
+        return bar
+
+    def set_selecting(self, selecting):
+        if not selecting:
+            self.selected = []
+            self._last_ticked = None
+        if selecting != self.selecting:
+            self.selecting = selecting
+            self.selectingChanged.emit(selecting)
+        self._update_selection_bar()
+        self.viewport().update()
+
+    def selected_items(self):
+        if self.model is None:
+            return []
+        return [self.model.ids[message_id] for message_id in self.selected if message_id in self.model.ids]
+
+    def _prune_selection(self):
+        if self.model is not None and self.selected:
+            self.selected = [message_id for message_id in self.selected if message_id in self.model.ids]
+            self._update_selection_bar()
+
+    def _tick(self, item, extend=False):
+        if not self.selecting:
+            self.set_selecting(True)
+        items = self.model.items
+        if extend and self._last_ticked in self.model.ids:
+            first, last = sorted((items.index(self.model.ids[self._last_ticked]), items.index(item)))
+            for other in items[first:last + 1]:
+                if other.id not in self.selected:
+                    self.selected.append(other.id)
+        elif item.id in self.selected:
+            self.selected.remove(item.id)
+        else:
+            self.selected.append(item.id)
+        self._last_ticked = item.id
+        self._update_selection_bar()
+        self.viewport().update()
+
+    def _update_selection_bar(self):
+        count = len(self.selected)
+        self.selection_label.setText(translate('message_pane', 'Tick the tiles to select them') if not count else
+                                     translate('message_pane', '1 selected') if count == 1 else translate('message_pane', '%d selected') % count)
+        self.forward_button.setEnabled(count > 0 and self.receivers(self.forwardRequested) > 0)
+        self.delete_button.setEnabled(count > 0)
+        self.selection_bar.setVisible(self.selecting)
+        self._place_selection_bar()
+
+    def _place_selection_bar(self):
+        height = self.selection_bar.sizeHint().height()
+        self.selection_bar.setGeometry(0, self.height() - height, self.width(), height)
+        self.setViewportMargins(0, 0, 0, height if self.selecting else 0)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and self.selecting:
+            self.set_selecting(False)
+            return
+        super().keyPressEvent(event)
+
+    @staticmethod
+    def _tick_rect(rect):
+        return QRectF(rect.left() + 4, rect.top() + 4, 20, 20)
+
+    def _paint_tick(self, painter, rect, checked):
+        painter.save()
+        if checked:
+            painter.setPen(QPen(QColor('#ffffff'), 1.5))
+            painter.setBrush(self.palette().highlight().color())
+            painter.drawEllipse(rect)
+            painter.setPen(QPen(QColor('#ffffff'), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            check = QPainterPath(QPointF(rect.left() + rect.width() * 0.28, rect.top() + rect.height() * 0.52))
+            check.lineTo(QPointF(rect.left() + rect.width() * 0.44, rect.top() + rect.height() * 0.68))
+            check.lineTo(QPointF(rect.left() + rect.width() * 0.73, rect.top() + rect.height() * 0.35))
+            painter.drawPath(check)
+        else:
+            painter.setPen(QPen(QColor(255, 255, 255, 230), 1.5))
+            painter.setBrush(QColor(0, 0, 0, 70))
+            painter.drawEllipse(rect)
+        painter.restore()
 
     # Layout
 
@@ -160,6 +282,7 @@ class GridView(QAbstractScrollArea):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._place_selection_bar()
         self._relayout()
 
     def _SH_Scrolled(self, value):
@@ -259,6 +382,15 @@ class GridView(QAbstractScrollArea):
             self._paint_video_marks(painter, rect, item, small)
         self._paint_size(painter, rect, item, small)
         self._paint_info_button(painter, self._info_rect(rect))
+        checked = item.id in self.selected
+        if checked:
+            painter.save()
+            painter.setPen(QPen(self.palette().highlight().color(), 3))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(1.5, 1.5, -1.5, -1.5), 6, 6)
+            painter.restore()
+        if self.selecting or checked or item.id == self._hover_id:
+            self._paint_tick(painter, self._tick_rect(rect), checked)
 
     def _paint_cover(self, painter, rect, path):
         """The picture (or a movie's poster) filling rect, its middle kept."""
@@ -365,18 +497,63 @@ class GridView(QAbstractScrollArea):
 
     # Mouse
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            item, rect = self._tile_at(event.position().toPoint())
+            self._press = (event.position().toPoint(), item) if item is not None else None
+        super().mousePressEvent(event)
+
     def mouseMoveEvent(self, event):
-        item, rect = self._tile_at(event.position().toPoint())
+        position = event.position().toPoint()
+        if self._press is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            start, item = self._press
+            if (position - start).manhattanLength() >= QApplication.startDragDistance():
+                self._press = None
+                self._drag(item)
+                return
+        item, rect = self._tile_at(position)
+        hover = item.id if item is not None else None
+        if hover != self._hover_id:
+            self._hover_id = hover
+            self.viewport().update()
         self.viewport().setCursor(Qt.CursorShape.PointingHandCursor if item is not None else Qt.CursorShape.ArrowCursor)
         super().mouseMoveEvent(event)
 
+    def leaveEvent(self, event):
+        if self._hover_id is not None:
+            self._hover_id = None
+            self.viewport().update()
+        super().leaveEvent(event)
+
+    def _drag(self, item):
+        """Drag the ticked files that are here (or the one pressed on, when it is not ticked) out."""
+        items = self.selected_items() if item.id in self.selected else [item]
+        paths = [path for path in (self._path(other) for other in items if other.category != 'location') if path]
+        if not paths:
+            return
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(path) for path in paths])
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        from blink.messagepane.media import MediaCache
+        pixmap = MediaCache.instance().thumbnail(paths[0], (96, 96)) if item.category != 'location' else None
+        if pixmap is not None and not pixmap.isNull():
+            drag.setPixmap(pixmap)
+        from blink.logging import ActivityLog
+        ActivityLog().info(f'[ui] Dragging {len(paths)} file(s) out of the message pane')
+        drag.exec(Qt.DropAction.CopyAction)
+
     def mouseReleaseEvent(self, event):
+        self._press = None
         if event.button() != Qt.MouseButton.LeftButton:
             return super().mouseReleaseEvent(event)
         item, rect = self._tile_at(event.position().toPoint())
         if item is None:
             return
-        if self._info_rect(rect).contains(event.position()):
+        shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        if self._tick_rect(rect).contains(event.position()) or self.selecting:
+            self._tick(item, extend=shift)
+        elif self._info_rect(rect).contains(event.position()):
             self.actionRequested.emit('info', item)
         elif item.category == 'location':
             self.actionRequested.emit('location', item)
@@ -397,7 +574,11 @@ class GridView(QAbstractScrollArea):
                 menu.addAction(translate('message_pane', 'Save As…'), lambda: self._save_as(path))
         menu.addSeparator()
         menu.addAction(translate('message_pane', 'Info…'), lambda: self.actionRequested.emit('info', item))
-        menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
+        menu.addAction(translate('message_pane', 'Select'), lambda: self._tick(item) if item.id not in self.selected else None)
+        if self.selecting and self.selected:
+            menu.addAction(translate('message_pane', 'Delete %d Selected…') % len(self.selected), lambda: self.deleteRequested.emit(self.selected_items()))
+        else:
+            menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
         menu.exec(event.globalPos())
 
     def _save_as(self, path):

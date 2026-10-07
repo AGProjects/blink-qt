@@ -103,6 +103,7 @@ class MessagePane(QWidget):
         self.stack.addWidget(self.grid)
         self.grid.progress_of = self.fetcher.progress
         self.grid.actionRequested.connect(self._SH_ActionRequested)
+        self.grid.deleteRequested.connect(self._delete_messages)
         self.grid.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
         self._make_grid_controls()
         self.composer = Composer(self)
@@ -509,12 +510,19 @@ class MessagePane(QWidget):
         self.download_button.setText(translate('message_pane', 'Download All'))
         self.download_button.setToolTip(translate('message_pane', 'Download the videos in view'))
         self.download_button.clicked.connect(self._download_visible)
-        for widget in (self.download_button, self.columns_box, self.grid_button):
+        self.select_button = QToolButton(self.filters)
+        self.select_button.setText(translate('message_pane', 'Select'))
+        self.select_button.setToolTip(translate('message_pane', 'Tick tiles to forward or delete them together'))
+        self.select_button.setCheckable(True)
+        self.select_button.toggled.connect(self.grid.set_selecting)
+        self.grid.selectingChanged.connect(self.select_button.setChecked)
+        for widget in (self.download_button, self.select_button, self.columns_box, self.grid_button):
             self.filters.add_extra(widget)
         self.filters.categoryChosen.connect(lambda category: self._update_mode())
         self.grid_button.hide()
         self.columns_box.hide()
         self.download_button.hide()
+        self.select_button.hide()
 
     def _SH_GridToggled(self, checked):
         QSettings().setValue('message_pane/grid', checked)
@@ -529,6 +537,7 @@ class MessagePane(QWidget):
         grid = tiles and self.grid_button.isChecked()
         self.grid_button.setVisible(tiles)
         self.columns_box.setVisible(grid)
+        self.select_button.setVisible(grid)
         self.download_button.setVisible(grid and category == 'video')
         if model is None:
             return
@@ -666,6 +675,42 @@ class MessagePane(QWidget):
         for_both = both is not None and both.isChecked()
         ActivityLog().info(f'[Message with {key}] Deleted {what} {item.id} from the message pane' + (', also for the other party' if for_both else ''))
         self._remove_message(item.id, item.account_id, for_both, why='deleted here')
+
+    def _delete_messages(self, items):
+        """Delete several messages (the grid's ticked tiles) after one question; one's own
+        also for the other party when asked to (and possible)."""
+        from PyQt6.QtWidgets import QCheckBox, QMessageBox
+        from blink.messagepane.uploads import Uploads
+        from blink.uris import BONJOUR_ACCOUNT_ID
+        items = [item for item in items if item is not None]
+        if not items or self.key is None:
+            return
+        key = self.key
+        stored = [item for item in items if item.upload is None]
+        own = [item for item in stored if item.outgoing and item.account_id != BONJOUR_ACCOUNT_ID and item.state not in ('failed-local', 'pending')]
+        count = len(items)
+        box = QMessageBox(QMessageBox.Icon.Question, translate('message_pane', 'Delete %d messages') % count if count > 1 else translate('message_pane', 'Delete message'),
+                          (translate('message_pane', 'Delete these %d messages from this conversation?') % count if count > 1 else translate('message_pane', 'Delete this message from this conversation?'))
+                          + '\n' + translate('message_pane', 'Files downloaded here are deleted with them.'), parent=self)
+        delete_button = box.addButton(translate('message_pane', 'Delete'), QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        both = None
+        if own:
+            name = getattr(self.contact, 'name', '') or key
+            both = QCheckBox((translate('message_pane', 'Delete the %d I sent for %s too') % (len(own), name)) if len(own) > 1 else translate('message_pane', 'Delete the one I sent for %s too') % name)
+            both.setChecked(True)
+            box.setCheckBox(both)
+        box.exec()
+        if box.clickedButton() is not delete_button:
+            return
+        for_both = both is not None and both.isChecked()
+        ActivityLog().info(f'[Message with {key}] Deleting {count} messages from the message pane' + (f', {len(own)} also for the other party' if for_both else ''))
+        for item in items:
+            if item.upload is not None:
+                Uploads.instance().discard(item.id)
+            else:
+                self._remove_message(item.id, item.account_id, for_both and item in own, why='deleted here')
+        self.grid.set_selecting(False)
 
     def _remove_message(self, message_id, account_id, for_both, why):
         """Hide a message here (with its downloaded file) and, for_both, ask the other party's devices to remove it."""
