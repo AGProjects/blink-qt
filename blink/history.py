@@ -150,10 +150,7 @@ class HistoryManager(object, metaclass=Singleton):
             self.save()
         self._remove_account_keys(account)
         # the db thread runs these after the removal above
-        if getattr(notification.data, 'first_sync', False):
-            self.message_history.settle_first_sync_read(str(notification.sender.id), marker=getattr(notification.data, 'first_sync_marker', None))
         self.message_history.get_unread_messages()
-        self.message_history.log_unread(str(notification.sender.id))
         if BlinkSettings().interface.show_messages_group:
             self.message_history.get_all_contacts()
 
@@ -334,8 +331,12 @@ class HistoryManager(object, metaclass=Singleton):
 
     def _NH_BlinkJournalDidApply(self, notification):
         # after a journal run: unread counts and the Messages group come from history,
-        # and the database is counted (queued after the run's writes on the db thread)
+        # and the database is counted (queued after the run's writes on the db thread); after a
+        # first sync the read state is settled first, which also ends the first sync (its marker)
+        if getattr(notification.data, 'first_sync', False):
+            self.message_history.settle_first_sync_read(str(notification.sender.id), marker=getattr(notification.data, 'first_sync_marker', None))
         self.message_history.get_unread_messages()
+        self.message_history.log_unread(str(notification.sender.id))
         if BlinkSettings().interface.show_messages_group:
             self.message_history.get_all_contacts()
         self.message_history.journal_db_check(str(notification.sender.id), getattr(notification.data, 'stats_path', None))
