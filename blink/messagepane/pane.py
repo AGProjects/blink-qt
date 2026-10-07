@@ -487,6 +487,17 @@ class MessagePane(QWidget):
             self.composer.set_editing({'id': item.id, 'text': content, 'timestamp': item.timestamp, 'account_id': item.account_id})
         elif action == 'caption':
             self._edit_caption(item)
+        elif action == 'info':
+            from blink.messagepane.files import local_file
+            from blink.messagepane.format import bubble_kind, delivery_mark
+            from blink.messagepane.info import show_message_info
+            progress = self.fetcher.progress(item.id)
+            shown = {'Drawn as': 'picture' if item.category == 'image' else bubble_kind(item),
+                     'Delivery mark': delivery_mark(item)[0] or '—',
+                     'File here': local_file(item) if item.category in ('image', 'audio', 'video', 'other') else None,
+                     'Downloading': f'{int(progress * 100)}%' if progress is not None else None,
+                     'Unread here': 'yes' if item.direction == 'incoming' and not item.read else None}
+            show_message_info(self, item, shown)
         elif action == 'reply':
             from blink.messagepane.format import plain_summary
             name = translate('message_pane', 'yourself') if item.outgoing else (getattr(self.contact, 'name', '') or item.display_name or self.key)
