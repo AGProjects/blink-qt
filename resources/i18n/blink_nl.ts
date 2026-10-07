@@ -2010,8 +2010,8 @@ border-color: #3278c8;
     </message>
     <message>
         <location filename="../blink.ui" line="340"/>
-        <source>Switch to Calls</source>
-        <translation>Ga naar gesprekken</translation>
+        <source>Back to Calls</source>
+        <translation>Terug naar gesprekken</translation>
     </message>
     <message>
         <location filename="../blink.ui" line="485"/>
@@ -4293,14 +4293,24 @@ QToolButton:pressed {
 <context>
     <name>switch_view_button</name>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="265"/>
-        <source>Switch to Calls</source>
-        <translation>Ga naar gesprekken</translation>
+        <location filename="../../blink/widgets/buttons.py" line="263"/>
+        <source>Back to Calls</source>
+        <translation>Terug naar gesprekken</translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="265"/>
-        <source>Switch to Contacts</source>
-        <translation>Ga naar contacten</translation>
+        <location filename="../../blink/widgets/buttons.py" line="263"/>
+        <source>Back to Contacts</source>
+        <translation>Terug naar contacten</translation>
+    </message>
+    <message>
+        <location filename="../../blink/widgets/buttons.py" line="351"/>
+        <source>Back to the call in progress</source>
+        <translation>Terug naar het lopende gesprek</translation>
+    </message>
+    <message>
+        <location filename="../../blink/widgets/buttons.py" line="353"/>
+        <source>Back to %d calls in progress</source>
+        <translation>Terug naar %d lopende gesprekken</translation>
     </message>
     <message>
         <location filename="../../blink/widgets/buttons.py" line="266"/>

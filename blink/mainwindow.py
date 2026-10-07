@@ -111,6 +111,7 @@ class MainWindow(base_class, ui_class):
         self.open_unread_messages_button.setEnabled(False)
         self.open_unread_messages_button.setVisible(False)
         self.active_sessions_label.hide()
+        self.switch_view_button.hide()      # shown only while there are calls (_SH_AudioSessionModelChangedStructure)
 
         # System tray
         if QSystemTrayIcon.isSystemTrayAvailable():
@@ -1189,8 +1190,8 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AudioSessionModelChangedStructure(self):
         active_sessions = self.session_model.active_sessions
-        self.active_sessions_label.setText(translate('main_window', 'There is 1 active call') if len(active_sessions) == 1 else translate('main_window', 'There are %d active calls') % len(active_sessions))
-        self.active_sessions_label.setVisible(any(active_sessions))
+        self.switch_view_button.active_calls = len(active_sessions)     # the red "Return to the call" button, no banner
+        self.switch_view_button.setVisible(bool(self.session_model.sessions))
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
         active_session = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else Null

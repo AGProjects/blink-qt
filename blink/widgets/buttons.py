@@ -260,8 +260,22 @@ class SwitchViewButton(QPushButton):
 
     viewChanged = pyqtSignal(int)
 
-    button_text = {ContactView: QT_TRANSLATE_NOOP('switch_view_button', 'Switch to Calls'), SessionView: QT_TRANSLATE_NOOP('switch_view_button', 'Switch to Contacts')}
+    button_text = {ContactView: QT_TRANSLATE_NOOP('switch_view_button', 'Back to Calls'), SessionView: QT_TRANSLATE_NOOP('switch_view_button', 'Back to Contacts')}
     button_dnd_text = {ContactView: QT_TRANSLATE_NOOP('switch_view_button', 'Drag here to add to a conference'), SessionView: QT_TRANSLATE_NOOP('switch_view_button', 'Drag here to go back to contacts')}
+
+    # In the contact view while calls are up, the button is the way back to them: red, and says so.
+    active_calls_style_sheet = """
+                          QPushButton {
+                              background-color: #c0002f;
+                              border: 1px solid #800020;
+                              border-radius: 4px;
+                              color: white;
+                              font-weight: bold;
+                              padding: 2px 8px;
+                          }
+                          QPushButton:hover { background-color: #d8103f; }
+                          QPushButton:pressed { background-color: #a0002a; }
+                       """
 
     dnd_style_sheet1 = """
                           QPushButton {
@@ -287,6 +301,7 @@ class SwitchViewButton(QPushButton):
         super(SwitchViewButton, self).__init__(parent)
         self.setAcceptDrops(True)
         self.__dict__['dnd_active'] = False
+        self.__dict__['active_calls'] = 0
         self.view = self.ContactView
         self.original_height = 20  # used to restore button size after DND
         self.dnd_timer = QTimer(self)
@@ -304,15 +319,42 @@ class SwitchViewButton(QPushButton):
         if value not in (self.ContactView, self.SessionView):
             raise ValueError("invalid view value: %r" % value)
         self.__dict__['view'] = value
-        if self.dnd_active:
-            text = self.button_dnd_text[value]
-        else:
-            text = self.button_text[value]
-        self.setText(translate('switch_view_button', text))
+        self._update_appearance()
         self.viewChanged.emit(value)
 
     view = property(_get_view, _set_view)
     del _get_view, _set_view
+
+    def _get_active_calls(self):
+        return self.__dict__['active_calls']
+
+    def _set_active_calls(self, value):
+        if self.__dict__.get('active_calls', None) == value:
+            return
+        self.__dict__['active_calls'] = value
+        self._update_appearance()
+
+    active_calls = property(_get_active_calls, _set_active_calls)
+    del _get_active_calls, _set_active_calls
+
+    def _update_appearance(self):
+        """Text and look for the view, the calls in progress and drag and drop."""
+        view = self.__dict__.get('view')
+        if view is None:
+            return
+        if self.__dict__.get('dnd_active'):
+            self.setText(translate('switch_view_button', self.button_dnd_text[view]))
+            return
+        calls = self.__dict__.get('active_calls', 0)
+        if view == self.ContactView and calls:
+            if calls == 1:
+                self.setText(translate('switch_view_button', 'Back to the call in progress'))
+            else:
+                self.setText(translate('switch_view_button', 'Back to %d calls in progress') % calls)
+            self.setStyleSheet(self.active_calls_style_sheet)
+        else:
+            self.setText(translate('switch_view_button', self.button_text[view]))
+            self.setStyleSheet('')
 
     def _get_dnd_active(self):
         return self.__dict__['dnd_active']
@@ -328,9 +370,8 @@ class SwitchViewButton(QPushButton):
             self.setText(translate('switch_view_button', self.button_dnd_text[self.view]))
             self.setFixedHeight(40)
         else:
-            self.setStyleSheet('')
-            self.setText(translate('switch_view_button', self.button_text[self.view]))
             self.setFixedHeight(self.original_height)
+            self._update_appearance()
 
     dnd_active = property(_get_dnd_active, _set_dnd_active)
     del _get_dnd_active, _set_dnd_active

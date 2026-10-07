@@ -1868,7 +1868,7 @@ border-color: #3278c8;
     </message>
     <message>
         <location filename="../blink.ui" line="340"/>
-        <source>Switch to Calls</source>
+        <source>Back to Calls</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -4071,13 +4071,23 @@ QToolButton:pressed {
 <context>
     <name>switch_view_button</name>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="265"/>
-        <source>Switch to Calls</source>
+        <location filename="../../blink/widgets/buttons.py" line="263"/>
+        <source>Back to Calls</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../blink/widgets/buttons.py" line="265"/>
-        <source>Switch to Contacts</source>
+        <location filename="../../blink/widgets/buttons.py" line="263"/>
+        <source>Back to Contacts</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/widgets/buttons.py" line="351"/>
+        <source>Back to the call in progress</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../blink/widgets/buttons.py" line="353"/>
+        <source>Back to %d calls in progress</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

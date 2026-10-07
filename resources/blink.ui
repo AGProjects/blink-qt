@@ -337,7 +337,7 @@
        <enum>Qt::TabFocus</enum>
       </property>
       <property name="text">
-       <string>Switch to Calls</string>
+       <string>Back to Calls</string>
       </property>
       <property name="iconSize">
        <size>
