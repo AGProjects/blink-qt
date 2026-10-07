@@ -3000,9 +3000,12 @@ class Contact(object):
             # conversation is the neighbour's instance id.
             in_messages_group = is_messages_group(getattr(self.group, 'settings', None))
             if in_messages_group:
-                # the last typed message of the conversation, when there is one
-                from blink.history import ConversationPreviews
-                preview = ConversationPreviews().preview(self.conversation_keys)
+                # they are typing, else the last typed message of the conversation, when there is one
+                from blink.history import ConversationPreviews, ConversationTyping
+                keys = self.conversation_keys
+                if ConversationTyping().is_typing(keys):
+                    return translate('contact_list', '✎ is typing…')
+                preview = ConversationPreviews().preview(keys)
                 if preview:
                     return preview
             instance_id = neighbour_instance_id(self, str(self.uri.uri) if self.uri is not None else None)

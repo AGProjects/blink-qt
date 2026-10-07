@@ -47,7 +47,7 @@ from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, Dat
 from sqlobject import connectionForURI
 from sqlobject import dberrors
 
-__all__ = ['HistoryManager', 'ConversationPreviews']
+__all__ = ['HistoryManager', 'ConversationPreviews', 'ConversationTyping']
 
 
 @implementer(IObserver)
@@ -61,6 +61,7 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history = MessageHistory()
         self.download_history = DownloadHistory()
         ConversationPreviews()
+        ConversationTyping()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -2394,6 +2395,71 @@ class ConversationPreviews(object, metaclass=Singleton):
             return None
         MessageHistory().update_decrypted_message(message_id, plaintext)
         return plaintext
+
+
+@implementer(IObserver)
+class ConversationTyping(object, metaclass=Singleton):
+    """Which conversations the other party is typing in, by conversation key.
+
+    From is-composing indications (replicated ones, our own typing on another
+    device, never get here). An active state lasts its refresh interval plus a
+    second unless renewed; idle, or a message stored from them, ends it.
+    Changes are announced as BlinkConversationPreviewsDidChange with data.keys,
+    as the contact row's second line is what they change.
+    """
+
+    grace = 1
+
+    def __init__(self):
+        self.typing = {}            # key: expiry (time.monotonic())
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkGotComposingIndication')
+        notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
+
+    def is_typing(self, keys):
+        now = time.monotonic()
+        return any(self.typing.get(key, 0) > now for key in keys)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkGotComposingIndication(self, notification):
+        session = notification.sender
+        try:
+            key = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else conversation_key(str(session.contact.uri.uri), session.account)
+        except AttributeError:
+            return
+        if not key:
+            return
+        data = notification.data
+        if data.state == 'active':
+            refresh = data.refresh or 120
+            was_typing = self.is_typing([key])
+            self.typing[key] = time.monotonic() + refresh + self.grace
+            call_later(refresh + self.grace, self._expire, key)
+            if not was_typing:
+                self._changed(key)
+        else:
+            self._stop(key)
+
+    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        if notification.data.direction == 'incoming':
+            self._stop(str(notification.data.remote_uri))
+
+    def _stop(self, key):
+        if self.typing.pop(key, None) is not None:
+            self._changed(key)
+
+    def _expire(self, key):
+        expiry = self.typing.get(key)
+        if expiry is not None and expiry <= time.monotonic() + 0.05:
+            del self.typing[key]
+            self._changed(key)
+
+    def _changed(self, key):
+        NotificationCenter().post_notification('BlinkConversationPreviewsDidChange', sender=self, data=NotificationData(keys={key}))
 
 
 class IconDescriptor(object):
