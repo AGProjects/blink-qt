@@ -121,6 +121,8 @@ class ConversationHeader(QWidget):
     dayChosen = pyqtSignal(object)      # a date to jump to
     fontStep = pyqtSignal(int)          # -1 smaller, +1 larger
     locationAction = pyqtSignal(str)    # 'send' (current location) or 'request' (theirs)
+    addressChosen = pyqtSignal(object)  # another address of the contact (a contact URI)
+    accountChosen = pyqtSignal(object)  # the account to send from, chosen by the user
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -153,11 +155,37 @@ class ConversationHeader(QWidget):
         for label in (self.name_label, self.info_label):
             label.setTextFormat(Qt.TextFormat.PlainText)
             label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        # the address below the name; with several, ▾ switches to another (another conversation)
+        info_row = QHBoxLayout()
+        info_row.setSpacing(2)
+        info_row.addWidget(self.info_label, 1)
+        self.address_button = QToolButton(self)
+        self.address_button.setAutoRaise(True)
+        self.address_button.setText('▾')
+        self.address_button.setToolTip(translate('message_pane', 'Other addresses of this contact'))
+        self.address_menu = QMenu(self.address_button)
+        self.address_menu.aboutToShow.connect(self._fill_address_menu)
+        self.address_button.setMenu(self.address_menu)
+        self.address_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.address_button.setStyleSheet('QToolButton { padding: 0px 2px; } QToolButton::menu-indicator { image: none; }')
+        self.address_button.hide()
+        info_row.addWidget(self.address_button)
         text.addStretch(1)
         text.addWidget(self.name_label)
-        text.addWidget(self.info_label)
+        text.addLayout(info_row)
         text.addStretch(1)
         row.addLayout(text, 1)
+        # with several accounts, the one messages go from, to change
+        self.account_button = QToolButton(self)
+        self.account_button.setAutoRaise(True)
+        self.account_menu = QMenu(self.account_button)
+        self.account_menu.aboutToShow.connect(self._fill_account_menu)
+        self.account_button.setMenu(self.account_menu)
+        self.account_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.account_button.setStyleSheet('QToolButton { border: 1px solid palette(mid); border-radius: 9px; padding: 1px 8px; } QToolButton::menu-indicator { image: none; }')
+        self.account_button.setToolTip(translate('message_pane', 'The account messages are sent from'))
+        self.account_button.hide()
+        row.addWidget(self.account_button)
 
         self.lock_button = self._tool_button()
         self.lock_menu = QMenu(self.lock_button)
@@ -238,6 +266,8 @@ class ConversationHeader(QWidget):
         self.update_info()
         self.update_lock()
         self._update_location_button()
+        self._update_address_button()
+        self._update_account_button()
 
     def set_day_counts(self, key, counts):
         if key == self.key:
@@ -275,6 +305,51 @@ class ConversationHeader(QWidget):
         self.account = account
         self.update_lock()
         self._update_location_button()
+        self._update_account_button()
+
+    # Addresses and accounts
+
+    def _addresses(self):
+        try:
+            return [uri for uri in self.contact.uris if str(getattr(uri, 'uri', '') or '')]
+        except (AttributeError, TypeError):
+            return []
+
+    def _update_address_button(self):
+        self.address_button.setVisible(self.contact is not None and getattr(self.contact, 'type', None) != 'bonjour' and len(self._addresses()) > 1)
+
+    def _fill_address_menu(self):
+        menu = self.address_menu
+        menu.clear()
+        current = str(self.uri.uri) if self.uri is not None else ''
+        for uri in self._addresses():
+            label = str(uri.uri) + (f'   ({uri.type})' if getattr(uri, 'type', None) else '')
+            action = menu.addAction(label, lambda uri=uri: self.addressChosen.emit(uri))
+            action.setCheckable(True)
+            action.setChecked(str(uri.uri) == current)
+
+    @staticmethod
+    def sending_accounts():
+        """The enabled SIP accounts (not Bonjour) a message can go from."""
+        from sipsimple.account import Account
+        return [account for account in AccountManager().iter_accounts() if isinstance(account, Account) and account.enabled]
+
+    def _update_account_button(self):
+        account = self.account
+        shown = self.contact is not None and account is not None and account is not BonjourAccount() and len(self.sending_accounts()) > 1
+        self.account_button.setVisible(shown)
+        if shown:
+            text = translate('message_pane', 'From %s') % account.id
+            metrics = self.account_button.fontMetrics()
+            self.account_button.setText(metrics.elidedText(text, Qt.TextElideMode.ElideMiddle, 220))
+
+    def _fill_account_menu(self):
+        menu = self.account_menu
+        menu.clear()
+        for account in self.sending_accounts():
+            action = menu.addAction(str(account.id), lambda account=account: self.accountChosen.emit(account))
+            action.setCheckable(True)
+            action.setChecked(account is self.account)
 
     # Location
 

@@ -70,6 +70,9 @@ class MessagePane(QWidget):
         self.header.hide()
         self.header.dayChosen.connect(self._jump_to)
         self.header.locationAction.connect(self._location_action)
+        self.header.addressChosen.connect(self._SH_AddressChosen)
+        self.header.accountChosen.connect(self._SH_AccountChosen)
+        self.chosen_accounts = {}           # conversation key: account id the user chose to send from
         layout.addWidget(self.header)
         self.strip = TranscriptStrip(self)
         self.strip.hide()
@@ -166,7 +169,8 @@ class MessagePane(QWidget):
         self.contact, self.uri, self.key = contact, uri, key
         self.composer.set_text(self.unsent.get(key, ''))
         self.composer.show()
-        self.header.set_conversation(contact, uri, key, self._default_account())
+        chosen = self._account(self.chosen_accounts[key]) if key in self.chosen_accounts else None
+        self.header.set_conversation(contact, uri, key, chosen or self._default_account())
         self.header.show()
         cached = key in self.models
         self.transcript.bubble_delegate.peer_avatar = self.header.avatar.draw
@@ -223,6 +227,56 @@ class MessagePane(QWidget):
             return BonjourAccount()
         return AccountManager().default_account
 
+    def _SH_AddressChosen(self, uri):
+        """Another address of the contact: its own conversation."""
+        from blink.contacts import _conversation_key
+        key = _conversation_key(str(uri.uri), AccountManager().default_account)
+        ActivityLog().info(f'[Message with {key}] Switched from {self.key} to the address {uri.uri}')
+        self.show_conversation(self.contact, uri, key)
+
+    def _SH_AccountChosen(self, account):
+        if self.key is None:
+            return
+        self.chosen_accounts[self.key] = account.id
+        self.header.set_account(account)
+        ActivityLog().info(f'[Message with {self.key}] Messages are sent from account {account.id} (chosen)')
+
+    def _confirm_account(self):
+        """Before the first message of a conversation: with several accounts and none of them in the
+        other party's domain, ask which one to send from. False when the user cancelled."""
+        key = self.key
+        if key is None or key in self.chosen_accounts:
+            return True
+        account = self.header.account
+        if account is None or account is BonjourAccount():
+            return True
+        model = self.models.get(key)
+        if model is None or not model.loaded or model.items or model.has_more or model.category or model.search_text:
+            return True             # not the first message (or not known yet)
+        accounts = self.header.sending_accounts()
+        if len(accounts) < 2:
+            return True
+        address = str(self.uri.uri).split(':', 1)[-1]
+        domain = address.rpartition('@')[2].lower()
+        same_domain = [candidate for candidate in accounts if str(candidate.id.domain).lower() == domain]
+        if same_domain:
+            chosen = same_domain[0]
+        else:
+            from PyQt6.QtWidgets import QInputDialog
+            names = [str(candidate.id) for candidate in accounts]
+            current = names.index(str(account.id)) if str(account.id) in names else 0
+            name, accepted = QInputDialog.getItem(self, translate('message_pane', 'Send From'),
+                                                  translate('message_pane', 'This is the first message to %s. Send it from which account?') % address,
+                                                  names, current, False)
+            if not accepted:
+                ActivityLog().info(f'[Message with {key}] First message not sent: no account chosen')
+                return False
+            chosen = accounts[names.index(name)]
+        self.chosen_accounts[key] = chosen.id
+        self.header.set_account(chosen)
+        ActivityLog().info(f'[Message with {key}] First message sent from account {chosen.id}' + (' (same domain)' if same_domain else ' (chosen)'))
+        return True
+
     @run_in_thread('db')
     def _find_account(self, key):
         from blink.history import MessageHistory
@@ -235,8 +289,8 @@ class MessagePane(QWidget):
             call_in_gui_thread(self._set_account, key, account_id)
 
     def _set_account(self, key, account_id):
-        if key != self.key:
-            return
+        if key != self.key or key in self.chosen_accounts:
+            return              # the user's choice stands
         from blink.uris import BONJOUR_ACCOUNT_ID
         if account_id == BONJOUR_ACCOUNT_ID:
             account = BonjourAccount()
@@ -397,6 +451,9 @@ class MessagePane(QWidget):
     def _send_text(self, text):
         if self.key is None:
             return
+        if not self._confirm_account():
+            self.composer.set_text(text)      # nothing lost
+            return
         import uuid
         from blink.messages import MessageManager
         try:
@@ -447,7 +504,7 @@ class MessagePane(QWidget):
         if self.key is None or not paths:
             return
         paths = [path for path in paths if os.path.isfile(path)]
-        if not paths:
+        if not paths or not self._confirm_account():
             return
         from blink.messagepane.attach import AttachmentPreview
         key = self.key
@@ -684,7 +741,7 @@ class MessagePane(QWidget):
     # Location: send the current one, ask for theirs
 
     def _location_action(self, action):
-        if self.key is None:
+        if self.key is None or not self._confirm_account():
             return
         key = self.key
         if action == 'request':
@@ -913,6 +970,8 @@ class MessagePane(QWidget):
         """Compress a recorded voice note to AAC (blink.messagepane.transcode; the WAV when that cannot be
         done) and send it as a file transfer, with its waveform as a peaks companion (as mobile does)."""
         from blink.messagepane.transcode import convert
+        if not self._confirm_account():
+            return
         key = self.key
 
         def converted(path):
