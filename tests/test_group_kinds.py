@@ -73,5 +73,27 @@ class StampPlanTests(unittest.TestCase):
         self.assertEqual(plan['favorites'], (None, 'missing'))
 
 
+class DuplicatePlanTests(unittest.TestCase):
+    def test_reserved_id_kept(self):
+        server = Group('_conference', 'Conference', 'conference')
+        early = Group('id1791394378737117890447', 'Conference', 'conference')
+        plan = kinds.duplicate_plan([early, server])
+        self.assertEqual(len(plan), 1)
+        identity, kept, duplicates = plan[0]
+        self.assertIs(identity, kinds.CONFERENCE)
+        self.assertIs(kept, server)
+        self.assertEqual(duplicates, [early])
+
+    def test_most_members_kept_without_reserved_id(self):
+        small, big = Group('a', 'Tel', 'tel'), Group('b', 'Tel', 'tel')
+        small.contacts, big.contacts = [1], [1, 2, 3]
+        identity, kept, duplicates = kinds.duplicate_plan([small, big])[0]
+        self.assertIs(kept, big)
+        self.assertEqual(duplicates, [small])
+
+    def test_single_groups_untouched(self):
+        self.assertEqual(kinds.duplicate_plan([Group('_calls', 'Calls', 'calls'), Group('x', 'Calls')]), [])
+
+
 if __name__ == '__main__':
     unittest.main()

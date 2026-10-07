@@ -731,6 +731,7 @@ class MessageManager(object, metaclass=Singleton):
     def __init__(self):
         self.sessions = []
         self._own_message_ids = OrderedDict()  # ids of messages sent by this device, to recognise their replicated copies
+        self.journal_receipts = {}      # {account id: {message id: state}}, collected in a first sync
         self.seen_message_ids = SeenMessageIds(self.seen_message_ids_size)  # handled live or from the journal, whichever came first
         self._own_conversation_reads = OwnMarkers(ttl=30)  # read markers this device sent, to recognise their echo
         self._own_conversation_removes = OwnMarkers(ttl=60)  # conversation removals this device asked the server for
@@ -970,6 +971,7 @@ class MessageManager(object, metaclass=Singleton):
             activity.warning('[journal] The certificate of the journal server is not verified (TLS verify server is off)')
         started = time.monotonic()
         pages = entries = transferred = 0
+        self._journal_progress(account, 'download', 0)
         complete = False
         stats = JournalStats(account.id, first_sync=first_sync, cursor=account.sms.history_synchronization_id, reason=reason)
 
@@ -1018,6 +1020,7 @@ class MessageManager(object, metaclass=Singleton):
             transferred += len(r.content)
             last_id = messages[-1].get('message_id')
             stats.page_downloaded(name, len(messages), len(r.content), time.monotonic() - page_started, last_id)
+            self._journal_progress(account, 'download', entries)
             log.info(f'Cached journal page {name} ({len(messages)} entries, {len(r.content)} bytes, cursor {last_id})')
 
             if not last_id:
@@ -1046,6 +1049,7 @@ class MessageManager(object, metaclass=Singleton):
         cache = JournalCache(self._journal_directory(account))
         names = cache.pages()
         if not names:
+            self._journal_progress(account, 'done')
             return
         activity = ActivityLog()
         activity.info(f'[journal] Applying {len(names)} cached journal pages of {account.id}')
@@ -1062,8 +1066,13 @@ class MessageManager(object, metaclass=Singleton):
                 page = None
                 error = e
             if page is not None:
+                page_number = applied
+                progress = lambda index, total: self._journal_progress(account, 'apply', (page_number + index / (total or 1)) / len(names))
+                progress(0, 1)
                 try:
-                    page_stats = self._apply_server_history_messages(account, page.get('messages') or [], first_sync=not page.get('cursor'), contacts=contacts, stats=stats)
+                    # a first sync is one for all its pages (only the first page has no cursor)
+                    page_stats = self._apply_server_history_messages(account, page.get('messages') or [], first_sync=stats.first_sync or not page.get('cursor'),
+                                                                     contacts=contacts, stats=stats, progress=progress)
                 except Exception as e:
                     page_stats = None
                     error = e
@@ -1091,6 +1100,11 @@ class MessageManager(object, metaclass=Singleton):
             activity.warning(f'[journal] Cannot write the import statistics: {e}')
         else:
             activity.info(f'[journal] Import statistics written to {stats_path}')
+        self._journal_progress(account, 'done')
+        receipts = self.journal_receipts.pop(account.id, None)
+        if receipts:
+            from blink.history import MessageHistory
+            MessageHistory().apply_receipts(receipts)
         # one notification for the whole run: unread counts and the Messages group are refreshed from
         # history, then the database is counted against this run
         NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=stats_path, first_sync=stats.first_sync))
@@ -1099,7 +1113,12 @@ class MessageManager(object, metaclass=Singleton):
     def _process_server_history_messages(self, account, messages):
         self._apply_server_history_messages(account, messages)
 
-    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None):
+    @staticmethod
+    def _journal_progress(account, phase, done=None):
+        """For the main window's progress bar: 'download' (done = entries so far), 'apply' (done = 0..1), 'done'."""
+        NotificationCenter().post_notification('BlinkJournalProgress', sender=account, data=NotificationData(phase=phase, done=done))
+
+    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None, progress=None):
         """Apply journal entries by content type (blink.journal.journal_action). Runs in the sync thread.
 
         Bulk mode: nothing here creates a conversation or decrypts; an entry for a
@@ -1131,9 +1150,15 @@ class MessageManager(object, metaclass=Singleton):
             if stats is not None:
                 stats.entry(content_type, outcome, message.get('contact'), message.get('direction'), message.get('timestamp'))
             if index % self.journal_progress_every == 0:
+                # wait for the db thread to store what was queued: the queue stays short, so a
+                # conversation opened meanwhile loads between batches, not after the whole run
+                MessageHistory().wait_for_writes()
                 elapsed = time.monotonic() - started
                 log.info(f'Applied {index} of {len(messages)} journal entries of {account.id} ({index / elapsed if elapsed else 0:.0f}/s)')
+                if progress is not None:
+                    progress(index, len(messages))
                 time.sleep(self.journal_throttle)
+        MessageHistory().wait_for_writes()
         account.sms.history_synchronization_timestamp = ISOTimestamp.now()
         account.save()
         return outcomes
@@ -1149,12 +1174,20 @@ class MessageManager(object, metaclass=Singleton):
         return 'ignored'
 
     def _journal_receipt(self, account, message, content_type, first_sync, contacts):
-        if first_sync:
-            return 'receipts skipped (first sync)'
+        # the receipt's state is in its payload; the entry's own state is the journal's ('received')
         payload = parse_payload(message.get('content'))
         if not payload or not payload.get('message_id'):
             return 'failed'
-        kwargs = {'data': NotificationData(id=payload['message_id'], status=message.get('state'))}
+        status = payload.get('state') or message.get('state')
+        if first_sync:
+            # collected and applied in one go at the end of the run (MessageHistory.apply_receipts)
+            receipts = self.journal_receipts.setdefault(account.id, {})
+            rank = {'delivered': 1, 'displayed': 2}
+            message_id = str(payload['message_id'])
+            if rank.get(status, 0) >= rank.get(receipts.get(message_id), 0):
+                receipts[message_id] = status
+            return 'receipts collected (first sync)'
+        kwargs = {'data': NotificationData(id=payload['message_id'], status=status)}
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(message['contact'])
         session = self._journal_session(contact)

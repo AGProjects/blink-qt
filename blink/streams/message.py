@@ -331,8 +331,14 @@ class MessageStream(object, metaclass=MediaStreamType):
                 # the file is written.
                 basename = os.path.basename(filename)
                 decrypted_filepath = os.path.join(os.path.dirname(filename), basename[:-4] if basename.lower().endswith('.asc') and len(basename) > 4 else basename + '.decrypted')
-                message = decrypted_message.message
-                file_contents = bytes(message) if isinstance(message, (bytes, bytearray)) else message.encode('latin1')
+                # the literal data's bytes as sent: pgpy's .message decodes data marked as text
+                # ('t' latin-1, 'u' UTF-8), which fails for a binary file marked 'u' (some clients do)
+                # and would change a UTF-8 text file marked 't'
+                literal = getattr(decrypted_message, '_message', None)
+                message = getattr(literal, '_contents', None)
+                if message is None:
+                    message = decrypted_message.message
+                file_contents = bytes(message) if isinstance(message, (bytes, bytearray)) else message.encode('utf-8')
                 temporary_filepath = decrypted_filepath + '.part'
                 try:
                     with open(temporary_filepath, 'wb') as output_file:

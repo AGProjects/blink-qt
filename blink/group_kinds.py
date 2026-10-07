@@ -12,7 +12,7 @@ No Qt and no sipsimple: a group is anything with id, name and kind.
 """
 
 __all__ = ['CALLS', 'TEL', 'BLOCKED', 'CONFERENCE', 'FAVORITES', 'STAMPED_KINDS',
-           'group_kind', 'find_group', 'is_group', 'stamp_plan']
+           'group_kind', 'find_group', 'is_group', 'stamp_plan', 'duplicate_plan']
 
 
 class GroupIdentity(object):
@@ -90,4 +90,22 @@ def stamp_plan(groups, identities=STAMPED_KINDS):
             plan.append((identity, group, 'stamped'))
         else:
             plan.append((identity, group, 'foreign'))
+    return plan
+
+
+def duplicate_plan(groups, identities=STAMPED_KINDS):
+    """Groups of one kind that exist more than once, as [(identity, kept, [duplicates])].
+
+    Two clients (or one before the addressbook arrived) can each create the
+    group of a kind; the one kept is the one with the kind's reserved id, else
+    the one with most members, else the first; its duplicates' members go to it.
+    """
+    plan = []
+    for identity in identities:
+        same = [group for group in groups if group_kind(group) == identity.kind]
+        if len(same) < 2:
+            continue
+        reserved = [group for group in same if getattr(group, 'id', None) in identity.reserved_ids]
+        kept = reserved[0] if reserved else max(same, key=lambda group: len(getattr(group, 'contacts', ()) or ()))
+        plan.append((identity, kept, [group for group in same if group is not kept]))
     return plan

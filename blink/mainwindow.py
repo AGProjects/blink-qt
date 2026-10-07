@@ -5,10 +5,10 @@ import os
 from functools import partial
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QSettings, QSize, QUrl, QTranslator
+from PyQt6.QtCore import Qt, QSettings, QSize, QTimer, QUrl, QTranslator
 from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QActionGroup, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
-from PyQt6.QtWidgets import QMessageBox, QSplitter
+from PyQt6.QtWidgets import QMessageBox, QProgressBar, QSplitter
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -71,6 +71,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
         notification_center.add_observer(self, name='BlinkMessagePaneDidReadConversation')
+        notification_center.add_observer(self, name='BlinkJournalProgress')
 
         notification_center.add_observer(self, sender=AccountManager())
 
@@ -289,6 +290,17 @@ class MainWindow(base_class, ui_class):
         self.identity.initStyleOption(option)
         wide_padding = self.identity.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option, QStyle.SubControl.SC_ComboBoxEditField, self.identity).height() < 10
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
+
+        # the message journal's download and import, under the account; shown only when it takes a while
+        self.journal_progress = QProgressBar(self)
+        self.journal_progress.setTextVisible(True)
+        self.journal_progress.setMaximumHeight(16)
+        self.journal_progress.hide()
+        self.window_layout.insertWidget(self.window_layout.indexOf(self.identity_widget) + 1, self.journal_progress)
+        self.journal_progress_timer = QTimer(self)
+        self.journal_progress_timer.setSingleShot(True)
+        self.journal_progress_timer.setInterval(1500)
+        self.journal_progress_timer.timeout.connect(self.journal_progress.show)
 
         # the message pane, right of the contact list (which becomes the conversation switcher);
         # closed at start whatever it was when Blink quit, so starting never shows (and reads) a conversation
@@ -1218,6 +1230,26 @@ class MainWindow(base_class, ui_class):
             self.show()
             self.raise_()
             self.activateWindow()
+
+    def _NH_BlinkJournalProgress(self, notification):
+        phase, done = notification.data.phase, notification.data.done
+        bar = self.journal_progress
+        if phase == 'done':
+            self.journal_progress_timer.stop()
+            bar.hide()
+            return
+        if not bar.isVisible() and not self.journal_progress_timer.isActive():
+            self.journal_progress_timer.start()
+        account = notification.sender.id
+        if phase == 'download':
+            bar.setRange(0, 0)      # the total is not known before the end
+            bar.setFormat(translate('main_window', 'Downloading messages of %s: %d') % (account, done or 0))
+            bar.setToolTip(bar.format())
+        else:
+            bar.setRange(0, 100)
+            bar.setValue(int(round(100 * min(max(done or 0, 0), 1))))
+            bar.setFormat(translate('main_window', 'Importing messages of %s: %%p%%') % account)
+            bar.setToolTip(translate('main_window', 'Importing messages of %s') % account)
 
     @run_in_gui_thread
     def handle_notification(self, notification):

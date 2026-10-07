@@ -55,7 +55,7 @@ from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
 from blink import addressbook_notify, addressbook_origin
 from blink.contact_repair import merge_plan, repair_plan
-from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, find_group, group_kind, is_group, stamp_plan
+from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_plan, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager, themed_icon
@@ -383,6 +383,8 @@ class CallsGroupFiler(object, metaclass=Singleton):
         if not self.xcap_loaded and xcap_is_expected():
             ActivityLog().info(f"[addressbook] No '{identity.name}' group yet, waiting for the addressbook to arrive before creating one")
             return None
+        # with the kind's reserved id, so one created before the server's arrived is the same group, not a second one
+        reserved_id = reserved_id or (identity.reserved_ids[0] if identity.reserved_ids else None)
         with addressbook_origin.reason('ensure-group'):
             group = addressbook.Group(reserved_id) if reserved_id else addressbook.Group()
             group.name = identity.name
@@ -825,6 +827,31 @@ class GroupKindStamper(object, metaclass=Singleton):
                         written += 1
                         activity.info(f"[addressbook] Stamped group '{group.name}' (id={group.id}) with kind={identity.kind}")
         activity.info(f'[addressbook] Group kinds checked: {written} stamped')
+        self.merge_duplicates(groups)
+
+    def merge_duplicates(self, groups):
+        """One group per kind: the members of a duplicate (two clients, or one before the addressbook
+        arrived, each made the group) go to the one kept (group_kinds.duplicate_plan), the duplicate is deleted."""
+        activity = ActivityLog()
+        plan = duplicate_plan(groups)
+        if not plan:
+            return
+        with addressbook_origin.reason('group-kind'), addressbook.AddressbookManager.transaction():
+            for identity, kept, duplicates in plan:
+                present = {member.id for member in kept.contacts}
+                for duplicate in duplicates:
+                    moved = [member for member in duplicate.contacts if member.id not in present]
+                    try:
+                        for member in moved:
+                            kept.contacts.add(member)
+                            present.add(member.id)
+                        kept.save()
+                        duplicate.delete()
+                    except Exception as e:
+                        activity.error(f"[addressbook] Cannot merge group '{duplicate.name}' (id={duplicate.id}) into '{kept.name}' (id={kept.id}): {e}")
+                        continue
+                    activity.info(f"[addressbook] Merged duplicate {identity.kind} group '{duplicate.name}' (id={duplicate.id}) into '{kept.name}' (id={kept.id}): "
+                                  f"{len(moved)} members moved, {len(duplicate.contacts) - len(moved)} already there")
 
 
 @implementer(IObserver)

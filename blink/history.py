@@ -8,6 +8,8 @@ import re
 import threading
 import time
 import uuid
+
+from collections import Counter
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 
@@ -16,7 +18,7 @@ from application.python import Null
 from application.python.types import Singleton
 from application.system import host, makedirs, unlink
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from dateutil.parser import parse
 from dateutil.tz import tzlocal
 from zope.interface import implementer
@@ -147,6 +149,8 @@ class HistoryManager(object, metaclass=Singleton):
             self.save()
         self._remove_account_keys(account)
         # the db thread runs these after the removal above
+        if getattr(notification.data, 'first_sync', False):
+            self.message_history.settle_first_sync_read(str(notification.sender.id))
         self.message_history.get_unread_messages()
         if BlinkSettings().interface.show_messages_group:
             self.message_history.get_all_contacts()
@@ -951,13 +955,14 @@ class MessageHistory(object, metaclass=Singleton):
         message was removed already. Caller is in the db thread."""
         target = fields.get('related_msg_id')
         if not target:
-            ActivityLog().info(f'[db] Metadata message {message_id} stored, it names no message it belongs to')
+            log.debug(f'Metadata message {message_id} stored, it names no message it belongs to')
             return
         db = Message._connection
         removed = db.queryOne(f'select deleted_time from {Message.sqlmeta.table} where message_id = {db.sqlrepr(target)} and deleted = 1')
         if removed is not None:
             cls._set_deleted(f'message_id = {db.sqlrepr(str(message_id))}', True, removed[0] or None)
-        ActivityLog().info(f'[db] Metadata message {message_id} ({fields["related_action"]}) stored for message {target}' + (', which was removed: hidden too' if removed is not None else ''))
+        # one line per companion is a flood during a journal import: the messaging trace has them
+        log.debug(f'Metadata message {message_id} ({fields["related_action"]}) stored for message {target}' + (', which was removed: hidden too' if removed is not None else ''))
         NotificationCenter().post_notification('BlinkMessageHistoryCompanionDidStore', data=NotificationData(message_id=str(message_id), related_msg_id=str(target), related_action=fields['related_action']))
 
     @staticmethod
@@ -1188,7 +1193,9 @@ class MessageHistory(object, metaclass=Singleton):
         """The ones of these message ids history already holds (removed ones included).
 
         For callers outside the db thread (the journal's sync thread): the query
-        is queued on the db thread, after the writes before it, and waited for.
+        is queued on the db thread, after the writes before it, and waited for to
+        the end (a large first sync queues a page of writes before it: an answer
+        given early would be missing ids, and duplicates would be stored as new).
         """
         message_ids = sorted({str(message_id) for message_id in message_ids if message_id})
         found = set()
@@ -1210,8 +1217,67 @@ class MessageHistory(object, metaclass=Singleton):
                 done.set()
         query()
         if not done.wait(timeout):
-            ActivityLog().warning(f'[db] Looking up {len(message_ids)} stored message ids timed out')
+            started = time.monotonic() - timeout
+            done.wait()
+            ActivityLog().info(f'[db] Looking up {len(message_ids)} stored message ids waited {time.monotonic() - started:.0f}s for the writes before it')
         return found
+
+    def wait_for_writes(self):
+        """For callers outside the db thread: returns once what was queued on the db thread before it is done."""
+        done = threading.Event()
+        run_in_thread('db')(done.set)()
+        done.wait()
+
+    @run_in_thread('db')
+    def apply_receipts(self, receipts):
+        """{message id: state} from a first sync's journal, applied in one go.
+
+        Outgoing messages take the state (an error only when not delivered or
+        displayed yet); incoming ones this account reported displayed are read.
+        """
+        table = Message.sqlmeta.table
+        by_state = {}
+        for message_id, state in receipts.items():
+            if state in ('delivered', 'displayed', 'error', 'failed'):
+                by_state.setdefault('error' if state == 'failed' else state, []).append(message_id)
+        changed = Counter()
+        try:
+            for state, message_ids in by_state.items():
+                for start in range(0, len(message_ids), 500):
+                    ids = ', '.join(self.db.sqlrepr(message_id) for message_id in message_ids[start:start + 500])
+                    if state == 'displayed':
+                        changed['incoming read'] += self.db.queryOne(f"select count(*) from {table} where message_id in ({ids}) and direction = 'incoming' and read = 0")[0]
+                        self.db.queryAll(f"update {table} set read = 1, state = 'displayed' where message_id in ({ids}) and direction = 'incoming' and state != 'deleted'")
+                        allowed = "state not in ('displayed', 'deleted')"
+                    elif state == 'delivered':
+                        allowed = "state not in ('delivered', 'displayed', 'deleted')"
+                    else:
+                        allowed = "state not in ('delivered', 'displayed', 'deleted', 'error')"
+                    where = f"message_id in ({ids}) and direction = 'outgoing' and {allowed}"
+                    changed[f'outgoing {state}'] += self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+                    self.db.queryAll(f'update {table} set state = {self.db.sqlrepr(state)} where {where}')
+        except Exception as e:
+            ActivityLog().error(f'[db] Applying {len(receipts)} journal receipts failed: {e}')
+            return
+        ActivityLog().info(f'[db] Applied {len(receipts)} journal receipts: ' + (', '.join(f'{count} {what}' for what, count in sorted(changed.items()) if count) or 'nothing changed'))
+
+    @run_in_thread('db')
+    def settle_first_sync_read(self, account_id, days=7):
+        """After a first sync: an incoming message older than the newest outgoing one in its
+        conversation, or older than `days`, was read (on another device, before this one)."""
+        table = Message.sqlmeta.table
+        account = self.db.sqlrepr(str(account_id))
+        cutoff = self.db.sqlrepr(self._storage_time(datetime.now(timezone.utc) - timedelta(days=days)))
+        where = (f"account_id = {account} and direction = 'incoming' and read = 0 and (timestamp < {cutoff} or timestamp < "
+                 f"(select max(o.timestamp) from {table} as o where o.remote_uri = {table}.remote_uri and o.direction = 'outgoing'))")
+        try:
+            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            if count:
+                self.db.queryAll(f'update {table} set read = 1 where {where}')
+        except Exception as e:
+            ActivityLog().error(f'[db] Settling the read state of {account_id} after the first sync failed: {e}')
+            return
+        ActivityLog().info(f'[db] First sync of {account_id}: {count} older incoming messages marked read')
 
     def last_message_times(self, accounts=None, include_calls=False, remote_uri=None):
         """{conversation key: newest message time} for ordering conversations."""
