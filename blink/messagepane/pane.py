@@ -531,6 +531,7 @@ class MessagePane(QWidget):
             model.remove_item(item.id)
 
     def _SH_DownloadChanged(self, message_id):
+        self.transcript.bubble_delegate.forget(message_id)      # where its file is may have changed
         model = self.models.get(self.key)
         row = model.row_of(message_id) if model is not None else None
         if row is not None:

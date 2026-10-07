@@ -14,6 +14,10 @@ A reply starts with a quote of what it answers (who, and the first line);
 clicking the quote goes to that message. A message being pointed out is
 flashed (flash()). Under the mouse a bubble shows its actions button (three dots, beside it on
 the side facing the middle), which opens the same menu as a right click.
+A picture is drawn inline once it is here (MediaCache decodes it off the GUI
+thread): at most 320 pixels high, 640 for a large source, at least 120 wide,
+with the time over its corner and the caption under it; until then a box of the
+same kind says what it is and how far the download got.
 Layouts are cached per message, width and font.
 """
 
@@ -31,7 +35,8 @@ __all__ = ['BubbleDelegate']
 
 
 class BubbleLayout(object):
-    __slots__ = ('kind', 'run_start', 'day_text', 'document', 'text_size', 'bubble_size', 'size', 'time_text', 'mark', 'mark_kind', 'name_text', 'quote_name', 'quote_text', 'quote_height')
+    __slots__ = ('kind', 'run_start', 'day_text', 'document', 'text_size', 'bubble_size', 'size', 'time_text', 'mark', 'mark_kind', 'name_text', 'quote_name', 'quote_text', 'quote_height',
+                 'image_path', 'image_size')
 
 
 class BubbleDelegate(QStyledItemDelegate):
@@ -106,7 +111,8 @@ class BubbleDelegate(QStyledItemDelegate):
         reply = item.reply
         progress = self.progress_of(item.id) if self.progress_of is not None else None
         progress = None if progress is None else int(progress * 100)
-        key = (progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
+        image_path = self.file_path(item) if item.category == 'image' else None
+        key = (image_path, item.caption, progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
                (reply['id'], reply['text']) if reply else None)
         layout = self._cache.get(key)
         if layout is not None:
@@ -121,10 +127,15 @@ class BubbleDelegate(QStyledItemDelegate):
         layout.mark, layout.mark_kind = delivery_mark(item)
         layout.quote_name = layout.quote_text = ''
         layout.quote_height = 0
+        layout.image_path = layout.image_size = None
+        if item.category == 'image':
+            layout.kind = kind = 'image'
         layout.name_text = (item.display_name or '') if run_start and not item.outgoing and kind != 'note' else ''
         small = self._small_font(font)
         document = QTextDocument()
         document.setDocumentMargin(0)
+        if kind == 'image':
+            return self._image_layout(key, layout, item, image_path, width, font, small, progress)
         if kind == 'note':
             document.setDefaultFont(small)
             option = QTextOption(Qt.AlignmentFlag.AlignHCenter)
@@ -196,6 +207,115 @@ class BubbleDelegate(QStyledItemDelegate):
         while not cursor.isNull():
             cursor.mergeCharFormat(highlight)
             cursor = document.find(text, cursor)
+
+    # Pictures
+
+    image_padding = 4
+    image_max_height = 320
+    image_large_max_height = 640
+    image_large_source = 1600       # pixels on the long side
+    image_min_width = 120
+    image_placeholder = (220, 150)
+
+    _paths = {}         # message id: local path or None
+
+    def file_path(self, item):
+        """Where the message's file is here, remembered until forget() (a download changed it)."""
+        try:
+            return self._paths[item.id]
+        except KeyError:
+            from blink.messagepane.files import local_file
+            path = self._paths[item.id] = local_file(item)
+            return path
+
+    def forget(self, message_id):
+        self._paths.pop(message_id, None)
+
+    def _image_layout(self, key, layout, item, path, width, font, small, progress):
+        from blink.messagepane.media import MediaCache
+        limit = self._bubble_width_limit(width) - 2 * self.image_padding
+        natural = MediaCache.instance().natural_size(path) if path else None
+        if natural is not None and natural.isValid() and natural.width() > 0 and natural.height() > 0:
+            max_height = self.image_large_max_height if max(natural.width(), natural.height()) >= self.image_large_source else self.image_max_height
+            scale = min(1.0, limit / natural.width(), max_height / natural.height())
+            box = (max(1, round(natural.width() * scale)), max(1, round(natural.height() * scale)))
+            layout.image_path = path
+        else:
+            box = (min(self.image_placeholder[0], limit), self.image_placeholder[1])
+        layout.image_size = box
+        bubble_width = max(box[0], self.image_min_width) + 2 * self.image_padding
+        document = QTextDocument()
+        document.setDocumentMargin(0)
+        caption_height = 0
+        text = item.caption
+        if not layout.image_path:
+            # what the box stands for until the picture is here
+            from blink.messagepane.format import file_name
+            text = (file_name(item.content) or translate('message_pane', 'Picture')) + ('\n' + (translate('message_pane', 'downloading %d%%') % progress) if progress is not None and progress < 100 else '')
+        if text:
+            document.setDefaultFont(font if layout.image_path else small)
+            option = QTextOption(Qt.AlignmentFlag.AlignLeft if layout.image_path else Qt.AlignmentFlag.AlignHCenter)
+            option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+            document.setDefaultTextOption(option)
+            document.setPlainText(text)
+            document.setTextWidth(bubble_width - 2 * self.padding_h)
+            if layout.image_path:
+                caption_height = document.size().height() + self.padding_v + 2
+        layout.document = document
+        layout.text_size = QSizeF(document.size().width(), document.size().height())
+        layout.bubble_size = QSizeF(bubble_width, box[1] + 2 * self.image_padding + caption_height)
+        height = layout.bubble_size.height()
+        if layout.name_text:
+            height += QFontMetricsF(small).height() + 2
+        height += self.run_gap if layout.run_start else self.inner_gap
+        if layout.day_text:
+            height += self.divider_height
+        layout.size = QSize(width, int(height + 0.999))
+        self._cache[key] = layout
+        return layout
+
+    def _paint_image(self, painter, layout, item, bubble, palette, small, secondary):
+        from blink.messagepane.media import MediaCache
+        box = QRectF(bubble.left() + self.image_padding, bubble.top() + self.image_padding, layout.image_size[0], layout.image_size[1])
+        if bubble.width() - 2 * self.image_padding > box.width():
+            box.moveLeft(bubble.left() + (bubble.width() - box.width()) / 2)
+        clip = QPainterPath()
+        clip.addRoundedRect(box, self.radius - 3, self.radius - 3)
+        pixmap = None
+        if layout.image_path:
+            ratio = painter.device().devicePixelRatioF() if painter.device() is not None else 1.0
+            pixmap = MediaCache.instance().thumbnail(layout.image_path, (box.width() * ratio, box.height() * ratio))
+        painter.save()
+        painter.setClipPath(clip)
+        if pixmap is not None:
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            painter.drawPixmap(box, pixmap, QRectF(pixmap.rect()))
+        else:
+            painter.fillRect(box, QColor(0, 0, 0, 30) if not is_dark_theme() else QColor(255, 255, 255, 24))
+            if not layout.image_path:
+                context = QAbstractTextDocumentLayout.PaintContext()
+                context.palette = self._text_palette(palette, secondary)
+                painter.translate(box.left() + (box.width() - layout.text_size.width()) / 2, box.top() + (box.height() - layout.text_size.height()) / 2)
+                layout.document.documentLayout().draw(painter, context)
+        painter.restore()
+        # the time (and the delivery state) on a dark pill over the picture's corner
+        metrics = QFontMetricsF(small)
+        label = layout.time_text + ('  ' + layout.mark if layout.mark else '')
+        pill = QRectF(0, 0, metrics.horizontalAdvance(label) + 12, metrics.height() + 4)
+        pill.moveBottomRight(box.bottomRight() - QPointF(6, 6))
+        pill_path = QPainterPath()
+        pill_path.addRoundedRect(pill, pill.height() / 2, pill.height() / 2)
+        painter.fillPath(pill_path, QColor(0, 0, 0, 120))
+        painter.setFont(small)
+        painter.setPen(QColor('#ffffff'))
+        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
+        if layout.image_path and item.caption:
+            context = QAbstractTextDocumentLayout.PaintContext()
+            context.palette = self._text_palette(palette, self._colours(palette, item.outgoing)[1])
+            painter.save()
+            painter.translate(bubble.left() + self.padding_h, box.bottom() + self.padding_v)
+            layout.document.documentLayout().draw(painter, context)
+            painter.restore()
 
     def sizeHint(self, option, index):
         width = option.rect.width() if option.rect.width() > 0 else self.parent().viewport().width()
@@ -317,6 +437,12 @@ class BubbleDelegate(QStyledItemDelegate):
         painter.fillPath(path, fill)
         if item.id == self.flashed_id:
             painter.fillPath(path, QColor(255, 200, 0, 110))
+        if layout.kind == 'image':
+            self._paint_image(painter, layout, item, bubble, palette, small, secondary)
+            if option.state & QStyle.StateFlag.State_MouseOver:
+                self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
+            painter.restore()
+            return
         if layout.quote_height:
             quote = self.quote_rect(layout, bubble)
             quote_path = QPainterPath()

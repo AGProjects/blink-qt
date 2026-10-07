@@ -40,7 +40,7 @@ class MessageItem(object):
 
     __slots__ = ('id', 'account_id', 'remote_uri', 'display_name', 'uri', 'timestamp', 'direction', 'content', 'content_type',
                  'state', 'encryption_type', 'decrypted', 'disposition', 'read', 'category', 'has_link', 'metadata',
-                 'related_msg_id', 'related_action', 'media_type', 'row_id', 'reply')
+                 'related_msg_id', 'related_action', 'media_type', 'row_id', 'reply', 'caption')
 
     def __init__(self, row):
         self.id = str(row.message_id)
@@ -66,6 +66,7 @@ class MessageItem(object):
         self.related_action = row.related_action
         self.media_type = row.media_type
         self.reply = None           # what it answers: {'id', 'timestamp', 'outgoing', 'name', 'text'} (attach_replies)
+        self.caption = ''           # a picture's or movie's caption (label companion, the newest wins)
 
     @property
     def sort_key(self):
@@ -86,7 +87,7 @@ def attach_replies(items):
     """Fill in item.reply for the replies among items, from their reply links (metadata
     companions filed against them) and the messages they answer. In the db thread."""
     from blink.history import Message, MessageHistory
-    from blink.message_envelopes import reply_metadata
+    from blink.message_envelopes import label_metadata, reply_metadata
     from blink.messagepane.format import plain_summary
     if not items:
         return
@@ -96,7 +97,16 @@ def attach_replies(items):
     except Exception as e:
         log.warning(f'Cannot read the reply links of {len(items)} messages: {e!r}')
         return
+    caption_times = {}
     for companion in companions:
+        if companion.related_action == 'label':
+            label = label_metadata(companion.content)
+            if label is not None and label['transfer_id'] in by_id:
+                stamp = (label['timestamp'], str(companion.timestamp))
+                if stamp >= caption_times.get(label['transfer_id'], ('', '')):
+                    caption_times[label['transfer_id']] = stamp
+                    by_id[label['transfer_id']].caption = label['label']
+            continue
         if companion.related_action != 'reply':
             continue
         link = reply_metadata(companion.content)
