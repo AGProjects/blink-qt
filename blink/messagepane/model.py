@@ -8,13 +8,17 @@ rows; scrolling up loads the page before it (load_older), inserted at the top
 so the view can keep what the user was looking at in place. New and changed
 messages are merged in by id, in timestamp order, from the newest page.
 
+jump_to(day) loads the page ending with that day instead; the newer messages
+then come a page at a time as the view reaches the bottom (load_newer), and
+live messages wait until they are reached.
+
 search(text) shows the conversation's text messages containing the text
 instead (newest 200, oldest first); search('') goes back to the conversation.
 """
 
 import bisect
 
-from datetime import timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
@@ -96,6 +100,7 @@ class ConversationModel(QAbstractListModel):
 
     loadingChanged = pyqtSignal(bool)
     initialLoadFinished = pyqtSignal()
+    jumped = pyqtSignal(int)            # the row a jump to a day landed on
 
     def __init__(self, key, parent=None):
         super().__init__(parent)
@@ -103,6 +108,7 @@ class ConversationModel(QAbstractListModel):
         self.items = []
         self.ids = {}           # message id: item
         self.has_more = False
+        self.has_newer = False      # after a jump: newer messages not loaded yet
         self.loading = False
         self.loaded = False
         self.closed = False
@@ -204,6 +210,66 @@ class ConversationModel(QAbstractListModel):
         self._set_loading(True)
         self._fetch(self._generation, 'initial', before=None)
 
+    def jump_to(self, day):
+        """Load the page ending with a day (a local date): the day's messages and the ones before them."""
+        if self.search_text:
+            self.search_text = ''
+        self._generation += 1
+        self._set_loading(True)
+        end = datetime.combine(day + timedelta(days=1), time()).astimezone()      # local midnight after the day
+        self._fetch(self._generation, ('jump', day), before=end)
+
+    def load_newer(self):
+        """After a jump: the page after the newest loaded row."""
+        if self.loading or not self.has_newer or not self.items or self.closed:
+            return
+        self._set_loading(True)
+        self._fetch_forward(self._generation, self.items[-1].timestamp - self._tick)
+
+    @run_in_thread('db')
+    def _fetch_forward(self, generation, after):
+        from blink.history import MessageHistory
+        history = MessageHistory()
+        after = after.astimezone(timezone.utc).replace(tzinfo=None)
+        found, seen, more = [], set(), True
+        cursor = after
+        try:
+            while len(found) < self.page_size:
+                rows = history.get_messages(self.key, after=cursor, limit=self.fetch_size, oldest_first=True)
+                for row in rows:      # oldest first
+                    if row.message_id not in seen and is_renderable(row):
+                        seen.add(row.message_id)
+                        found.append(MessageItem(row))
+                if len(rows) < self.fetch_size:
+                    more = False
+                    break
+                last = rows[-1].timestamp
+                cursor = last if last - self._tick == cursor else last - self._tick
+        except Exception as e:
+            log.warning(f'Loading newer messages of the conversation with {self.key} failed: {e!r}')
+            call_in_gui_thread(self._apply_failed, generation)
+            return
+        if len(found) > self.page_size:
+            found = found[:self.page_size]
+            more = True
+        call_in_gui_thread(self._apply_newer, generation, found, more)
+
+    def _apply_newer(self, generation, found, more):
+        if generation != self._generation or self.closed:
+            return
+        newest = self.items[-1].sort_key if self.items else None
+        newer = [item for item in found if item.id not in self.ids and (newest is None or item.sort_key > newest)]
+        if newer:
+            self.beginInsertRows(QModelIndex(), len(self.items), len(self.items) + len(newer) - 1)
+            self.items.extend(newer)
+            self.ids.update((item.id, item) for item in newer)
+            self.endInsertRows()
+        self.has_newer = more and bool(newer)
+        self._set_loading(False)
+        ActivityLog().info(f'[Message with {self.key}] Loaded {len(newer)} newer messages, {len(self.items)} shown' + (', newer ones available' if self.has_newer else ', up to the newest'))
+        if not self.has_newer:
+            self._schedule_refresh()        # what arrived in the meantime
+
     def load_older(self):
         """The page before the oldest loaded row; no-op while loading or when there is none."""
         if self.loading or not self.has_more or not self.items or self.closed:
@@ -247,16 +313,38 @@ class ConversationModel(QAbstractListModel):
             found = found[:self.page_size]
             more = True
         found.reverse()
-        call_in_gui_thread(self._apply_page, generation, kind, found, more)
+        newer = False
+        if isinstance(kind, tuple):     # a jump: is there anything after the page?
+            try:
+                newer = bool(history.get_messages(self.key, after=before - self._tick, limit=1, oldest_first=True)) if before is not None else False
+            except Exception:
+                newer = True
+        call_in_gui_thread(self._apply_page, generation, kind, found, more, newer)
 
     def _apply_failed(self, generation):
         if generation == self._generation:
             self._set_loading(False)
 
-    def _apply_page(self, generation, kind, found, more):
+    def _apply_page(self, generation, kind, found, more, newer=False):
         if generation != self._generation or self.closed:
             return
+        if isinstance(kind, tuple):
+            day = kind[1]
+            self.search_truncated = False
+            self.beginResetModel()
+            self.items = found
+            self.ids = {item.id: item for item in found}
+            self.endResetModel()
+            self.has_more = more
+            self.has_newer = newer
+            self.loaded = True
+            self._set_loading(False)
+            row = next((position for position, item in enumerate(found) if item.timestamp.astimezone().date() >= day), max(len(found) - 1, 0))
+            ActivityLog().info(f'[Message with {self.key}] Jumped to {day:%Y-%m-%d}: {len(found)} messages loaded' + (', newer ones available' if newer else ''))
+            self.jumped.emit(row)
+            return
         if kind == 'initial':
+            self.has_newer = False
             self.search_truncated = False
             self.beginResetModel()
             self.items = found
@@ -324,6 +412,8 @@ class ConversationModel(QAbstractListModel):
             if current is None:
                 if self.has_more and self.items and item.sort_key < self.items[0].sort_key:
                     continue            # older than what is loaded: comes with its page
+                if self.has_newer and self.items and item.sort_key > self.items[-1].sort_key:
+                    continue            # after a jump: comes when the view gets there
                 position = bisect.bisect_right([existing.sort_key for existing in self.items], item.sort_key)
                 self.beginInsertRows(QModelIndex(), position, position)
                 self.items.insert(position, item)

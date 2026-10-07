@@ -59,6 +59,7 @@ class MessagePane(QWidget):
         layout.setSpacing(0)
         self.header = ConversationHeader(self)
         self.header.hide()
+        self.header.dayChosen.connect(self._jump_to)
         layout.addWidget(self.header)
         self.strip = TranscriptStrip(self)
         self.strip.hide()
@@ -87,6 +88,10 @@ class MessagePane(QWidget):
         self._read_timer.timeout.connect(self._read)
         self._model_connected = None
         self._pending = None         # (contact, uri, key) selected while the pane was closed
+        self._calendar_timer = QTimer(self)
+        self._calendar_timer.setSingleShot(True)
+        self._calendar_timer.setInterval(2000)
+        self._calendar_timer.timeout.connect(lambda: self.key and self._load_day_counts(self.key))
 
         self.apply_theme()
         follow_theme(self)
@@ -94,6 +99,7 @@ class MessagePane(QWidget):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
         notification_center.add_observer(self, name='PGPKeysShouldReload')
+        notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
 
     def apply_theme(self):
@@ -123,6 +129,7 @@ class MessagePane(QWidget):
         self.strip.show()
         self.stack.setCurrentWidget(self.transcript)
         self._find_account(key)
+        self._load_day_counts(key)
         model = self.models[key]
         how = f'{len(model.items)} messages already loaded' if cached and model.loaded else 'loading'
         ActivityLog().info(f'[Message with {key}] Conversation selected in the message pane ({uri.uri}, {how})')
@@ -199,6 +206,10 @@ class MessagePane(QWidget):
         keys = notification.data.keys
         if self.key is not None and (keys is None or self.key in keys):
             self.header.update_info()
+
+    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        if self.key is not None and str(notification.data.remote_uri) == self.key:
+            self._calendar_timer.start()
 
     def _NH_PGPKeysShouldReload(self, notification):
         self.header.update_lock()
@@ -285,3 +296,22 @@ class MessagePane(QWidget):
         except KeyError:
             return None
         return account if account.enabled else None
+
+    # Calendar
+
+    @run_in_thread('db')
+    def _load_day_counts(self, key):
+        from blink.history import MessageHistory
+        try:
+            counts = MessageHistory().day_counts(key)
+        except Exception as e:
+            log.warning(f'Cannot count the days of the conversation with {key}: {e!r}')
+            return
+        call_in_gui_thread(self.header.set_day_counts, key, counts)
+
+    def _jump_to(self, day):
+        model = self.models.get(self.key)
+        if model is None:
+            return
+        model.jump_to(day)
+        self.strip.set_conversation(model, self.transcript)     # a search gives way to the jump

@@ -129,6 +129,8 @@ class TranscriptStrip(QWidget):
             text = range_text(model.items)
             if model.loading:
                 note = translate('message_pane', 'loading older messages…') if model.items else translate('message_pane', 'loading…')
+            elif model.has_newer:
+                note = translate('message_pane', 'newer messages below')
             elif not model.has_more and model.loaded:
                 note = translate('message_pane', 'the beginning of the conversation')
             elif self._scrolled_up():

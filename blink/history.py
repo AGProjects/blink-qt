@@ -1228,9 +1228,10 @@ class MessageHistory(object, metaclass=Singleton):
             found.add('links')
         return found
 
-    def get_messages(self, remote_uri, before=None, after=None, category=None, limit=100, accounts=None, include_trail=False):
+    def get_messages(self, remote_uri, before=None, after=None, category=None, limit=100, accounts=None, include_trail=False, oldest_first=False):
         """A page of a conversation, newest first: up to `limit` messages older than
-        `before` (and newer than `after`), of one category if given. Location trail
+        `before` (and newer than `after`), of one category if given; with oldest_first,
+        the oldest `limit` of them, oldest first (paging forwards). Location trail
         ticks are left out unless asked for (they belong to their share's bubble) and
         metadata sidecars always are."""
         query = f'remote_uri = {self.db.sqlrepr(str(remote_uri))} and {NOT_DELETED_SQL}' + self._category_sql(category) + self._in_sql('account_id', accounts)
@@ -1243,7 +1244,18 @@ class MessageHistory(object, metaclass=Singleton):
             query += f' and timestamp < {self.db.sqlrepr(self._storage_time(before))}'
         if after is not None:
             query += f' and timestamp > {self.db.sqlrepr(self._storage_time(after))}'
-        return list(Message.select(query, orderBy=['-timestamp', '-id'], limit=int(limit)))
+        order = ['timestamp', 'id'] if oldest_first else ['-timestamp', '-id']
+        return list(Message.select(query, orderBy=order, limit=int(limit)))
+
+    def day_counts(self, remote_uri, accounts=None):
+        """{'YYYY-MM-DD' (local time): number of messages shown that day} for a conversation's calendar."""
+        table = Message.sqlmeta.table
+        actions = ', '.join(self.db.sqlrepr(action) for action in self.__trail_actions__)
+        query = (f"select date(timestamp, 'localtime') as day, count(*) from {table}"
+                 f" where remote_uri = {self.db.sqlrepr(str(remote_uri))} and {NOT_DELETED_SQL} and category is not null"
+                 f" and content_type != '{METADATA_CONTENT_TYPE}' and (related_action is null or related_action not in ({actions}))"
+                 + self._in_sql('account_id', accounts) + ' group by day')
+        return {str(day): int(count) for day, count in self.db.queryAll(query) if day}
 
     def related_messages(self, message_ids):
         """The rows filed against a page of messages (location ticks, sidecars keyed by related_msg_id)."""

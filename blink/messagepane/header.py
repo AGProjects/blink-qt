@@ -2,14 +2,19 @@
 
 Avatar (the contact's photo, else initials on a colour of their own), name,
 info line (is typing..., else the address the conversation is on), the lock
-with what is known about encryption, and the audio and video call buttons.
+with what is known about encryption, the calendar (years, months and days
+with how many messages each has; choosing a day jumps there) and the audio and
+video call buttons.
 Calls start from the conversation's account: the one its newest message was
 on, else the default one (a Bonjour neighbour: the Bonjour account).
 """
 
 import os
 
-from PyQt6.QtCore import Qt, QRectF, QSize
+from collections import defaultdict
+from datetime import date
+
+from PyQt6.QtCore import Qt, QLocale, QRectF, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPalette, QPixmap
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
@@ -112,10 +117,13 @@ class AvatarLabel(QLabel):
 
 
 class ConversationHeader(QWidget):
+    dayChosen = pyqtSignal(object)      # a date to jump to
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.contact = self.uri = self.key = None
         self.account = None
+        self.day_counts = {}
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -154,11 +162,17 @@ class ConversationHeader(QWidget):
         self.lock_button.setMenu(self.lock_menu)
         self.lock_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.lock_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
+        self.calendar_button = self._tool_button(translate('message_pane', 'Jump to a date'))
+        self.calendar_menu = QMenu(self.calendar_button)
+        self.calendar_menu.aboutToShow.connect(self._fill_calendar_menu)
+        self.calendar_button.setMenu(self.calendar_menu)
+        self.calendar_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.calendar_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
         self.audio_button = self._tool_button(translate('message_pane', 'Audio call'))
         self.video_button = self._tool_button(translate('message_pane', 'Video call'))
         self.audio_button.clicked.connect(lambda: self._start_call('audio'))
         self.video_button.clicked.connect(lambda: self._start_call('video'))
-        for button in (self.lock_button, self.audio_button, self.video_button):
+        for button in (self.lock_button, self.calendar_button, self.audio_button, self.video_button):
             row.addWidget(button)
 
         self.apply_theme()
@@ -180,18 +194,53 @@ class ConversationHeader(QWidget):
         self.info_label.setPalette(palette)
         self.audio_button.setIcon(themed_icon(Resources.get('icons/handset.png'), '#d0d0d0'))
         self.video_button.setIcon(themed_icon(Resources.get('icons/camera.png'), '#d0d0d0'))
+        self.calendar_button.setIcon(themed_icon(Resources.get('icons/clock.svg'), '#d0d0d0'))
         self.update_lock()
 
     # Contents
 
     def set_conversation(self, contact, uri, key, account):
         self.contact, self.uri, self.key, self.account = contact, uri, key, account
+        self.day_counts = {}
+        self.calendar_button.setEnabled(False)
         name = getattr(contact, 'name', '') or str(uri.uri)
         self.name_label.setText(name)
         self.name_label.setToolTip(name)
         self.avatar.set_contact(contact_photo(contact), initials(name, str(uri.uri)), avatar_colour(key))
         self.update_info()
         self.update_lock()
+
+    def set_day_counts(self, key, counts):
+        if key == self.key:
+            self.day_counts = counts
+            self.calendar_button.setEnabled(bool(counts))
+
+    def _fill_calendar_menu(self):
+        """Years, then months, then days, newest first, each with its number of messages."""
+        menu = self.calendar_menu
+        menu.clear()
+        days = {}
+        for text, count in self.day_counts.items():
+            try:
+                days[date.fromisoformat(text)] = count
+            except ValueError:
+                pass
+        if not days:
+            menu.addAction(translate('message_pane', 'No messages')).setEnabled(False)
+            return
+        locale = QLocale()
+        years = defaultdict(lambda: defaultdict(dict))
+        for day, count in days.items():
+            years[day.year][day.month][day] = count
+        for year in sorted(years, reverse=True):
+            months = years[year]
+            year_menu = menu.addMenu(f'{year}   ({sum(sum(month.values()) for month in months.values())})')
+            for month in sorted(months, reverse=True):
+                month_days = months[month]
+                month_menu = year_menu.addMenu(f'{locale.monthName(month, QLocale.FormatType.LongFormat)}   ({sum(month_days.values())})')
+                for day in sorted(month_days, reverse=True):
+                    label = f'{locale.dayName(day.isoweekday(), QLocale.FormatType.ShortFormat)} {day.day}   ({month_days[day]})'
+                    month_menu.addAction(label, lambda day=day: self.dayChosen.emit(day))
 
     def set_account(self, account):
         self.account = account

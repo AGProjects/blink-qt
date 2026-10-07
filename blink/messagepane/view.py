@@ -60,7 +60,16 @@ class TranscriptView(QListView):
             QTimer.singleShot(0, self.scrollToBottom)
 
     def _connections(self, model):
-        return ((model.rowsAboutToBeInserted, self._SH_RowsAboutToBeInserted), (model.initialLoadFinished, self._SH_InitialLoadFinished))
+        return ((model.rowsAboutToBeInserted, self._SH_RowsAboutToBeInserted), (model.initialLoadFinished, self._SH_InitialLoadFinished),
+                (model.jumped, self._SH_Jumped))
+
+    def _SH_Jumped(self, row):
+        """After a jump to a day: its first message at the top."""
+        self._stick = False
+        self._anchor = None
+        index = self.model().index(row, 0)
+        QTimer.singleShot(0, lambda: self.scrollTo(index, QAbstractItemView.ScrollHint.PositionAtTop))
+        QTimer.singleShot(0, self._fill)
 
     def _at_bottom(self):
         scrollbar = self.verticalScrollBar()
@@ -76,7 +85,7 @@ class TranscriptView(QListView):
         scrollbar = self.verticalScrollBar()
         if first == 0 and model.rowCount() > 0:
             self._anchor = (scrollbar.maximum(), scrollbar.value())
-        self._stick = self._at_bottom()
+        self._stick = self._at_bottom() and not model.has_newer
 
     def _SH_ScrollRangeChanged(self, minimum, maximum):
         scrollbar = self.verticalScrollBar()
@@ -91,12 +100,17 @@ class TranscriptView(QListView):
     def _fill(self):
         """A page that does not fill the view has no scroll bar to scroll up with: load the one before."""
         model = self.model()
-        if model is not None and model.has_more and not model.loading and self.verticalScrollBar().maximum() == 0:
-            QTimer.singleShot(0, model.load_older)
+        if model is not None and not model.loading and self.verticalScrollBar().maximum() == 0:
+            if model.has_more:
+                QTimer.singleShot(0, model.load_older)
+            elif model.has_newer:
+                QTimer.singleShot(0, model.load_newer)
 
     def _SH_ScrollValueChanged(self, value):
-        self._stick = self._at_bottom()
         model = self.model()
+        self._stick = self._at_bottom() and not (model is not None and model.has_newer)
+        if model is not None and model.has_newer and not model.loading and value >= self.verticalScrollBar().maximum() - self.load_margin:
+            model.load_newer()
         if model is not None and value <= self.load_margin and model.has_more and not model.loading and self.verticalScrollBar().maximum() > 0:
             model.load_older()
 
