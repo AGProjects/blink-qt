@@ -23,7 +23,7 @@ from sipsimple.session import IllegalStateError
 
 from blink.aboutpanel import AboutPanel
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI
+from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI, conversation_uri
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
@@ -842,6 +842,17 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         selected_items = self.contact_list.selectionModel().selectedIndexes()
         self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.ItemDataRole.UserRole), Contact))
+        self._follow_selection(selected_items)
+
+    def _follow_selection(self, selected_indexes):
+        """The message pane shows the one selected contact's conversation (and opens only when asked)."""
+        contact = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
+        if isinstance(contact, Contact):
+            uri, key = conversation_uri(contact)
+            if uri is not None:
+                self.message_pane.show_conversation(contact, uri, key)
+                return
+        self.message_pane.clear()
 
     def _SH_ContactModelAddedItems(self, items):
         if not self.search_box.text():
@@ -932,6 +943,7 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         selected_items = self.search_list.selectionModel().selectedIndexes()
         self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) <= 1)
+        self._follow_selection(selected_items)
 
     def _SH_ServerToolsAccountModelChanged(self, parent_index, start, end):
         server_tools_enabled = self.server_tools_account_model.rowCount() > 0

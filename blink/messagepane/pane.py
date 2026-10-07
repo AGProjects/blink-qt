@@ -1,14 +1,18 @@
 """MessagePane: the right side of the main window, next to the contact list.
 
 The contact list is the conversation switcher; this shows the conversation.
-For now it holds the empty state only: the header, the transcript and the
-composer come with the next patches (docs/messaging/ui-plan.md, B2-B6).
+It follows the selection in the contact list (it never opens because of it):
+one contact selected shows that contact's conversation, anything else the
+empty state. The header, the transcript and the composer come with the next
+patches (docs/messaging/ui-plan.md, B2-B6); until then a conversation is its
+name and address.
 """
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 
+from blink.logging import MessagingTrace as log
 from blink.util import translate
 from blink.widgets.color import follow_theme, secondary_text_color
 
@@ -39,7 +43,18 @@ class MessagePane(QWidget):
         self.empty_label.setWordWrap(True)
         self.empty_label.setMargin(24)
         self.stack.addWidget(self.empty_label)
+
+        self.conversation_label = QLabel(self.stack)
+        self.conversation_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.conversation_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.conversation_label.setWordWrap(True)
+        self.conversation_label.setMargin(24)
+        self.stack.addWidget(self.conversation_label)
         self.stack.setCurrentWidget(self.empty_label)
+
+        self.contact = None
+        self.uri = None
+        self.key = None
 
         self.apply_theme()
         follow_theme(self)
@@ -49,3 +64,20 @@ class MessagePane(QWidget):
         for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
             palette.setColor(group, QPalette.ColorRole.WindowText, secondary_text_color(self.palette(), group))
         self.empty_label.setPalette(palette)
+
+    def show_conversation(self, contact, uri, key):
+        """Switch to the conversation with a contact, on one of its addresses (key: its conversation key)."""
+        if contact is self.contact and key == self.key:
+            return
+        self.contact, self.uri, self.key = contact, uri, key
+        name = getattr(contact, 'name', '') or str(uri.uri)
+        self.conversation_label.setText(f'{name}\n{uri.uri}')
+        self.stack.setCurrentWidget(self.conversation_label)
+        log.debug(f'Message pane shows the conversation with {key}')
+
+    def clear(self):
+        """No conversation: the empty state."""
+        if self.contact is None:
+            return
+        self.contact = self.uri = self.key = None
+        self.stack.setCurrentWidget(self.empty_label)

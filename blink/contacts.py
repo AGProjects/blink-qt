@@ -1882,6 +1882,33 @@ def contact_conversation_keys(contact):
     return keys
 
 
+
+def conversation_uri(contact):
+    """(uri, conversation key) a contact's conversation opens on: the address the last
+    message was with, else the default one; a Bonjour neighbour by its instance id.
+    (None, None) for a contact without an address."""
+    default = contact.uri
+    if default is None:
+        return None, None
+    instance_id = neighbour_instance_id(contact, str(default.uri))
+    if instance_id:
+        return default, instance_id
+    from blink.history import ConversationPreviews
+    previews = ConversationPreviews()
+    account = AccountManager().default_account
+    best, best_time = None, None
+    try:
+        uris = list(contact.uris)
+    except (AttributeError, TypeError):
+        uris = []
+    for uri in uris:
+        key = _conversation_key(str(uri.uri), account)
+        when = previews.message_times.get(key)
+        if when is not None and (best_time is None or when > best_time):
+            best, best_time = (uri, key), when
+    return best or (default, _conversation_key(str(default.uri), account))
+
+
 def row_time_kind(group_settings):
     """What the time on the right of a contact row is in this group: 'message' in Messages,
     'call' in Calls and Tel, None elsewhere."""
