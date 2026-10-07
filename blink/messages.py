@@ -1786,12 +1786,14 @@ class MessageManager(object, metaclass=Singleton):
                     blink_session.fake_streams.get('messages').enable_pgp()
                 notification_center.post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
 
-        if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
-            blink_session.fake_streams.get('messages').enable_pgp()
+        # no session for a delivery report of a conversation not open here (a Bonjour neighbour's, say): none is needed
+        if blink_session is not None:
+            if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
+                blink_session.fake_streams.get('messages').enable_pgp()
 
-        if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)) and account is BonjourAccount():
-            stream = blink_session.fake_streams.get('messages')
-            stream.generate_keys()
+            if account.sms.enable_pgp and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)) and account is BonjourAccount():
+                stream = blink_session.fake_streams.get('messages')
+                stream.generate_keys()
 
         if account.sms.use_cpim and account.sms.enable_imdn and content_type.lower() == IMDNDocument.content_type:
             # print("-- IMDN received")
@@ -1802,7 +1804,7 @@ class MessageManager(object, metaclass=Singleton):
             log.info(f'Disposition {imdn_status} of message {imdn_message_id} received from {_bare(sender.uri)} for account {account.id} (IMDN {message_id}){via}')
             from blink.history import MessageHistory
             MessageHistory().record_agent(imdn_message_id, imdn_status, user_agent, relay)
-            notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
+            notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session if blink_session is not None else account, data=NotificationData(id=imdn_message_id, status=imdn_status))
             return
         elif content_type.lower() == IMDNDocument.content_type:
             # print("-- IMDN received, ignored")
