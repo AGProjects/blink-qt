@@ -34,7 +34,7 @@ from sipsimple.util import ISOTimestamp
 from blink.configuration.settings import BlinkSettings
 from blink.journal import FIRST_SYNC_MARKER
 from blink.logging import ActivityLog, JournalLog, MessagingTrace as log
-from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
+from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_record, call_summary, dominant_media, legacy_call_record, merge_call_records, this_device_id
 from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link, reply_metadata
 from blink.message_envelopes import conversation_preview, is_pgp_armoured
@@ -1955,6 +1955,43 @@ class MessageHistory(object, metaclass=Singleton):
             pass
         else:
             NotificationCenter().post_notification('BlinkMessageHistoryCallHistoryDidStore', sender=session, data=NotificationData(message=message))
+
+    @classmethod
+    @run_in_thread('db')
+    def add_call_recording(cls, path, transfer_id, key, account, uri, display_name, timestamp):
+        """A call this device recorded, as an audio message of the conversation with the other
+        party. The file is already where local_file looks (file_transfers/<account>/<peer>/<id>/);
+        the envelope has no url: the recording stays on this device."""
+        content = json.dumps({'filename': os.path.basename(path),
+                              'filesize': os.path.getsize(path),
+                              'filetype': 'audio/wav',
+                              'transfer_id': transfer_id,
+                              'call_recording': True})
+        fields = cls._content_fields(FILE_TRANSFER_CONTENT_TYPE, content)
+        try:
+            Message(remote_uri=key,
+                    display_name=display_name or '',
+                    uri=str(uri),
+                    content=content,
+                    content_type=FILE_TRANSFER_CONTENT_TYPE,
+                    message_id=transfer_id,
+                    account_id=str(account.id),
+                    direction='outgoing',
+                    timestamp=timestamp,
+                    decrypted='0',
+                    decryption_error='',
+                    disposition='',
+                    state='displayed',
+                    read=1,
+                    **fields)
+        except dberrors.DuplicateEntryError:
+            return
+        except Exception as e:
+            ActivityLog().error(f'[db] Storing the call recording {path} failed: {e!r}')
+            return
+        ActivityLog().info(f'[db] Call recording with {key} stored as message {transfer_id}')
+        NotificationCenter().post_notification('BlinkMessageHistoryMessageDidStore', sender=account,
+                                               data=NotificationData(remote_uri=key, state='displayed', direction='outgoing'))
 
     @run_in_thread('db')
     def store_call_record(self, account, record, message_id=None, origin=''):

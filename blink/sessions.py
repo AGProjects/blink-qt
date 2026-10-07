@@ -534,6 +534,7 @@ class BlinkSession(BlinkSessionBase):
         self.local_hold = False
         self.remote_hold = False
         self.recording = False
+        self._pending_recording = None  # the call recording in progress, filed in the conversation when it stops
 
         self.transfer_state = None
         self.transfer_direction = None
@@ -894,19 +895,42 @@ class BlinkSession(BlinkSessionBase):
             player.start()
 
     def start_recording(self):
+        """Record the call into the conversation with the other party: the file is kept where a
+        received file of that conversation is (file_transfers/<account>/<peer>/<id>/) and, when the
+        recording stops, it becomes an audio message there. The sylk-call-recording- prefix is
+        what titles its bubble "Call recording"."""
         audio_stream = self.streams.get('audio')
         if audio_stream is not None and not self.recording:
-            settings = SIPSimpleSettings()
+            from blink.file_transfer import transfer_folder
+            from blink.history import conversation_key
             direction = self.sip_session.direction
-            remote = "%s@%s" % (self.sip_session.remote_identity.uri.user, self.sip_session.remote_identity.uri.host)
-            filename = "%s-%s-%s.wav" % (datetime.now().strftime("%Y%m%d-%H%M%S"), remote, direction)
-            path = os.path.join(settings.audio.recordings_directory.normalized, self.account.id)
+            remote_identity = self.sip_session.remote_identity.uri
+            remote = "%s@%s" % (remote_identity.user.decode() if isinstance(remote_identity.user, bytes) else remote_identity.user,
+                                remote_identity.host.decode() if isinstance(remote_identity.host, bytes) else remote_identity.host)
+            started = datetime.now(timezone.utc)
+            filename = "sylk-call-recording-%s-%s-%s.wav" % (started.astimezone().strftime("%Y%m%d-%H%M%S"), remote, direction)
+            party_uri = str(self.contact_uri.uri) if self.contact_uri is not None else remote
+            key = conversation_key(party_uri, self.account)
+            transfer_id = str(uuid.uuid4())
+            directory = transfer_folder(ApplicationData.get('file_transfers'), self.account.id, key, transfer_id)
+            path = os.path.join(directory, filename)
             try:
-                audio_stream.start_recording(os.path.join(path, filename))
+                os.makedirs(directory, exist_ok=True)
+                audio_stream.start_recording(path)
             except (SIPCoreError, IOError, OSError) as e:
-                print('Failed to record: %s' % e)
+                ActivityLog().error(f'[call] Recording the call with {key} failed: {e}')
             else:
                 self.recording = True
+                self._pending_recording = dict(path=path, transfer_id=transfer_id, key=key, account=self.account, uri=party_uri,
+                                               display_name=self.contact.name if self.contact is not None else '',
+                                               timestamp=started.replace(tzinfo=None))
+                ActivityLog().info(f'[call] Recording the call with {key} to {path}')
+
+    def _finish_recording(self, delay):
+        """File the recording that stopped (once the recorder has closed the file)."""
+        recording, self._pending_recording = self._pending_recording, None
+        if recording is not None:
+            call_later(delay, _file_call_recording, recording)
 
     def stop_recording(self):
         audio_stream = self.streams.get('audio')
@@ -971,6 +995,7 @@ class BlinkSession(BlinkSessionBase):
         self.local_hold = False
         self.remote_hold = False
         self.recording = False
+        self._finish_recording(2)      # the call ended while recording: the stream stops the recorder
 
         state = SessionState('ended')
         state.reason = reason
@@ -1222,6 +1247,7 @@ class BlinkSession(BlinkSessionBase):
 
     def _NH_AudioStreamWillStopRecording(self, notification):
         self.recording = False
+        self._finish_recording(1)
         notification.center.post_notification('BlinkSessionDidChangeRecordingState', sender=self, data=NotificationData(recording=self.recording))
 
     def _NH_RTPStreamZRTPReceivedSAS(self, notification):
@@ -1665,6 +1691,21 @@ class ServerConference(object):
         if participant not in self.pending_removals:
             return
         participant.request_status = notification.data.reason
+
+
+def _file_call_recording(recording):
+    """Store a finished call recording as an audio message of its conversation."""
+    from blink.history import MessageHistory
+    path = recording['path']
+    if not os.path.isfile(path) or os.path.getsize(path) <= 44:    # nothing past the WAV header
+        ActivityLog().info(f"[call] Recording of the call with {recording['key']} is empty, not kept")
+        try:
+            os.remove(path)
+            os.rmdir(os.path.dirname(path))
+        except OSError:
+            pass
+        return
+    MessageHistory().add_call_recording(**recording)
 
 
 # Audio sessions
