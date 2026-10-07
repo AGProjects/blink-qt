@@ -86,6 +86,7 @@ class MessagePane(QWidget):
         self._read_timer.setInterval(200)
         self._read_timer.timeout.connect(self._read)
         self._model_connected = None
+        self._pending = None         # (contact, uri, key) selected while the pane was closed
 
         self.apply_theme()
         follow_theme(self)
@@ -102,7 +103,12 @@ class MessagePane(QWidget):
         self.empty_label.setPalette(palette)
 
     def show_conversation(self, contact, uri, key):
-        """Switch to the conversation with a contact, on one of its addresses (key: its conversation key)."""
+        """Switch to the conversation with a contact, on one of its addresses (key: its conversation key).
+        With the pane closed nothing is loaded: the conversation is shown when the pane opens."""
+        if not self.isVisible():
+            self._pending = (contact, uri, key)
+            return
+        self._pending = None
         if contact is self.contact and key == self.key:
             return
         self.contact, self.uri, self.key = contact, uri, key
@@ -123,6 +129,7 @@ class MessagePane(QWidget):
 
     def clear(self):
         """No conversation: the empty state."""
+        self._pending = None
         if self.contact is None:
             return
         self.contact = self.uri = self.key = None
@@ -229,6 +236,8 @@ class MessagePane(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        if self._pending is not None:
+            self.show_conversation(*self._pending)
         self.check_read()
 
     def _read(self):
