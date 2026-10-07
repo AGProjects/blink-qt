@@ -2935,24 +2935,34 @@ class Contact(object):
         self.__dict__.pop('icon', None)
         self.__dict__.pop('pixmap', None)
 
+    @property
+    def sort_key(self):
+        """Where the contact goes in its group: in Messages newest message first, in Calls and Tel
+        newest call first, the ones without either after them; by name otherwise and on a tie."""
+        name = locale.strxfrm(self.name or '')
+        if row_time_kind(getattr(self.group, 'settings', None)) is None:
+            return (0, 0, name)
+        when = self.row_time
+        return (0, -when.timestamp(), name) if when is not None else (1, 0, name)
+
     def __gt__(self, other):
         if isinstance(other, Contact):
-            return locale.strcoll(self.name, other.name) > 0
+            return self.sort_key > other.sort_key
         return NotImplemented
 
     def __ge__(self, other):
         if isinstance(other, Contact):
-            return locale.strcoll(self.name, other.name) >= 0
+            return self.sort_key >= other.sort_key
         return NotImplemented
 
     def __lt__(self, other):
         if isinstance(other, Contact):
-            return locale.strcoll(self.name, other.name) < 0
+            return self.sort_key < other.sort_key
         return NotImplemented
 
     def __le__(self, other):
         if isinstance(other, Contact):
-            return locale.strcoll(self.name, other.name) <= 0
+            return self.sort_key <= other.sort_key
         return NotImplemented
 
     def __repr__(self):
@@ -4176,13 +4186,28 @@ class ContactModel(QAbstractListModel):
 
     def _NH_BlinkConversationPreviewsDidChange(self, notification):
         # Messages group rows quote the last message and show its time, Calls and Tel rows the last call's
+        # and are ordered by it: a changed row moves to its place (rows moved, not reset, so the
+        # selection and the scroll position stay); the previews are already coalesced
         keys = notification.data.keys
-        for position, item in enumerate(self.items):
-            if not isinstance(item, Contact) or row_time_kind(getattr(item.group, 'settings', None)) is None:
-                continue
-            if keys is None or not keys.isdisjoint(item.conversation_keys):
-                index = self.index(position)
-                self.dataChanged.emit(index, index)
+        changed = [item for item in self.items if isinstance(item, Contact) and row_time_kind(getattr(item.group, 'settings', None)) is not None
+                   and (keys is None or not keys.isdisjoint(item.conversation_keys))]
+        for contact in changed:
+            self._reposition_contact(contact)
+
+    def _reposition_contact(self, contact):
+        """Move a contact to its place in its group if its sort key changed, and repaint it."""
+        try:
+            position = self.items.index(contact)
+        except ValueError:
+            return
+        move_point = self._find_contact_move_point(contact)
+        if move_point is not None and move_point not in (position, position + 1):
+            self.beginMoveRows(QModelIndex(), position, position, QModelIndex(), move_point)
+            del self.items[position]
+            self.items.insert(self._find_contact_insertion_point(contact), contact)
+            self.endMoveRows()
+        index = self.index(self.items.index(contact))
+        self.dataChanged.emit(index, index)
 
     def _NH_BlinkMessagesGroupShouldPromote(self, notification):
         groups = self.items[GroupList]
