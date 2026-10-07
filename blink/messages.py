@@ -1083,11 +1083,15 @@ class MessageManager(object, metaclass=Singleton):
         contacts = contacts if contacts is not None else Counter()
         started = time.monotonic()
         log.debug(f'-- {len(messages)} messages fetched from server for {account.id}')
+        # what an earlier run of Blink stored (received live before quitting, say) is a duplicate
+        # too: the in-memory seen ids start empty, and handling it again would show it as new
+        from blink.history import MessageHistory
+        stored = MessageHistory().stored_message_ids(message.get('message_id') for message in messages)
         for index, message in enumerate(messages, 1):
             content_type = str(message.get('content_type') or '').lower()
             action = journal_action(content_type)
-            if self.seen_message_ids.seen(message.get('message_id')):
-                outcome = 'duplicates'      # already handled live (or earlier in this run)
+            if self.seen_message_ids.seen(message.get('message_id')) or str(message.get('message_id') or '') in stored:
+                outcome = 'duplicates'      # already handled live (or earlier in this run), or already stored
             else:
                 try:
                     outcome = getattr(self, f'_journal_{action}')(account, message, content_type, first_sync, contacts)

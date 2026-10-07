@@ -5,6 +5,7 @@ import json
 import pickle as pickle
 import os
 import re
+import threading
 import time
 import uuid
 from PyQt6.QtCore import QTimer
@@ -1120,6 +1121,35 @@ class MessageHistory(object, metaclass=Singleton):
         if category == 'links':
             return " and category = 'text' and has_link = 1"
         return f" and category = {Message.sqlrepr(category)}"
+
+    def stored_message_ids(self, message_ids, timeout=30):
+        """The ones of these message ids history already holds (removed ones included).
+
+        For callers outside the db thread (the journal's sync thread): the query
+        is queued on the db thread, after the writes before it, and waited for.
+        """
+        message_ids = sorted({str(message_id) for message_id in message_ids if message_id})
+        found = set()
+        if not message_ids:
+            return found
+        done = threading.Event()
+
+        @run_in_thread('db')
+        def query():
+            try:
+                table = Message.sqlmeta.table
+                for start in range(0, len(message_ids), 500):
+                    chunk = message_ids[start:start + 500]
+                    rows = self.db.queryAll(f"select distinct message_id from {table} where message_id in ({', '.join(self.db.sqlrepr(message_id) for message_id in chunk)})")
+                    found.update(str(message_id) for (message_id,) in rows)
+            except Exception as e:
+                ActivityLog().error(f'[db] Looking up stored message ids failed: {e}')
+            finally:
+                done.set()
+        query()
+        if not done.wait(timeout):
+            ActivityLog().warning(f'[db] Looking up {len(message_ids)} stored message ids timed out')
+        return found
 
     def last_message_times(self, accounts=None, include_calls=False):
         """{conversation key: newest message time} for ordering conversations."""

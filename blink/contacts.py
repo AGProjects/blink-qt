@@ -11,8 +11,8 @@ import time
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
-from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
-from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
+from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
 from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QListView, QMenu, QMessageBox, QRadioButton, QTableView, QWidget
@@ -3361,8 +3361,33 @@ class ContactWidget(base_class, ui_class):
         except AttributeError:
             self.unread_label.setVisible(False)
         else:
-            background_color = self.state_label.state_colors['available'].stroke
-            self.unread_label.setStyleSheet(f'color: #ffffff; padding: 4px; font-weight: bold; background-color: {background_color.name()}; border-radius: 4px;')
+            # the label only holds the badge's place: ContactDelegate paints it, round and antialiased
+            metrics = QFontMetrics(self.unread_label.font())
+            height = metrics.height() + 4
+            width = max(height, metrics.horizontalAdvance(self.unread_label.text()) + height // 2 + 2)
+            self.unread_label.setFixedSize(width, height)
+            self.unread_label.setStyleSheet('color: transparent; background: transparent; padding: 0px;')
+
+    def paint_unread_badge(self, painter, origin):
+        """The unread count as a white number on a circle (a pill for wider numbers)."""
+        label = self.unread_label
+        if label.isHidden() or not label.text() or label.text() == '0':
+            return
+        rect = QRectF(label.geometry()).translated(QPointF(label.parentWidget().mapTo(self, QPoint(0, 0)))).translated(QPointF(origin))
+        radius = rect.height() / 2
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self.state_label.state_colors['available'].stroke)
+        painter.drawRoundedRect(rect, radius, radius)
+        painter.setPen(QColor('#ffffff'))
+        painter.setFont(label.font())
+        # centred on the digits' ink, not the line box (whose descent and side bearings push them off centre)
+        ink = QFontMetricsF(label.font()).tightBoundingRect(label.text())
+        center = rect.center()
+        painter.drawText(QPointF(center.x() - ink.x() - ink.width() / 2, center.y() - ink.y() - ink.height() / 2), label.text())
+        painter.restore()
 
 
 del ui_class, base_class
@@ -3545,6 +3570,19 @@ class GroupWidget(base_class, ui_class):
 del ui_class, base_class
 
 
+def render_row(widget, painter, rect):
+    """Paint a row widget into a list item at the screen's pixel ratio: a 1x pixmap
+    is scaled up, and blurry, on a HiDPI screen."""
+    device = painter.device()
+    ratio = device.devicePixelRatioF() if device is not None else 1.0
+    if widget.layout() is not None:
+        widget.layout().activate()
+    pixmap = QPixmap(rect.size() * ratio)
+    pixmap.setDevicePixelRatio(ratio)
+    widget.render(pixmap)
+    painter.drawPixmap(rect.topLeft(), pixmap)
+
+
 class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
     def __init__(self, parent=None):
         super(ContactDelegate, self).__init__(parent)
@@ -3632,9 +3670,8 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         widget.init_from_contact(contact)
 
         painter.save()
-        pixmap = QPixmap(item_size)
-        widget.render(pixmap)
-        painter.drawPixmap(option.rect, pixmap)
+        render_row(widget, painter, option.rect)
+        widget.paint_unread_badge(painter, option.rect.topLeft())
 
         if option.state & QStyle.StateFlag.State_MouseOver:
             self.drawExpansionIndicator(contact, option, painter, widget)
@@ -3751,9 +3788,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         widget.init_from_contact(contact)
 
         painter.save()
-        pixmap = QPixmap(item_size)
-        widget.render(pixmap)
-        painter.drawPixmap(option.rect, pixmap)
+        render_row(widget, painter, option.rect)
 
         self.drawCollapseIndicator(contact, option, painter, widget)
 
