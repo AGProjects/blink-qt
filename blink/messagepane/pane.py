@@ -3,9 +3,10 @@
 The contact list is the conversation switcher; this shows the conversation.
 It follows the selection in the contact list (it never opens because of it):
 one contact selected shows that contact's conversation, anything else the
-empty state. A conversation has its header (blink.messagepane.header); the
-transcript and the composer come with the next patches
-(docs/messaging/ui-plan.md, B3-B6).
+empty state. A conversation has its header (blink.messagepane.header) and its
+transcript (ConversationModel in TranscriptView); the composer comes later
+(docs/messaging/ui-plan.md, B6). The models of the last few conversations are
+kept with the pages they loaded, so going back to one does not query history again.
 """
 
 from application.notification import IObserver, NotificationCenter
@@ -19,8 +20,10 @@ from PyQt6.QtWidgets import QLabel, QSizePolicy, QStackedWidget, QVBoxLayout, QW
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.threading import run_in_thread
 
-from blink.logging import MessagingTrace as log
+from blink.logging import ActivityLog, MessagingTrace as log
 from blink.messagepane.header import ConversationHeader
+from blink.messagepane.model import ConversationModel
+from blink.messagepane.view import TranscriptView
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.color import follow_theme, secondary_text_color
 
@@ -30,6 +33,8 @@ __all__ = ['MessagePane']
 
 @implementer(IObserver)
 class MessagePane(QWidget):
+    kept_conversations = 8
+
     minimum_width = 320
     default_width = 480
 
@@ -55,8 +60,9 @@ class MessagePane(QWidget):
         self.empty_label.setWordWrap(True)
         self.empty_label.setMargin(24)
         self.stack.addWidget(self.empty_label)
-        self.conversation_area = QWidget(self.stack)     # the transcript goes here
-        self.stack.addWidget(self.conversation_area)
+        self.transcript = TranscriptView(self.stack)
+        self.stack.addWidget(self.transcript)
+        self.models = {}            # conversation key: ConversationModel, most recent last
         self.stack.setCurrentWidget(self.empty_label)
 
         self.contact = None
@@ -84,9 +90,14 @@ class MessagePane(QWidget):
         self.contact, self.uri, self.key = contact, uri, key
         self.header.set_conversation(contact, uri, key, self._default_account())
         self.header.show()
-        self.stack.setCurrentWidget(self.conversation_area)
+        cached = key in self.models
+        self.transcript.bubble_delegate.peer_avatar = self.header.avatar.draw
+        self.transcript.setModel(self._model(key))
+        self.stack.setCurrentWidget(self.transcript)
         self._find_account(key)
-        log.debug(f'Message pane shows the conversation with {key}')
+        model = self.models[key]
+        how = f'{len(model.items)} messages already loaded' if cached and model.loaded else 'loading'
+        ActivityLog().info(f'[Message with {key}] Conversation selected in the message pane ({uri.uri}, {how})')
 
     def clear(self):
         """No conversation: the empty state."""
@@ -94,7 +105,21 @@ class MessagePane(QWidget):
             return
         self.contact = self.uri = self.key = None
         self.header.hide()
+        self.transcript.setModel(None)
         self.stack.setCurrentWidget(self.empty_label)
+
+    def _model(self, key):
+        model = self.models.pop(key, None)
+        if model is None:
+            model = ConversationModel(key, self)
+            model.load()
+        self.models[key] = model
+        while len(self.models) > self.kept_conversations:
+            oldest = next(iter(self.models))
+            dropped = self.models.pop(oldest)
+            dropped.close()
+            dropped.deleteLater()
+        return model
 
     # The conversation's account: the one its newest message was on
 

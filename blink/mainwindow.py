@@ -27,6 +27,7 @@ from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSe
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
+from blink.logging import ActivityLog
 from blink.messagepane import MessagePane
 from blink.preferences import PreferencesWindow
 from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
@@ -340,11 +341,13 @@ class MainWindow(base_class, ui_class):
                 self.resize(list_width + handle + pane_width, self.height())
                 self._keep_on_screen()
             self.main_splitter.setSizes([list_width, pane_width])
+            ActivityLog().info(f'[ui] Message pane opened ({pane_width} px wide' + (f', showing {self.message_pane.key})' if self.message_pane.key else ', no conversation selected)'))
         else:
             self._save_message_pane_width()
             self.message_pane.hide()
             if resizable:
                 self.resize(list_width, self.height())
+            ActivityLog().info('[ui] Message pane closed')
 
     def _keep_on_screen(self):
         screen = self.screen()
