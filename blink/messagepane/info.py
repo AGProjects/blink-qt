@@ -20,7 +20,7 @@ from sipsimple.threading import run_in_thread
 from blink.util import call_in_gui_thread, translate
 
 
-__all__ = ['show_message_info']
+__all__ = ['show_message_info', 'show_call_details']
 
 
 _open_panels = []
@@ -135,6 +135,52 @@ def _show(parent, item, shown, stored, related_rows, answers):
     browser.setOpenLinks(False)
     browser.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
     browser.setHtml(''.join(parts))
+    layout.addWidget(browser)
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
+    buttons.rejected.connect(dialog.close)
+    layout.addWidget(buttons)
+    _open_panels.append(dialog)
+    dialog.destroyed.connect(lambda *args, dialog=dialog: _open_panels.remove(dialog) if dialog in _open_panels else None)
+    dialog.show()
+
+
+_CALL_FIELDS = (('direction', 'Direction'), ('outcome', 'Outcome'), ('duration', 'Duration'), ('status', 'SIP status'), ('reason', 'Reason'),
+                ('remoteParty', 'Remote party'), ('displayName', 'Name'), ('startTime', 'Started'), ('stopTime', 'Ended'),
+                ('timezone', 'Time zone'), ('media', 'Media'), ('answeredBy', 'Answered by device'), ('source', 'Recorded by'),
+                ('sessionId', 'Call-ID'), ('fromTag', 'From tag'), ('toTag', 'To tag'), ('proxyIP', 'Proxy'), ('sipTraceUrl', 'SIP trace'))
+
+
+def show_call_details(parent, item, record):
+    """The call details dialog: what the call record says, field by field (selectable)."""
+    from blink.message_envelopes import call_summary, format_call_duration, this_device_id
+    if not record:
+        show_message_info(parent, item, {'Drawn as': 'call'})
+        return
+    pairs = [(translate('call_details', 'Summary'), call_summary(record, this_device_id()))]
+    for field, title in _CALL_FIELDS:
+        value = record.get(field)
+        if field == 'duration':
+            value = format_call_duration(value) or value
+        elif isinstance(value, (list, tuple)):
+            value = ', '.join(str(part) for part in value)
+        pairs.append((translate('call_details', title), value))
+    local = record.get('local') if isinstance(record.get('local'), dict) else {}
+    parts = [_section(translate('call_details', 'Call'), pairs),
+             _section(translate('call_details', 'This device'), [(key, ', '.join(map(str, value)) if isinstance(value, list) else value) for key, value in sorted(local.items())]),
+             _section(translate('call_details', 'Record'), [('JSON', json.dumps(record, indent=2, sort_keys=True))])]
+    _dialog(parent, translate('call_details', 'Call Details'), ''.join(parts))
+
+
+def _dialog(parent, title, body):
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(title)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+    dialog.resize(560, 640)
+    layout = QVBoxLayout(dialog)
+    browser = QTextBrowser(dialog)
+    browser.setOpenLinks(False)
+    browser.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+    browser.setHtml(body)
     layout.addWidget(browser)
     buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
     buttons.rejected.connect(dialog.close)

@@ -197,6 +197,9 @@ class TranscriptView(QListView):
                 if item is not None and item.category in ('image', 'audio', 'video', 'other'):
                     self.actionRequested.emit('open', item)      # a file: open it, or fetch it
                     return
+                if item is not None and item.category == 'call':
+                    self.actionRequested.emit('call_details', item)
+                    return
         super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event):

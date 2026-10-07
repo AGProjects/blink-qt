@@ -20,7 +20,9 @@ with the time over its corner and the caption under it; until then a box of the
 same kind says what it is and how far the download got. Any other file is its
 icon, its name and "type · size" (with how far the download got, or in red why
 it failed); a PDF that is here shows its first page, with "PDF · N pages ·
-size" over it.
+size" over it. A call is an arrow for its direction (red for one that wants
+attention: missed, rejected, failed), what happened ("Missed video call") and
+"duration — reason"; a click opens the call's details.
 Layouts are cached per message, width and font.
 """
 
@@ -41,7 +43,8 @@ __all__ = ['BubbleDelegate']
 
 class BubbleLayout(object):
     __slots__ = ('kind', 'run_start', 'day_text', 'document', 'text_size', 'bubble_size', 'size', 'time_text', 'mark', 'mark_kind', 'name_text', 'quote_name', 'quote_text', 'quote_height',
-                 'image_path', 'image_size', 'file_name', 'file_meta', 'file_note', 'file_error', 'file_icon')
+                 'image_path', 'image_size', 'file_name', 'file_meta', 'file_note', 'file_error', 'file_icon',
+                 'call_arrow', 'call_title', 'call_detail', 'call_attention')
 
 
 class BubbleDelegate(QStyledItemDelegate):
@@ -133,7 +136,9 @@ class BubbleDelegate(QStyledItemDelegate):
         layout.quote_name = layout.quote_text = ''
         layout.quote_height = 0
         layout.image_path = layout.image_size = None
-        if item.category == 'image':
+        if item.category == 'call':
+            layout.kind = kind = 'call'
+        elif item.category == 'image':
             layout.kind = kind = 'image'
         elif item.category in ('other', 'audio', 'video'):
             from blink.messagepane.media import pdf_available
@@ -152,6 +157,8 @@ class BubbleDelegate(QStyledItemDelegate):
             layout.kind = kind = 'file'         # cannot be read: a plain file
         if kind == 'file':
             return self._file_layout(key, layout, item, image_path, width, font, small, progress)
+        if kind == 'call':
+            return self._call_layout(key, layout, item, width, font, small)
         if kind == 'note':
             document.setDefaultFont(small)
             option = QTextOption(Qt.AlignmentFlag.AlignHCenter)
@@ -359,6 +366,61 @@ class BubbleDelegate(QStyledItemDelegate):
         self._cache[key] = layout
         return layout
 
+    # Calls
+
+    def _call_layout(self, key, layout, item, width, font, small):
+        from blink.message_envelopes import call_lines, call_needs_attention, call_record, this_device_id
+        record = call_record(item.content, item.metadata)
+        device_id = this_device_id()
+        lines = call_lines(record, device_id) if record else None
+        if lines is None:
+            title, duration, phrase = plain_summary(item), '', ''
+            layout.call_attention = False
+        else:
+            title, duration, phrase = lines
+            layout.call_attention = call_needs_attention(record, device_id)
+        layout.mark, layout.mark_kind = '', None        # a call record is not a message that was delivered
+        direction = (record or {}).get('direction') or item.direction
+        layout.call_arrow = '↗' if direction == 'outgoing' else '↙'
+        layout.call_title = title
+        layout.call_detail = ' — '.join(part for part in (duration, phrase) if part)
+        metrics, small_metrics = QFontMetricsF(font), QFontMetricsF(small)
+        arrow_width = metrics.horizontalAdvance(layout.call_arrow + ' ')
+        limit = self._bubble_width_limit(width) - 2 * self.padding_h
+        text_width = min(limit, max(arrow_width + metrics.horizontalAdvance(title), small_metrics.horizontalAdvance(layout.call_detail),
+                                    small_metrics.horizontalAdvance(layout.time_text + '  ' + (layout.mark or ''))))
+        lines_height = metrics.height() + (small_metrics.height() if layout.call_detail else 0)
+        layout.text_size = QSizeF(text_width, lines_height)
+        layout.bubble_size = QSizeF(max(160, text_width + 2 * self.padding_h), 2 * self.padding_v + lines_height + small_metrics.height())
+        height = layout.bubble_size.height()
+        if layout.name_text:
+            height += small_metrics.height() + 2
+        height += self.run_gap if layout.run_start else self.inner_gap
+        if layout.day_text:
+            height += self.divider_height
+        layout.size = QSize(width, int(height + 0.999))
+        self._cache[key] = layout
+        return layout
+
+    def _paint_call(self, painter, layout, bubble, font, small, secondary, text_colour):
+        metrics, small_metrics = QFontMetricsF(font), QFontMetricsF(small)
+        attention = QColor('#ff7b72') if is_dark_theme() else QColor('#c62828')
+        ok = QColor('#3fb950') if is_dark_theme() else QColor('#2e7d32')
+        left, top = bubble.left() + self.padding_h, bubble.top() + self.padding_v
+        width = bubble.width() - 2 * self.padding_h
+        painter.setFont(font)
+        painter.setPen(attention if layout.call_attention else ok)
+        painter.drawText(QRectF(left, top, width, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.call_arrow)
+        arrow_width = metrics.horizontalAdvance(layout.call_arrow + ' ')
+        painter.setPen(attention if layout.call_attention else text_colour)
+        painter.drawText(QRectF(left + arrow_width, top, width - arrow_width, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                         metrics.elidedText(layout.call_title, Qt.TextElideMode.ElideRight, width - arrow_width))
+        if layout.call_detail:
+            painter.setFont(small)
+            painter.setPen(secondary)
+            painter.drawText(QRectF(left, top + metrics.height(), width, small_metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                             small_metrics.elidedText(layout.call_detail, Qt.TextElideMode.ElideRight, width))
+
     def _paint_file(self, painter, layout, item, bubble, font, small, secondary, text_colour):
         metrics, small_metrics = QFontMetricsF(font), QFontMetricsF(small)
         icon_box = QRectF(bubble.left() + self.padding_h, bubble.top() + self.padding_v + (metrics.height() + small_metrics.height() - self.file_icon_size) / 2,
@@ -562,6 +624,8 @@ class BubbleDelegate(QStyledItemDelegate):
             painter.fillPath(path, QColor(255, 200, 0, 110))
         if layout.kind == 'file':
             self._paint_file(painter, layout, item, bubble, option.font, small, secondary, text_colour)
+        if layout.kind == 'call':
+            self._paint_call(painter, layout, bubble, option.font, small, secondary, text_colour)
         if layout.kind in ('image', 'pdf'):
             self._paint_image(painter, layout, item, bubble, palette, small, secondary)
             if option.state & QStyle.StateFlag.State_MouseOver:
@@ -582,7 +646,7 @@ class BubbleDelegate(QStyledItemDelegate):
             painter.setPen(secondary)
             painter.drawText(QRectF(quote.left() + 9, quote.top() + 3 + metrics.height(), quote.width() - 12, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.quote_text)
 
-        if layout.kind != 'file':
+        if layout.kind not in ('file', 'call'):
             context.palette = self._text_palette(palette, text_colour if layout.kind == 'text' else secondary)
             painter.save()
             origin = self.text_origin(layout, bubble)

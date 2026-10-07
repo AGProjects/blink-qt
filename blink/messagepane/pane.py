@@ -485,6 +485,10 @@ class MessagePane(QWidget):
             if item.content_type == 'text/html':
                 content = plain_summary(item)
             self.composer.set_editing({'id': item.id, 'text': content, 'timestamp': item.timestamp, 'account_id': item.account_id})
+        elif action == 'call_details':
+            from blink.message_envelopes import call_record
+            from blink.messagepane.info import show_call_details
+            show_call_details(self, item, call_record(item.content, item.metadata))
         elif action == 'caption':
             self._edit_caption(item)
         elif action == 'info':
