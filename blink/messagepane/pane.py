@@ -69,6 +69,7 @@ class MessagePane(QWidget):
         self.header = ConversationHeader(self)
         self.header.hide()
         self.header.dayChosen.connect(self._jump_to)
+        self.header.locationAction.connect(self._location_action)
         layout.addWidget(self.header)
         self.strip = TranscriptStrip(self)
         self.strip.hide()
@@ -679,6 +680,70 @@ class MessagePane(QWidget):
         for_both = both is not None and both.isChecked()
         ActivityLog().info(f'[Message with {key}] Deleted {what} {item.id} from the message pane' + (', also for the other party' if for_both else ''))
         self._remove_message(item.id, item.account_id, for_both, why='deleted here')
+
+    # Location: send the current one, ask for theirs
+
+    def _location_action(self, action):
+        if self.key is None:
+            return
+        key = self.key
+        if action == 'request':
+            from datetime import datetime
+            from blink.location import LOCATION_CONTENT_TYPE, location_request_envelope
+            self._send_location_body(key, location_request_envelope(self._new_id(), now=datetime.now().astimezone()), LOCATION_CONTENT_TYPE, 'Location request')
+            self._note(translate('message_pane', 'Location requested'))
+            return
+        from blink.messagepane.position import CurrentPosition
+        self.header.location_button.setEnabled(False)
+        self._note(translate('message_pane', 'Finding your location…'))
+        CurrentPosition.request(lambda coords, why, key=key: self._position_found(key, coords, why))
+
+    @staticmethod
+    def _new_id():
+        import uuid
+        return str(uuid.uuid4())
+
+    def _position_found(self, key, coords, why):
+        self.header.location_button.setEnabled(True)
+        if coords is None:
+            from PyQt6.QtWidgets import QMessageBox
+            ActivityLog().warning(f'[Message with {key}] Location not sent: {why}')
+            QMessageBox.warning(self, translate('message_pane', 'Location Not Sent'), translate('message_pane', 'Your current location could not be found.') + '\n\n' + why)
+            return
+        if key != self.key:
+            ActivityLog().warning(f'[Message with {key}] The location was found after the conversation was left: not sent')
+            return
+        from datetime import datetime
+        from blink.location import LOCATION_CONTENT_TYPE, one_shot_envelope
+        message_id = self._new_id()
+        body = one_shot_envelope(coords, message_id, now=datetime.now().astimezone())
+        if body is None:
+            self._note(translate('message_pane', 'Location not sent: the position is not known'), error=True)
+            return
+        self._send_location_body(key, body, LOCATION_CONTENT_TYPE, 'Current location', message_id)
+        self.transcript.follow_bottom()
+
+    def _send_location_body(self, key, body, content_type, what, message_id=None):
+        import json
+        from blink.messages import MessageManager
+        message_id = message_id or json.loads(body).get('messageId') or self._new_id()
+        try:
+            session = self._message_session()
+            account = self.header.account or session.account
+            MessageManager().send_message(account, session.contact, body, content_type, id=message_id)
+        except Exception as e:
+            ActivityLog().error(f'[Message with {key}] Sending {what.lower()} failed: {e!r}')
+            self._note(translate('message_pane', '%s not sent') % what, error=True)
+            return
+        ActivityLog().info(f'[Message with {key}] {what} sent as {message_id} from account {account.id}')
+
+    def _note(self, text, error=False):
+        """A short word near the location button."""
+        from PyQt6.QtWidgets import QToolTip
+        button = self.header.location_button
+        QToolTip.showText(button.mapToGlobal(button.rect().bottomLeft()), text, button, button.rect(), 4000)
+        if error:
+            ActivityLog().warning(f'[Message with {self.key}] {text}')
 
     # Forward (blink.messagepane.forward)
 

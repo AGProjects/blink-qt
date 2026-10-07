@@ -120,6 +120,7 @@ class AvatarLabel(QLabel):
 class ConversationHeader(QWidget):
     dayChosen = pyqtSignal(object)      # a date to jump to
     fontStep = pyqtSignal(int)          # -1 smaller, +1 larger
+    locationAction = pyqtSignal(str)    # 'send' (current location) or 'request' (theirs)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -170,6 +171,14 @@ class ConversationHeader(QWidget):
         self.calendar_button.setMenu(self.calendar_menu)
         self.calendar_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.calendar_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
+        # location, for accounts with a SylkServer (mobile is where it is read and answered)
+        self.location_button = self._tool_button(translate('message_pane', 'Location'))
+        self.location_menu = QMenu(self.location_button)
+        self.location_menu.aboutToShow.connect(self._fill_location_menu)
+        self.location_button.setMenu(self.location_menu)
+        self.location_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.location_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
+        self.location_button.hide()
         self.audio_button = self._tool_button(translate('message_pane', 'Audio call'))
         self.video_button = self._tool_button(translate('message_pane', 'Video call'))
         self.audio_button.clicked.connect(lambda: self._start_call('audio'))
@@ -190,7 +199,7 @@ class ConversationHeader(QWidget):
             player = AudioPlayer.instance()
             self.stop_audio_button.clicked.connect(player.stop)
             player.changed.connect(lambda *args: self.stop_audio_button.setVisible(player.message_id is not None))
-        for button in (self.stop_audio_button, *self.font_buttons, self.lock_button, self.calendar_button, self.audio_button, self.video_button):
+        for button in (self.stop_audio_button, *self.font_buttons, self.lock_button, self.calendar_button, self.location_button, self.audio_button, self.video_button):
             row.addWidget(button)
 
         self.apply_theme()
@@ -213,6 +222,7 @@ class ConversationHeader(QWidget):
         self.audio_button.setIcon(themed_icon(Resources.get('icons/handset.png'), '#d0d0d0'))
         self.video_button.setIcon(themed_icon(Resources.get('icons/camera.png'), '#d0d0d0'))
         self.calendar_button.setIcon(themed_icon(Resources.get('icons/clock.svg'), '#d0d0d0'))
+        self.location_button.setIcon(themed_icon(Resources.get('icons/location-pin.svg'), '#d0d0d0'))
         self.update_lock()
 
     # Contents
@@ -227,6 +237,7 @@ class ConversationHeader(QWidget):
         self.avatar.set_contact(contact_photo(contact), initials(name, str(uri.uri)), avatar_colour(key))
         self.update_info()
         self.update_lock()
+        self._update_location_button()
 
     def set_day_counts(self, key, counts):
         if key == self.key:
@@ -263,6 +274,30 @@ class ConversationHeader(QWidget):
     def set_account(self, account):
         self.account = account
         self.update_lock()
+        self._update_location_button()
+
+    # Location
+
+    def _update_location_button(self):
+        from sipsimple.account import BonjourAccount
+        account = self.account
+        self.location_button.setVisible(account is not None and account is not BonjourAccount() and bool(getattr(account.sms, 'history_synchronization_url', None)))
+
+    def _fill_location_menu(self):
+        from blink.messagepane.position import positioning_available
+        menu = self.location_menu
+        menu.clear()
+        send = menu.addAction(translate('message_pane', 'Send Current Location'), lambda: self.locationAction.emit('send'))
+        available, why = positioning_available()
+        if not available:
+            send.setEnabled(False)
+            reason = menu.addAction(why)          # why it is greyed out, where it can be read
+            reason.setEnabled(False)
+            font = reason.font()
+            if font.pointSizeF() > 0:
+                font.setPointSizeF(font.pointSizeF() - 1)
+            reason.setFont(font)
+        menu.addAction(translate('message_pane', 'Request Location'), lambda: self.locationAction.emit('request'))
 
     def update_info(self):
         if self.contact is None:

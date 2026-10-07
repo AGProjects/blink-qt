@@ -19,6 +19,7 @@ trail (the pin follows, with the time of the point), Open in OpenStreetMap.
 
 import math
 import os
+import time
 
 from datetime import datetime, timezone
 
@@ -81,6 +82,8 @@ class TileCache(QObject):
 
     concurrent = 4
     memory_limit = 400          # tiles kept as pixmaps
+    timeout = 15                # seconds a tile may take
+    retry_after = 60            # seconds before a tile that failed is asked for again
 
     _instance = None
 
@@ -96,7 +99,7 @@ class TileCache(QObject):
         self._memory = OrderedDict()
         self._queue = []
         self._pending = set()
-        self._failed = set()
+        self._failed = {}           # key: time.monotonic() it failed
         self._running = 0
         self._network = None
         self._directory = None
@@ -123,6 +126,8 @@ class TileCache(QObject):
             if not pixmap.isNull():
                 self._remember(key, pixmap)
                 return pixmap
+        if key in self._failed and time.monotonic() - self._failed[key] > self.retry_after:
+            del self._failed[key]
         if key not in self._pending and key not in self._failed:
             self._pending.add(key)
             self._queue.append(key)
@@ -144,6 +149,7 @@ class TileCache(QObject):
             host = TILE_HOST % SUBDOMAINS[(x + y) % len(SUBDOMAINS)]
             request = QNetworkRequest(QUrl(f'https://{host}/{zoom}/{x}/{y}.png'))
             request.setRawHeader(b'User-Agent', user_agent().encode())
+            request.setTransferTimeout(self.timeout * 1000)      # a stalled request must not hold a slot for ever
             reply = self._network.get(request)
             self._running += 1
             reply.finished.connect(lambda reply=reply, key=key: self._finished(reply, key))
@@ -155,13 +161,14 @@ class TileCache(QObject):
         try:
             if reply.error() != QNetworkReply.NetworkError.NoError:
                 if not self._failed:
-                    ActivityLog().warning(f'[location] Map tiles cannot be fetched from {TILE_HOST % "*"}: {reply.errorString()}')
-                self._failed.add(key)
+                    ActivityLog().warning(f'[location] Map tiles cannot be fetched from {TILE_HOST % "*"}: {reply.errorString()} (asked again in {self.retry_after} s)')
+                log.debug(f'Map tile {key} not fetched: {reply.errorString()}')
+                self._failed[key] = time.monotonic()
                 return
             data = bytes(reply.readAll())
             pixmap = QPixmap()
             if not pixmap.loadFromData(data):
-                self._failed.add(key)
+                self._failed[key] = time.monotonic()
                 return
             path = self._path(*key)
             try:

@@ -58,7 +58,7 @@ class TranscriptView(QListView):
             AudioInfo.instance().measured.connect(self._SH_MediaReady)
         from blink.messagepane.locations import LocationStore, TileCache
         TileCache.instance().tileReady.connect(self.viewport().update)
-        LocationStore.instance().changed.connect(self._SH_VideoProbed)        # a share read (again): its bubble may change size
+        LocationStore.instance().changed.connect(self._SH_LocationChanged)
         from blink.messagepane.video import VideoProbe, video_available
         if video_available():
             VideoProbe.instance().probed.connect(self._SH_VideoProbed)
@@ -320,6 +320,15 @@ class TranscriptView(QListView):
         row = model.row_of(message_id) if model is not None else None
         if row is not None:
             self.viewport().update(self.visualRect(model.index(row, 0)))
+
+    def _SH_LocationChanged(self, message_id):
+        """A share was read (again): its bubble takes its new size (two lines under the map) and draws it."""
+        model = self.model()
+        row = model.row_of(message_id) if model is not None else None
+        if row is not None:
+            index = model.index(row, 0)
+            self.bubble_delegate.sizeHintChanged.emit(index)
+            self.viewport().update(self.visualRect(index))
 
     def _SH_VideoProbed(self, path):
         """A movie's size is known: its bubble takes the poster's shape."""

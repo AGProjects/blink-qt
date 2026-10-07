@@ -650,7 +650,7 @@ class BubbleDelegate(QStyledItemDelegate):
         clip = QPainterPath()
         clip.addRoundedRect(box, self.radius - 3, self.radius - 3)
         painter.save()
-        painter.setClipPath(clip)
+        painter.setClipPath(clip, Qt.ClipOperation.IntersectClip)     # within what the view repaints
         if share:
             track = [(lat, lng) for lat, lng, _ in share['track']]
             points = track + ([share['destination']] if share['destination'] else [])
