@@ -191,6 +191,7 @@ class HistoryManager(object, metaclass=Singleton):
         else:
             self.calls = data[-self.history_size:]
         self.message_history.rekey_conversations()      # once, now that the accounts' dial rules are known
+        self.message_history.drop_file_transfer_notices()
         self.message_history._retry_failed_messages()
         self.message_history.get_unread_messages()
 
@@ -1493,6 +1494,24 @@ class MessageHistory(object, metaclass=Singleton):
                 row.has_link = has_link(row.content_type, plaintext) or 0
 
     rekey_marker = 'history-canonical-keys.done'
+
+    @run_in_thread('db')
+    def drop_file_transfer_notices(self):
+        """Remove the server's plain text notices of file transfers stored before they were
+        skipped (blink.journal.is_file_transfer_notice): the transfers are stored on their own."""
+        table = Message.sqlmeta.table
+        where = ("content_type = 'text/plain' and content like 'File transfer available at %'"
+                 " and content like '%/webrtcgateway/filetransfer/%'")
+        try:
+            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            if count:
+                self.db.queryAll(f'delete from {table} where {where}')
+        except Exception as e:
+            ActivityLog().error(f'[db] Removing file transfer notices failed: {e}')
+            return
+        if count:
+            ActivityLog().info(f'[db] Removed {count} file transfer notices (the transfers are stored on their own)')
+            ConversationPreviews().invalidate()
 
     @run_in_thread('db')
     def rekey_conversations(self):

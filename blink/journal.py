@@ -21,7 +21,7 @@ from blink.message_envelopes import (ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTE
 
 
 __all__ = ['journal_action', 'parse_payload', 'JournalCache', 'JournalStats', 'SeenMessageIds', 'OwnMarkers', 'IGNORED_CONTENT_TYPES', 'KNOWN_INERT_CONTENT_TYPES', 'MAX_PAGE_ATTEMPTS',
-           'FIRST_SYNC_MARKER']
+           'FIRST_SYNC_MARKER', 'is_file_transfer_notice']
 
 
 IMDN_CONTENT_TYPE = 'message/imdn'
@@ -42,6 +42,18 @@ MAX_PAGE_ATTEMPTS = 3
 # removed once the read state is settled): it is resumed as a first sync after a restart, and
 # its unread counts are not shown before they mean something.
 FIRST_SYNC_MARKER = 'first-sync.marker'
+
+
+def is_file_transfer_notice(content_type, content):
+    """SylkServer's plain text notice of a file transfer, "File transfer available at <url> (size)",
+    sent to the other party and to the sender's own devices for clients that cannot show a
+    transfer. The transfer comes as a message of its own: the notice is dropped (as mobile does)."""
+    if str(content_type or '').lower() != 'text/plain':
+        return False
+    if isinstance(content, (bytes, bytearray)):
+        content = content.decode('utf-8', 'replace')
+    content = str(content or '')
+    return content.startswith('File transfer available at ') and '/webrtcgateway/filetransfer/' in content
 
 
 def journal_action(content_type):

@@ -48,7 +48,7 @@ from blink.file_transfer import base_url_from_transfer, derive_base_url
 from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
-from blink.journal import FIRST_SYNC_MARKER, KNOWN_INERT_CONTENT_TYPES, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
+from blink.journal import FIRST_SYNC_MARKER, KNOWN_INERT_CONTENT_TYPES, is_file_transfer_notice, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, JournalLog, MessagingTrace as log
 from blink.resources import ApplicationData, Resources
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
@@ -1406,6 +1406,8 @@ class MessageManager(object, metaclass=Singleton):
         content = message.get('content') or ''
         if content.startswith('?OTR:') or content.startswith('?OTRv3?'):
             return 'OTR skipped'
+        if is_file_transfer_notice(message.get('content_type'), content):
+            return 'file transfer notices skipped'
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(message['contact'])
         history_message = BlinkMessage(content, message['content_type'], self._journal_sender(account, message, contact),
@@ -1733,6 +1735,10 @@ class MessageManager(object, metaclass=Singleton):
             # not history: acted on elsewhere or not at all. The other types the journal ignores
             # (API token, private key, typing) are handled live below
             ActivityLog().info(f'[Message] {content_type.lower()} message {message_id} for account {account.id} skipped, it is not history')
+            return
+
+        if is_file_transfer_notice(content_type, body):
+            log.info(f'File transfer notice {message_id} for account {account.id} skipped, the transfer comes as its own message')
             return
 
         if content_type.lower() == 'application/sylk-api-token':
