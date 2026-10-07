@@ -4,12 +4,16 @@ Plain text in the system font (at the pane's font size), growing up to six
 lines. Enter sends, Shift+Enter starts a new line. While text is being typed
 the peer is told so (is-composing active, renewed every 10 s while typing,
 idle when the text is cleared). Pasting inserts plain text; pasted or dropped
-files are handed on (filesDropped) to be sent.
+files are handed on (filesDropped) to be sent, as are the files chosen from
+the paperclip menu (Files..., Screenshot...).
 """
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QTextOption
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPlainTextEdit, QSizePolicy, QToolButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QMenu, QPlainTextEdit, QSizePolicy, QToolButton, QVBoxLayout, QWidget
+
+from blink.resources import Resources, themed_icon
+from blink.widgets.color import follow_theme
 
 from blink.util import translate
 
@@ -85,6 +89,17 @@ class Composer(QWidget):
         row.setContentsMargins(8, 6, 8, 6)
         row.setSpacing(6)
         outer.addLayout(row)
+        self.attach_button = QToolButton(self)
+        self.attach_button.setAutoRaise(True)
+        self.attach_button.setIconSize(QSize(18, 18))
+        self.attach_button.setToolTip(translate('message_pane', 'Send files or a screenshot'))
+        self.attach_menu = QMenu(self.attach_button)
+        self.attach_menu.addAction(translate('message_pane', 'Files…'), self._choose_files)
+        self.attach_menu.addAction(translate('message_pane', 'Screenshot…'), self._take_screenshot)
+        self.attach_button.setMenu(self.attach_menu)
+        self.attach_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.attach_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
+        row.addWidget(self.attach_button, 0, Qt.AlignmentFlag.AlignBottom)
         self.edit = ComposerEdit(self)
         row.addWidget(self.edit, 1)
         self.send_button = QToolButton(self)
@@ -102,6 +117,23 @@ class Composer(QWidget):
         self.send_button.clicked.connect(self._send)
         self.edit.filesDropped.connect(self.filesDropped)
         self.edit.textChanged.connect(self._SH_TextChanged)
+        self._directory = ''
+        self.apply_theme()
+        follow_theme(self)
+
+    def apply_theme(self):
+        self.attach_button.setIcon(themed_icon(Resources.get('icons/attach.svg'), '#d0d0d0'))
+
+    def _choose_files(self):
+        paths, _ = QFileDialog.getOpenFileNames(self, translate('message_pane', 'Send Files'), self._directory)
+        if paths:
+            import os
+            self._directory = os.path.dirname(paths[0])
+            self.filesDropped.emit(paths)
+
+    def _take_screenshot(self):
+        from blink.screenshot import PortalScreenshot
+        PortalScreenshot.take(lambda path: path and self.filesDropped.emit([path]))
 
     def text(self):
         return self.edit.toPlainText()
