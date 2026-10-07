@@ -15,7 +15,7 @@ from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRectF, QRect, 
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
-from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QListView, QMenu, QMessageBox, QRadioButton, QTableView, QWidget
+from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QListView, QMenu, QMessageBox, QRadioButton, QTableView, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -27,7 +27,7 @@ from application.system import makedirs, unlink
 from collections import OrderedDict, deque
 from contextlib import contextmanager
 from datetime import datetime
-from functools import partial
+from functools import lru_cache, partial
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from heapq import heappush
@@ -6531,6 +6531,47 @@ class ContactURITableView(QTableView):
         self.selectionModel().clearSelection()
 
 
+def is_read_only_group(group_settings):
+    """Messages, Calls and Tel: a record of who this account has messages or calls with,
+    kept by the software (MessagesGroupFiler, CallsGroupFiler). The contact editor shows
+    them, ticked when the contact is in one, but never offers them as a choice: putting
+    somebody in one by hand states something untrue, and taking somebody out is undone
+    by their next message or call (macOS ContactController.isReadOnlyGroup)."""
+    if group_settings is None or isinstance(group_settings, VirtualGroup):
+        return False
+    return is_messages_group(group_settings) or is_group(group_settings, CALLS) or is_group(group_settings, TEL)
+
+
+def is_selectable_group(group_settings):
+    """Whether the contact editor lists this group: the ones the user files people into,
+    plus the read-only ones, which the contact is shown in and so would look lost if left
+    out (macOS ContactController.selectableGroups). Deleted and Conference are not listed."""
+    if group_settings is None or isinstance(group_settings, VirtualGroup):
+        return False
+    return is_read_only_group(group_settings) or not is_managed_group(group_settings)
+
+
+class GroupSelectionMenu(QMenu):
+    """A menu of check boxes that stays open while they are toggled, so several groups
+    can be picked in one go; any other item closes it as usual."""
+
+    def _toggle_active(self):
+        action = self.activeAction()
+        if action is not None and action.isEnabled() and action.isCheckable():
+            action.trigger()
+            return True
+        return False
+
+    def mouseReleaseEvent(self, event):
+        if not self._toggle_active():
+            super(GroupSelectionMenu, self).mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._toggle_active():
+            return
+        super(GroupSelectionMenu, self).keyPressEvent(event)
+
+
 ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
 
 
@@ -6545,6 +6586,12 @@ class ContactEditorDialog(base_class, ui_class):
         self.addresses_table.setModel(self.contact_uri_model)
         self.edited_contact = None
         self.target_group = None
+        self.original_groups = []       # addressbook groups the edited contact was in when opened
+        self.selected_groups = []       # addressbook groups the contact will be in on Ok
+        self.created_groups = []        # groups made with Add Group... that the contact list may not show yet
+        self.groups_menu = GroupSelectionMenu(self.groups_button)
+        self.groups_menu.aboutToShow.connect(self._SH_GroupsMenuAboutToShow)
+        self.groups_button.setMenu(self.groups_menu)
         self.name_editor.textChanged.connect(self._SH_NameEditorTextChanged)
         self.accepted.connect(self._SH_Accepted)
         self.rejected.connect(self._SH_Rejected)
@@ -6568,6 +6615,9 @@ class ContactEditorDialog(base_class, ui_class):
         self.icon_selector.init_with_contact(None)
         self.presence.setChecked(True)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData('messages'))   # new contacts default to messages
+        self.original_groups = []
+        self.selected_groups = [target_group.settings] if target_group is not None and is_selectable_group(target_group.settings) else []
+        self._update_groups_button()
         self.accept_button.setText(translate('contact_editor', 'Add'))
         self.accept_button.setEnabled(False)
         self.show()
@@ -6583,9 +6633,90 @@ class ContactEditorDialog(base_class, ui_class):
         self.presence.setChecked(contact.presence.subscribe)
         self.auto_answer.setChecked(contact.auto_answer)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
+        self.original_groups = [group for group in self._selectable_groups() if contact.id in {member.id for member in group.contacts}]
+        self.selected_groups = list(self.original_groups)
+        self._update_groups_button()
         self.accept_button.setText(translate('contact_editor', 'Ok'))
         self.accept_button.setEnabled(True)
         self.show()
+
+    def _selectable_groups(self):
+        """The addressbook groups the editor lists, in contact list order."""
+        try:
+            contact_model = self.parent().contact_model
+        except AttributeError:
+            return []
+        return [group.settings for group in contact_model.items[GroupList] if is_selectable_group(group.settings)]
+
+    def _update_groups_button(self):
+        count = len(self.selected_groups)
+        if count == 0:
+            title = translate('contact_editor', 'No Selected Groups')
+        elif count == 1:
+            title = translate('contact_editor', 'One Selected Group')
+        else:
+            title = translate('contact_editor', '%d Selected Groups') % count
+        self.groups_button.setText(title)
+        self.groups_button.setToolTip(', '.join(group.name for group in self.selected_groups if group.name))
+
+    def _SH_GroupsMenuAboutToShow(self):
+        # built every time it opens, so a group added, renamed or removed meanwhile is current
+        groups = self._selectable_groups()
+        listed = {group.id for group in groups}
+        self.selected_groups = [group for group in self.selected_groups if group.id in listed or group in self.created_groups]
+        self.groups_menu.clear()
+        for group in groups:
+            action = self.groups_menu.addAction(group.name or translate('contact_editor', 'Unnamed Group'))
+            action.setCheckable(True)
+            action.setChecked(group in self.selected_groups)
+            action.setEnabled(not is_read_only_group(group))
+            action.setData(group)
+            action.triggered.connect(partial(self._SH_GroupToggled, group))
+        self.groups_menu.addSeparator()
+        for title, handler in ((translate('contact_editor', 'Select All'), self._SH_SelectAllGroups),
+                               (translate('contact_editor', 'Deselect All'), self._SH_DeselectAllGroups),
+                               (translate('contact_editor', 'Add Group...'), self._SH_AddGroup)):
+            action = self.groups_menu.addAction(title)
+            action.triggered.connect(handler)
+        self._update_groups_button()
+
+    def _sync_group_actions(self):
+        for action in self.groups_menu.actions():
+            group = action.data()
+            if action.isCheckable() and group is not None:
+                action.setChecked(group in self.selected_groups)
+        self._update_groups_button()
+
+    def _SH_GroupToggled(self, group, checked):
+        if is_read_only_group(group):     # disabled in the menu; the same rule where it cannot be routed around
+            return
+        if checked and group not in self.selected_groups:
+            self.selected_groups.append(group)
+        elif not checked and group in self.selected_groups:
+            self.selected_groups.remove(group)
+        self._update_groups_button()
+
+    def _SH_SelectAllGroups(self, checked=False):
+        # all the ones that are the user's to choose, plus whatever the software already decided
+        self.selected_groups = [group for group in self._selectable_groups() if not is_read_only_group(group) or group in self.selected_groups]
+        self._sync_group_actions()
+
+    def _SH_DeselectAllGroups(self, checked=False):
+        self.selected_groups = [group for group in self.selected_groups if is_read_only_group(group)]
+        self._sync_group_actions()
+
+    def _SH_AddGroup(self, checked=False):
+        name, ok = QInputDialog.getText(self, translate('contact_editor', 'Add Group'), translate('contact_editor', 'Group name:'))
+        name = name.strip() if ok else ''
+        if not name:
+            return
+        group = addressbook.Group()
+        group.name = name
+        self.parent().contact_model._atomic_update(save=[group])
+        self.created_groups.append(group)
+        self.selected_groups.append(group)
+        ActivityLog().info(f'[contacts] Created group {name} from the contact editor')
+        self._update_groups_button()
 
     def _SH_NameEditorTextChanged(self, text):
         self.accept_button.setEnabled(text != '')
@@ -6612,6 +6743,7 @@ class ContactEditorDialog(base_class, ui_class):
                                     translate('contact_editor', 'A Bonjour neighbour is reached on this network only, so it is not saved in the address book: %s') % ', '.join(str(uri) for uri in refused))
         if self.edited_contact is None and not any(item.uri and item.uri not in refused for item in self.contact_uri_model.items):
             self.contact_uri_model.reset()
+            self._reset_groups()
             self.target_group = None
             return
 
@@ -6655,20 +6787,42 @@ class ContactEditorDialog(base_class, ui_class):
                 contact.alternate_icon = icon_descriptor
 
         modified_settings = [contact]
-        if self.target_group is not None:
-            self.target_group.settings.contacts.add(contact)
-            modified_settings.append(self.target_group.settings)
+        added = [group for group in self.selected_groups if group not in self.original_groups]
+        # a read-only group is never left by hand: Deselect All and the menu both keep them
+        removed = [group for group in self.original_groups if group not in self.selected_groups and not is_read_only_group(group)]
+        if added and self.edited_contact is None:
+            publish_contact_for_groups(contact)
+        for group in added:
+            if contact.id not in {member.id for member in group.contacts}:
+                group.contacts.add(contact)
+                modified_settings.append(group)
+        for group in removed:
+            if contact.id in {member.id for member in group.contacts}:
+                group.contacts.remove(contact)
+                modified_settings.append(group)
+        if added or removed:
+            ActivityLog().info(f"[contacts] {contact.name}: added to {', '.join(group.name for group in added) or 'no group'}, removed from {', '.join(group.name for group in removed) or 'no group'}")
         contact_model._atomic_update(save=modified_settings)
 
+        self._reset_groups()
         self.contact_uri_model.reset()
         self.edited_contact = None
         self.target_group = None
+
+    def _reset_groups(self):
+        self.original_groups = []
+        self.selected_groups = []
+        self.created_groups = []
+        self.groups_menu.clear()
 
     def _SH_Rejected(self):
         if self.edited_contact is not None:
             notification_center = NotificationCenter()
             notification_center.remove_observer(self, sender=self.edited_contact)
         self.contact_uri_model.reset()
+        self._reset_groups()
+        self.edited_contact = None
+        self.target_group = None
 
     @run_in_gui_thread
     def handle_notification(self, notification):
