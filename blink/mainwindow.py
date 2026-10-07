@@ -629,8 +629,13 @@ class MainWindow(base_class, ui_class):
         self.server_tools_window.open_history_page(account)
 
     def _AH_ChatWindowActionTriggered(self, checked):
+        """The chat window is for MSRP chat, video and screen sharing; without any, messages are in the pane."""
         blink = QApplication.instance()
-        blink.chat_window.show()
+        if blink.chat_window.has_visible_sessions():
+            blink.chat_window.show()
+        else:
+            self.set_message_pane_visible(True)
+            self._bring_to_front()
 
     def _AH_ShowLastMessagesActionTriggered(self, checked):
         """The message pane, on the conversation with the newest message."""

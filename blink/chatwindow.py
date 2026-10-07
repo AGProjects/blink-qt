@@ -2763,10 +2763,28 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.chat_encryption_label.setPixmap(self.pixmaps.grey_lock)
 
     def show(self):
+        self._hide_message_only_sessions()
         super(ChatWindow, self).show()
         self.raise_()
         self.activateWindow()
         self.showNormal()
+
+    def _hide_message_only_sessions(self):
+        """SIP message conversations are the message pane's: their rows are hidden here (the
+        window still routes their messages: unread counts, receipts), and one selected is left."""
+        model = self.session_model
+        selection_model = self.session_list.selectionModel()
+        for position, session in enumerate(model.sessions):
+            self.session_list.setRowHidden(position, not self._shows_session(session.blink_session))
+        if self.selected_session is not None and not self._shows_session(self.selected_session.blink_session):
+            visible = next((position for position, session in enumerate(model.sessions) if self._shows_session(session.blink_session)), None)
+            if visible is None:
+                selection_model.clearSelection()
+            else:
+                selection_model.select(model.index(visible), selection_model.SelectionFlag.ClearAndSelect)
+
+    def has_visible_sessions(self):
+        return any(self._shows_session(session.blink_session) for session in self.session_model.sessions)
         # if not self.session_model.rowCount():
         #     history = HistoryManager()
         #     history.get_last_contacts()
@@ -2785,6 +2803,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.selected_session.active_panel = self.info_panel
 
     def show_with_messages(self):
+        self._hide_message_only_sessions()
         super(ChatWindow, self).show()
         self.raise_()
         self.activateWindow()
@@ -3977,6 +3996,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.chat_widget.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
         history = HistoryManager()
         history.load(session.blink_session.contact.uri.uri, session.blink_session)
+        self._hide_message_only_sessions()
 
     def _NH_BlinkMessageHistoryMustReload(self, notification):
         history = HistoryManager()

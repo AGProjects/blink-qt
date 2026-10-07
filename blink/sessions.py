@@ -3162,8 +3162,15 @@ class AudioSessionListView(QListView):
             session.blink_session.remove_stream(session.blink_session.streams.get('screen-sharing'))
 
     def _AH_SendSMS(self):
+        """Messages to the party of this call: its conversation in the message pane."""
         blink = QApplication.instance()
-        blink.chat_window.show()
+        selected_indexes = self.selectionModel().selectedIndexes() if hasattr(self, 'selectionModel') else []
+        session = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
+        blink_session = getattr(session, 'blink_session', None)
+        if blink_session is not None and blink_session.contact is not None:
+            blink.main_window.show_conversation_in_pane(blink_session.contact, blink_session.contact_uri)
+        else:
+            blink.main_window.set_message_pane_visible(True)
 
     def _AH_ShowSessionInfo(self):
         blink = QApplication.instance()
