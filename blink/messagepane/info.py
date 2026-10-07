@@ -1,7 +1,8 @@
 """The message info panel: everything known about one message, stored and shown.
 
 Sections: Message (ids, parties, account, time as stored and as sent), Delivery
-(state, disposition asked for, read), Replies (what it answers, what answers it),
+(state, disposition asked for, read), Clients (the client that sent it and the ones
+that sent its receipts, from blink.history.MessageAgent), Replies (what it answers, what answers it),
 File transfer (name, size, type, URL, where it is here, a failure), Location
 (the share's fields), Storage (the history row's columns as stored) and Related
 (rows filed against it: links, captions, waveforms, trail ticks). The values are
@@ -11,6 +12,8 @@ stored state next to what the transcript shows. All text can be selected.
 
 import html
 import json
+
+from datetime import timezone
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QTextBrowser, QVBoxLayout
@@ -52,7 +55,30 @@ def _load(parent, item, shown):
         stored.append({column: getattr(row, column, None) for column in ['id'] + list(row.sqlmeta.columns)})
     related_rows = [{'message_id': row.message_id, 'action': row.related_action, 'content_type': row.content_type,
                      'time': str(row.timestamp), 'deleted': row.deleted, 'detail': _detail(row, label_metadata, reply_metadata)} for row in related]
-    call_in_gui_thread(_show, parent, item, shown, stored, related_rows, answers)
+    agents = MessageHistory().agents(item.id)
+    call_in_gui_thread(_show, parent, item, shown, stored, related_rows, answers, agents)
+
+
+_AGENT_LABELS = {'sent': 'Sent from', 'delivered': 'Delivered to', 'displayed': 'Displayed on', 'error': 'Error from',
+                 'failed': 'Failed on', 'forbidden': 'Refused by', 'processed': 'Processed by', 'stored': 'Stored by'}
+
+
+def _agent_rows(agents):
+    """(label, "client, via relay, at time") of who sent a message and who answered it."""
+    rows = []
+    for kind, user_agent, relay, received_at in agents:
+        when = received_at.replace(tzinfo=timezone.utc).astimezone().strftime('%Y-%m-%d %H:%M:%S') if received_at else ''
+        text = user_agent + (f'\nvia {relay}' if relay else '') + (f'\nat {when}' if when else '')
+        rows.append((_AGENT_LABELS.get(kind, kind), text))
+    return rows
+
+
+def _sent_by(agents):
+    """The client that sent the message: as it said (this device's own, for one sent from here), else why it is not known."""
+    for kind, user_agent, relay, received_at in agents:
+        if kind == 'sent':
+            return user_agent + (f' (via {relay})' if relay else '')
+    return translate('message_info', 'not known (fetched from the journal, or received before user agents were kept)')
 
 
 def _detail(row, label_metadata, reply_metadata):
@@ -65,14 +91,33 @@ def _detail(row, label_metadata, reply_metadata):
     return ''
 
 
+def _plain(value):
+    """A value as people read it: lists (and lists stored as their text) comma separated, addresses without sip:."""
+    if isinstance(value, str) and value.startswith('[') and value.endswith(']'):
+        import ast
+        try:
+            parsed = ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            parsed = None
+        if isinstance(parsed, (list, tuple)):
+            value = parsed
+    if isinstance(value, (list, tuple, set)):
+        return ', '.join(_plain(part) for part in value)
+    text = str(value)
+    for scheme in ('sips:', 'sip:'):
+        if text.lower().startswith(scheme):
+            return text[len(scheme):]
+    return text
+
+
 def _section(title, pairs):
     rows = ''.join(f'<tr><td style="color:gray;padding-right:12px;vertical-align:top;white-space:nowrap">{html.escape(str(key))}</td>'
-                   f'<td style="white-space:pre-wrap">{html.escape(str(value))}</td></tr>'
-                   for key, value in pairs if value not in (None, '', [], {}))
+                   f'<td style="white-space:pre-wrap">{html.escape(_plain(value))}</td></tr>'
+                   for key, value in pairs if value not in (None, '', [], {}, (), '[]'))
     return f'<h3 style="margin-top:14px">{html.escape(title)}</h3><table cellspacing="2">{rows}</table>' if rows else ''
 
 
-def _show(parent, item, shown, stored, related_rows, answers):
+def _show(parent, item, shown, stored, related_rows, answers, agents=()):
     from blink.message_envelopes import file_transfer_envelope
     from blink.messagepane.files import failure_reason, local_file
     row = stored[0] if stored else {}
@@ -84,6 +129,7 @@ def _show(parent, item, shown, stored, related_rows, answers):
         ('Party', item.uri),
         ('Name', item.display_name),
         ('Account', item.account_id),
+        ('User agent', _sent_by(agents)),
         ('Time', item.timestamp.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')),
         ('Sent at (as received)', row.get('cpim_timestamp')),
         ('Content type', item.content_type),
@@ -96,6 +142,7 @@ def _show(parent, item, shown, stored, related_rows, answers):
         ('Read', {1: 'yes', 0: 'no'}.get(item.read, item.read)),
         ('Decrypted', {'1': 'yes', '0': 'no'}.get(str(item.decrypted), item.decrypted)),
     ]))
+    parts.append(_section(translate('message_info', 'Clients'), _agent_rows(agents)))
     reply = item.reply
     parts.append(_section(translate('message_info', 'Replies'), [
         ('Answers', f"{reply['id']}: {reply['text']}" if reply else ''),

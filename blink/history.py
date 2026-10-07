@@ -461,6 +461,26 @@ class DownloadedFiles(SQLObject):
 NOT_DELETED_SQL = '(deleted is null or deleted = 0)'
 
 
+class MessageAgent(SQLObject):
+    """Which client sent a message, or answered it with a receipt, as the SIP request said.
+
+    kind is 'sent' for the message itself, else the receipt's status (delivered,
+    displayed, error, ...); the newest of each is kept. user_agent is the client's
+    (X-Sylk-User-Agent when a SylkServer relayed it, else the SIP User-Agent), relay
+    the SIP User-Agent of the relay when there was one.
+    """
+    __version__ = 1
+
+    class sqlmeta:
+        table = 'message_agents'
+    message_id         = StringCol()
+    kind               = StringCol()
+    user_agent         = UnicodeCol(length=255, default=None)
+    relay              = UnicodeCol(length=255, default=None)
+    received_at        = DateTimeCol(default=None)            # UTC
+    unq_idx            = DatabaseIndex(message_id, kind, unique=True)
+
+
 class PendingRemoval(SQLObject):
     """A message removal whose target message has not been stored yet.
 
@@ -724,7 +744,40 @@ class MessageHistory(object, metaclass=Singleton):
                 self.table_versions.set_version(PendingRemoval.sqlmeta.table, PendingRemoval.__version__)
                 ActivityLog().info('[db] Created table %s' % PendingRemoval.sqlmeta.table)
 
+        MessageAgent._connection = self.db
+        if not MessageAgent.tableExists():
+            try:
+                MessageAgent.createTable()
+            except Exception as e:
+                ActivityLog().error('[db] Could not create table %s: %s' % (MessageAgent.sqlmeta.table, e))
+            else:
+                self.table_versions.set_version(MessageAgent.sqlmeta.table, MessageAgent.__version__)
+                ActivityLog().info('[db] Created table %s' % MessageAgent.sqlmeta.table)
+
         self._vacuum_if_needed()
+
+    @run_in_thread('db')
+    def record_agent(self, message_id, kind, user_agent, relay=None):
+        """Remember the client that sent a message (kind 'sent') or a receipt of it (kind: its status)."""
+        if not message_id or not user_agent:
+            return
+        try:
+            rows = list(MessageAgent.selectBy(message_id=message_id, kind=kind))
+            if rows:
+                rows[0].set(user_agent=user_agent, relay=relay, received_at=datetime.now(timezone.utc).replace(tzinfo=None))
+            else:
+                MessageAgent(message_id=message_id, kind=kind, user_agent=user_agent, relay=relay, received_at=datetime.now(timezone.utc).replace(tzinfo=None))
+        except Exception as e:
+            log.warning(f'Cannot store the user agent of {kind} {message_id}: {e!r}')
+
+    def agents(self, message_id):
+        """[(kind, user agent, relay, received at)] of a message, oldest first. In the db thread."""
+        try:
+            rows = MessageAgent.selectBy(message_id=message_id).orderBy('received_at')
+            return [(row.kind, row.user_agent, row.relay, row.received_at) for row in rows]
+        except Exception as e:
+            log.warning(f'Cannot read the user agents of {message_id}: {e!r}')
+            return []
 
     def _check_table_version(self):
         """Upgrade the messages table one version at a time.

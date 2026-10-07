@@ -329,6 +329,29 @@ class ExportPrivateKeyRequest(QObject):
 del ui_class, base_class
 
 
+def _bare(uri):
+    """An address for the logs: no sip: or sips: in front."""
+    text = str(uri)
+    for scheme in ('sips:', 'sip:'):
+        if text.lower().startswith(scheme):
+            return text[len(scheme):]
+    return text
+
+
+def _header_text(headers, name):
+    """A SIP header's value as text, or None."""
+    header = headers.get(name, None)
+    if header is None or header is Null:
+        return None
+    value = getattr(header, 'body', None)
+    if value is None:
+        value = str(header)
+    if isinstance(value, bytes):
+        value = value.decode('utf-8', 'replace')
+    value = ' '.join(str(value).split())[:255]
+    return value or None
+
+
 class BlinkMessage(MSRPChatMessage):
     __slots__ = 'id', 'disposition', 'is_secure', 'direction', 'metadata'
 
@@ -558,7 +581,7 @@ class OutgoingMessage(object):
     @property
     def _peer(self):
         # a Bonjour neighbour by instance id, not by today's address
-        return getattr(self.session, 'remote_instance_id', None) or self.uri
+        return getattr(self.session, 'remote_instance_id', None) or _bare(self.uri)
 
     def _NH_SIPMessageDidSucceed(self, notification):
         notification_center = NotificationCenter()
@@ -572,6 +595,9 @@ class OutgoingMessage(object):
             return
 
         log.info(f'Message {self.id} {self.content_type.lower()} sent to {self._peer} from account {self.account.id}: {getattr(notification.data, "code", "")} {getattr(notification.data, "reason", "")}'.rstrip())
+        if not self._disabled_imdn_content_type:
+            from blink.history import MessageHistory
+            MessageHistory().record_agent(self.id, 'sent', ' '.join(str(SIPSimpleSettings().user_agent or '').split())[:255] or None)    # this device
         if self.session is not None:
             notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
         if not self._disabled_imdn_content_type:
@@ -599,7 +625,7 @@ class OutgoingMessage(object):
         except AttributeError:
             code = ''
 
-        log.info(f'Message {self.id} to {self.session.contact_uri.uri} failed {originator}ly: {code} {reason}')
+        log.info(f'Message {self.id} to {_bare(self.session.contact_uri.uri)} failed {originator}ly: {code} {reason}')
         ActivityLog().warning(f'[Message with {self._peer}] Sending {self.content_type} message {self.id} from account {self.account.id} failed {originator}ly: {code} {reason}')
 
 
@@ -1457,6 +1483,12 @@ class MessageManager(object, metaclass=Singleton):
         x_replicated_message = data.headers.get('X-Replicated-Message', Null)
         to_header = data.headers.get('To', Null)
         instance_id = data.from_header.uri.parameters.get('instance_id', None)
+        # the client that sent it: a SylkServer relaying for a web or mobile client names it in X-Sylk-User-Agent
+        sip_user_agent = _header_text(data.headers, 'User-Agent')
+        client_user_agent = _header_text(data.headers, 'X-Sylk-User-Agent')
+        user_agent = client_user_agent or sip_user_agent
+        relay = sip_user_agent if client_user_agent else None
+        via = f' using {user_agent}' + (f' via {relay}' if relay else '') if user_agent else ''
 
         if instance_id and instance_id.startswith('urn:uuid:'):
             instance_id = instance_id[9:]
@@ -1491,7 +1523,7 @@ class MessageManager(object, metaclass=Singleton):
         encryption = self.check_encryption(content_type, body)
         enc_text = f'{encryption} encrypted ' if encryption else ''
 
-        log.info(f'Message {message_id} {enc_text}{content_type.lower()} received from {sender.uri} for account {account.id}')
+        log.info(f'Message {message_id} {enc_text}{content_type.lower()} received from {_bare(sender.uri)} for account {account.id}{via}')
         if content_type.lower() not in (IsComposingDocument.content_type, IMDNDocument.content_type):
             def aor(uri):
                 # SIP headers carry bytes, CPIM headers str
@@ -1503,7 +1535,7 @@ class MessageManager(object, metaclass=Singleton):
                 peer, what = aor(to_header.uri), 'Outgoing (sent from another device)'
             else:
                 peer, what = instance_id or aor(sender.uri), 'Incoming'
-            ActivityLog().info(f'[Message with {peer}] {what} {enc_text}{content_type.lower()} message {message_id} for account {account.id}')
+            ActivityLog().info(f'[Message with {peer}] {what} {enc_text}{content_type.lower()} message {message_id} for account {account.id}{via}')
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
 
@@ -1524,6 +1556,10 @@ class MessageManager(object, metaclass=Singleton):
         if cpim_message is not None and self.seen_message_ids.seen(message_id):
             ActivityLog().info(f'[Message] {content_type.lower()} message {message_id} for account {account.id} skipped, it was already handled (live or from the journal)')
             return
+
+        if cpim_message is not None and content_type.lower() not in (IsComposingDocument.content_type, IMDNDocument.content_type):
+            from blink.history import MessageHistory
+            MessageHistory().record_agent(message_id, 'sent', user_agent, relay)
 
         if content_type.lower() == IsComposingDocument.content_type and x_replicated_message is not Null:
             # our own typing notice, replicated back from the server: never "typing" to ourselves
@@ -1763,7 +1799,9 @@ class MessageManager(object, metaclass=Singleton):
             imdn_message_id = document.message_id.value
             imdn_status = document.notification.status.__str__()
             imdn_datetime = document.datetime.__str__()
-            log.info(f'Disposition {imdn_status} of message {imdn_message_id} received from {sender.uri} for account {account.id} (IMDN {message_id})')
+            log.info(f'Disposition {imdn_status} of message {imdn_message_id} received from {_bare(sender.uri)} for account {account.id} (IMDN {message_id}){via}')
+            from blink.history import MessageHistory
+            MessageHistory().record_agent(imdn_message_id, imdn_status, user_agent, relay)
             notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
             return
         elif content_type.lower() == IMDNDocument.content_type:
