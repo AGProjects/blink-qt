@@ -3666,11 +3666,13 @@ class GroupWidget(base_class, ui_class):
                 background.setColorAt(1.0, QColor('#26405d'))
                 upper_color = QColor('#3a5a80')
                 lower_color = QColor('#1a2c40')
+                foreground = QColor('#b8cce4')
             else:
                 background.setColorAt(0.0, QColor('#d6e6fb'))
                 background.setColorAt(1.0, QColor('#c2d8f5'))
                 upper_color = QColor('#e8f1fd')
                 lower_color = QColor('#a9c4ea')
+                foreground = QColor('#5a7aa8')
         elif is_dark_theme():
             if self.selected:
                 background.setColorAt(0.0, QColor('#5a5a5a'))
