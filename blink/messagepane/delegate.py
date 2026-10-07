@@ -16,7 +16,7 @@ Layouts are cached per message, width and font.
 from datetime import date, timedelta
 
 from PyQt6.QtCore import Qt, QLocale, QPointF, QRectF, QSize, QSizeF
-from PyQt6.QtGui import QAbstractTextDocumentLayout, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPalette, QTextDocument, QTextOption
+from PyQt6.QtGui import QAbstractTextDocumentLayout, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPalette, QTextCharFormat, QTextCursor, QTextDocument, QTextOption
 from PyQt6.QtWidgets import QStyle, QStyledItemDelegate
 
 from blink.messagepane.format import bubble_kind, day_label, delivery_mark, linkify, plain_summary, sanitize_html
@@ -97,7 +97,8 @@ class BubbleDelegate(QStyledItemDelegate):
         item = self._item(index)
         run_start = self.is_run_start(index)
         day_text = self.day_text(index)
-        key = (item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text)
+        search_text = getattr(index.model(), 'search_text', '')
+        key = (item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text)
         layout = self._cache.get(key)
         if layout is not None:
             return layout
@@ -132,6 +133,8 @@ class BubbleDelegate(QStyledItemDelegate):
                 document.setPlainText('🔒 ' + _('Encrypted message'))
             else:
                 document.setPlainText(plain_summary(item))
+            if search_text and kind == 'text':
+                self._highlight(document, search_text)
             limit = self._bubble_width_limit(width) - 2 * self.padding_h
             document.setTextWidth(limit)
             ideal = document.idealWidth()
@@ -158,6 +161,16 @@ class BubbleDelegate(QStyledItemDelegate):
         layout.size = QSize(width, int(height + 0.999))
         self._cache[key] = layout
         return layout
+
+    @staticmethod
+    def _highlight(document, text):
+        """Mark every occurrence of a searched text (case-insensitive)."""
+        highlight = QTextCharFormat()
+        highlight.setBackground(QColor('#8a6d00') if is_dark_theme() else QColor('#ffe08a'))
+        cursor = document.find(text, 0)
+        while not cursor.isNull():
+            cursor.mergeCharFormat(highlight)
+            cursor = document.find(text, cursor)
 
     def sizeHint(self, option, index):
         width = option.rect.width() if option.rect.width() > 0 else self.parent().viewport().width()

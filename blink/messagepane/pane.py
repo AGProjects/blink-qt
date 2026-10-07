@@ -23,6 +23,7 @@ from sipsimple.threading import run_in_thread
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.messagepane.header import ConversationHeader
 from blink.messagepane.model import ConversationModel
+from blink.messagepane.strip import TranscriptStrip
 from blink.messagepane.view import TranscriptView
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.color import follow_theme, secondary_text_color
@@ -52,6 +53,9 @@ class MessagePane(QWidget):
         self.header = ConversationHeader(self)
         self.header.hide()
         layout.addWidget(self.header)
+        self.strip = TranscriptStrip(self)
+        self.strip.hide()
+        layout.addWidget(self.strip)
         self.stack = QStackedWidget(self)
         layout.addWidget(self.stack, 1)
 
@@ -62,6 +66,7 @@ class MessagePane(QWidget):
         self.stack.addWidget(self.empty_label)
         self.transcript = TranscriptView(self.stack)
         self.stack.addWidget(self.transcript)
+        self.transcript.verticalScrollBar().valueChanged.connect(self.strip.update_text)
         self.models = {}            # conversation key: ConversationModel, most recent last
         self.stack.setCurrentWidget(self.empty_label)
 
@@ -92,7 +97,10 @@ class MessagePane(QWidget):
         self.header.show()
         cached = key in self.models
         self.transcript.bubble_delegate.peer_avatar = self.header.avatar.draw
-        self.transcript.setModel(self._model(key))
+        model = self._model(key)
+        self.transcript.setModel(model)
+        self.strip.set_conversation(model, self.transcript)
+        self.strip.show()
         self.stack.setCurrentWidget(self.transcript)
         self._find_account(key)
         model = self.models[key]
@@ -105,6 +113,7 @@ class MessagePane(QWidget):
             return
         self.contact = self.uri = self.key = None
         self.header.hide()
+        self.strip.hide()
         self.transcript.setModel(None)
         self.stack.setCurrentWidget(self.empty_label)
 

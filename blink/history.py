@@ -1211,6 +1211,14 @@ class MessageHistory(object, metaclass=Singleton):
                     reaction_ids.add(link['reply_id'])
         return result, reaction_ids
 
+    def search_messages(self, remote_uri, text, limit=200, accounts=None):
+        """A conversation's text messages containing `text` (case-insensitive for ASCII), newest first.
+        Encrypted bodies not yet decrypted cannot match."""
+        pattern = '%' + str(text).replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+        query = (f"remote_uri = {self.db.sqlrepr(str(remote_uri))} and {NOT_DELETED_SQL} and category = 'text'"
+                 f" and content like {self.db.sqlrepr(pattern)} escape '\\'" + self._in_sql('account_id', accounts))
+        return list(Message.select(query, orderBy=['-timestamp', '-id'], limit=int(limit)))
+
     def present_categories(self, remote_uri, accounts=None):
         """The category filters a conversation has messages for, 'links' included."""
         where = (f' where {NOT_DELETED_SQL} and remote_uri = {self.db.sqlrepr(str(remote_uri))}' + self._in_sql('account_id', accounts))

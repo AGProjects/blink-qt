@@ -7,6 +7,9 @@ receipts) never become rows. Opening loads the newest page of 50 renderable
 rows; scrolling up loads the page before it (load_older), inserted at the top
 so the view can keep what the user was looking at in place. New and changed
 messages are merged in by id, in timestamp order, from the newest page.
+
+search(text) shows the conversation's text messages containing the text
+instead (newest 200, oldest first); search('') goes back to the conversation.
 """
 
 import bisect
@@ -103,6 +106,7 @@ class ConversationModel(QAbstractListModel):
         self.loading = False
         self.loaded = False
         self.closed = False
+        self.search_text = ''
         self._generation = 0    # a reload makes answers to earlier queries stale
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -144,6 +148,53 @@ class ConversationModel(QAbstractListModel):
         return None
 
     # Loading
+
+    search_limit = 200
+
+    def search(self, text):
+        """Show the messages containing text; an empty text shows the conversation again."""
+        text = (text or '').strip()
+        if text == self.search_text:
+            return
+        self.search_text = text
+        if not text:
+            self.load()
+            return
+        self._generation += 1
+        self._set_loading(True)
+        self._search(self._generation, text)
+
+    @run_in_thread('db')
+    def _search(self, generation, text):
+        from blink.history import MessageHistory
+        try:
+            rows = MessageHistory().search_messages(self.key, text, limit=self.search_limit)
+        except Exception as e:
+            log.warning(f'Searching the conversation with {self.key} failed: {e!r}')
+            call_in_gui_thread(self._apply_failed, generation)
+            return
+        seen, found = set(), []
+        for row in rows:
+            if row.message_id not in seen and is_renderable(row):
+                seen.add(row.message_id)
+                found.append(MessageItem(row))
+        found.reverse()
+        call_in_gui_thread(self._apply_search, generation, text, found, len(rows) >= self.search_limit)
+
+    def _apply_search(self, generation, text, found, truncated):
+        if generation != self._generation or self.closed:
+            return
+        self.beginResetModel()
+        self.items = found
+        self.ids = {item.id: item for item in found}
+        self.endResetModel()
+        self.has_more = False
+        self.search_truncated = truncated
+        self._set_loading(False)
+        ActivityLog().info(f'[Message with {self.key}] Search for {text!r}: {len(found)} messages' + (f' (the newest {self.search_limit})' if truncated else ''))
+        self.initialLoadFinished.emit()
+
+    search_truncated = False
 
     def load(self):
         """The newest page: what opening the conversation shows."""
@@ -204,6 +255,7 @@ class ConversationModel(QAbstractListModel):
         if generation != self._generation or self.closed:
             return
         if kind == 'initial':
+            self.search_truncated = False
             self.beginResetModel()
             self.items = found
             self.ids = {item.id: item for item in found}
@@ -229,7 +281,7 @@ class ConversationModel(QAbstractListModel):
     # Live changes: merged from the newest page
 
     def _schedule_refresh(self):
-        if not self.closed and self.loaded:
+        if not self.closed and self.loaded and not self.search_text:
             self._refresh_timer.start()
 
     def _refresh(self):
