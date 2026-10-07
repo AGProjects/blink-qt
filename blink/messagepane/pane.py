@@ -88,7 +88,7 @@ class MessagePane(QWidget):
         self.composer.sendText.connect(self._send_text)
         self.composer.filesDropped.connect(self._send_files)
         self.composer.composing.connect(self._send_composing)
-        self.strip.fontStep.connect(self._step_font)
+        self.header.fontStep.connect(self._step_font)
         self.unsent = {}            # conversation key: text typed and not sent
         self.setAcceptDrops(True)
         self._apply_font()

@@ -2,7 +2,8 @@
 
 Avatar (the contact's photo, else initials on a colour of their own), name,
 info line (is typing..., else the address the conversation is on), the lock
-with what is known about encryption, the calendar (years, months and days
+with what is known about encryption (A− and A+ before it make the text of the
+transcript and the composer smaller or larger), the calendar (years, months and days
 with how many messages each has; choosing a day jumps there) and the audio and
 video call buttons.
 Calls start from the conversation's account: the one its newest message was
@@ -118,6 +119,7 @@ class AvatarLabel(QLabel):
 
 class ConversationHeader(QWidget):
     dayChosen = pyqtSignal(object)      # a date to jump to
+    fontStep = pyqtSignal(int)          # -1 smaller, +1 larger
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -172,7 +174,13 @@ class ConversationHeader(QWidget):
         self.video_button = self._tool_button(translate('message_pane', 'Video call'))
         self.audio_button.clicked.connect(lambda: self._start_call('audio'))
         self.video_button.clicked.connect(lambda: self._start_call('video'))
-        for button in (self.lock_button, self.calendar_button, self.audio_button, self.video_button):
+        self.font_buttons = []
+        for text, step, tip in (('A−', -1, translate('message_pane', 'Smaller text')), ('A+', 1, translate('message_pane', 'Larger text'))):
+            button = self._tool_button(tip)
+            button.setText(text)
+            button.clicked.connect(lambda checked=False, step=step: self.fontStep.emit(step))
+            self.font_buttons.append(button)
+        for button in (*self.font_buttons, self.lock_button, self.calendar_button, self.audio_button, self.video_button):
             row.addWidget(button)
 
         self.apply_theme()

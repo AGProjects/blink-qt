@@ -5,8 +5,7 @@ note: loading older messages, the beginning of the conversation, or, only once
 the user has scrolled up, that scrolling further up loads older messages. On
 the right the search field: typing searches the whole conversation in history
 (the transcript shows the hits, highlighted); clearing it (or Escape) shows
-the conversation again. Between them A− and A+ make the text of the transcript
-and the composer smaller or larger.
+the conversation again.
 """
 
 from datetime import datetime
@@ -43,8 +42,6 @@ def range_text(items, now=None):
 class TranscriptStrip(QWidget):
     search_delay = 300      # ms after the last key press
 
-    fontStep = pyqtSignal(int)      # -1 smaller, +1 larger
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.model = None
@@ -56,13 +53,6 @@ class TranscriptStrip(QWidget):
         self.info_label.setTextFormat(Qt.TextFormat.PlainText)
         self.info_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.info_label, 1)
-        for text, step, tip in (('A−', -1, translate('message_pane', 'Smaller text')), ('A+', 1, translate('message_pane', 'Larger text'))):
-            button = QToolButton(self)
-            button.setText(text)
-            button.setToolTip(tip)
-            button.setAutoRaise(True)
-            button.clicked.connect(lambda checked=False, step=step: self.fontStep.emit(step))
-            layout.addWidget(button)
         self.search_field = QLineEdit(self)
         self.search_field.setPlaceholderText(translate('message_pane', 'Search messages'))
         self.search_field.setClearButtonEnabled(True)
