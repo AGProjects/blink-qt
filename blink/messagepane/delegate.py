@@ -17,9 +17,14 @@ the side facing the middle), which opens the same menu as a right click.
 A picture is drawn inline once it is here (MediaCache decodes it off the GUI
 thread): at most 320 pixels high, 640 for a large source, at least 120 wide,
 with the time over its corner and the caption under it; until then a box of the
-same kind says what it is and how far the download got.
+same kind says what it is and how far the download got. Any other file is its
+icon, its name and "type · size" (with how far the download got, or in red why
+it failed); a PDF that is here shows its first page, with "PDF · N pages ·
+size" over it.
 Layouts are cached per message, width and font.
 """
+
+import os
 
 from datetime import date, timedelta
 
@@ -36,7 +41,7 @@ __all__ = ['BubbleDelegate']
 
 class BubbleLayout(object):
     __slots__ = ('kind', 'run_start', 'day_text', 'document', 'text_size', 'bubble_size', 'size', 'time_text', 'mark', 'mark_kind', 'name_text', 'quote_name', 'quote_text', 'quote_height',
-                 'image_path', 'image_size')
+                 'image_path', 'image_size', 'file_name', 'file_meta', 'file_note', 'file_error', 'file_icon')
 
 
 class BubbleDelegate(QStyledItemDelegate):
@@ -111,7 +116,7 @@ class BubbleDelegate(QStyledItemDelegate):
         reply = item.reply
         progress = self.progress_of(item.id) if self.progress_of is not None else None
         progress = None if progress is None else int(progress * 100)
-        image_path = self.file_path(item) if item.category == 'image' else None
+        image_path = self.file_path(item) if item.category in ('image', 'other', 'audio', 'video') else None
         key = (image_path, item.caption, progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
                (reply['id'], reply['text']) if reply else None)
         layout = self._cache.get(key)
@@ -130,12 +135,23 @@ class BubbleDelegate(QStyledItemDelegate):
         layout.image_path = layout.image_size = None
         if item.category == 'image':
             layout.kind = kind = 'image'
+        elif item.category in ('other', 'audio', 'video'):
+            from blink.messagepane.media import pdf_available
+            # audio and video are files here until they have players of their own
+            layout.kind = kind = 'pdf' if image_path and image_path.lower().endswith('.pdf') and pdf_available() else 'file'
         layout.name_text = (item.display_name or '') if run_start and not item.outgoing and kind != 'note' else ''
         small = self._small_font(font)
         document = QTextDocument()
         document.setDocumentMargin(0)
         if kind == 'image':
             return self._image_layout(key, layout, item, image_path, width, font, small, progress)
+        if kind == 'pdf':
+            layout = self._image_layout(key, layout, item, image_path, width, font, small, progress, pdf=True)
+            if layout.image_path:
+                return layout
+            layout.kind = kind = 'file'         # cannot be read: a plain file
+        if kind == 'file':
+            return self._file_layout(key, layout, item, image_path, width, font, small, progress)
         if kind == 'note':
             document.setDefaultFont(small)
             option = QTextOption(Qt.AlignmentFlag.AlignHCenter)
@@ -231,12 +247,21 @@ class BubbleDelegate(QStyledItemDelegate):
     def forget(self, message_id):
         self._paths.pop(message_id, None)
 
-    def _image_layout(self, key, layout, item, path, width, font, small, progress):
+    pdf_width = 260
+    pdf_max_height = 360
+
+    def _image_layout(self, key, layout, item, path, width, font, small, progress, pdf=False):
         from blink.messagepane.media import MediaCache
         limit = self._bubble_width_limit(width) - 2 * self.image_padding
+        if pdf:
+            limit = min(limit, self.pdf_width)
         natural = MediaCache.instance().natural_size(path) if path else None
+        if pdf and not (natural is not None and natural.isValid() and natural.width() > 0):
+            return layout
         if natural is not None and natural.isValid() and natural.width() > 0 and natural.height() > 0:
-            max_height = self.image_large_max_height if max(natural.width(), natural.height()) >= self.image_large_source else self.image_max_height
+            if pdf:
+                natural = natural.scaled(limit, 100000, Qt.AspectRatioMode.KeepAspectRatio)    # pages are drawn to fit, never at their size in points
+            max_height = self.pdf_max_height if pdf else self.image_large_max_height if max(natural.width(), natural.height()) >= self.image_large_source else self.image_max_height
             scale = min(1.0, limit / natural.width(), max_height / natural.height())
             box = (max(1, round(natural.width() * scale)), max(1, round(natural.height() * scale)))
             layout.image_path = path
@@ -248,6 +273,10 @@ class BubbleDelegate(QStyledItemDelegate):
         document.setDocumentMargin(0)
         caption_height = 0
         text = item.caption
+        if pdf:
+            from blink.messagepane.files import file_info
+            info = file_info(item) or {}
+            text = info.get('name') or os.path.basename(path)
         if not layout.image_path:
             # what the box stands for until the picture is here
             from blink.messagepane.format import file_name
@@ -274,6 +303,82 @@ class BubbleDelegate(QStyledItemDelegate):
         self._cache[key] = layout
         return layout
 
+    # Files
+
+    file_icon_size = 32
+    file_min_width = 200
+
+    _mime_icons = {}
+
+    def _mime_icon(self, name):
+        from PyQt6.QtCore import QMimeDatabase
+        from PyQt6.QtGui import QIcon
+        mime = QMimeDatabase().mimeTypeForFile(name, QMimeDatabase.MatchMode.MatchExtension)
+        icon = self._mime_icons.get(mime.name())
+        if icon is None:
+            icon = QIcon.fromTheme(mime.iconName(), QIcon.fromTheme(mime.genericIconName()))
+            if icon.isNull():
+                from blink.resources import Resources, themed_icon
+                icon = themed_icon(Resources.get('icons/paperclip.svg'), '#bdbdbd')
+            self._mime_icons[mime.name()] = icon
+        return icon, mime
+
+    def _file_layout(self, key, layout, item, path, width, font, small, progress):
+        from blink.messagepane.files import failure_reason, file_info
+        from blink.messagepane.format import format_size
+        info = file_info(item) or {'name': translate('message_pane', 'File'), 'size': None, 'type': ''}
+        layout.file_name = info['name']
+        layout.file_icon, mime = self._mime_icon(info['name'])
+        kind_text = mime.comment() if not mime.isDefault() else (os.path.splitext(info['name'])[1].lstrip('.').upper() or translate('message_pane', 'File'))
+        size = info['size'] or (os.path.getsize(path) if path and os.path.exists(path) else None)
+        layout.file_meta = ' · '.join(part for part in (kind_text, format_size(size)) if part)
+        layout.file_error = False
+        layout.file_note = ''
+        if progress is not None and progress < 100:
+            layout.file_note = translate('message_pane', 'downloading %d%%') % progress
+        elif not path:
+            reason = failure_reason(item)
+            if reason:
+                layout.file_note, layout.file_error = '⚠ ' + reason, True
+        metrics, small_metrics = QFontMetricsF(font), QFontMetricsF(small)
+        limit = self._bubble_width_limit(width) - 2 * self.padding_h - self.file_icon_size - 10
+        text_width = min(limit, max(metrics.horizontalAdvance(layout.file_name), small_metrics.horizontalAdvance(layout.file_meta),
+                                    small_metrics.horizontalAdvance(layout.file_note), small_metrics.horizontalAdvance(layout.time_text + '  ' + (layout.mark or ''))))
+        layout.file_name = metrics.elidedText(layout.file_name, Qt.TextElideMode.ElideMiddle, limit)
+        layout.text_size = QSizeF(text_width, metrics.height() + small_metrics.height() * (2 if layout.file_note else 1))
+        bubble_width = max(self.file_min_width, text_width + self.file_icon_size + 10 + 2 * self.padding_h)
+        bubble_height = 2 * self.padding_v + layout.text_size.height() + small_metrics.height()
+        layout.bubble_size = QSizeF(bubble_width, bubble_height)
+        height = bubble_height
+        if layout.name_text:
+            height += small_metrics.height() + 2
+        height += self.run_gap if layout.run_start else self.inner_gap
+        if layout.day_text:
+            height += self.divider_height
+        layout.size = QSize(width, int(height + 0.999))
+        self._cache[key] = layout
+        return layout
+
+    def _paint_file(self, painter, layout, item, bubble, font, small, secondary, text_colour):
+        metrics, small_metrics = QFontMetricsF(font), QFontMetricsF(small)
+        icon_box = QRectF(bubble.left() + self.padding_h, bubble.top() + self.padding_v + (metrics.height() + small_metrics.height() - self.file_icon_size) / 2,
+                          self.file_icon_size, self.file_icon_size)
+        layout.file_icon.paint(painter, icon_box.toRect())
+        left = icon_box.right() + 10
+        width = bubble.right() - self.padding_h - left
+        top = bubble.top() + self.padding_v
+        painter.setFont(font)
+        painter.setPen(text_colour)
+        painter.drawText(QRectF(left, top, width, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.file_name)
+        top += metrics.height()
+        painter.setFont(small)
+        painter.setPen(secondary)
+        painter.drawText(QRectF(left, top, width, small_metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.file_meta)
+        if layout.file_note:
+            top += small_metrics.height()
+            painter.setPen((QColor('#ff7b72') if is_dark_theme() else QColor('#c62828')) if layout.file_error else secondary)
+            painter.drawText(QRectF(left, top, width, small_metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.file_note)
+
     def _paint_image(self, painter, layout, item, bubble, palette, small, secondary):
         from blink.messagepane.media import MediaCache
         box = QRectF(bubble.left() + self.image_padding, bubble.top() + self.image_padding, layout.image_size[0], layout.image_size[1])
@@ -288,6 +393,8 @@ class BubbleDelegate(QStyledItemDelegate):
         painter.save()
         painter.setClipPath(clip)
         if pixmap is not None:
+            if layout.kind == 'pdf':
+                painter.fillRect(box, QColor('#ffffff'))       # pages are drawn without their paper
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.drawPixmap(box, pixmap, QRectF(pixmap.rect()))
         else:
@@ -309,7 +416,23 @@ class BubbleDelegate(QStyledItemDelegate):
         painter.setFont(small)
         painter.setPen(QColor('#ffffff'))
         painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
-        if layout.image_path and item.caption:
+        if layout.kind == 'pdf':
+            from blink.messagepane.files import file_info
+            from blink.messagepane.format import format_size
+            from blink.messagepane.media import page_count
+            pages = page_count(layout.image_path)
+            info = file_info(item) or {}
+            size = info.get('size') or (os.path.getsize(layout.image_path) if os.path.exists(layout.image_path) else None)
+            parts = ['PDF', (translate('message_pane', '1 page') if pages == 1 else translate('message_pane', '%d pages') % pages) if pages else '', format_size(size)]
+            text = ' · '.join(part for part in parts if part)
+            badge = QRectF(0, 0, metrics.horizontalAdvance(text) + 12, metrics.height() + 4)
+            badge.moveBottomLeft(box.bottomLeft() + QPointF(6, -6))
+            badge_path = QPainterPath()
+            badge_path.addRoundedRect(badge, badge.height() / 2, badge.height() / 2)
+            painter.fillPath(badge_path, QColor(0, 0, 0, 120))
+            painter.setPen(QColor('#ffffff'))
+            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
+        if layout.image_path and (item.caption or layout.kind == 'pdf'):
             context = QAbstractTextDocumentLayout.PaintContext()
             context.palette = self._text_palette(palette, self._colours(palette, item.outgoing)[1])
             painter.save()
@@ -437,7 +560,9 @@ class BubbleDelegate(QStyledItemDelegate):
         painter.fillPath(path, fill)
         if item.id == self.flashed_id:
             painter.fillPath(path, QColor(255, 200, 0, 110))
-        if layout.kind == 'image':
+        if layout.kind == 'file':
+            self._paint_file(painter, layout, item, bubble, option.font, small, secondary, text_colour)
+        if layout.kind in ('image', 'pdf'):
             self._paint_image(painter, layout, item, bubble, palette, small, secondary)
             if option.state & QStyle.StateFlag.State_MouseOver:
                 self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
@@ -457,13 +582,14 @@ class BubbleDelegate(QStyledItemDelegate):
             painter.setPen(secondary)
             painter.drawText(QRectF(quote.left() + 9, quote.top() + 3 + metrics.height(), quote.width() - 12, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.quote_text)
 
-        context.palette = self._text_palette(palette, text_colour if layout.kind == 'text' else secondary)
-        painter.save()
-        origin = self.text_origin(layout, bubble)
-        painter.translate(origin)
-        painter.setClipRect(QRectF(0, 0, layout.text_size.width() + 1, layout.text_size.height() + 1))
-        layout.document.documentLayout().draw(painter, context)
-        painter.restore()
+        if layout.kind != 'file':
+            context.palette = self._text_palette(palette, text_colour if layout.kind == 'text' else secondary)
+            painter.save()
+            origin = self.text_origin(layout, bubble)
+            painter.translate(origin)
+            painter.setClipRect(QRectF(0, 0, layout.text_size.width() + 1, layout.text_size.height() + 1))
+            layout.document.documentLayout().draw(painter, context)
+            painter.restore()
         if layout.kind == 'summary' and item.category in self.summary_icons:
             line = QFontMetricsF(option.font).height()
             box = QRectF(origin.x(), origin.y() + line * 0.025, line * 0.95, line * 0.95)

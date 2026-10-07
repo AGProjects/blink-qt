@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 
 
 __all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note',
-           'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason']
+           'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason', 'format_size']
 
 
 # Backgrounds for initials, white text on each reads in light and dark themes.
@@ -261,3 +261,15 @@ def auto_fetch_reason(category, filename, size, age_days):
     if kind in AUTO_FETCH_RECENT_ONLY and age_days is not None and age_days > AUTO_FETCH_RECENT_DAYS:
         return f'older than {AUTO_FETCH_RECENT_DAYS} days'
     return None
+
+
+def format_size(size):
+    """A file size for people: 512 bytes, 12 KB, 3.4 MB, 1.2 GB (powers of 1024, as file managers here show them)."""
+    if size is None or size < 0:
+        return ''
+    if size < 1024:
+        return f'{size} bytes'
+    for unit in ('KB', 'MB', 'GB', 'TB'):
+        size /= 1024.0
+        if size < 1024 or unit == 'TB':
+            return f'{size:.0f} {unit}' if size >= 100 or unit == 'KB' else f'{size:.1f} {unit}'

@@ -14,7 +14,7 @@ from blink.message_envelopes import file_transfer_envelope
 from blink.resources import ApplicationData
 
 
-__all__ = ['local_file']
+__all__ = ['local_file', 'file_info', 'failure_reason']
 
 
 def _candidates(item):
@@ -34,6 +34,37 @@ def _url_id(url):
     # <base>/<sender>/<receiver>/<transfer id>/<name>
     parts = str(url or '').split('?', 1)[0].rstrip('/').split('/')
     return parts[-2] if len(parts) >= 5 else None
+
+
+def file_info(item):
+    """{'name', 'size', 'type'} of a file transfer message (from its envelope), or None."""
+    meta = file_transfer_envelope(item.content) if item.content else None
+    if not meta or not meta.get('filename'):
+        return None
+    from blink.file_transfer import transfer_filename
+    name = transfer_filename(meta['filename'])
+    if name.lower().endswith('.asc'):
+        name = name[:-4]
+    try:
+        size = int(meta.get('filesize') or 0) or None
+    except (TypeError, ValueError):
+        size = None
+    return {'name': name, 'size': size, 'type': str(meta.get('filetype') or '')}
+
+
+def failure_reason(item):
+    """Why fetching the file failed, when it did and nothing has replaced the failure (.failure.json), else None."""
+    import json
+    _, ids = _candidates(item)
+    for transfer_id in ids:
+        for path in glob.glob(os.path.join(ApplicationData.get('file_transfers'), '*', '*', glob.escape(transfer_id), '.failure.json')) + \
+                [os.path.join(ApplicationData.get('downloads'), transfer_id, '.failure.json')]:
+            try:
+                with open(path) as failure:
+                    return json.load(failure).get('reason') or 'failed'
+            except (OSError, ValueError):
+                continue
+    return None
 
 
 def local_file(item):

@@ -110,5 +110,14 @@ class FetchTests(unittest.TestCase):
         self.assertIsNotNone(fmt.auto_fetch_reason('other', 'a.zip', MiB, 0))
 
 
+class SizeTests(unittest.TestCase):
+    def test_sizes(self):
+        self.assertEqual(fmt.format_size(512), '512 bytes')
+        self.assertEqual(fmt.format_size(12 * 1024 + 300), '12 KB')
+        self.assertEqual(fmt.format_size(int(3.4 * 1024 * 1024)), '3.4 MB')
+        self.assertEqual(fmt.format_size(250 * 1024 * 1024), '250 MB')
+        self.assertEqual(fmt.format_size(None), '')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -8,7 +8,10 @@ and ready(path) is emitted when it can be painted. natural_size(path) reads
 only the header. Entries are keyed by path, modification time and size, so a
 file replaced on disk is decoded again; they are dropped least recently used
 first above byte_limit. Other kinds (a video poster, a PDF page) register a
-decoder for their extension with register_decoder().
+decoder for their extension with register_decoder(), and a size reader with it
+when the header reader cannot tell. PDF pages are drawn with QtPdf when it is
+installed (page_count(path) then also knows the pages); without it a PDF is a
+plain file.
 """
 
 import os
@@ -42,11 +45,69 @@ def _decode_image(path, box):
 
 
 _decoders = {}      # extension: callable(path, box) -> QImage or None, run in a worker
+_sizers = {}        # extension: callable(path) -> QSize, run in the GUI thread
 
 
-def register_decoder(extensions, decoder):
+def register_decoder(extensions, decoder, sizer=None):
     for extension in extensions:
         _decoders[extension.lower().lstrip('.')] = decoder
+        if sizer is not None:
+            _sizers[extension.lower().lstrip('.')] = sizer
+
+
+# PDF: the first page
+
+try:
+    from PyQt6.QtPdf import QPdfDocument
+except ImportError:
+    QPdfDocument = None
+
+_pdf_info = {}      # path: (page count, QSizeF of page 1 in points)
+
+
+def pdf_available():
+    return QPdfDocument is not None
+
+
+def _pdf_open(path):
+    document = QPdfDocument(None)
+    document.load(path)
+    if document.status() != QPdfDocument.Status.Ready or document.pageCount() < 1:
+        return document, None
+    return document, (document.pageCount(), document.pagePointSize(0))
+
+
+def _pdf_size(path):
+    info = _pdf_info.get(path)
+    if info is None:
+        document, info = _pdf_open(path)
+        document.close()
+        _pdf_info[path] = info or (0, None)
+        info = _pdf_info[path]
+    size = info[1]
+    return QSize(round(size.width()), round(size.height())) if size is not None and size.width() > 0 else QSize()
+
+
+def _pdf_page(path, box):
+    document, info = _pdf_open(path)
+    try:
+        if info is None:
+            return None
+        size = info[1]
+        target = QSize(round(size.width()), round(size.height())).scaled(QSize(*box), Qt.AspectRatioMode.KeepAspectRatio)
+        image = document.render(0, target)
+        return None if image.isNull() else image
+    finally:
+        document.close()
+
+
+def page_count(path):
+    info = _pdf_info.get(path)
+    return info[0] if info else None
+
+
+if QPdfDocument is not None:
+    register_decoder(['pdf'], _pdf_page, _pdf_size)
 
 
 class _Signals(QObject):
@@ -107,6 +168,14 @@ class MediaCache(QObject):
         if stamp is None:
             return QSize()
         size = self._sizes.get(stamp)
+        sizer = _sizers.get(os.path.splitext(path)[1].lower().lstrip('.'))
+        if size is None and sizer is not None:
+            try:
+                size = sizer(path)
+            except Exception as e:
+                log.warning(f'Cannot read the size of {path}: {e!r}')
+                size = QSize()
+            self._sizes[stamp] = size
         if size is None:
             reader = QImageReader(path)
             reader.setAutoTransform(True)
