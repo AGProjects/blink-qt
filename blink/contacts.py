@@ -11,7 +11,7 @@ import time
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
-from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPoint, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
+from PyQt6.QtCore import QByteArray, QEvent, QLocale, QMimeData, QPoint, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
@@ -26,7 +26,7 @@ from application.python import Null
 from application.system import makedirs, unlink
 from collections import OrderedDict, deque
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache, partial
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -1882,6 +1882,40 @@ def contact_conversation_keys(contact):
     return keys
 
 
+def row_time_kind(group_settings):
+    """What the time on the right of a contact row is in this group: 'message' in Messages,
+    'call' in Calls and Tel, None elsewhere."""
+    if is_messages_group(group_settings):
+        return 'message'
+    if group_settings is None or isinstance(group_settings, VirtualGroup):
+        return None
+    try:
+        if is_group(group_settings, CALLS) or is_group(group_settings, TEL):
+            return 'call'
+    except Exception:
+        pass
+    return None
+
+
+def format_row_time(when, now=None):
+    """The time on the right of a contact row: HH:MM today, Yesterday, the weekday within
+    the last week, day and month this year, else day/month/year. `when` is an aware datetime."""
+    if when is None:
+        return ''
+    when = when.astimezone()
+    now = (now or datetime.now().astimezone()).astimezone(when.tzinfo)
+    days = (now.date() - when.date()).days
+    if days <= 0:
+        return when.strftime('%H:%M')
+    if days == 1:
+        return translate('contact_list', 'Yesterday')
+    if days < 7:
+        return QLocale().dayName(when.isoweekday(), QLocale.FormatType.LongFormat)
+    if when.year == now.year:
+        return f"{when.day} {QLocale().monthName(when.month, QLocale.FormatType.ShortFormat)}"
+    return when.strftime('%d/%m/%y')
+
+
 class BonjourPresence(object):
     def __init__(self, state=None, note=None):
         self.state = state
@@ -3033,6 +3067,17 @@ class Contact(object):
         return contact_conversation_keys(self)
 
     @property
+    def row_time(self):
+        """When the last message (Messages group) or call (Calls, Tel) with this contact was, or None."""
+        kind = row_time_kind(getattr(self.group, 'settings', None))
+        if kind is None:
+            return None
+        from blink.history import ConversationPreviews
+        previews = ConversationPreviews()
+        keys = self.conversation_keys
+        return previews.message_time(keys) if kind == 'message' else previews.call_time(keys)
+
+    @property
     def state(self):
         return self.settings.presence.state
 
@@ -3332,6 +3377,12 @@ class ContactWidget(base_class, ui_class):
             palette.setColor(color_group, QPalette.ColorRole.WindowText, secondary_text_color(QApplication.palette(), color_group))
         self.info_label.setPalette(palette)
         self.info_label.setForegroundRole(QPalette.ColorRole.WindowText)
+        self.time_label.setPalette(palette)
+        self.time_label.setForegroundRole(QPalette.ColorRole.WindowText)
+        time_font = QFont(self.font())
+        if time_font.pointSizeF() > 0:
+            time_font.setPointSizeF(max(time_font.pointSizeF() - 1, 6))
+        self.time_label.setFont(time_font)
         # AlternateBase set to #f0f4ff or #e0e9ff
 
     def paintEvent(self, event):
@@ -3351,6 +3402,9 @@ class ContactWidget(base_class, ui_class):
     def init_from_contact(self, contact):
         self.name_label.setText(getattr(contact, 'display_name', contact.name))
         self.info_label.setTextFormat(Qt.TextFormat.PlainText)     # may quote a message
+        time_text = format_row_time(getattr(contact, 'row_time', None))
+        self.time_label.setText(time_text)
+        self.time_label.setVisible(bool(time_text))
         self.info_label.setText(contact.info)
         self.icon_label.setPixmap(contact.pixmap)
         self.state_label.state = contact.state
@@ -3383,10 +3437,12 @@ class ContactWidget(base_class, ui_class):
         painter.drawRoundedRect(rect, radius, radius)
         painter.setPen(QColor('#ffffff'))
         painter.setFont(label.font())
-        # centred on the digits' ink, not the line box (whose descent and side bearings push them off centre)
-        ink = QFontMetricsF(label.font()).tightBoundingRect(label.text())
+        # across by the advance (digits are drawn to sit centred in it; the ink of a 1 is lopsided),
+        # down by the ink of a digit (the line box's descent would push the number up)
+        metrics = QFontMetricsF(label.font())
+        ink = metrics.tightBoundingRect('0')
         center = rect.center()
-        painter.drawText(QPointF(center.x() - ink.x() - ink.width() / 2, center.y() - ink.y() - ink.height() / 2), label.text())
+        painter.drawText(QPointF(center.x() - metrics.horizontalAdvance(label.text()) / 2, center.y() - ink.y() - ink.height() / 2), label.text())
         painter.restore()
 
 
@@ -3606,6 +3662,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         self.contact_selected_widget.setForegroundRole(QPalette.ColorRole.HighlightedText)
         self.contact_selected_widget.name_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
         self.contact_selected_widget.info_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+        self.contact_selected_widget.time_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
 
         # No theme except Oxygen honors the BackgroundRole
         palette = self.contact_oddline_widget.palette()
@@ -4118,10 +4175,10 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
 
     def _NH_BlinkConversationPreviewsDidChange(self, notification):
-        # the second line of Messages group rows quotes the last message
+        # Messages group rows quote the last message and show its time, Calls and Tel rows the last call's
         keys = notification.data.keys
         for position, item in enumerate(self.items):
-            if not isinstance(item, Contact) or not is_messages_group(getattr(item.group, 'settings', None)):
+            if not isinstance(item, Contact) or row_time_kind(getattr(item.group, 'settings', None)) is None:
                 continue
             if keys is None or not keys.isdisjoint(item.conversation_keys):
                 index = self.index(position)

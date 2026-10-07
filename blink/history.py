@@ -1151,11 +1151,18 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().warning(f'[db] Looking up {len(message_ids)} stored message ids timed out')
         return found
 
-    def last_message_times(self, accounts=None, include_calls=False):
+    def last_message_times(self, accounts=None, include_calls=False, remote_uri=None):
         """{conversation key: newest message time} for ordering conversations."""
         query = (f'select remote_uri, max(timestamp) from {Message.sqlmeta.table}'
                  f' where {NOT_DELETED_SQL} and category is not null' + ('' if include_calls else " and category != 'call'")
-                 + self._in_sql('account_id', accounts) + ' group by remote_uri')
+                 + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
+        return {str(remote_uri): str(newest) for remote_uri, newest in self.db.queryAll(query) if remote_uri and newest}
+
+    def last_call_times(self, accounts=None, remote_uri=None):
+        """{conversation key: start time of the newest call}."""
+        query = (f'select remote_uri, max(timestamp) from {Message.sqlmeta.table}'
+                 f" where {NOT_DELETED_SQL} and category = 'call'"
+                 + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
         return {str(remote_uri): str(newest) for remote_uri, newest in self.db.queryAll(query) if remote_uri and newest}
 
     def last_message_accounts(self, accounts=None):
@@ -2275,11 +2282,22 @@ class MessageHistory(object, metaclass=Singleton):
             message.destroySelf()
 
 
+def _row_time(value):
+    """A stored timestamp (naive UTC, as SQLite hands it back) as an aware UTC datetime, or None."""
+    try:
+        value = parse(str(value))
+    except (ValueError, OverflowError):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 @implementer(IObserver)
 class ConversationPreviews(object, metaclass=Singleton):
-    """The last typed message of every conversation, for the second line of its contact row.
+    """What a conversation's contact row shows of it: the last typed message (the
+    second line) and the times of the last message and the last call (on the right).
 
-    {conversation key: (timestamp, text)}, filled from history in the db thread
+    previews {conversation key: (time, text)}, message_times and call_times
+    {conversation key: time}, aware UTC datetimes, filled from history in the db thread
     (queued after the writes that prompted it) and read in the GUI thread. An
     encrypted candidate is decrypted with its account's key and the plaintext
     written back, as opening the conversation would. Changes are coalesced and
@@ -2290,6 +2308,8 @@ class ConversationPreviews(object, metaclass=Singleton):
 
     def __init__(self):
         self.previews = {}
+        self.message_times = {}
+        self.call_times = {}
         self._dirty = set()
         self._dirty_all = False
         self._scheduled = False
@@ -2298,7 +2318,7 @@ class ConversationPreviews(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         for name in ('SIPApplicationDidStart', 'BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryAllContactsDidSucceed',
                      'BlinkMessageHistoryConversationDidRemove', 'BlinkMessageDidDecrypt', 'BlinkMessageWillDelete',
-                     'BlinkGotHistoryMessageUpdate'):
+                     'BlinkGotHistoryMessageUpdate', 'BlinkMessageHistoryCallHistoryDidStore', 'BlinkGotHistoryCallRecord'):
             notification_center.add_observer(self, name=name)
 
     def handle_notification(self, notification):
@@ -2314,10 +2334,21 @@ class ConversationPreviews(object, metaclass=Singleton):
     def _NH_BlinkMessageHistoryConversationDidRemove(self, notification):
         self.invalidate([notification.data.contact])
 
+    def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
+        self.invalidate([notification.data.message.remote_uri])
+
     def preview(self, keys):
         """The newest preview among a contact's conversation keys, or None."""
         found = [self.previews[key] for key in keys if key in self.previews]
         return max(found)[1] if found else None
+
+    def message_time(self, keys):
+        """When the newest message (not call) among a contact's conversation keys was, or None."""
+        return max((self.message_times[key] for key in keys if key in self.message_times), default=None)
+
+    def call_time(self, keys):
+        """When the newest call among a contact's conversation keys was, or None."""
+        return max((self.call_times[key] for key in keys if key in self.call_times), default=None)
 
     @run_in_gui_thread
     def invalidate(self, keys=None):
@@ -2341,7 +2372,10 @@ class ConversationPreviews(object, metaclass=Singleton):
     @run_in_thread('db')
     def _load(self, keys):
         try:
-            rows, reaction_ids = MessageHistory().last_text_messages(remote_uri=keys)
+            history = MessageHistory()
+            rows, reaction_ids = history.last_text_messages(remote_uri=keys)
+            message_times = {key: _row_time(value) for key, value in history.last_message_times(remote_uri=keys).items()}
+            call_times = {key: _row_time(value) for key, value in history.last_call_times(remote_uri=keys).items()}
         except Exception as e:
             ActivityLog().error(f'[db] Loading conversation previews failed: {e}')
             return
@@ -2357,25 +2391,27 @@ class ConversationPreviews(object, metaclass=Singleton):
                 body = self._decrypt(row, body)
             text = conversation_preview(body, row['content_type'], row['message_id'], reaction_ids)
             if text:
-                found[remote] = (row['timestamp'], text)
-        self._apply(keys, found)
+                found[remote] = (_row_time(row['timestamp']) or datetime.fromtimestamp(0, timezone.utc), text)
+        self._apply(keys, {'previews': found, 'message_times': message_times, 'call_times': call_times})
 
     @run_in_gui_thread
-    def _apply(self, keys, found):
-        if keys is None:
-            changed = set(self.previews) | set(found)
-            changed = {key for key in changed if self.previews.get(key) != found.get(key)}
-            self.previews = found
-        else:
-            changed = set()
+    def _apply(self, keys, loaded):
+        changed = set()
+        for name, found in loaded.items():
+            current = getattr(self, name)
+            found = {key: value for key, value in found.items() if value is not None}
+            if keys is None:
+                changed.update(key for key in set(current) | set(found) if current.get(key) != found.get(key))
+                setattr(self, name, found)
+                continue
             for key in keys:
                 value = found.get(key)
-                if self.previews.get(key) != value:
+                if current.get(key) != value:
                     changed.add(key)
                     if value is None:
-                        self.previews.pop(key, None)
+                        current.pop(key, None)
                     else:
-                        self.previews[key] = value
+                        current[key] = value
         if changed:
             NotificationCenter().post_notification('BlinkConversationPreviewsDidChange', sender=self, data=NotificationData(keys=changed))
 
