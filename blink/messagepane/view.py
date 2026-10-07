@@ -188,11 +188,19 @@ class TranscriptView(QListView):
                 return
         index = self.indexAt(position)
         on_quote = index.isValid() and self.bubble_delegate.quote_at(index, self.visualRect(index), position) is not None
-        if self._link_at(position) or self._on_actions_button(position) or on_quote:
+        if self._link_at(position) or self._on_actions_button(position) or on_quote or self._on_clickable_bubble(index, position):
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         else:
             self.viewport().unsetCursor()
         super().mouseMoveEvent(event)
+
+    clickable_categories = ('image', 'audio', 'video', 'other', 'call', 'location')
+
+    def _on_clickable_bubble(self, index, position):
+        if not index.isValid():
+            return False
+        item = index.data(Qt.ItemDataRole.UserRole)
+        return item is not None and item.category in self.clickable_categories and self.bubble_delegate.bubble_at(index, self.visualRect(index), position)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -211,7 +219,7 @@ class TranscriptView(QListView):
             if anchor:
                 QDesktopServices.openUrl(QUrl(anchor))
                 return
-            if index.isValid():
+            if index.isValid() and self.bubble_delegate.bubble_at(index, self.visualRect(index), position):     # the bubble, not the space beside it
                 item = index.data(Qt.ItemDataRole.UserRole)
                 hit = self.bubble_delegate.audio_hit(index, self.visualRect(index), position)
                 if hit is not None:
@@ -230,7 +238,7 @@ class TranscriptView(QListView):
 
     def contextMenuEvent(self, event):
         index = self.indexAt(event.pos())
-        if not index.isValid():
+        if not index.isValid() or not self.bubble_delegate.bubble_at(index, self.visualRect(index), event.pos()):
             return
         self._show_menu(index, event.pos(), event.globalPos())
 

@@ -850,6 +850,14 @@ class BubbleDelegate(QStyledItemDelegate):
     def quote_rect(self, layout, bubble):
         return QRectF(bubble.left() + self.padding_h, bubble.top() + self.padding_v, bubble.width() - 2 * self.padding_h, layout.quote_height - 4)
 
+    def bubble_at(self, index, rect, position):
+        """Whether a point of the view is on the bubble itself (not the space around it)."""
+        item = self._item(index)
+        if item is None:
+            return False
+        layout = self.layout(index, rect.width(), self.parent().font())
+        return self.bubble_rect(layout, item, QRectF(rect)).contains(QPointF(position))
+
     def quote_at(self, index, rect, position):
         """The reply dict when a point of the view is on a reply's quote, else None."""
         item = self._item(index)
