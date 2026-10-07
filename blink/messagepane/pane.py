@@ -422,16 +422,43 @@ class MessagePane(QWidget):
             log.warning(f'Cannot tell {self.key} about typing: {e!r}')
 
     def _send_files(self, paths):
+        """Show the files first (blink.messagepane.attach): crop, caption, smaller pictures; Send sends them."""
+        import os
         if self.key is None or not paths:
             return
-        import os
+        paths = [path for path in paths if os.path.isfile(path)]
+        if not paths:
+            return
+        from blink.messagepane.attach import AttachmentPreview
+        key = self.key
+        peer = getattr(self.contact, 'name', '') or key
+        dialog = AttachmentPreview(paths, peer, self)
+        if dialog.exec() != AttachmentPreview.DialogCode.Accepted or not dialog.plan():
+            ActivityLog().info(f'[Message with {key}] Sending {len(paths)} file(s) cancelled in the preview')
+            return
+        if self.key != key:
+            return          # the conversation changed while the preview was open
+        import uuid
+        from blink.message_envelopes import METADATA_CONTENT_TYPE, label_envelope
+        from blink.messages import MessageManager
         from blink.sessions import SessionManager
         session = self._message_session()
         account = self.header.account or session.account
-        for path in paths:
-            if os.path.isfile(path):
-                SessionManager().send_file(session.contact, session.contact_uri, path, account=account)
-                ActivityLog().info(f'[Message with {self.key}] Sending {os.path.basename(path)} from the message pane')
+        for path, caption in dialog.plan():
+            transfer_id = str(uuid.uuid4())
+            try:
+                SessionManager().send_file(session.contact, session.contact_uri, path, transfer_id=transfer_id, account=account)
+            except Exception as e:
+                ActivityLog().error(f'[Message with {key}] Sending {path} failed: {e!r}')
+                continue
+            ActivityLog().info(f'[Message with {key}] Sending {os.path.basename(path)} as {transfer_id} from the message pane' + (' with a caption' if caption else ''))
+            if caption:
+                try:
+                    metadata_id = str(uuid.uuid4())
+                    envelope = label_envelope(transfer_id, metadata_id, caption, str(self.uri.uri), ISOTimestamp.now())
+                    MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
+                except Exception as e:
+                    ActivityLog().error(f'[Message with {key}] Sending the caption of {transfer_id} failed: {e!r}')
         self.transcript.follow_bottom()
 
     def dragEnterEvent(self, event):

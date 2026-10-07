@@ -5,7 +5,7 @@ lines. Enter sends, Shift+Enter starts a new line. While text is being typed
 the peer is told so (is-composing active, renewed every 10 s while typing,
 idle when the text is cleared). Pasting inserts plain text; pasted or dropped
 files are handed on (filesDropped) to be sent, as are the ones from the
-paperclip menu (as on Blink for macOS; Grab a Screenshot...,
+paperclip menu (as on Blink for macOS; Take a Photo... and Grab a Screenshot...,
 then Choose Files... and Paste from Clipboard).
 
 In reply mode (set_reply) a line above the text says what is being answered,
@@ -350,6 +350,12 @@ class Composer(QWidget):
         if PortalScreenshot._busy is not None:
             grab.setEnabled(False)
             grab.setToolTip(translate('message_pane', 'A screenshot is already being taken'))
+        from blink.messagepane.camera import camera_available
+        photo = menu.addAction(translate('message_pane', 'Take a Photo…'), self._take_photo)
+        available, why = camera_available()
+        if not available:
+            photo.setEnabled(False)
+            photo.setToolTip(why)
         menu.addSeparator()
         menu.addAction(translate('message_pane', 'Choose Files…'), self._choose_files)
         paste = menu.addAction(translate('message_pane', 'Paste from Clipboard'), self._paste_files)
@@ -383,6 +389,12 @@ class Composer(QWidget):
             import os
             self._directory = os.path.dirname(paths[0])
             self.filesDropped.emit(paths)
+
+    def _take_photo(self):
+        from blink.messagepane.camera import take_photo
+        path = take_photo(self.window())
+        if path:
+            self.filesDropped.emit([path])
 
     def _take_screenshot(self):
         from blink.screenshot import PortalScreenshot
