@@ -255,6 +255,7 @@ class MainWindow(base_class, ui_class):
             settings.audio.output_device = 'system_default'
 
         settings.save()
+        self._update_combined_audio_devices()
 
     def setupUi(self):
         super(MainWindow, self).setupUi(self)
@@ -479,6 +480,55 @@ class MainWindow(base_class, ui_class):
 
         active_action = action_map.get(settings.audio.alert_device, Null)
         active_action.setChecked(True)
+
+        self._load_combined_audio_devices()
+
+    # generic ALSA/PulseAudio/PipeWire names: present on both sides on every machine, not a device you plug in
+    combined_device_exclusions = {'system_default', 'default', 'pulse', 'pipewire', 'sysdefault', 'dmix', 'dsnoop', 'jack', 'oss', 'speex', 'upmix', 'vdownmix', 'samplerate', 'speexrate', 'lavrate'}
+
+    def _load_combined_audio_devices(self):
+        """At the top of the Devices menu, as on macOS: the devices that are both an input and an output
+        (a USB headset, a speakerphone), each one item that selects it for both."""
+        for action in getattr(self, 'combined_device_actions', []):
+            self.devices_menu.removeAction(action)
+            action.deleteLater()
+        self.combined_device_actions = []
+        outputs = list(SIPApplication.engine.output_devices)
+        inputs = set(SIPApplication.engine.input_devices)
+        devices = [device for device in outputs if device in inputs and device.split(':', 1)[0].strip().lower() not in self.combined_device_exclusions]
+        if not devices:
+            return
+        first = self.devices_menu.actions()[0] if self.devices_menu.actions() else None
+        short_names = [device.split(':', 1)[0].strip() or device for device in devices]
+        for device, short in zip(devices, short_names):
+            label = short if short_names.count(short) == 1 else device
+            action = QAction(label, self.devices_menu)
+            action.setCheckable(True)
+            action.setToolTip(device)
+            action.setData(device)
+            action.triggered.connect(partial(self._AH_CombinedAudioDeviceTriggered, device))
+            self.devices_menu.insertAction(first, action)
+            self.combined_device_actions.append(action)
+        separator = QAction(self.devices_menu)
+        separator.setSeparator(True)
+        self.devices_menu.insertAction(first, separator)
+        self.combined_device_actions.append(separator)
+        self.devices_menu.setToolTipsVisible(True)
+        self._update_combined_audio_devices()
+
+    def _update_combined_audio_devices(self):
+        settings = SIPSimpleSettings()
+        for action in getattr(self, 'combined_device_actions', []):
+            if not action.isSeparator():
+                action.setChecked(settings.audio.input_device == action.data() == settings.audio.output_device)
+
+    def _AH_CombinedAudioDeviceTriggered(self, device, checked=False):
+        settings = SIPSimpleSettings()
+        settings.audio.input_device = device
+        settings.audio.output_device = device
+        settings.save()
+        ActivityLog().info(f'[audio] {device} selected for both input and output')
+        self._update_combined_audio_devices()
 
     def load_video_devices(self):
         settings = SIPSimpleSettings()
