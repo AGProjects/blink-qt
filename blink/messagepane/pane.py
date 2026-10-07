@@ -7,18 +7,25 @@ empty state. A conversation has its header (blink.messagepane.header) and its
 transcript (ConversationModel in TranscriptView); the composer comes later
 (docs/messaging/ui-plan.md, B6). The models of the last few conversations are
 kept with the pages they loaded, so going back to one does not query history again.
+
+A conversation is being read while it is selected here, the pane is shown and
+the window is active (and not minimised). Becoming read marks its incoming
+messages read in history, clears its badge, sends the displayed notifications
+the sender asked for and tells this account's other devices; while it is not
+being read nothing is marked, and messages arriving stay unread.
 """
 
-from application.notification import IObserver, NotificationCenter
+from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from zope.interface import implementer
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.threading import run_in_thread
+from sipsimple.util import ISOTimestamp
 
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.messagepane.header import ConversationHeader
@@ -73,6 +80,12 @@ class MessagePane(QWidget):
         self.contact = None
         self.uri = None
         self.key = None
+        self._displayed_sent = set()     # message ids a displayed notification went out for
+        self._read_timer = QTimer(self)
+        self._read_timer.setSingleShot(True)
+        self._read_timer.setInterval(200)
+        self._read_timer.timeout.connect(self._read)
+        self._model_connected = None
 
         self.apply_theme()
         follow_theme(self)
@@ -98,6 +111,7 @@ class MessagePane(QWidget):
         cached = key in self.models
         self.transcript.bubble_delegate.peer_avatar = self.header.avatar.draw
         model = self._model(key)
+        self._follow_model(model)
         self.transcript.setModel(model)
         self.strip.set_conversation(model, self.transcript)
         self.strip.show()
@@ -112,6 +126,7 @@ class MessagePane(QWidget):
         if self.contact is None:
             return
         self.contact = self.uri = self.key = None
+        self._follow_model(None)
         self.header.hide()
         self.strip.hide()
         self.transcript.setModel(None)
@@ -185,3 +200,79 @@ class MessagePane(QWidget):
         if self.contact is not None:
             self.header.set_account(self._default_account())
             self._find_account(self.key)
+
+    # Read state
+
+    def _follow_model(self, model):
+        if self._model_connected is not None:
+            for signal in (self._model_connected.initialLoadFinished, self._model_connected.rowsInserted, self._model_connected.dataChanged):
+                try:
+                    signal.disconnect(self.check_read)
+                except TypeError:
+                    pass
+        self._model_connected = model
+        if model is not None:
+            for signal in (model.initialLoadFinished, model.rowsInserted, model.dataChanged):
+                signal.connect(self.check_read)
+            self.check_read()
+
+    def is_reading(self):
+        """Whether the user has the conversation in front of them."""
+        window = self.window()
+        return (self.key is not None and self.isVisible() and window.isActiveWindow()
+                and not window.isMinimized() and self.stack.currentWidget() is self.transcript)
+
+    def check_read(self, *args):
+        """Mark what is shown read, soon, if it is being read (called on every change that may make it so)."""
+        if self.is_reading():
+            self._read_timer.start()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.check_read()
+
+    def _read(self):
+        if not self.is_reading():
+            return
+        model = self.models.get(self.key)
+        if model is None or not model.loaded or model.search_text:
+            return
+        unread = [item for item in model.items if item.direction == 'incoming' and not item.read]
+        main_window = self.window()
+        badge = getattr(main_window, 'unread_messages', {}).get(self.key, 0)
+        if not unread and not badge:
+            return
+        key = self.key
+        from blink.history import MessageHistory
+        MessageHistory().mark_conversation_read(key)
+        NotificationCenter().post_notification('BlinkMessagePaneDidReadConversation', sender=self, data=NotificationData(remote_uri=key))
+        ActivityLog().info(f'[Message with {key}] Read in the message pane: {len(unread)} unread messages shown' + (f', badge was {badge}' if badge else ''))
+
+        displayed = [item for item in unread if 'display' in item.disposition and item.id not in self._displayed_sent
+                     and '-----BEGIN PGP MESSAGE-----' not in str(item.content or '')]
+        if not unread and not displayed:
+            return
+        from blink.messages import MessageManager
+        manager = MessageManager()
+        try:
+            session = manager.create_message_session(str(self.uri.uri), selected=False)
+        except Exception as e:
+            log.warning(f'Cannot reach the conversation with {key} to confirm reading it: {e!r}')
+            return
+        for item in displayed:
+            account = self._account(item.account_id) or session.account
+            self._displayed_sent.add(item.id)
+            manager.send_imdn_message(session, item.id, ISOTimestamp(item.timestamp), 'displayed', account)
+        if unread:
+            manager.send_conversation_read(session)
+
+    @staticmethod
+    def _account(account_id):
+        from blink.uris import BONJOUR_ACCOUNT_ID
+        if account_id == BONJOUR_ACCOUNT_ID:
+            return BonjourAccount()
+        try:
+            account = AccountManager().get_account(account_id)
+        except KeyError:
+            return None
+        return account if account.enabled else None

@@ -115,7 +115,8 @@ class ConversationModel(QAbstractListModel):
         notification_center = NotificationCenter()
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
-                     'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification'):
+                     'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
+                     'BlinkMessageHistoryConversationWasRead'):
             notification_center.add_observer(self, name=name)
 
     def close(self):
@@ -127,7 +128,8 @@ class ConversationModel(QAbstractListModel):
         notification_center = NotificationCenter()
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
-                     'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification'):
+                     'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
+                     'BlinkMessageHistoryConversationWasRead'):
             notification_center.discard_observer(self, name=name)
 
     # Qt model
@@ -366,6 +368,10 @@ class ConversationModel(QAbstractListModel):
     _NH_BlinkMessageDidFail = _NH_BlinkMessageDidSucceed
     _NH_BlinkGotDispositionNotification = _NH_BlinkMessageDidSucceed
     _NH_BlinkDidSendDispositionNotification = _NH_BlinkMessageDidSucceed
+
+    def _NH_BlinkMessageHistoryConversationWasRead(self, notification):
+        if notification.data.count:
+            self._schedule_refresh()         # the read flags changed
 
     def _NH_BlinkMessageDidDecrypt(self, notification):
         self._schedule_refresh()

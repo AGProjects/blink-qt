@@ -70,6 +70,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkSessionConfirmReadMessages')
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
+        notification_center.add_observer(self, name='BlinkMessagePaneDidReadConversation')
 
         notification_center.add_observer(self, sender=AccountManager())
 
@@ -987,6 +988,16 @@ class MainWindow(base_class, ui_class):
             pass
         else:
             NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
+
+    @run_in_gui_thread
+    def _NH_BlinkMessagePaneDidReadConversation(self, notification):
+        if self.unread_messages.pop(notification.data.remote_uri, None) is not None:
+            NotificationCenter().post_notification('BlinkUnreadMessagesChanged')
+
+    def changeEvent(self, event):
+        super(MainWindow, self).changeEvent(event)
+        if event.type() in (event.Type.ActivationChange, event.Type.WindowStateChange) and hasattr(self, 'message_pane'):
+            self.message_pane.check_read()      # becoming active (or restored) may make the shown conversation read
 
     @run_in_gui_thread
     def _NH_BlinkSessionConfirmReadMessages(self, notification):
