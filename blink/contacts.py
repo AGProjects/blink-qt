@@ -3076,6 +3076,12 @@ class Contact(object):
                 keys = self.conversation_keys
                 if ConversationTyping().is_typing(keys):
                     return translate('contact_list', '✎ is typing…')
+                from blink.history import ConversationLocations
+                sharing = ConversationLocations().sharing(keys)
+                if sharing == 'meet':
+                    return translate('contact_list', '⌖ is meeting up with you…')
+                if sharing:
+                    return translate('contact_list', '⌖ is sharing location…')
                 preview = ConversationPreviews().preview(keys)
                 if preview:
                     return preview

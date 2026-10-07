@@ -41,7 +41,7 @@ from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
 
 from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, canonical_uri, is_instance_id, placeholder_instance_id
-from blink.util import call_later, run_in_gui_thread, translate
+from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 import traceback
 
 from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex, AND, OR
@@ -63,6 +63,7 @@ class HistoryManager(object, metaclass=Singleton):
         self.download_history = DownloadHistory()
         ConversationPreviews()
         ConversationTyping()
+        ConversationLocations()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -2611,6 +2612,123 @@ class ConversationTyping(object, metaclass=Singleton):
 
     def _changed(self, key):
         NotificationCenter().post_notification('BlinkConversationPreviewsDidChange', sender=self, data=NotificationData(keys={key}))
+
+
+@implementer(IObserver)
+class ConversationLocations(object, metaclass=Singleton):
+    """Which conversations the other party is sharing their location in, by conversation key.
+
+    A share is running from its start (location_start, meeting_start, received)
+    until a teardown tick (location_stop, meeting_end, meeting_reject), its
+    expiry, or, when it says none, until it has been quiet for idle_limit.
+    Read from history at start and again when a location tick is stored; while
+    any share runs it is looked at every check_interval seconds for expiry.
+    Changes are announced as BlinkConversationPreviewsDidChange with data.keys:
+    the contact row's second line says it.
+    """
+
+    start_actions = ('location_start', 'meeting_start')
+    teardown_actions = ('location_stop', 'meeting_end', 'meeting_reject')
+    window = 24 * 3600              # seconds: a share older than this is not looked at
+    idle_limit = 30 * 60            # seconds without a tick for a share that has no expiry
+    check_interval = 60
+
+    def __init__(self):
+        self.active = {}            # key: 'live' or 'meet'
+        self._checking = False
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='BlinkMessageHistoryLocationDidStore')
+
+    def sharing(self, keys):
+        """'live' or 'meet' when the other party shares their location in one of these conversations, else None."""
+        return next((self.active[key] for key in keys if key in self.active), None)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_SIPApplicationDidStart(self, notification):
+        self._scan(None)
+
+    def _NH_BlinkMessageHistoryLocationDidStore(self, notification):
+        self._scan([str(notification.data.remote_uri)])
+
+    def _tick(self):
+        self._checking = False
+        if self.active:
+            self._scan(list(self.active))
+
+    @run_in_thread('db')
+    def _scan(self, keys):
+        from blink.location import location_envelope, row_metadata
+        try:
+            db = Message._connection
+            table = Message.sqlmeta.table
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            since = datetime.fromtimestamp(time.time() - self.window, timezone.utc).replace(tzinfo=None)
+            starts = ', '.join(db.sqlrepr(action) for action in self.start_actions)
+            where = (f"direction = 'incoming' and related_action in ({starts}) and timestamp > {db.sqlrepr(since)} and {NOT_DELETED_SQL}"
+                     + (f" and remote_uri in ({', '.join(db.sqlrepr(key) for key in keys)})" if keys else ''))
+            found = {}
+            for row in Message.select(where, orderBy='timestamp'):
+                session = row.related_msg_id or row.message_id
+                ticks = db.queryAll(f'select related_action, max(timestamp) from {table} where related_msg_id = {db.sqlrepr(session)} and {NOT_DELETED_SQL} group by related_action')
+                if any(action in self.teardown_actions for action, _ in ticks):
+                    continue
+                expires = None
+                try:
+                    envelope = location_envelope(row.content, row_metadata(row.metadata, row.related_action, row.related_msg_id))
+                    expires = self._time(envelope.get('expires')) if envelope else None
+                except Exception:
+                    pass
+                if expires is not None:
+                    if expires <= now:
+                        continue
+                else:
+                    last = max([when for when in (self._time(when) for _, when in ticks) if when is not None] + [row.timestamp])
+                    if (now - last).total_seconds() > self.idle_limit:
+                        continue
+                found[str(row.remote_uri)] = 'meet' if row.related_action.startswith('meeting') else 'live'
+        except Exception as e:
+            log.warning(f'Cannot read the running location shares: {e!r}')
+            return
+        call_in_gui_thread(self._apply, keys, found)
+
+    @staticmethod
+    def _time(value):
+        if value is None or value == '':
+            return None
+        if isinstance(value, datetime):
+            return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value / 1000 if value > 1e11 else value, timezone.utc).replace(tzinfo=None)
+        text = str(value).strip().replace('Z', '+00:00')
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo else parsed
+
+    def _apply(self, keys, found):
+        scope = set(keys) if keys is not None else set(self.active) | set(found)
+        changed = set()
+        for key in scope:
+            kind = found.get(key)
+            if self.active.get(key) != kind:
+                changed.add(key)
+                if kind is None:
+                    self.active.pop(key, None)
+                    ActivityLog().info(f'[location] {key} is no longer sharing their location')
+                else:
+                    self.active[key] = kind
+                    ActivityLog().info(f'[location] {key} is sharing their location' + (' (meet-up)' if kind == 'meet' else ''))
+        if changed:
+            NotificationCenter().post_notification('BlinkConversationPreviewsDidChange', sender=self, data=NotificationData(keys=changed))
+        if self.active and not self._checking:
+            self._checking = True
+            call_later(self.check_interval, self._tick)
 
 
 class IconDescriptor(object):
