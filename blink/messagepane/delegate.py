@@ -30,6 +30,10 @@ A movie that is here is its poster (blink.messagepane.video) with a play badge
 and its length; a click plays it in the bubble (AudioPlayer, one clip at a time)
 with a transport over its bottom (play/pause, a track to seek on, the clock);
 one GStreamer cannot read is a plain file, Open gives it to the system player.
+A location is a map (blink.messagepane.locations: OpenStreetMap tiles) with a
+pin where it is, a live share's trail and a meet-up's meeting point, and under
+it what it is (Location, Live location, Meet-up) and how it stands (until,
+ended, how many points, last update); a click opens the map window.
 Layouts are cached per message, width and font.
 """
 
@@ -133,7 +137,13 @@ class BubbleDelegate(QStyledItemDelegate):
             if video_available():
                 video_info = VideoProbe.instance().info(image_path)
                 video_state = 'pending' if video_info is None else 'ok' if video_info else 'bad'
-        key = (image_path, video_state, item.caption, progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
+        location_share = location_version = None
+        if item.category == 'location':
+            from blink.messagepane.locations import LocationStore
+            store = LocationStore.instance()
+            location_share = store.shown(item)
+            location_version = (store.version(item.id), location_share is None)
+        key = (image_path, video_state, location_version, item.caption, progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
                (reply['id'], reply['text']) if reply else None)
         layout = self._cache.get(key)
         if layout is not None:
@@ -155,6 +165,8 @@ class BubbleDelegate(QStyledItemDelegate):
             layout.kind = kind = 'image'
         elif video_state in ('pending', 'ok'):
             layout.kind = kind = 'video'
+        elif item.category == 'location' and location_share is not False:
+            layout.kind = kind = 'location'
         elif item.category in ('other', 'audio', 'video'):
             from blink.messagepane.media import pdf_available
             from blink.messagepane.audio import audio_available
@@ -169,6 +181,8 @@ class BubbleDelegate(QStyledItemDelegate):
         document.setDocumentMargin(0)
         if kind == 'image':
             return self._image_layout(key, layout, item, image_path, width, font, small, progress)
+        if kind == 'location':
+            return self._location_layout(key, layout, item, location_share, width, font, small)
         if kind == 'video':
             # until it is probed, a 16:9 well (the poster replaces it a moment later)
             natural = video_info['size'] if video_info and video_info['size'].isValid() else QSize(16, 9)
@@ -594,6 +608,75 @@ class BubbleDelegate(QStyledItemDelegate):
             box.moveLeft(bubble.left() + (bubble.width() - box.width()) / 2)
         return box
 
+    # Locations
+
+    location_size = (300, 190)
+
+    def _location_layout(self, key, layout, item, share, width, font, small):
+        from blink.messagepane.locations import share_detail, share_title
+        box_width = min(self.location_size[0], self._bubble_width_limit(width) - 2 * self.image_padding)
+        layout.image_size = (box_width, self.location_size[1])
+        document = QTextDocument()
+        document.setDocumentMargin(0)
+        document.setDefaultFont(font)
+        option = QTextOption()
+        option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        document.setDefaultTextOption(option)
+        import html as _html
+        if share:
+            detail = share_detail(share)
+            document.setHtml(f'<b>{_html.escape(share_title(share))}</b>' + (f'<br><span style="font-size:small">{_html.escape(detail)}</span>' if detail else ''))
+        else:
+            document.setHtml(f'<b>{_html.escape(translate("message_pane", "Location"))}</b>')
+        bubble_width = box_width + 2 * self.image_padding
+        document.setTextWidth(bubble_width - 2 * self.padding_h)
+        layout.document = document
+        layout.text_size = QSizeF(document.size().width(), document.size().height())
+        layout.bubble_size = QSizeF(bubble_width, layout.image_size[1] + 2 * self.image_padding + layout.text_size.height() + self.padding_v + 2)
+        height = layout.bubble_size.height()
+        if layout.name_text:
+            height += QFontMetricsF(small).height() + 2
+        height += self.run_gap if layout.run_start else self.inner_gap
+        if layout.day_text:
+            height += self.divider_height
+        layout.size = QSize(width, int(height + 0.999))
+        self._cache[key] = layout
+        return layout
+
+    def _paint_location(self, painter, layout, item, bubble, palette, small):
+        from blink.messagepane.locations import LocationStore, fit_view, paint_map
+        box = self._image_box(layout, bubble)
+        share = LocationStore.instance().shown(item)
+        clip = QPainterPath()
+        clip.addRoundedRect(box, self.radius - 3, self.radius - 3)
+        painter.save()
+        painter.setClipPath(clip)
+        if share:
+            track = [(lat, lng) for lat, lng, _ in share['track']]
+            points = track + ([share['destination']] if share['destination'] else [])
+            zoom, centre = fit_view(points, box.size().toSize())
+            paint_map(painter, box, zoom, centre, track=track, pin=track[-1] if track else None, destination=share['destination'],
+                      start=track[0] if track else None, accent=QColor('#1a73e8'))
+        else:
+            painter.fillRect(box, QColor(0, 0, 0, 30) if not is_dark_theme() else QColor(255, 255, 255, 24))
+        painter.restore()
+        metrics = QFontMetricsF(small)
+        label = layout.time_text + ('  ' + layout.mark if layout.mark else '')
+        pill = QRectF(0, 0, metrics.horizontalAdvance(label) + 12, metrics.height() + 4)
+        pill.moveBottomRight(box.bottomRight() - QPointF(6, 6))
+        pill_path = QPainterPath()
+        pill_path.addRoundedRect(pill, pill.height() / 2, pill.height() / 2)
+        painter.fillPath(pill_path, QColor(0, 0, 0, 120))
+        painter.setFont(small)
+        painter.setPen(QColor('#ffffff'))
+        painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
+        context = QAbstractTextDocumentLayout.PaintContext()
+        context.palette = self._text_palette(palette, self._colours(palette, item.outgoing)[1])
+        painter.save()
+        painter.translate(bubble.left() + self.padding_h, box.bottom() + self.padding_v)
+        layout.document.documentLayout().draw(painter, context)
+        painter.restore()
+
     # Movies
 
     transport_height = 34
@@ -865,8 +948,11 @@ class BubbleDelegate(QStyledItemDelegate):
             self._paint_call(painter, layout, bubble, option.font, small, secondary, text_colour)
         if layout.kind == 'audio':
             self._paint_audio(painter, layout, item, bubble, small, secondary, text_colour)
-        if layout.kind in ('image', 'pdf', 'video'):
-            self._paint_image(painter, layout, item, bubble, palette, small, secondary)
+        if layout.kind in ('image', 'pdf', 'video', 'location'):
+            if layout.kind == 'location':
+                self._paint_location(painter, layout, item, bubble, palette, small)
+            else:
+                self._paint_image(painter, layout, item, bubble, palette, small, secondary)
             if option.state & QStyle.StateFlag.State_MouseOver:
                 self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
             painter.restore()

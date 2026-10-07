@@ -525,6 +525,9 @@ class MessagePane(QWidget):
             if item.content_type == 'text/html':
                 content = plain_summary(item)
             self.composer.set_editing({'id': item.id, 'text': content, 'timestamp': item.timestamp, 'account_id': item.account_id})
+        elif action == 'location':
+            from blink.messagepane.locations import LocationWindow
+            LocationWindow.show_for(item, getattr(self.contact, 'name', '') or self.key, self.window())
         elif action == 'call_details':
             from blink.message_envelopes import call_record
             from blink.messagepane.info import show_call_details

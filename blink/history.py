@@ -934,6 +934,9 @@ class MessageHistory(object, metaclass=Singleton):
         """After a location tick is stored: log it (trail ticks only at debug level,
         they come every few seconds). Caller is in the db thread."""
         action = fields.get('related_action')
+        # a share's bubble draws its trail: tell it (blink.messagepane.locations)
+        NotificationCenter().post_notification('BlinkMessageHistoryLocationDidStore',
+                                               data=NotificationData(remote_uri=remote_uri, message_id=message_id, action=action, session_id=fields.get('related_msg_id') or message_id))
         if action is None:
             ActivityLog().info(f'[db] Location message {message_id} with {remote_uri} stored, it cannot be read without decrypting')
         elif action in cls.__trail_actions__:

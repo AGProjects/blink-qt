@@ -56,6 +56,9 @@ class TranscriptView(QListView):
             AudioPlayer.instance().changed.connect(self._SH_MediaReady)
             AudioPlayer.instance().frameChanged.connect(self._SH_VideoFrame)
             AudioInfo.instance().measured.connect(self._SH_MediaReady)
+        from blink.messagepane.locations import LocationStore, TileCache
+        TileCache.instance().tileReady.connect(self.viewport().update)
+        LocationStore.instance().changed.connect(self._SH_VideoProbed)        # a share read (again): its bubble may change size
         from blink.messagepane.video import VideoProbe, video_available
         if video_available():
             VideoProbe.instance().probed.connect(self._SH_VideoProbed)
@@ -219,6 +222,9 @@ class TranscriptView(QListView):
                     return
                 if item is not None and item.category == 'call':
                     self.actionRequested.emit('call_details', item)
+                    return
+                if item is not None and item.category == 'location':
+                    self.actionRequested.emit('location', item)
                     return
         super().mouseReleaseEvent(event)
 
