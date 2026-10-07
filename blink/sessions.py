@@ -63,6 +63,7 @@ from blink.widgets.util import ContextMenuActions, FontScaledSize, QtDynamicProp
 from blink.widgets.zrtp import ZRTPWidget
 from blink.streams.message import MessageStream
 from blink.pstn_normalize import pstn_dial_username
+from blink.file_transfer import MAX_ENCRYPT_BYTES
 from blink.uris import bare_instance_id, placeholder_instance_id
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
@@ -4183,6 +4184,11 @@ class BlinkFileTransfer(BlinkSessionBase):
         # Open file after download
         self.must_open = False
 
+        # 'http': uploaded to the account's file transfer service, which sends it on (blink.file_transfer)
+        # 'msrp': sent to the other party directly (Bonjour, or no service on the account)
+        self.route = 'msrp'
+        self.upload_base = None
+
     def __establish__(self):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferWasCreated', sender=self)
@@ -4255,11 +4261,19 @@ class BlinkFileTransfer(BlinkSessionBase):
             makedirs(directory)
             shutil.copy(filename, directory)
 
+        # Over HTTP when the account has a file transfer service, as Sylk Mobile and Blink for macOS
+        # send files (mobile does not take MSRP); MSRP for Bonjour and accounts with no service.
+        if isinstance(account, Account):
+            from blink.messages import MessageManager
+            self.upload_base = MessageManager().file_transfer_base_url(account)
+        if self.upload_base:
+            self.route = 'http'
+
         self.state = 'initialized'
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferNewOutgoing', self)
 
-        if self._stat.st_size < 26214400:
+        if self._stat.st_size < (MAX_ENCRYPT_BYTES if self.route == 'http' else 26214400):
             stream = StreamDescription('messages')
             message_stream = stream.create_stream()
             message_stream.blink_session = self
@@ -4315,6 +4329,10 @@ class BlinkFileTransfer(BlinkSessionBase):
             self.state = 'initialized'
             notification_center.post_notification('BlinkFileTransferWillRetry', self)
 
+        if self.route == 'http' and self.transfer_type == 'push':
+            self._upload()
+            return
+
         settings = SIPSimpleSettings()
         if isinstance(self.account, Account):
             if self.account.sip.outbound_proxy is not None:
@@ -4331,6 +4349,64 @@ class BlinkFileTransfer(BlinkSessionBase):
         lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
         self.state = 'connecting/dns_lookup'
+
+    # HTTP upload
+
+    def _upload(self):
+        """POST the file to <base>/<sender>/<receiver>/<transfer id>/<name>: the POST is the send.
+
+        SylkServer stores the file and emits the application/sylk-file-transfer message itself,
+        to the other party and back to our other devices, so nothing is sent over SIP here.
+        """
+        from blink.file_transfer import upload_url
+        receiver = '%s@%s' % (self._uri.user.decode() if isinstance(self._uri.user, bytes) else self._uri.user, self._uri.host.decode() if isinstance(self._uri.host, bytes) else self._uri.host)
+        # the name travels in a URL and becomes a path on the other side: spaces and colons out, as mobile does
+        name = re.sub(r'[\s:]', '_', os.path.basename(self.file_selector.name)).lstrip('./') or f'file-{self.id}'
+        url = upload_url(self.upload_base, self.account.id, receiver, self.id, name)
+        token = self.account.sms.history_synchronization_token
+        content_type = self.file_selector.type or 'application/octet-stream'
+        self.state = 'connecting'
+        fd = self.file_selector.fd
+        fd.seek(0)
+        data = fd.read()
+        size = len(data)
+        encrypted = name.endswith('.asc')
+        ActivityLog().info(f"[transfer] Uploading {name} ({size} bytes{', PGP encrypted' if encrypted else ''}) for {receiver} to {url}")
+        if not token:
+            ActivityLog().warning(f'[transfer] Uploading {name} without an API token: the server will refuse it')
+        self.state = 'connected'
+        NotificationCenter().post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(bytes=0, total_bytes=size))
+        self._post_file(url, data, content_type, token, size, name)
+
+    @run_in_thread('file-transfer')
+    def _post_file(self, url, data, content_type, token, size, name):
+        headers = {'Content-Type': content_type}
+        if token:
+            headers['Authorization'] = f'Apikey {token}'
+        try:
+            response = requests.post(url, data=data, headers=headers, timeout=(15, 600))
+        except requests.RequestException as e:
+            self._upload_finished(None, str(e), size, name)
+        else:
+            self._upload_finished(response.status_code, response.reason, size, name)
+
+    @run_in_gui_thread
+    def _upload_finished(self, status, detail, size, name):
+        if self.state in ('ending', 'ended'):
+            ActivityLog().info(f'[transfer] Upload of {name} finished after it was cancelled ({status or detail})')
+            return
+        if status is not None and 200 <= status < 300:
+            ActivityLog().info(f'[transfer] Uploaded {name} (HTTP {status})')
+            NotificationCenter().post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(bytes=size, total_bytes=size))
+            self._terminate()
+            return
+        reason = f'HTTP {status}' if status is not None else detail
+        ActivityLog().warning(f'[transfer] Upload of {name} failed: {reason}' + (f' {detail}' if status is not None and detail else ''))
+        if status == 401:
+            # the token this account holds is not the one the server has: ask for another, as history sync does
+            from blink.messages import MessageManager
+            MessageManager()._request_history_synchronization_token(self.account, 'file upload refused (401)')
+        self._terminate(failure_reason=reason)
 
     def end(self):
         assert self.state is not None
