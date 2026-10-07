@@ -663,6 +663,10 @@ class DownloadHistory(object, metaclass=Singleton):
         for message in messages:
             if message.direction == 'outgoing' and state == 'received':
                 continue
+            if message.direction == 'outgoing' and state == 'error' and message.state in ('delivered', 'displayed'):
+                # the peer's devices answer each on its own: one that cannot show it does not undo one that did
+                log.info(f'Message {id} to {message.remote_uri} error disposition ignored, already {message.state}')
+                continue
 
             if message.state != 'displayed' and message.state != state:
                 log.info(f'Update {message.direction} {id} {message.state} -> {state}')
@@ -2016,6 +2020,10 @@ class MessageHistory(object, metaclass=Singleton):
         messages = Message.selectBy(message_id=id)
         for message in messages:
             if message.direction == 'outgoing' and state == 'received':
+                continue
+            if message.direction == 'outgoing' and state == 'error' and message.state in ('delivered', 'displayed'):
+                # the peer's devices answer each on its own: one that cannot show it does not undo one that did
+                log.info(f'Message {id} to {message.remote_uri} error disposition ignored, already {message.state}')
                 continue
 
             if (state == 'deleted' or message.state != 'displayed') and message.state != state:
