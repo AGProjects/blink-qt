@@ -1,5 +1,7 @@
 # Blink Qt — Phase B: Messaging UI
 
+**Status (2026-10-07):** B1–B6 implemented, patches 58–93, plus the patches listed under *Done alongside Phase B*. Where the code differs from the tables below, see *Implementation notes*. Video trim (part of 87) is not done; moving unread counting out of the chat window (the last part of 93) is left for a later patch.
+
 Phase A made Blink Qt behave like Blink for macOS and Sylk Mobile on the wire, in XCAP and in storage. Phase B builds the user interface on the APIs it left behind (`MessageHistory` paging, categories, read state, tombstones, sidecars, CDRs, file cache, location storage). Reference: `blink-macos-messaging-inventory.md` (Inv §n) for behaviour, `patch-series.md` for what exists.
 
 ## Decisions
@@ -17,15 +19,34 @@ Same rules as Phase A: one darcs patch per logical change, each leaves Blink wor
 ```
 MainWindow
  └─ QSplitter
-     ├─ contact list (existing ContactListView; becomes the conversation switcher)
-     └─ MessagePane (new)
-         ├─ ConversationHeader      avatar, name, info line, URI switcher, account pill, lock, A−/A+, calendar, call buttons
-         ├─ TranscriptStrip         loaded range, history note, scroll hint, search, filter chips
-         ├─ TranscriptView          QListView, ScrollPerItem off, per-pixel scrolling, anchored prepend
-         │    model:    ConversationModel  (rows = MessageItem; paging from MessageHistory)
-         │    delegate: BubbleDelegate     (one painter per bubble kind; size cache per width)
-         └─ Composer                text input, attach, record, smileys, reply/edit hint line
+     ├─ contact list (existing ContactListView; the conversation switcher)
+     └─ MessagePane                 pane.py
+         ├─ ConversationHeader      header.py   avatar, name, address ▾, account pill, ■ stop, A−/A+, lock, calendar, 📍, call buttons
+         ├─ TranscriptStrip         strip.py    loaded range, history note, scroll hint, search
+         ├─ FilterBar               filters.py  category chips; Grid, columns, Select, Download All at the right
+         ├─ QStackedWidget
+         │    ├─ TranscriptView     view.py     QListView, per-pixel scrolling, anchored prepend
+         │    │    model:    ConversationModel  model.py   (rows = MessageItem; paging from MessageHistory)
+         │    │    delegate: BubbleDelegate     delegate.py (one painter per bubble kind; layout cache per id, width, font)
+         │    └─ GridView           grid.py     tiles for pictures, videos, locations; multi-select bar
+         └─ Composer                composer.py text input, attach menu, record, reply/edit hint line
 ```
+
+Modules of `blink/messagepane/` as built:
+
+| Module | What |
+|---|---|
+| `format.py` | Pure helpers (tested): summaries, file names, linkify, HTML sanitiser, bubble kind, day labels, delivery marks, auto-fetch limits, sizes, waveform bars, clock |
+| `model.py` | `ConversationModel`, `MessageItem` (incl. `MessageItem.for_upload`), paging, live merge, search, jump, category filter |
+| `delegate.py`, `view.py` | Bubbles (text, note, summary, image, PDF, file, call, audio, video, location), hit testing (`bubble_at`, `audio_hit`), menus |
+| `media.py` | `MediaCache`: decode off the GUI thread, LRU by bytes, PDF page 1 (QtPdf), decoders per extension |
+| `fetch.py`, `files.py` | Auto-fetch in view; where a message's file is, its info, its failure |
+| `uploads.py` | Files being sent over HTTP shown as rows until the server's copy is in history |
+| `audio.py`, `recorder.py`, `transcode.py` | One player app-wide (audio and video frames), waveforms; voice recorder; WAV → AAC (.m4a) with GStreamer |
+| `video.py` | `VideoProbe`: poster and duration with GStreamer (gi), posters registered with `MediaCache` |
+| `locations.py`, `position.py` | OSM tiles (`TileCache`), shares and trails (`LocationStore`), map window; current position (QtPositioning/GeoClue) |
+| `attach.py`, `camera.py` | Attachment preview (crop, caption, smaller pictures); Take a Photo |
+| `forward.py`, `info.py` | Forward dialog; message info panel |
 
 - **`blink/messagepane/`** (new package): `model.py` (ConversationModel, MessageItem), `delegate.py` (BubbleDelegate and kind painters), `pane.py` (MessagePane, header, strip), `composer.py`, `media.py` (thumbnails, posters, waveforms, PDF page 1; decoded off the GUI thread, cached by path+mtime+size), `format.py` (pure: day labels, times, sizes, HTML sanitiser, linkifier; tested).
 - **Model**: rows come from `MessageHistory.get_messages(remote, before, category, limit)`; live rows arrive through the existing notifications (`BlinkGotMessage`, `BlinkGotHistoryMessage`, delete/tombstone, state changes) keyed by message id. One row per message id; a duplicate only updates state. Sidecars (captions, replies, peaks, location ticks) are attached to their target row, never shown as rows.
@@ -106,6 +127,49 @@ Independent of the pane: these only read history, so they can go first.
 
 ---
 
+## Implementation notes
+
+Where the code differs from the tables above.
+
+| # | Note |
+|---|---|
+| 58 | Second line order as built: typing → sharing location (78b) → last message → contact detail. |
+| 62 | Toggle and Ctrl+4; opening and closing the pane are logged. Selecting a contact while the pane is closed loads nothing; the conversation is loaded when the pane opens. |
+| 66 | The delegate paints every kind itself; no persistent editors are used (`openPersistentEditor` was not needed). |
+| 69 | Read path: `BlinkMessagePaneDidReadConversation` clears the contact badge. Unread counts are still posted by the chat window's message handling (see 93). |
+| 72 | Audio is fetched too: up to 10 MiB and 7 days old, like video (20 MiB). |
+| 76 | One player for the whole application (`AudioPlayer`), also used for video (77). Voice notes are sent as AAC in .m4a (GStreamer via python3-gi, `transcode.py`), the WAV when no AAC encoder is installed. |
+| 77 | Inline playback paints the player's frames (QVideoSink) inside the bubble, with the transport over its bottom; no video widget. Posters and durations come from GStreamer (`video.py`). |
+| 78 | Bubble: static map with pin, trail and meeting point; pan, zoom, recentre and the trail slider are in the map window a click opens (`LocationWindow`). Tiles from `{a,b,c}.tile.openstreetmap.de`, 4 at a time, 15 s timeout, retried after 60 s. The contact row line ("⌖ is sharing location…", ⌖ because 📍 draws as an empty box on common Linux fonts) came as its own patch, 78b (`ConversationLocations` in `history.py`). History posts `BlinkMessageHistoryLocationDidStore` for every stored tick. |
+| 80 | Grid opens at the newest month and loads older months when scrolled up, like the transcript. |
+| 81 | Remote delete is offered only for messages one sent, as for a single message. |
+| 86 | Also a Clients section and a User agent row (see *Done alongside*); values are shown without `sip:` and lists comma separated. |
+| 87 | Pictures are made smaller unless "Send original": at most 2048 px on the long side, JPEG 85 (PNG with transparency); a crop always makes a new file. No video trim (needs an H.264 encoder; x264 is not in the dependencies). Every file sent from the pane goes through the preview (choose, drop, paste, screenshot, photo). |
+| 91 | 📍 shown when the account has a journal URL (SylkServer). Positioning asks GeoClue directly with desktop id `blink`; a failure opens a dialog with the reason; the greyed menu item says why. The request is not drawn in the transcript (stored as a signal without a category). |
+| 92 | The chosen account is kept per conversation for the session, not across restarts. A first message to a domain one of the accounts is in goes from that account without asking. |
+| 93 | Message-only sessions are hidden from the chat window's list and never select it; Window → Chat Window opens the pane when there is no MSRP, video or screen sharing session; a call's "Send Messages" opens its conversation in the pane. The chat window still handles those sessions' messages in the background (unread counts, queued receipts); moving that out would let `ChatWidget` stop rendering SIP messages altogether. |
+
+## Done alongside Phase B
+
+| Area | Patch |
+|---|---|
+| File transfers | HTTP uploads shown in the pane while they upload (✓ when done, ⚠ with retry, cancel); the File Transfers window and its auto-opening are for MSRP transfers only |
+| Messages | Messaging log lines for sent, received and disposition with message ids; journal duplicates no longer mark read messages unread; live IMDN not stored as an unknown type |
+| Receipts | An `error`/`failed` receipt no longer moves a delivered or displayed message back (Blink Qt, Blink Cocoa `HistoryManager` and `markMessage`, Sylk Mobile `updateMessageState`); Blink Cocoa: displayed receipts sent again (EventQueue pause counter) |
+| User agents | SylkServer sends `X-Sylk-User-Agent` (the web or mobile client) with messages and receipts; Blink Qt records the client of every message and receipt (`message_agents` table, no schema change of `messages`) and shows it in Info and the logs; messages known only from the journal have none |
+| Composer | Take a Photo (camera) in the attach menu |
+| Audio devices | Devices menu: combined input+output devices on top select both sides; each side checked against its own list on refresh, the alert device included |
+| Transcript | Clicks and right clicks only inside the bubble |
+| Packaging | Depends: python3-pyqt6.qtmultimedia, python3-pyqt6.qtpdf, python3-gi, gir1.2-gstreamer-1.0, gstreamer1.0-plugins-base/-good, gstreamer1.0-libav; Recommends: python3-pyqt6.qtpositioning, libqt6positioning6-plugins, geoclue-2.0 |
+
+## Left after Phase B
+
+- Video trim in the attachment preview (needs an H.264 encoder in the dependencies).
+- Unread counting and receipts out of the chat window, so it renders MSRP chat only.
+- Messages SylkServer writes after an HTTP upload carry no `X-Sylk-User-Agent` (`web.py`).
+- Sylk Mobile sent `error` display receipts for .m4a voice notes it had received: to be checked with mobile logs.
+- 57 (Sylk data import), from Phase A.
+
 ## Ordering notes
 
 - 58–61 first: they work on the existing contact list and only read history, so they are useful before the pane exists. 61 after 58 and 60 (sorting uses the same last-message and last-call times).
@@ -119,3 +183,5 @@ Independent of the pane: these only read history, so they can go first.
 - MSRP chat stays in its separate window.
 - Screenshots go through the desktop portal (patch above), so they work on Wayland too.
 - After Phase B: contact mangler (screenshot/demo mode), per-chat language, Edit Contact "XCAP" pill (Inv §14.5, §19).
+- Remote delete stays limited to one's own messages.
+- User agents are not stored in the server journal (neither a new column nor the metadata column).

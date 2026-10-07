@@ -1,6 +1,6 @@
 # Blink Qt — Phase A Patch Series
 
-**Status (2026-10-07):** A1–A5 implemented through patch 56; 57 (Sylk data import) deferred. Every row was checked against the code on that date. Where the implementation differs from the plan, see *Implementation notes* below; patches recorded alongside the series, mostly UI and logging, are listed at the end.
+**Status (2026-10-07):** A1–A5 implemented through patch 56; 57 (Sylk data import) deferred. Phase B (the messaging UI, patches 58–93) is in `ui-plan.md`, with its status and notes. Every row was checked against the code on that date. Where the implementation differs from the plan, see *Implementation notes* below; patches recorded alongside the series, mostly UI and logging, are listed at the end.
 
 One darcs patch per logical change, in recording order. Each patch leaves Blink Qt running and is testable on its own. Section references point to `porting-plan-protocol.md` (Plan §) and `blink-macos-messaging-inventory.md` (Inv §).
 
@@ -117,7 +117,7 @@ Where the code differs from the table above.
 
 | # | Note |
 |---|---|
-| 8 | Steps are `MessageHistory._upgrade_to_v<n>()`, run one at a time by `_check_table_version`; the version is stored after every step, so an interrupted upgrade resumes. The messages table is at v11. |
+| 8 | Steps are `MessageHistory._upgrade_to_v<n>()`, run one at a time by `_check_table_version`; the version is stored after every step, so an interrupted upgrade resumes. The messages table is at v11; Phase B added no messages schema step, only a separate `message_agents` table (created when missing). |
 | 12 | Module `blink/pstn_normalize.py` (not `pstn.py`); `sessions._normalize_uri` applies the account dial plan (`pstn_dial_username`) and logs `[call] Dial plan`. |
 | 19 | No `eval()` left in `chatwindow.py` or `history.py`. |
 | 29, 30 | Schema v10 files metadata companions against their message, v11 location ticks against their share. |
@@ -128,7 +128,7 @@ Where the code differs from the table above.
 | 52 | Most guards already existed (Messages/Calls filing, trash, purge, local Bonjour names); the patch added `is_bonjour_address` for the contact editor, Calls and Messages filing, and removed Edit/Delete for neighbours in search. Only `contacts.py` changed. |
 | 53 | `KeyEscrowManager` lives in `messages.py`; no `contacts.py` change. When no contact carries the account's own address, one is created (as Sylk Mobile does) and the escrow is written on the next reload. No "save key on server" menu item yet. |
 | 54 | URL helpers in a new `blink/file_transfer.py` (shared by 55 and 56). |
-| 55 | `BlinkFileTransfer` gets an `http` route (`_upload` / `_post_file`), keeping the transfers window, progress, retry and cancel. The SylkServer echo of our own upload is what puts the sent file in history. Known gap: an encrypted upload that fails cannot be retried (retry re-reads the `.asc` path). |
+| 55 | `BlinkFileTransfer` gets an `http` route (`_upload` / `_post_file`), keeping progress, retry and cancel; since Phase B an HTTP upload is shown in the message pane (`blink/messagepane/uploads.py`) and the transfers window is for MSRP transfers only. The SylkServer echo of our own upload is what puts the sent file in history. Known gap: an encrypted upload that fails cannot be retried (retry re-reads the `.asc` path). |
 | 56 | Path built by `configuration.datatypes.sylk_file_path`; files under the old `downloads/<id>/` are still found. Permanent and gone failures are kept in `<transfer folder>/.failure.json`, not in the envelope: Qt stores incoming transfers as RCS XML, which has no field for it. A gone transfer not on disk is tombstoned and removed from the open chat. |
 | 57 | Deferred. |
 
