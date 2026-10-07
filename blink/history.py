@@ -1267,7 +1267,8 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def settle_first_sync_read(self, account_id, days=7, marker=None):
         """After a first sync: an incoming message older than the newest outgoing one in its
-        conversation, or older than `days`, was read (on another device, before this one)."""
+        conversation, or older than `days`, was read (on another device, before this one).
+        Then the first sync is finished: its marker file (journal/<account>/first-sync.marker) goes."""
         table = Message.sqlmeta.table
         account = self.db.sqlrepr(str(account_id))
         cutoff = self.db.sqlrepr(self._storage_time(datetime.now(timezone.utc) - timedelta(days=days)))
@@ -1281,7 +1282,9 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().error(f'[db] Settling the read state of {account_id} after the first sync failed: {e}')
             JournalLog()(account_id, 'settle failed', error=str(e)[:200])
             return
-        JournalLog()(account_id, 'settle first_sync', incoming_read=count, rule=f'older than the newest outgoing or {days} days')
+        if marker:
+            unlink(marker)
+        JournalLog()(account_id, 'settle first_sync', incoming_read=count, rule=f'older than the newest outgoing or {days} days', finished='yes')
         ActivityLog().info(f'[db] First sync of {account_id}: {count} older incoming messages marked read')
 
     @run_in_thread('db')

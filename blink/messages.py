@@ -912,6 +912,18 @@ class MessageManager(object, metaclass=Singleton):
         makedirs(path)
         return path
 
+    journal_first_sync_marker = 'first-sync.marker'
+
+    def _journal_first_sync_marker(self, account):
+        """journal/<account>/first-sync.marker: there while a first sync is not finished.
+
+        Written when a first sync starts and removed by the history once the read
+        state is settled (MessageHistory.settle_first_sync_read), so a first sync
+        interrupted by a quit is resumed as one: its later pages have a cursor and
+        would otherwise be applied as a catch-up, and the settling would never run.
+        """
+        return os.path.join(self._journal_directory(account), self.journal_first_sync_marker)
+
     def _journal_page_url(self, account):
         """The next journal page: after the cursor, or for a first sync `since` five years ago.
 
@@ -962,12 +974,21 @@ class MessageManager(object, metaclass=Singleton):
         headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
         settings = SIPSimpleSettings()
         activity = ActivityLog()
-        first_sync = not account.sms.history_synchronization_id
+        marker = self._journal_first_sync_marker(account)
+        resumed = os.path.exists(marker)
+        first_sync = resumed or not account.sms.history_synchronization_id
+        if first_sync and not resumed:
+            try:
+                with open(marker, 'w') as marker_file:
+                    marker_file.write(f'{ISOTimestamp.now()}\n')
+            except OSError as e:
+                activity.warning(f'[journal] Cannot write {marker}: {e}')
         jlog = JournalLog()
-        jlog(account.id, 'sync start', reason=reason, first_sync=first_sync, cursor=account.sms.history_synchronization_id,
+        jlog(account.id, 'sync start', reason=reason, first_sync=first_sync, resumed=resumed or None, cursor=account.sms.history_synchronization_id,
              since=f'{self.journal_since_years} years' if first_sync else None, server=account.sms.history_synchronization_url)
         activity.info(f'[journal] Fetching the message journal of {account.id}' + (f' ({reason})' if reason else '')
-                      + (f' since {self.journal_since_years} years ago' if first_sync else f' after {account.sms.history_synchronization_id}'))
+                      + (f' after {account.sms.history_synchronization_id}' if account.sms.history_synchronization_id else f' since {self.journal_since_years} years ago')
+                      + (' (resuming the first sync)' if resumed else ''))
         if not settings.tls.verify_server and not self._journal_unverified_logged:
             # the user's choice (tls.verify_server); said once here instead of a urllib3 warning per request
             self._journal_unverified_logged = True
@@ -1070,16 +1091,22 @@ class MessageManager(object, metaclass=Singleton):
         cache = JournalCache(self._journal_directory(account))
         names = cache.pages()
         jlog = JournalLog()
+        marker = self._journal_first_sync_marker(account)
         if not names:
             self._journal_progress(account, 'done')
             if stats is not None:
                 jlog(account.id, 'sync end', pages=0, entries=0)
+            if os.path.exists(marker):
+                # quit after the last page and before the read state was settled: settle it now
+                jlog(account.id, 'first sync unfinished', pages=0, settle='now')
+                NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages={}, stats_path=None, first_sync=True, first_sync_marker=marker))
             return
         activity = ActivityLog()
         activity.info(f'[journal] Applying {len(names)} cached journal pages of {account.id}')
         if stats is None:
-            stats = JournalStats(account.id, reason='cached pages')
-            jlog(account.id, 'sync start', reason='cached pages left from before')
+            resumed = os.path.exists(marker)
+            stats = JournalStats(account.id, first_sync=resumed, reason='cached pages')
+            jlog(account.id, 'sync start', reason='cached pages left from before', first_sync=resumed, resumed=resumed or None)
         # the entries to apply, for the progress: known for the pages just downloaded, counted for pages left from before
         sizes = {page['file']: page['entries'] for page in stats.pages}
         for name in names:
@@ -1133,12 +1160,20 @@ class MessageManager(object, metaclass=Singleton):
                 attempts, quarantined = cache.failed(name)
                 if quarantined:
                     stats.quarantined.append(name)
+                    self.journal_receipts.pop(account.id, None)     # collected from the bad page
                     jlog(account.id, 'page quarantined', file=name, attempts=attempts, error=str(error)[:200], moved=f'{cache.quarantine_directory}/')
                     activity.error(f'[journal] Journal page {name} of {account.id} failed {attempts} times and was moved to quarantine: {error}')
                     continue
                 activity.exception(f'[journal] Applying journal page {name} of {account.id} failed (attempt {attempts}), kept for the next sync: {error}')
+                self.journal_receipts.pop(account.id, None)         # collected again when the page is retried
                 jlog(account.id, 'page failed', file=name, attempt=f'{attempts}/{cache.max_attempts}', error=str(error)[:200], kept='yes, the run stops here')
                 break
+            receipts = self.journal_receipts.pop(account.id, None)
+            if receipts:
+                # applied with the page, before it is deleted: a quit cannot lose them
+                from blink.history import MessageHistory
+                MessageHistory().apply_receipts(receipts, account.id, page=name)
+                MessageHistory().wait_for_writes()
             cache.applied(name)
             applied += 1
             done_entries += sizes.get(name, 0)
@@ -1163,13 +1198,11 @@ class MessageManager(object, metaclass=Singleton):
              failed=totals.get('failed') or None, quarantined=len(stats.quarantined) or None)
         jlog(account.id, 'sync end', downloaded=sum(page['entries'] for page in stats.pages), applied=done_entries,
              took=f'{stats.download_seconds + stats.apply_seconds:.1f}s', stats=os.path.basename(stats_path) if stats_path else None)
-        receipts = self.journal_receipts.pop(account.id, None)
-        if receipts:
-            from blink.history import MessageHistory
-            MessageHistory().apply_receipts(receipts, account.id)
         # one notification for the whole run: unread counts and the Messages group are refreshed from
         # history, then the database is counted against this run
-        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=stats_path, first_sync=stats.first_sync))
+        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=stats_path,
+                                                                                                  first_sync=stats.first_sync and applied == len(names) - len(stats.quarantined),
+                                                                                                  first_sync_marker=marker))
 
     @run_in_thread('sync')
     def _process_server_history_messages(self, account, messages):

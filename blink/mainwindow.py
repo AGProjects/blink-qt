@@ -294,7 +294,13 @@ class MainWindow(base_class, ui_class):
         # the message journal's download and import, under the account; shown only when it takes a while
         self.journal_progress = QProgressBar(self)
         self.journal_progress.setTextVisible(True)
-        self.journal_progress.setMaximumHeight(16)
+        font = self.journal_progress.font()
+        if font.pointSizeF() > 0:
+            font.setPointSizeF(font.pointSizeF() * 0.8)
+        else:
+            font.setPixelSize(max(8, round(font.pixelSize() * 0.8)))
+        self.journal_progress.setFont(font)
+        self.journal_progress.setFixedHeight(self.journal_progress.fontMetrics().height() + 4)
         self.journal_progress.hide()
         self.window_layout.insertWidget(self.window_layout.indexOf(self.identity_widget) + 1, self.journal_progress)
         self.journal_progress_timer = QTimer(self)
@@ -1242,16 +1248,15 @@ class MainWindow(base_class, ui_class):
             self.journal_progress_timer.start()
         account = notification.sender.id
         done, total = notification.data.done or 0, notification.data.total
-        label = translate('main_window', 'Downloading messages of %s') if phase == 'download' else translate('main_window', 'Importing messages of %s')
-        label %= account
+        label = translate('main_window', 'Downloading messages') if phase == 'download' else translate('main_window', 'Importing messages')
         if total:
             bar.setRange(0, total)
             bar.setValue(min(done, total))
-            bar.setFormat(f'{label}: %v of %m (%p%)')
+            bar.setFormat(f'{label} %v/%m (%p%)')
         else:
             bar.setRange(0, 0)      # busy: the total is not known (a server without X-Sylk-Journal-Remaining)
-            bar.setFormat(f'{label}: {done}')
-        bar.setToolTip(f'{label}: {done} of {total}' if total else f'{label}: {done}')
+            bar.setFormat(f'{label} {done}')
+        bar.setToolTip(f'{label} of {account}: {done} of {total}' if total else f'{label} of {account}: {done}')
 
     @run_in_gui_thread
     def handle_notification(self, notification):

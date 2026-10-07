@@ -134,7 +134,8 @@ class JournalLog(object, metaclass=Singleton):
 
         <date time.ms> [<account>] <event> key=value ...
 
-    Always on; the file is rotated to journal.txt.1 at max_size.
+    Always on, also shown in the Messages tab of the logs window; the file is
+    rotated to journal.txt.1 at max_size.
     """
 
     max_size = 10 * 1024 * 1024
@@ -158,7 +159,10 @@ class JournalLog(object, metaclass=Singleton):
 
     def __call__(self, account, event, **fields):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-        line = f'{timestamp} [{account}] {event}' + ''.join(f' {key}={self._value(value)}' for key, value in fields.items() if value is not None) + '\n'
+        text = f'[{account}] {event}' + ''.join(f' {key}={self._value(value)}' for key, value in fields.items() if value is not None)
+        line = f'{timestamp} {text}\n'
+        # also in the Messages tab of the logs window, whatever logs.trace_messaging is (it is not a trace)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=f'{timestamp} (journal) {text}', section='messaging'))
         with self._lock:
             try:
                 if self._file is None:
