@@ -85,6 +85,16 @@ def is_messages_group(group_settings):
     return group_settings is not None and (getattr(group_settings, 'id', None) == MESSAGES_GROUP_ID or group_settings is MessageContactsGroup())
 
 
+def start_contact_conversation(contact, contact_uri):
+    """What double-click / Enter on a contact does: open the message view for a contact in the
+    Messages group or whose preferred media is messages, otherwise start a session with its
+    preferred media."""
+    if is_messages_group(getattr(contact.group, 'settings', None)) or contact.preferred_media == 'messages':
+        MessageManager().create_message_session(contact_uri.uri)
+    else:
+        SessionManager().create_session(contact, contact_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
+
+
 def is_fileable_key(key):
     """Whether a conversation key may become an addressbook contact: an address
     (user@host) or a phone number (blink.uris.is_fileable_address). A Bonjour
@@ -5091,12 +5101,7 @@ class ContactListView(QListView):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
-                if is_messages_group(item.group.settings):
-                    session_manager = MessageManager()
-                    session_manager.create_message_session(item.uri.uri)
-                else:
-                    session_manager = SessionManager()
-                    session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+                start_contact_conversation(item, item.uri)
         elif event.key() == Qt.Key.Key_Space:
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
@@ -5475,12 +5480,7 @@ class ContactListView(QListView):
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
-            if is_messages_group(item.group.settings):
-                session_manager = MessageManager()
-                session_manager.create_message_session(item.uri.uri)
-            else:
-                session_manager = SessionManager()
-                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+            start_contact_conversation(item, item.uri)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -5641,12 +5641,7 @@ class ContactSearchListView(QListView):
             selected_indexes = self.selectionModel().selectedIndexes()
             item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
             if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
-                if is_messages_group(item.group.settings):
-                    session_manager = MessageManager()
-                    session_manager.create_message_session(item.uri.uri)
-                else:
-                    session_manager = SessionManager()
-                    session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+                start_contact_conversation(item, item.uri)
         elif event.key() == Qt.Key.Key_Escape:
             QApplication.instance().main_window.search_box.clear()
         elif event.key() == Qt.Key.Key_Space:
@@ -5840,12 +5835,7 @@ class ContactSearchListView(QListView):
     def _SH_DoubleClicked(self, index):
         item = index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Contact) and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:   # a deleted contact is not called
-            if is_messages_group(item.group.settings):
-                session_manager = MessageManager()
-                session_manager.create_message_session(item.uri.uri)
-            else:
-                session_manager = SessionManager()
-                session_manager.create_session(item, item.uri, item.preferred_media.stream_descriptions, connect=item.preferred_media.autoconnect)
+            start_contact_conversation(item, item.uri)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -6001,12 +5991,7 @@ class ContactDetailView(QListView):
                 selected_uri = item.uri
             else:
                 selected_uri = contact.uri
-            if is_messages_group(item.group.settings):
-                session_manager = MessageManager()
-                session_manager.create_message_session(selected_uri)
-            else:
-                session_manager = SessionManager()
-                session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
+            start_contact_conversation(contact, selected_uri)
         elif event.key() == Qt.Key.Key_Escape:
             self.animation.setDirection(QPropertyAnimation.Backward)
             self.animation.start()
@@ -6211,12 +6196,7 @@ class ContactDetailView(QListView):
             selected_uri = item.uri
         else:
             selected_uri = contact.uri
-        if is_messages_group(item.group.settings):
-            session_manager = MessageManager()
-            session_manager.create_message_session(selected_uri)
-        else:
-            session_manager = SessionManager()
-            session_manager.create_session(contact, selected_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
+        start_contact_conversation(contact, selected_uri)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
