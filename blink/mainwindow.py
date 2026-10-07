@@ -1254,7 +1254,10 @@ class MainWindow(base_class, ui_class):
             bar.setValue(min(done, total))
             bar.setFormat(f'{label} %v/%m (%p%)')
         else:
-            bar.setRange(0, 0)      # busy: the total is not known (a server without X-Sylk-Journal-Remaining)
+            # the total is not known (a server without X-Sylk-Journal-Remaining); not the busy mode
+            # (range 0, 0): most styles draw no text in it, and the count is the point
+            bar.setRange(0, 1)
+            bar.setValue(0)
             bar.setFormat(f'{label} {done}')
         bar.setToolTip(f'{label} of {account}: {done} of {total}' if total else f'{label} of {account}: {done}')
 
