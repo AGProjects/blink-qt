@@ -10,6 +10,8 @@ body says so; anything else is summarised in a bubble until it gets a bubble
 of its own (docs/messaging/ui-plan.md, B4). The first message of a day has the
 day above it (Today, Yesterday, the weekday, the date); an outgoing message
 shows its delivery state after its time and a failed one is drawn in red.
+Under the mouse a bubble shows its actions button (three dots, beside it on
+the side facing the middle), which opens the same menu as a right click.
 Layouts are cached per message, width and font.
 """
 
@@ -284,6 +286,39 @@ class BubbleDelegate(QStyledItemDelegate):
             time_rect.setRight(time_rect.right() - QFontMetricsF(small).horizontalAdvance(layout.mark + '  '))
             painter.setPen(secondary)
         painter.drawText(time_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, layout.time_text)
+        if option.state & QStyle.StateFlag.State_MouseOver:
+            self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
+        painter.restore()
+
+    actions_size = 22
+
+    def actions_rect(self, layout, item, bubble):
+        """Where the actions button of a bubble is: beside it, towards the middle, level with its top."""
+        size = self.actions_size
+        left = bubble.left() - 6 - size if item.outgoing else bubble.right() + 6
+        return QRectF(left, bubble.top() + 2, size, size)
+
+    def actions_at(self, index, rect, position):
+        """Whether a point of the view (viewport coordinates) is on the actions button of this row."""
+        item = self._item(index)
+        if item is None:
+            return False
+        layout = self.layout(index, rect.width(), self.parent().font())
+        if layout.kind == 'note':
+            return False
+        return self.actions_rect(layout, item, self.bubble_rect(layout, item, QRectF(rect))).contains(QPointF(position))
+
+    def _paint_actions_button(self, painter, rect, colour):
+        painter.save()
+        background = QColor(0, 0, 0, 40) if not is_dark_theme() else QColor(255, 255, 255, 40)
+        path = QPainterPath()
+        path.addEllipse(rect)
+        painter.fillPath(path, background)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(colour)
+        radius = 1.8
+        for offset in (-5, 0, 5):
+            painter.drawEllipse(QPointF(rect.center().x() + offset, rect.center().y()), radius, radius)
         painter.restore()
 
     def _paint_divider(self, painter, rect, text, font, colour):

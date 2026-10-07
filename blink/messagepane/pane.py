@@ -82,6 +82,7 @@ class MessagePane(QWidget):
         self.transcript = TranscriptView(self.stack)
         self.stack.addWidget(self.transcript)
         self.transcript.verticalScrollBar().valueChanged.connect(self.strip.update_text)
+        self.transcript.actionRequested.connect(self._SH_ActionRequested)
         self.composer = Composer(self)
         self.composer.hide()
         layout.addWidget(self.composer)
@@ -432,3 +433,49 @@ class MessagePane(QWidget):
             font.setPointSizeF(max(font.pointSizeF() + self._font_delta(), 6))
         self.transcript.setFont(font)
         self.composer.edit.setFont(font)
+
+    # Message actions
+
+    def _SH_ActionRequested(self, action, item):
+        if action == 'delete':
+            self._delete_message(item)
+
+    def _delete_message(self, item):
+        """Delete a message here, after asking; one's own message also for the other party
+        when asked to (and possible: not a Bonjour neighbour, not a message never sent).
+        A file transfer takes its downloaded file with it."""
+        from PyQt6.QtWidgets import QCheckBox, QMessageBox
+        from blink.history import HistoryManager, MessageHistory
+        from blink.messagepane.files import local_file
+        from blink.uris import BONJOUR_ACCOUNT_ID
+        key = self.key
+        is_file = local_file(item) is not None or item.category in ('image', 'audio', 'video', 'other')
+        what = translate('message_pane', 'file') if is_file else translate('message_pane', 'message')
+        box = QMessageBox(QMessageBox.Icon.Question, translate('message_pane', 'Delete %s') % what,
+                          translate('message_pane', 'Delete this %s from this conversation?') % what, parent=self)
+        delete_button = box.addButton(translate('message_pane', 'Delete'), QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        both = None
+        if item.outgoing and item.account_id != BONJOUR_ACCOUNT_ID and item.state not in ('failed-local', 'pending'):
+            name = getattr(self.contact, 'name', '') or key
+            both = QCheckBox(translate('message_pane', 'Delete it for %s too') % name)
+            both.setChecked(True)
+            box.setCheckBox(both)
+        box.exec()
+        if box.clickedButton() is not delete_button:
+            return
+        for_both = both is not None and both.isChecked()
+        MessageHistory().tombstone_message(item.id, account_id=item.account_id, remote_uri=key, source='deleted here')
+        HistoryManager().download_history.remove(item.id)          # the downloaded file goes with it
+        ActivityLog().info(f'[Message with {key}] Deleted {what} {item.id} from the message pane' + (', also for the other party' if for_both else ''))
+        if for_both:
+            from blink.messages import MessageManager
+            try:
+                session = self._message_session()
+                account = self._account(item.account_id) or session.account
+                MessageManager().send_remove_message(session, item.id, account)
+            except Exception as e:
+                ActivityLog().warning(f'[Message with {key}] Cannot ask the other party to delete message {item.id}: {e!r}')
+        model = self.models.get(key)
+        if model is not None:
+            model.remove_item(item.id)

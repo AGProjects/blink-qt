@@ -368,6 +368,16 @@ class ConversationModel(QAbstractListModel):
         self._set_loading(False)
         ActivityLog().info(f'[Message with {self.key}] Loaded {len(older)} older messages' + (f' from {older[0].timestamp.astimezone():%Y-%m-%d %H:%M}' if older else '') + f', {len(self.items)} shown' + (', older ones available' if self.has_more else ', the whole conversation'))
 
+    def remove_item(self, message_id):
+        """Take a message out at once (deleted here), wherever it is in what is loaded."""
+        item = self.ids.pop(message_id, None)
+        if item is None:
+            return
+        position = self.items.index(item)
+        self.beginRemoveRows(QModelIndex(), position, position)
+        del self.items[position]
+        self.endRemoveRows()
+
     # Live changes: merged from the newest page
 
     def _schedule_refresh(self):

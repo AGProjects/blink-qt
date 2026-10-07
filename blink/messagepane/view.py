@@ -3,17 +3,20 @@
 Scrolled per pixel. Scrolling near the top loads the page before (the model's
 load_older); the rows inserted above are compensated for, so what was on
 screen stays where it was. At the bottom, new messages keep it at the bottom.
-Messages are drawn by BubbleDelegate; a click on a link opens it, the context
-menu copies a message's text. Behind them the linen texture of Sylk Mobile and
+Messages are drawn by BubbleDelegate; a click on a link opens it. A right
+click, or the actions button a bubble shows under the mouse, opens its menu:
+copy text or link, open or save the file, and delete (asking first; on one's
+own message also for the other party), handed to the pane (actionRequested). Behind them the linen texture of Sylk Mobile and
 Blink for macOS (dark or light with the theme), tiled from the viewport so the
 weave stays still while the transcript scrolls.
 """
 
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import Qt, QPoint, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QBrush, QDesktopServices, QGuiApplication, QPalette, QPixmap
 from PyQt6.QtWidgets import QAbstractItemView, QFrame, QListView, QMenu
 
 from blink.messagepane.delegate import BubbleDelegate
+from blink.messagepane.files import local_file
 from blink.messagepane.format import bubble_kind, plain_summary
 from blink.util import translate
 from blink.resources import Resources
@@ -25,6 +28,8 @@ __all__ = ['TranscriptView']
 
 class TranscriptView(QListView):
     load_margin = 48        # pixels from the top that load the page before
+
+    actionRequested = pyqtSignal(str, object)      # ('delete', MessageItem)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -153,9 +158,13 @@ class TranscriptView(QListView):
             return ''
         return self.bubble_delegate.anchor_at(index, self.visualRect(index), position)
 
+    def _on_actions_button(self, position):
+        index = self.indexAt(position)
+        return index.isValid() and self.bubble_delegate.actions_at(index, self.visualRect(index), position)
+
     def mouseMoveEvent(self, event):
         position = event.position().toPoint()
-        if self._link_at(position):
+        if self._link_at(position) or self._on_actions_button(position):
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         else:
             self.viewport().unsetCursor()
@@ -163,7 +172,13 @@ class TranscriptView(QListView):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            anchor = self._link_at(event.position().toPoint())
+            position = event.position().toPoint()
+            if self._on_actions_button(position):
+                index = self.indexAt(position)
+                rect = self.visualRect(index)
+                self._show_menu(index, position, self.viewport().mapToGlobal(position + QPoint(0, 12)))
+                return
+            anchor = self._link_at(position)
             if anchor:
                 QDesktopServices.openUrl(QUrl(anchor))
                 return
@@ -173,9 +188,12 @@ class TranscriptView(QListView):
         index = self.indexAt(event.pos())
         if not index.isValid():
             return
+        self._show_menu(index, event.pos(), event.globalPos())
+
+    def _show_menu(self, index, position, global_position):
         item = index.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
-        anchor = self._link_at(event.pos())
+        anchor = self._link_at(position)
         if anchor:
             menu.addAction(translate('message_pane', 'Copy Link'), lambda: QGuiApplication.clipboard().setText(anchor))
         if bubble_kind(item) in ('text', 'note'):
@@ -185,7 +203,27 @@ class TranscriptView(QListView):
         else:
             summary = plain_summary(item)
             menu.addAction(translate('message_pane', 'Copy Text'), lambda: QGuiApplication.clipboard().setText(summary))
-        menu.exec(event.globalPos())
+        path = local_file(item)
+        if path:
+            menu.addSeparator()
+            menu.addAction(translate('message_pane', 'Open'), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
+            menu.addAction(translate('message_pane', 'Save As…'), lambda: self._save_as(path))
+        menu.addSeparator()
+        delete = menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
+        delete.setEnabled(bubble_kind(item) != 'note' or item.category is not None)
+        menu.exec(global_position)
+
+    def _save_as(self, path):
+        import os
+        import shutil
+        from PyQt6.QtWidgets import QFileDialog
+        target, _ = QFileDialog.getSaveFileName(self, translate('message_pane', 'Save As'), os.path.join(os.path.expanduser('~'), os.path.basename(path)))
+        if target:
+            try:
+                shutil.copyfile(path, target)
+            except OSError as e:
+                from blink.logging import ActivityLog
+                ActivityLog().warning(f'[ui] Cannot save {path} as {target}: {e}')
 
     def follow_bottom(self):
         """Go to the newest message and stay there (after sending)."""
