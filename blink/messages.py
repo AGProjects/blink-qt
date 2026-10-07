@@ -913,6 +913,27 @@ class MessageManager(object, metaclass=Singleton):
         return path
 
     journal_first_sync_marker = 'first-sync.marker'
+    journal_progress_interval = 0.25        # seconds between progress updates while a page is read
+
+    def _journal_read_page(self, account, response, before, expected):
+        """The body of a journal page, read as it arrives, the progress bar counting the entries
+        in it so far: every entry has a "message_id" key, which in a JSON string payload is escaped."""
+        chunks = []
+        found = 0
+        tail = b''
+        marker = b'"message_id"'
+        updated = time.monotonic()
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            chunks.append(chunk)
+            window = tail + chunk
+            found += window.count(marker)
+            tail = window[-(len(marker) - 1):]      # a key split between two chunks is counted once
+            now = time.monotonic()
+            if now - updated >= self.journal_progress_interval:
+                updated = now
+                done = before + found
+                self._journal_progress(account, 'download', done, max(expected, done) if expected else None)
+        return b''.join(chunks)
 
     def _journal_first_sync_marker(self, account):
         """journal/<account>/first-sync.marker: there while a first sync is not finished.
@@ -1008,9 +1029,15 @@ class MessageManager(object, metaclass=Singleton):
             page_started = time.monotonic()
             log.info(f'Fetching message history for {account.id} from server {url}')
             try:
-                r = requests.get(url, headers=headers, timeout=20, verify=settings.tls.verify_server)
+                r = requests.get(url, headers=headers, timeout=20, verify=settings.tls.verify_server, stream=True)
                 r.raise_for_status()
-                data = r.json()
+                if expected is None:
+                    try:
+                        expected = int(r.headers.get('X-Sylk-Journal-Remaining'))
+                    except (TypeError, ValueError):
+                        expected = 0        # an older server: the total is not known
+                body = self._journal_read_page(account, r, entries, expected)
+                data = json.loads(body)
             except requests.HTTPError as e:
                 stopped = f'HTTP {e.response.status_code}'
                 if e.response.status_code == 401:
@@ -1046,19 +1073,14 @@ class MessageManager(object, metaclass=Singleton):
                 activity.error(f'[journal] Cannot save journal page {path}: {e}')
                 break
 
-            if expected is None:
-                try:
-                    expected = int(r.headers.get('X-Sylk-Journal-Remaining'))
-                except (TypeError, ValueError):
-                    expected = 0        # an older server: the total is not known
             pages += 1
             entries += len(messages)
-            transferred += len(r.content)
+            transferred += len(body)
             last_id = messages[-1].get('message_id')
-            stats.page_downloaded(name, len(messages), len(r.content), time.monotonic() - page_started, last_id)
+            stats.page_downloaded(name, len(messages), len(body), time.monotonic() - page_started, last_id)
             self._journal_progress(account, 'download', entries, max(expected or 0, entries) if expected else None)
-            log.info(f'Cached journal page {name} ({len(messages)} entries, {len(r.content)} bytes, cursor {last_id})')
-            jlog(account.id, 'download page', page=pages, file=name, entries=len(messages), bytes=len(r.content),
+            log.info(f'Cached journal page {name} ({len(messages)} entries, {len(body)} bytes, cursor {last_id})')
+            jlog(account.id, 'download page', page=pages, file=name, entries=len(messages), bytes=len(body),
                  took=f'{time.monotonic() - page_started:.1f}s', remaining=(expected - entries + len(messages)) if expected else None,
                  total=f'{entries}/{expected}' if expected else entries, cursor=last_id)
 
