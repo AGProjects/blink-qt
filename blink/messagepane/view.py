@@ -4,17 +4,20 @@ Scrolled per pixel. Scrolling near the top loads the page before (the model's
 load_older); the rows inserted above are compensated for, so what was on
 screen stays where it was. At the bottom, new messages keep it at the bottom.
 Messages are drawn by BubbleDelegate; a click on a link opens it, the context
-menu copies a message's text.
+menu copies a message's text. Behind them the linen texture of Sylk Mobile and
+Blink for macOS (dark or light with the theme), tiled from the viewport so the
+weave stays still while the transcript scrolls.
 """
 
 from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QDesktopServices, QGuiApplication
+from PyQt6.QtGui import QBrush, QDesktopServices, QGuiApplication, QPalette, QPixmap
 from PyQt6.QtWidgets import QAbstractItemView, QFrame, QListView, QMenu
 
 from blink.messagepane.delegate import BubbleDelegate
 from blink.messagepane.format import bubble_kind, plain_summary
 from blink.util import translate
-from blink.widgets.color import follow_theme
+from blink.resources import Resources
+from blink.widgets.color import follow_theme, is_dark_theme
 
 
 __all__ = ['TranscriptView']
@@ -36,6 +39,7 @@ class TranscriptView(QListView):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self.bubble_delegate = BubbleDelegate(self)
         self.setItemDelegate(self.bubble_delegate)
+        self._set_background()
         follow_theme(self)
         self._anchor = None         # (maximum, value) before rows were inserted at the top
         self._stick = True          # follow the bottom
@@ -114,7 +118,24 @@ class TranscriptView(QListView):
         if model is not None and value <= self.load_margin and model.has_more and not model.loading and self.verticalScrollBar().maximum() > 0:
             model.load_older()
 
+    _linen = {}         # dark: QPixmap
+
+    def _set_background(self):
+        dark = is_dark_theme()
+        pixmap = self._linen.get(dark)
+        if pixmap is None:
+            pixmap = self._linen[dark] = QPixmap(Resources.get('icons/dark_linen.png' if dark else 'icons/light_linen.png'))
+        viewport = self.viewport()
+        palette = viewport.palette()
+        if not pixmap.isNull():
+            for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+                palette.setBrush(group, QPalette.ColorRole.Base, QBrush(pixmap))
+        viewport.setPalette(palette)
+        viewport.setAutoFillBackground(True)
+        viewport.setBackgroundRole(QPalette.ColorRole.Base)
+
     def apply_theme(self):
+        self._set_background()
         self.bubble_delegate.clear_cache()
         self.scheduleDelayedItemsLayout()
         self.viewport().update()

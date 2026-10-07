@@ -4,8 +4,9 @@ Plain text in the system font (at the pane's font size), growing up to six
 lines. Enter sends, Shift+Enter starts a new line. While text is being typed
 the peer is told so (is-composing active, renewed every 10 s while typing,
 idle when the text is cleared). Pasting inserts plain text; pasted or dropped
-files are handed on (filesDropped) to be sent, as are the files chosen from
-the paperclip menu (Files..., Screenshot...).
+files are handed on (filesDropped) to be sent, as are the ones from the
+paperclip menu (as on Blink for macOS; Grab a Screenshot...,
+then Choose Files... and Paste from Clipboard).
 """
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
@@ -51,6 +52,9 @@ class ComposerEdit(QPlainTextEdit):
         super().changeEvent(event)
         if event.type() == event.Type.FontChange:
             self._fit()
+            composer = self.parent()
+            if hasattr(composer, 'apply_theme'):
+                composer.apply_theme()      # the clip follows the text size
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not event.modifiers() & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.AltModifier):
@@ -91,11 +95,10 @@ class Composer(QWidget):
         outer.addLayout(row)
         self.attach_button = QToolButton(self)
         self.attach_button.setAutoRaise(True)
-        self.attach_button.setIconSize(QSize(18, 18))
-        self.attach_button.setToolTip(translate('message_pane', 'Send files or a screenshot'))
+        # a drawn clip, not the 📎 character: without a colour emoji font it is an empty box
+        self.attach_button.setToolTip(translate('message_pane', 'Attach something'))
         self.attach_menu = QMenu(self.attach_button)
-        self.attach_menu.addAction(translate('message_pane', 'Files…'), self._choose_files)
-        self.attach_menu.addAction(translate('message_pane', 'Screenshot…'), self._take_screenshot)
+        self.attach_menu.aboutToShow.connect(self._fill_attach_menu)
         self.attach_button.setMenu(self.attach_menu)
         self.attach_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.attach_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
@@ -122,7 +125,45 @@ class Composer(QWidget):
         follow_theme(self)
 
     def apply_theme(self):
-        self.attach_button.setIcon(themed_icon(Resources.get('icons/attach.svg'), '#d0d0d0'))
+        size = self.edit.fontMetrics().height() + 4
+        self.attach_button.setIcon(themed_icon(Resources.get('icons/paperclip.svg'), '#bdbdbd'))
+        self.attach_button.setIconSize(QSize(size, size))
+
+    def _fill_attach_menu(self):
+        """Above the line what does not exist yet (a screenshot), below it what does (files, the clipboard)."""
+        from blink.screenshot import PortalScreenshot
+        menu = self.attach_menu
+        menu.clear()
+        grab = menu.addAction(translate('message_pane', 'Grab a Screenshot…'), self._take_screenshot)
+        if PortalScreenshot._busy is not None:
+            grab.setEnabled(False)
+            grab.setToolTip(translate('message_pane', 'A screenshot is already being taken'))
+        menu.addSeparator()
+        menu.addAction(translate('message_pane', 'Choose Files…'), self._choose_files)
+        paste = menu.addAction(translate('message_pane', 'Paste from Clipboard'), self._paste_files)
+        paste.setEnabled(self._clipboard_has_files())
+
+    @staticmethod
+    def _clipboard_has_files():
+        from PyQt6.QtWidgets import QApplication
+        data = QApplication.clipboard().mimeData()
+        return data is not None and (data.hasImage() or (data.hasUrls() and all(url.isLocalFile() for url in data.urls())))
+
+    def _paste_files(self):
+        import os
+        import tempfile
+        import uuid
+        from PyQt6.QtWidgets import QApplication
+        data = QApplication.clipboard().mimeData()
+        if data is None:
+            return
+        if data.hasUrls() and all(url.isLocalFile() for url in data.urls()):
+            self.filesDropped.emit([url.toLocalFile() for url in data.urls()])
+        elif data.hasImage():
+            image = QApplication.clipboard().image()
+            path = os.path.join(tempfile.gettempdir(), f'blink-clipboard-{uuid.uuid4().hex[:8]}.png')
+            if not image.isNull() and image.save(path, 'PNG'):
+                self.filesDropped.emit([path])
 
     def _choose_files(self):
         paths, _ = QFileDialog.getOpenFileNames(self, translate('message_pane', 'Send Files'), self._directory)
