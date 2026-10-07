@@ -59,6 +59,7 @@ from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_p
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager, themed_icon
+from blink.avatars import avatar_icon, circular_icon
 from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
@@ -3166,13 +3167,30 @@ class Contact(object):
         except KeyError:
             if self.type == 'addressbook':
                 icon_manager = IconManager()
-                icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
+                icon = circular_icon(icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id)) or self.generated_icon
             elif self.type == 'google':
                 icon_manager = IconManager()
-                icon = icon_manager.get(self.settings.id) or self.default_user_icon
+                icon = circular_icon(icon_manager.get(self.settings.id)) or self.generated_icon
             else:
-                icon = self.default_user_icon
+                icon = self.generated_icon
             return self.__dict__.setdefault('icon', icon)
+
+    @property
+    def avatar_name(self):
+        """What the initials and the colour are derived from: the name, else the default address (as on macOS)."""
+        name = (getattr(self.settings, 'name', None) or '').strip()
+        if not name and self.type == 'google':
+            name = (getattr(self.settings, 'organization', None) or '').strip()
+        if name:
+            return name
+        uri = self.uri
+        return str(getattr(uri, 'uri', None) or uri or '')
+
+    @property
+    def generated_icon(self):
+        """Initials on a colour for a contact without a picture; the grey person only when there is nothing to draw."""
+        name = self.avatar_name
+        return avatar_icon(name) if name else self.default_user_icon
 
     @property
     def pixmap(self):
@@ -3200,7 +3218,7 @@ class Contact(object):
         handler(notification)
 
     def _NH_AddressbookContactDidChange(self, notification):
-        if {'icon', 'alternate_icon'}.intersection(notification.data.modified):
+        if {'icon', 'alternate_icon', 'name', 'organization', 'uris', 'uris.default'}.intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDidChange', sender=self)
@@ -3331,13 +3349,30 @@ class ContactDetail(object):
         except KeyError:
             if self.type == 'addressbook':
                 icon_manager = IconManager()
-                icon = icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id) or self.default_user_icon
+                icon = circular_icon(icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id)) or self.generated_icon
             elif self.type == 'google':
                 icon_manager = IconManager()
-                icon = icon_manager.get(self.settings.id) or self.default_user_icon
+                icon = circular_icon(icon_manager.get(self.settings.id)) or self.generated_icon
             else:
-                icon = self.default_user_icon
+                icon = self.generated_icon
             return self.__dict__.setdefault('icon', icon)
+
+    @property
+    def avatar_name(self):
+        """What the initials and the colour are derived from: the name, else the default address (as on macOS)."""
+        name = (getattr(self.settings, 'name', None) or '').strip()
+        if not name and self.type == 'google':
+            name = (getattr(self.settings, 'organization', None) or '').strip()
+        if name:
+            return name
+        uri = self.uri
+        return str(getattr(uri, 'uri', None) or uri or '')
+
+    @property
+    def generated_icon(self):
+        """Initials on a colour for a contact without a picture; the grey person only when there is nothing to draw."""
+        name = self.avatar_name
+        return avatar_icon(name) if name else self.default_user_icon
 
     @property
     def pixmap(self):
@@ -3365,7 +3400,7 @@ class ContactDetail(object):
         handler(notification)
 
     def _NH_AddressbookContactDidChange(self, notification):
-        if {'icon', 'alternate_icon'}.intersection(notification.data.modified):
+        if {'icon', 'alternate_icon', 'name', 'organization', 'uris', 'uris.default'}.intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDetailDidChange', sender=self)

@@ -23,7 +23,7 @@ from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.logging import ActivityLog
-from blink.messagepane.format import avatar_colour, initials
+from blink.avatars import avatar_color, avatar_initials, circular_icon
 from blink.resources import IconManager, Resources, themed_icon
 from blink.util import translate
 from blink.widgets.color import follow_theme, secondary_text_color
@@ -42,7 +42,7 @@ def contact_photo(contact):
     if getattr(contact, 'type', None) not in ('addressbook', 'google'):
         return None
     icon_manager = IconManager()
-    return icon_manager.get(contact_id + '_alt') or icon_manager.get(contact_id) or None
+    return circular_icon(icon_manager.get(contact_id + '_alt') or icon_manager.get(contact_id)) or None
 
 
 def remote_key_path(key):
@@ -264,7 +264,9 @@ class ConversationHeader(QWidget):
         name = getattr(contact, 'name', '') or str(uri.uri)
         self.name_label.setText(name)
         self.name_label.setToolTip(name)
-        self.avatar.set_contact(contact_photo(contact), initials(name, str(uri.uri)), avatar_colour(key))
+        # the same initials and colour as the contact list (blink.avatars), so the person looks the same in both
+        avatar_name = getattr(contact, 'avatar_name', None) or name
+        self.avatar.set_contact(contact_photo(contact), avatar_initials(avatar_name), avatar_color(avatar_name))
         self.update_info()
         self.update_lock()
         self._update_location_button()
