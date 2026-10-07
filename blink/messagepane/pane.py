@@ -84,6 +84,11 @@ class MessagePane(QWidget):
         self.transcript.verticalScrollBar().valueChanged.connect(self.strip.update_text)
         self.transcript.actionRequested.connect(self._SH_ActionRequested)
         self.transcript.quoteClicked.connect(self._SH_QuoteClicked)
+        from blink.messagepane.fetch import AutoFetcher
+        self.fetcher = AutoFetcher(self)
+        self.fetcher.changed.connect(self._SH_DownloadChanged)
+        self.transcript.bubble_delegate.progress_of = self.fetcher.progress
+        self.transcript.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
         self.composer = Composer(self)
         self.composer.hide()
         layout.addWidget(self.composer)
@@ -252,11 +257,19 @@ class MessagePane(QWidget):
                     signal.disconnect(self.check_read)
                 except TypeError:
                     pass
+            for signal in (self._model_connected.initialLoadFinished, self._model_connected.rowsInserted, self._model_connected.jumped):
+                try:
+                    signal.disconnect(self.fetcher.schedule)
+                except TypeError:
+                    pass
         self._model_connected = model
         if model is not None:
             for signal in (model.initialLoadFinished, model.rowsInserted, model.dataChanged):
                 signal.connect(self.check_read)
+            for signal in (model.initialLoadFinished, model.rowsInserted, model.jumped):
+                signal.connect(self.fetcher.schedule)
             self.check_read()
+            self.fetcher.schedule()
 
     def is_reading(self):
         """Whether the user has the conversation in front of them."""
@@ -449,6 +462,15 @@ class MessagePane(QWidget):
     def _SH_ActionRequested(self, action, item):
         if action == 'delete':
             self._delete_message(item)
+        elif action == 'open':
+            from blink.messagepane.files import local_file
+            from PyQt6.QtCore import QUrl
+            from PyQt6.QtGui import QDesktopServices
+            path = local_file(item)
+            if path:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+            elif self.fetcher.progress(item.id) is None:
+                self.fetcher.fetch(item, force=True)        # asked for: whatever its size, and again after a failure
         elif action == 'reply':
             from blink.messagepane.format import plain_summary
             name = translate('message_pane', 'yourself') if item.outgoing else (getattr(self.contact, 'name', '') or item.display_name or self.key)
@@ -507,3 +529,11 @@ class MessagePane(QWidget):
         model = self.models.get(key)
         if model is not None:
             model.remove_item(item.id)
+
+    def _SH_DownloadChanged(self, message_id):
+        model = self.models.get(self.key)
+        row = model.row_of(message_id) if model is not None else None
+        if row is not None:
+            index = model.index(row)
+            model.dataChanged.emit(index, index)
+            self.transcript.scheduleDelayedItemsLayout()

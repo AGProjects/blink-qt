@@ -29,7 +29,7 @@ __all__ = ['TranscriptView']
 class TranscriptView(QListView):
     load_margin = 48        # pixels from the top that load the page before
 
-    actionRequested = pyqtSignal(str, object)      # ('delete' or 'reply', MessageItem)
+    actionRequested = pyqtSignal(str, object)      # ('delete', 'reply' or 'open', MessageItem)
     quoteClicked = pyqtSignal(object)              # the reply dict of a clicked quote
 
     def __init__(self, parent=None):
@@ -192,6 +192,11 @@ class TranscriptView(QListView):
             if anchor:
                 QDesktopServices.openUrl(QUrl(anchor))
                 return
+            if index.isValid():
+                item = index.data(Qt.ItemDataRole.UserRole)
+                if item is not None and item.category in ('image', 'audio', 'video', 'other'):
+                    self.actionRequested.emit('open', item)      # a file: open it, or fetch it
+                    return
         super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event):

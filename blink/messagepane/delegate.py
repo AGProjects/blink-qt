@@ -50,6 +50,7 @@ class BubbleDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.peer_avatar = None         # callable(painter, rect): draws the peer's avatar
+        self.progress_of = None         # callable(message id) -> download fraction or None
         self._cache = {}
 
     def clear_cache(self):
@@ -103,7 +104,9 @@ class BubbleDelegate(QStyledItemDelegate):
         day_text = self.day_text(index)
         search_text = getattr(index.model(), 'search_text', '')
         reply = item.reply
-        key = (item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
+        progress = self.progress_of(item.id) if self.progress_of is not None else None
+        progress = None if progress is None else int(progress * 100)
+        key = (progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
                (reply['id'], reply['text']) if reply else None)
         layout = self._cache.get(key)
         if layout is not None:
@@ -140,7 +143,12 @@ class BubbleDelegate(QStyledItemDelegate):
             elif kind == 'encrypted':
                 document.setPlainText('🔒 ' + _('Encrypted message'))
             else:
-                document.setPlainText(plain_summary(item))
+                summary = plain_summary(item)
+                if item.category in self.summary_icons:
+                    summary = '\u2003 ' + summary      # room for the icon drawn in front
+                if progress is not None:
+                    summary += '  ' + (translate('message_pane', 'downloading %d%%') % progress if progress < 100 else translate('message_pane', 'downloaded'))
+                document.setPlainText(summary)
             if search_text and kind == 'text':
                 self._highlight(document, search_text)
             limit = self._bubble_width_limit(width) - 2 * self.padding_h
@@ -330,6 +338,10 @@ class BubbleDelegate(QStyledItemDelegate):
         painter.setClipRect(QRectF(0, 0, layout.text_size.width() + 1, layout.text_size.height() + 1))
         layout.document.documentLayout().draw(painter, context)
         painter.restore()
+        if layout.kind == 'summary' and item.category in self.summary_icons:
+            line = QFontMetricsF(option.font).height()
+            box = QRectF(origin.x(), origin.y() + line * 0.025, line * 0.95, line * 0.95)
+            self._summary_icon(item.category).paint(painter, box.toRect())
 
         painter.setFont(small)
         painter.setPen(secondary)
@@ -346,6 +358,21 @@ class BubbleDelegate(QStyledItemDelegate):
         if option.state & QStyle.StateFlag.State_MouseOver:
             self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
         painter.restore()
+
+    # drawn in front of a summary line, for what fonts often lack a glyph for: (file, recoloured in a dark theme)
+    summary_icons = {'other': ('icons/paperclip.svg', True), 'location': ('icons/location-pin.svg', False)}
+    _icons = {}
+
+    def _summary_icon(self, category):
+        dark = is_dark_theme()
+        icon = self._icons.get((category, dark))
+        if icon is None:
+            from PyQt6.QtGui import QIcon
+            from blink.resources import Resources, themed_icon
+            filename, themed = self.summary_icons[category]
+            path = Resources.get(filename)
+            icon = self._icons[(category, dark)] = themed_icon(path, '#bdbdbd') if themed else QIcon(path)
+        return icon
 
     actions_size = 22
 

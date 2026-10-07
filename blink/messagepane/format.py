@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 
 
 __all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note',
-           'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark']
+           'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason']
 
 
 # Backgrounds for initials, white text on each reads in light and dark themes.
@@ -35,8 +35,22 @@ def avatar_colour(key):
     return AVATAR_COLOURS[digest[0] % len(AVATAR_COLOURS)]
 
 
-_CATEGORY_LABELS = {'audio': '🎤 Audio', 'image': '🖼 Picture', 'video': '🎬 Video', 'location': '📍 Location',
-                    'call': '📞 Call', 'other': '📎 File'}
+# A file's clip and a location's pin are drawn (BubbleDelegate.summary_icons): 📎 and 📍 are missing from common fonts
+_CATEGORY_LABELS = {'audio': '🎤 Audio', 'image': '🖼 Picture', 'video': '🎬 Video', 'location': 'Location',
+                    'call': '📞 Call', 'other': 'File'}
+
+_FILE_NAME_RES = (re.compile(r'"filename"\s*:\s*"((?:[^"\\]|\\.)*)"'), re.compile(r'<file-name>\s*([^<]*?)\s*</file-name>'))
+
+
+def file_name(content):
+    """The file name a file transfer envelope (Sylk JSON or RCS XML) carries, or ''."""
+    for pattern in _FILE_NAME_RES:
+        match = pattern.search(content or '')
+        if match:
+            name = match.group(1).replace('\\"', '"').replace('\\\\', '\\')
+            name = name.replace('\\', '/').rsplit('/', 1)[-1]
+            return name[:-4] if name.lower().endswith('.asc') else name
+    return ''
 
 
 def plain_summary(item):
@@ -51,6 +65,10 @@ def plain_summary(item):
     label = _CATEGORY_LABELS.get(item.category, item.category or '?')
     if item.category == 'call':
         return f'{label}: {" ".join(content.split())}' if content.strip() else label
+    if item.category in ('image', 'audio', 'video', 'other'):
+        name = file_name(content)
+        if name:
+            return f'{label}: {name}'
     return label
 
 
@@ -215,3 +233,31 @@ def delivery_mark(item):
     if item.direction != 'outgoing':
         return '', None
     return _DELIVERY_MARKS.get(str(item.state or ''), ('', None))
+
+
+MiB = 1024 * 1024
+
+# What is fetched without being asked, by kind: the largest size, and for audio and video how old it may be.
+AUTO_FETCH_LIMITS = {'image': 8 * MiB, 'pdf': 10 * MiB, 'video': 20 * MiB, 'audio': 10 * MiB}
+AUTO_FETCH_RECENT_DAYS = 7
+AUTO_FETCH_RECENT_ONLY = ('video', 'audio')
+
+
+def auto_fetch_reason(category, filename, size, age_days):
+    """None when a file in view is fetched on its own, else why it waits for a click:
+    pictures up to 8 MiB, PDFs up to 10 MiB, videos up to 20 MiB and audio (voice
+    notes) up to 10 MiB when a week old at most; other files never."""
+    name = str(filename or '').lower()
+    if name.endswith('.asc'):
+        name = name[:-4]
+    kind = 'pdf' if name.endswith('.pdf') else category
+    limit = AUTO_FETCH_LIMITS.get(kind)
+    if limit is None:
+        return 'not fetched without a click'
+    if size is None or size <= 0:
+        return 'size unknown'
+    if size > limit:
+        return f'larger than {limit // MiB} MiB'
+    if kind in AUTO_FETCH_RECENT_ONLY and age_days is not None and age_days > AUTO_FETCH_RECENT_DAYS:
+        return f'older than {AUTO_FETCH_RECENT_DAYS} days'
+    return None

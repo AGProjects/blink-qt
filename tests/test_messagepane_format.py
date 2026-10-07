@@ -47,6 +47,8 @@ class SummaryTests(unittest.TestCase):
 
     def test_other(self):
         self.assertEqual(fmt.plain_summary(self.item('image', '{}')), '🖼 Picture')
+        self.assertEqual(fmt.plain_summary(self.item('other', '{"filename": "report.pdf.asc", "filesize": 10}')), 'File: report.pdf')
+        self.assertEqual(fmt.plain_summary(self.item('other', '<file><file-name>a b.zip</file-name></file>')), 'File: a b.zip')
         self.assertEqual(fmt.plain_summary(self.item('call', 'Outgoing audio call, 2 min')), '📞 Call: Outgoing audio call, 2 min')
 
 
@@ -91,6 +93,21 @@ class DayTests(unittest.TestCase):
         self.assertEqual(fmt.delivery_mark(types.SimpleNamespace(direction='outgoing', state='displayed')), ('✔✔', 'displayed'))
         self.assertEqual(fmt.delivery_mark(types.SimpleNamespace(direction='incoming', state='displayed')), ('', None))
         self.assertEqual(fmt.delivery_mark(types.SimpleNamespace(direction='outgoing', state='failed-local')), ('⚠', 'failed'))
+
+
+class FetchTests(unittest.TestCase):
+    def test_policy(self):
+        MiB = 1024 * 1024
+        self.assertIsNone(fmt.auto_fetch_reason('image', 'a.jpg', 3 * MiB, 100))
+        self.assertIsNotNone(fmt.auto_fetch_reason('image', 'a.jpg', 9 * MiB, 0))
+        self.assertIsNone(fmt.auto_fetch_reason('other', 'doc.pdf.asc', 9 * MiB, 0))
+        self.assertIsNotNone(fmt.auto_fetch_reason('other', 'doc.pdf', 11 * MiB, 0))
+        self.assertIsNone(fmt.auto_fetch_reason('video', 'v.mp4', 19 * MiB, 7))
+        self.assertIsNotNone(fmt.auto_fetch_reason('video', 'v.mp4', 19 * MiB, 8))
+        self.assertIsNone(fmt.auto_fetch_reason('audio', 'a.m4a', 9 * MiB, 7))
+        self.assertIsNotNone(fmt.auto_fetch_reason('audio', 'a.m4a', 11 * MiB, 0))
+        self.assertIsNotNone(fmt.auto_fetch_reason('audio', 'a.m4a', MiB, 8))
+        self.assertIsNotNone(fmt.auto_fetch_reason('other', 'a.zip', MiB, 0))
 
 
 if __name__ == '__main__':
