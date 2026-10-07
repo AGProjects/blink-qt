@@ -21,7 +21,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from blink.resources import ApplicationData
 
 
-__all__ = ['ActivityLog', 'LogManager', 'MessagingTrace']
+__all__ = ['ActivityLog', 'JournalLog', 'LogManager', 'MessagingTrace']
 
 
 class ActivityLog(object, metaclass=Singleton):
@@ -122,6 +122,61 @@ class ActivityLog(object, metaclass=Singleton):
             except Exception:
                 pass
             self._file = None
+
+
+class JournalLog(object, metaclass=Singleton):
+    """The message journal at page level, logs/journal.txt, for tail -f.
+
+    Fields that are None are left out. One line per event, never per entry: a sync starting and ending, each page
+    downloaded, each cached page opened, its progress, applied (and deleted),
+    failed (kept) or quarantined, then receipts, the first-sync read settling
+    and the unread counts. Lines are
+
+        <date time.ms> [<account>] <event> key=value ...
+
+    Always on; the file is rotated to journal.txt.1 at max_size.
+    """
+
+    max_size = 10 * 1024 * 1024
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._file = None
+
+    @property
+    def filename(self):
+        return os.path.join(ApplicationData.directory, 'logs', 'journal.txt')
+
+    @staticmethod
+    def _value(value):
+        if isinstance(value, bool):
+            return 'yes' if value else 'no'
+        if isinstance(value, float):
+            return f'{value:.1f}'
+        text = str(value).replace('\n', ' ')
+        return f'"{text}"' if not text or ' ' in text or '=' in text else text
+
+    def __call__(self, account, event, **fields):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        line = f'{timestamp} [{account}] {event}' + ''.join(f' {key}={self._value(value)}' for key, value in fields.items() if value is not None) + '\n'
+        with self._lock:
+            try:
+                if self._file is None:
+                    makedirs(os.path.dirname(self.filename))
+                    self._file = open(self.filename, 'a', encoding='utf-8', errors='replace')
+                self._file.write(line)
+                self._file.flush()
+                if self._file.tell() > self.max_size:
+                    self._file.close()
+                    self._file = None
+                    os.replace(self.filename, self.filename + '.1')
+            except Exception:
+                if self._file is not None:
+                    try:
+                        self._file.close()
+                    except Exception:
+                        pass
+                self._file = None
 
 
 @implementer(IObserver)

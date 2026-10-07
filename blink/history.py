@@ -32,7 +32,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.settings import BlinkSettings
-from blink.logging import ActivityLog, MessagingTrace as log
+from blink.logging import ActivityLog, JournalLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_record, call_summary, dominant_media, legacy_call_record, merge_call_records, this_device_id
 from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link, reply_metadata
@@ -150,8 +150,9 @@ class HistoryManager(object, metaclass=Singleton):
         self._remove_account_keys(account)
         # the db thread runs these after the removal above
         if getattr(notification.data, 'first_sync', False):
-            self.message_history.settle_first_sync_read(str(notification.sender.id))
+            self.message_history.settle_first_sync_read(str(notification.sender.id), marker=getattr(notification.data, 'first_sync_marker', None))
         self.message_history.get_unread_messages()
+        self.message_history.log_unread(str(notification.sender.id))
         if BlinkSettings().interface.show_messages_group:
             self.message_history.get_all_contacts()
 
@@ -1229,7 +1230,7 @@ class MessageHistory(object, metaclass=Singleton):
         done.wait()
 
     @run_in_thread('db')
-    def apply_receipts(self, receipts):
+    def apply_receipts(self, receipts, account_id=None, page=None):
         """{message id: state} from a first sync's journal, applied in one go.
 
         Outgoing messages take the state (an error only when not delivered or
@@ -1258,11 +1259,13 @@ class MessageHistory(object, metaclass=Singleton):
                     self.db.queryAll(f'update {table} set state = {self.db.sqlrepr(state)} where {where}')
         except Exception as e:
             ActivityLog().error(f'[db] Applying {len(receipts)} journal receipts failed: {e}')
+            JournalLog()(account_id, 'receipts failed', receipts=len(receipts), error=str(e)[:200])
             return
+        JournalLog()(account_id, 'receipts', page=page, received=len(receipts), **{what.replace(' ', '_'): count for what, count in sorted(changed.items())})
         ActivityLog().info(f'[db] Applied {len(receipts)} journal receipts: ' + (', '.join(f'{count} {what}' for what, count in sorted(changed.items()) if count) or 'nothing changed'))
 
     @run_in_thread('db')
-    def settle_first_sync_read(self, account_id, days=7):
+    def settle_first_sync_read(self, account_id, days=7, marker=None):
         """After a first sync: an incoming message older than the newest outgoing one in its
         conversation, or older than `days`, was read (on another device, before this one)."""
         table = Message.sqlmeta.table
@@ -1276,8 +1279,23 @@ class MessageHistory(object, metaclass=Singleton):
                 self.db.queryAll(f'update {table} set read = 1 where {where}')
         except Exception as e:
             ActivityLog().error(f'[db] Settling the read state of {account_id} after the first sync failed: {e}')
+            JournalLog()(account_id, 'settle failed', error=str(e)[:200])
             return
+        JournalLog()(account_id, 'settle first_sync', incoming_read=count, rule=f'older than the newest outgoing or {days} days')
         ActivityLog().info(f'[db] First sync of {account_id}: {count} older incoming messages marked read')
+
+    @run_in_thread('db')
+    def log_unread(self, account_id):
+        """The unread counts of an account, for the journal log after a run."""
+        table = Message.sqlmeta.table
+        try:
+            conversations, messages = self.db.queryOne(f"select count(distinct remote_uri), count(*) from {table}"
+                                                       f" where account_id = {self.db.sqlrepr(str(account_id))} and direction = 'incoming' and read = 0"
+                                                       f" and {NOT_DELETED_SQL} and state != 'deleted' and {self.__readable_sql__}")
+        except Exception as e:
+            JournalLog()(account_id, 'unread failed', error=str(e)[:200])
+            return
+        JournalLog()(account_id, 'unread', conversations=conversations, messages=messages)
 
     def last_message_times(self, accounts=None, include_calls=False, remote_uri=None):
         """{conversation key: newest message time} for ordering conversations."""

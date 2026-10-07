@@ -1232,7 +1232,7 @@ class MainWindow(base_class, ui_class):
             self.activateWindow()
 
     def _NH_BlinkJournalProgress(self, notification):
-        phase, done = notification.data.phase, notification.data.done
+        phase = notification.data.phase
         bar = self.journal_progress
         if phase == 'done':
             self.journal_progress_timer.stop()
@@ -1241,15 +1241,17 @@ class MainWindow(base_class, ui_class):
         if not bar.isVisible() and not self.journal_progress_timer.isActive():
             self.journal_progress_timer.start()
         account = notification.sender.id
-        if phase == 'download':
-            bar.setRange(0, 0)      # the total is not known before the end
-            bar.setFormat(translate('main_window', 'Downloading messages of %s: %d') % (account, done or 0))
-            bar.setToolTip(bar.format())
+        done, total = notification.data.done or 0, notification.data.total
+        label = translate('main_window', 'Downloading messages of %s') if phase == 'download' else translate('main_window', 'Importing messages of %s')
+        label %= account
+        if total:
+            bar.setRange(0, total)
+            bar.setValue(min(done, total))
+            bar.setFormat(f'{label}: %v of %m (%p%)')
         else:
-            bar.setRange(0, 100)
-            bar.setValue(int(round(100 * min(max(done or 0, 0), 1))))
-            bar.setFormat(translate('main_window', 'Importing messages of %s: %%p%%') % account)
-            bar.setToolTip(translate('main_window', 'Importing messages of %s') % account)
+            bar.setRange(0, 0)      # busy: the total is not known (a server without X-Sylk-Journal-Remaining)
+            bar.setFormat(f'{label}: {done}')
+        bar.setToolTip(f'{label}: {done} of {total}' if total else f'{label}: {done}')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
