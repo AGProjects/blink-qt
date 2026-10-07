@@ -1497,8 +1497,10 @@ class MessageManager(object, metaclass=Singleton):
                 # SIP headers carry bytes, CPIM headers str
                 user, host = (part.decode(errors='replace') if isinstance(part, bytes) else part for part in (uri.user, uri.host))
                 return f'{user}@{host}'
-            if x_replicated_message is not Null:
-                peer, what = aor(to_header.uri), 'Replicated outgoing'
+            if x_replicated_message is not Null and message_id in self._own_message_ids:
+                peer, what = aor(to_header.uri), 'Own message replicated back by the server, ignored:'
+            elif x_replicated_message is not Null:
+                peer, what = aor(to_header.uri), 'Outgoing (sent from another device)'
             else:
                 peer, what = instance_id or aor(sender.uri), 'Incoming'
             ActivityLog().info(f'[Message with {peer}] {what} {enc_text}{content_type.lower()} message {message_id} for account {account.id}')
@@ -1684,7 +1686,8 @@ class MessageManager(object, metaclass=Singleton):
             self._take_call_record(account, body, metadata, party, message_id, 'replicated' if x_replicated_message is not Null else 'live')
             return
 
-        if journal_action(content_type) == 'inert' and content_type.lower() != FTHTTPDocument.content_type:
+        # a live delivery report (message/imdn+xml) is not the journal's message/imdn: it updates a state below
+        if journal_action(content_type) == 'inert' and content_type.lower() not in (FTHTTPDocument.content_type, IMDNDocument.content_type):
             # stored as it is and never unread, without opening a conversation: locations, metadata
             # companions, call records and types this version does not know (not shown, for now)
             remote_uri = contact_instance_id(contact, contact_uri) or contact.uri.uri

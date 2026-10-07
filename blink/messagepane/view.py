@@ -165,3 +165,8 @@ class TranscriptView(QListView):
             summary = plain_summary(item)
             menu.addAction(translate('message_pane', 'Copy Text'), lambda: QGuiApplication.clipboard().setText(summary))
         menu.exec(event.globalPos())
+
+    def follow_bottom(self):
+        """Go to the newest message and stay there (after sending)."""
+        self._stick = True
+        QTimer.singleShot(0, self.scrollToBottom)

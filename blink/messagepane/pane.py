@@ -13,13 +13,19 @@ the window is active (and not minimised). Becoming read marks its incoming
 messages read in history, clears its badge, sends the displayed notifications
 the sender asked for and tells this account's other devices; while it is not
 being read nothing is marked, and messages arriving stay unread.
+
+At the bottom the composer (blink.messagepane.composer): Enter sends the text
+on the conversation's account, typing tells the peer, unsent text is kept per
+conversation, files dropped anywhere on the conversation (or pasted) are sent.
+A−/A+ in the strip set the text size of the transcript and the composer,
+kept across restarts.
 """
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from zope.interface import implementer
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QSettings, QTimer
 from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 
@@ -28,6 +34,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.logging import ActivityLog, MessagingTrace as log
+from blink.messagepane.composer import Composer
 from blink.messagepane.header import ConversationHeader
 from blink.messagepane.model import ConversationModel
 from blink.messagepane.strip import TranscriptStrip
@@ -75,6 +82,16 @@ class MessagePane(QWidget):
         self.transcript = TranscriptView(self.stack)
         self.stack.addWidget(self.transcript)
         self.transcript.verticalScrollBar().valueChanged.connect(self.strip.update_text)
+        self.composer = Composer(self)
+        self.composer.hide()
+        layout.addWidget(self.composer)
+        self.composer.sendText.connect(self._send_text)
+        self.composer.filesDropped.connect(self._send_files)
+        self.composer.composing.connect(self._send_composing)
+        self.strip.fontStep.connect(self._step_font)
+        self.unsent = {}            # conversation key: text typed and not sent
+        self.setAcceptDrops(True)
+        self._apply_font()
         self.models = {}            # conversation key: ConversationModel, most recent last
         self.stack.setCurrentWidget(self.empty_label)
 
@@ -117,7 +134,10 @@ class MessagePane(QWidget):
         self._pending = None
         if contact is self.contact and key == self.key:
             return
+        self._keep_unsent()
         self.contact, self.uri, self.key = contact, uri, key
+        self.composer.set_text(self.unsent.get(key, ''))
+        self.composer.show()
         self.header.set_conversation(contact, uri, key, self._default_account())
         self.header.show()
         cached = key in self.models
@@ -139,6 +159,8 @@ class MessagePane(QWidget):
         self._pending = None
         if self.contact is None:
             return
+        self._keep_unsent()
+        self.composer.hide()
         self.contact = self.uri = self.key = None
         self._follow_model(None)
         self.header.hide()
@@ -315,3 +337,98 @@ class MessagePane(QWidget):
             return
         model.jump_to(day)
         self.strip.set_conversation(model, self.transcript)     # a search gives way to the jump
+
+    # Composer
+
+    def _keep_unsent(self):
+        if self.key is None:
+            return
+        text = self.composer.text()
+        if text.strip():
+            self.unsent[self.key] = text
+        else:
+            self.unsent.pop(self.key, None)
+
+    def _message_session(self):
+        from blink.messages import MessageManager
+        return MessageManager().create_message_session(str(self.uri.uri), selected=False)
+
+    def _send_text(self, text):
+        if self.key is None:
+            return
+        import uuid
+        from blink.messages import MessageManager
+        try:
+            session = self._message_session()
+            account = self.header.account or session.account
+            MessageManager().send_message(account, session.contact, text, 'text/plain', id=str(uuid.uuid4()))
+        except Exception as e:
+            ActivityLog().error(f'[Message with {self.key}] Sending a message from the message pane failed: {e!r}')
+            self.composer.set_text(text)      # nothing lost
+            return
+        self.unsent.pop(self.key, None)
+        model = self.models.get(self.key)
+        if model is not None and (model.has_newer or model.search_text):
+            model.search_text = ''
+            model.load()                      # back to the newest, where the message goes
+            self.strip.set_conversation(model, self.transcript)
+        self.transcript.follow_bottom()
+
+    def _send_composing(self, state):
+        if self.key is None:
+            return
+        from blink.messages import MessageManager
+        try:
+            MessageManager().send_composing_indication(self._message_session(), state)
+        except Exception as e:
+            log.warning(f'Cannot tell {self.key} about typing: {e!r}')
+
+    def _send_files(self, paths):
+        if self.key is None or not paths:
+            return
+        import os
+        from blink.sessions import SessionManager
+        session = self._message_session()
+        account = self.header.account or session.account
+        for path in paths:
+            if os.path.isfile(path):
+                SessionManager().send_file(session.contact, session.contact_uri, path, account=account)
+                ActivityLog().info(f'[Message with {self.key}] Sending {os.path.basename(path)} from the message pane')
+        self.transcript.follow_bottom()
+
+    def dragEnterEvent(self, event):
+        if self.key is not None and event.mimeData().hasUrls() and all(url.isLocalFile() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    dragMoveEvent = dragEnterEvent
+
+    def dropEvent(self, event):
+        paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+        event.acceptProposedAction()
+        self._send_files(paths)
+
+    # Text size
+
+    font_steps = (-3, 8)        # points smaller / larger than the system font
+
+    def _font_delta(self):
+        try:
+            return int(QSettings().value('message_pane/font_delta', 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def _step_font(self, step):
+        low, high = self.font_steps
+        delta = max(low, min(high, self._font_delta() + step))
+        QSettings().setValue('message_pane/font_delta', delta)
+        self._apply_font()
+
+    def _apply_font(self):
+        from PyQt6.QtWidgets import QApplication
+        font = QApplication.font()
+        if font.pointSizeF() > 0:
+            font.setPointSizeF(max(font.pointSizeF() + self._font_delta(), 6))
+        self.transcript.setFont(font)
+        self.composer.edit.setFont(font)
