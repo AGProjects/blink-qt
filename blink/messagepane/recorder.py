@@ -2,7 +2,8 @@
 
 VoiceRecorder.instance() records the default input (16 kHz mono, 16-bit) into
 a WAV file named like mobile's recordings (sylk-audio-recording-<ms>.wav, so it
-gets their title), measuring as it goes: level() for the meter, the peaks for
+gets their title; it is compressed to AAC .m4a before it is sent, see
+blink.messagepane.transcode), measuring as it goes: level() for the meter, the peaks for
 the waveform sent with it. At most max_seconds (600); it stops there by itself.
 Only one recording at a time, wherever it was started.
 """

@@ -609,14 +609,32 @@ class MessagePane(QWidget):
             AudioPlayer.instance().seek(item.id, path, fraction)
 
     def _send_voice_note(self, note):
-        """Send a recorded voice note as a file transfer, with its waveform as a peaks companion (as mobile does)."""
+        """Compress a recorded voice note to AAC (blink.messagepane.transcode; the WAV when that cannot be
+        done) and send it as a file transfer, with its waveform as a peaks companion (as mobile does)."""
+        from blink.messagepane.transcode import convert
+        key = self.key
+
+        def converted(path):
+            import os
+            if path is not None:
+                try:
+                    os.unlink(note['path'])
+                except OSError:
+                    pass
+                note['path'] = path
+            self._send_voice_note_file(note, key)
+        convert(note['path'], converted)
+
+    def _send_voice_note_file(self, note, key):
         import os
         import uuid
         from blink.message_envelopes import METADATA_CONTENT_TYPE, peaks_envelope
         from blink.messages import MessageManager
         from blink.messagepane.format import waveform_bars
         from blink.sessions import SessionManager
-        if self.key is None:
+        if self.key is None or self.key != key:
+            if self.key != key:
+                ActivityLog().warning(f'[Message with {key}] The voice note {os.path.basename(note["path"])} was ready after the conversation was left: not sent')
             return
         try:
             session = self._message_session()
