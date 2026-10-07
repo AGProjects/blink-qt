@@ -86,11 +86,11 @@ def is_messages_group(group_settings):
 
 
 def start_contact_conversation(contact, contact_uri):
-    """What double-click / Enter on a contact does: open the message view for a contact in the
-    Messages group or whose preferred media is messages, otherwise start a session with its
-    preferred media."""
+    """What double-click / Enter on a contact does: open the conversation in the message pane for
+    a contact in the Messages group or whose preferred media is messages, otherwise start a session
+    with its preferred media."""
     if is_messages_group(getattr(contact.group, 'settings', None)) or contact.preferred_media == 'messages':
-        MessageManager().create_message_session(contact_uri.uri)
+        QApplication.instance().main_window.show_conversation_in_pane(contact, contact_uri)
     else:
         SessionManager().create_session(contact, contact_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
 

@@ -3045,7 +3045,23 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if notification.data.stream.type in self.__streamtypes__:
             self.show()
 
+    def _shows_session(self, session):
+        """Whether this window is where a session is shown: MSRP chat, video and screen sharing.
+        A conversation of SIP messages only is shown in the main window's message pane."""
+        types = set()
+        for attribute in ('streams', 'stream_descriptions'):
+            try:
+                types.update(getattr(session, attribute).types)
+            except AttributeError:
+                pass
+        return bool(types & self.__streamtypes__)
+
     def _NH_BlinkSessionIsSelected(self, notification):
+        session = notification.sender
+        if not self._shows_session(session):
+            main_window = QApplication.instance().main_window
+            main_window.show_conversation_in_pane(session.contact, session.contact_uri)
+            return
         model = self.session_model
         position = model.sessions.index(notification.sender.items.chat)
         selection_model = self.session_list.selectionModel()

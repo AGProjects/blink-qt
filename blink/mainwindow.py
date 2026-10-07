@@ -583,12 +583,70 @@ class MainWindow(base_class, ui_class):
         blink.chat_window.show()
 
     def _AH_ShowLastMessagesActionTriggered(self, checked):
-        blink = QApplication.instance()
-        blink.chat_window.show_with_messages()
+        """The message pane, on the conversation with the newest message."""
+        from blink.history import ConversationPreviews
+        times = ConversationPreviews().message_times
+        if times:
+            key = max(times, key=times.get)
+            if self._select_conversation_row(key) is None:
+                contact, contact_uri = URIUtils.find_contact(key)
+                self.show_conversation_in_pane(contact, contact_uri)
+                return
+        self.set_message_pane_visible(True)
+        self._bring_to_front()
 
     def _AH_ShowUnreadMessagesActionTriggered(self, checked):
-        blink = QApplication.instance()
-        blink.chat_window.show_unread_messages()
+        """The conversation with the newest unread message, in the message pane."""
+        keys = [key for key, count in self.unread_messages.items() if count]
+        if not keys:
+            return
+        from blink.history import ConversationPreviews
+        times = ConversationPreviews().message_times
+        key = max(keys, key=lambda key: (times.get(key) is not None, times.get(key) or 0))
+        contact = self._select_conversation_row(key)
+        if contact is None:
+            contact, contact_uri = URIUtils.find_contact(key)
+            self.show_conversation_in_pane(contact, contact_uri)
+        else:
+            self.set_message_pane_visible(True)
+            self._bring_to_front()
+        ActivityLog().info(f'[Message with {key}] Opened from the new message bar ({len(keys)} conversations with unread messages)')
+
+    def _select_conversation_row(self, key):
+        """Select the contact list row of a conversation (in the Messages group if it is there) and return its contact, or None."""
+        model = self.contact_model
+        rows = [(position, item) for position, item in enumerate(model.items) if isinstance(item, Contact) and key in item.conversation_keys]
+        if not rows:
+            return None
+        from blink.contacts import is_messages_group
+        position, contact = next(((position, item) for position, item in rows if is_messages_group(getattr(item.group, 'settings', None))), rows[0])
+        if self.search_box.text():
+            self.search_box.clear()
+        self.main_view.setCurrentWidget(self.contacts_panel)
+        self.contacts_view.setCurrentWidget(self.contact_list_panel)
+        index = model.index(position)
+        if self.contact_list.isRowHidden(position) and getattr(contact.group, 'widget', None) is not None:
+            contact.group.widget.collapse_button.setChecked(False)     # expand its group
+        self.contact_list.selectionModel().select(index, self.contact_list.selectionModel().SelectionFlag.ClearAndSelect)
+        self.contact_list.setCurrentIndex(index)
+        self.contact_list.scrollTo(index)
+        return contact
+
+    def show_conversation_in_pane(self, contact, contact_uri):
+        """Open the message pane on the conversation with a contact, on this address."""
+        from blink.history import conversation_key
+        from blink.contacts import neighbour_instance_id
+        key = neighbour_instance_id(contact, str(contact_uri.uri)) or conversation_key(str(contact_uri.uri), AccountManager().default_account)
+        self.set_message_pane_visible(True)
+        self.message_pane.show_conversation(contact, contact_uri, key)
+        self._bring_to_front()
+
+    def _bring_to_front(self):
+        if self.isMinimized():
+            self.showNormal()
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def _AH_ExportPGPkeyActionTriggered(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
