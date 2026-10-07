@@ -567,9 +567,11 @@ class OutgoingMessage(object):
                 document = IMDNDocument.parse(self.content)
                 imdn_message_id = document.message_id.value
                 imdn_status = document.notification.status.__str__()
+                log.info(f'Disposition {imdn_status} of message {imdn_message_id} sent to {self._peer} (IMDN {self.id})')
                 notification_center.post_notification('BlinkDidSendDispositionNotification', sender=self.session, data=NotificationData(id=imdn_message_id, status=imdn_status))
             return
 
+        log.info(f'Message {self.id} {self.content_type.lower()} sent to {self._peer} from account {self.account.id}: {getattr(notification.data, "code", "")} {getattr(notification.data, "reason", "")}'.rstrip())
         if self.session is not None:
             notification_center.post_notification('BlinkMessageDidSucceed', sender=self.session, data=NotificationData(data=notification.data, id=self.id))
         if not self._disabled_imdn_content_type:
@@ -1489,7 +1491,7 @@ class MessageManager(object, metaclass=Singleton):
         encryption = self.check_encryption(content_type, body)
         enc_text = f'{encryption} encrypted ' if encryption else ''
 
-        log.info(f'Message {message_id} {enc_text}{content_type.lower()} for account {account.id} from {sender.uri}')
+        log.info(f'Message {message_id} {enc_text}{content_type.lower()} received from {sender.uri} for account {account.id}')
         if content_type.lower() not in (IsComposingDocument.content_type, IMDNDocument.content_type):
             def aor(uri):
                 # SIP headers carry bytes, CPIM headers str
@@ -1758,6 +1760,7 @@ class MessageManager(object, metaclass=Singleton):
             imdn_message_id = document.message_id.value
             imdn_status = document.notification.status.__str__()
             imdn_datetime = document.datetime.__str__()
+            log.info(f'Disposition {imdn_status} of message {imdn_message_id} received from {sender.uri} for account {account.id} (IMDN {message_id})')
             notification_center.post_notification('BlinkGotDispositionNotification', sender=blink_session, data=NotificationData(id=imdn_message_id, status=imdn_status))
             return
         elif content_type.lower() == IMDNDocument.content_type:
