@@ -572,6 +572,9 @@ class GridView(QAbstractScrollArea):
             menu.addAction(translate('message_pane', 'Open') if path else translate('message_pane', 'Download'), lambda: self.actionRequested.emit('open', item))
             if path:
                 menu.addAction(translate('message_pane', 'Save As…'), lambda: self._save_as(path))
+        from blink.messagepane.forward import forwardable
+        if forwardable(item):
+            menu.addAction(translate('message_pane', 'Forward…'), lambda: self.forwardRequested.emit(self.selected_items() if item.id in self.selected else [item]))
         menu.addSeparator()
         menu.addAction(translate('message_pane', 'Info…'), lambda: self.actionRequested.emit('info', item))
         menu.addAction(translate('message_pane', 'Select'), lambda: self._tick(item) if item.id not in self.selected else None)

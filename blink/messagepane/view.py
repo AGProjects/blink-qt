@@ -277,6 +277,9 @@ class TranscriptView(QListView):
                 menu.addAction(translate('message_pane', 'Edit'), lambda: self.actionRequested.emit('edit', item))
             if item.outgoing and item.category in ('image', 'video'):
                 menu.addAction(translate('message_pane', 'Edit Caption…'), lambda: self.actionRequested.emit('caption', item))
+            from blink.messagepane.forward import forwardable
+            if forwardable(item):
+                menu.addAction(translate('message_pane', 'Forward…'), lambda: self.actionRequested.emit('forward', item))
         menu.addSeparator()
         menu.addAction(translate('message_pane', 'Info…'), lambda: self.actionRequested.emit('info', item))
         delete = menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))

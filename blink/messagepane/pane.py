@@ -104,6 +104,8 @@ class MessagePane(QWidget):
         self.grid.progress_of = self.fetcher.progress
         self.grid.actionRequested.connect(self._SH_ActionRequested)
         self.grid.deleteRequested.connect(self._delete_messages)
+        self.grid.forwardRequested.connect(self._forward)
+        self._forward_after_download = {}       # message id: (item, conversation key), sent once its file is here
         self.grid.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
         self._make_grid_controls()
         self.composer = Composer(self)
@@ -609,6 +611,8 @@ class MessagePane(QWidget):
             if item.content_type == 'text/html':
                 content = plain_summary(item)
             self.composer.set_editing({'id': item.id, 'text': content, 'timestamp': item.timestamp, 'account_id': item.account_id})
+        elif action == 'forward':
+            self._forward([item])
         elif action == 'location':
             from blink.messagepane.locations import LocationWindow
             LocationWindow.show_for(item, getattr(self.contact, 'name', '') or self.key, self.window())
@@ -675,6 +679,66 @@ class MessagePane(QWidget):
         for_both = both is not None and both.isChecked()
         ActivityLog().info(f'[Message with {key}] Deleted {what} {item.id} from the message pane' + (', also for the other party' if for_both else ''))
         self._remove_message(item.id, item.account_id, for_both, why='deleted here')
+
+    # Forward (blink.messagepane.forward)
+
+    def _forward(self, items):
+        from blink.messagepane.files import local_file
+        from blink.messagepane.forward import ForwardDialog, forwardable
+        items = [item for item in items if forwardable(item)]
+        if not items:
+            return
+        dialog = ForwardDialog(len(items), exclude=self.key, parent=self)
+        if dialog.exec() != ForwardDialog.DialogCode.Accepted or not dialog.key:
+            return
+        target = dialog.key
+        ActivityLog().info(f'[Message with {self.key}] Forwarding {len(items)} messages to {target}')
+        ready = []
+        for item in items:
+            if item.category != 'text' and not local_file(item):
+                self._forward_after_download[item.id] = (item, target)
+                self.fetcher.fetch(item, force=True)
+                ActivityLog().info(f'[Message with {target}] Message {item.id} is forwarded once its file is downloaded')
+            else:
+                ready.append(item)
+        self._forward_to(target, ready)
+        self.grid.set_selecting(False)
+
+    def _forward_to(self, target, items):
+        """Send items again, as new messages, to the conversation target (a conversation key)."""
+        import os
+        import uuid
+        from blink.message_envelopes import METADATA_CONTENT_TYPE, label_envelope
+        from blink.messagepane.files import local_file
+        from blink.messages import MessageManager
+        from blink.sessions import SessionManager
+        if not items:
+            return
+        try:
+            session = MessageManager().create_message_session(target, selected=False)
+        except Exception as e:
+            ActivityLog().error(f'[Message with {target}] Cannot forward to it: {e!r}')
+            return
+        account = session.account
+        for item in items:
+            message_id = str(uuid.uuid4())
+            try:
+                if item.category == 'text':
+                    content = item.content if isinstance(item.content, str) else (item.content or b'').decode('utf-8', 'replace')
+                    content_type = item.content_type if item.content_type in ('text/plain', 'text/html') else 'text/plain'
+                    MessageManager().send_message(account, session.contact, content, content_type, id=message_id)
+                else:
+                    path = local_file(item)
+                    SessionManager().send_file(session.contact, session.contact_uri, path, transfer_id=message_id, account=account)
+                    if item.caption:
+                        metadata_id = str(uuid.uuid4())
+                        envelope = label_envelope(message_id, metadata_id, item.caption, str(session.contact_uri.uri), ISOTimestamp.now())
+                        MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
+            except Exception as e:
+                ActivityLog().error(f'[Message with {target}] Forwarding message {item.id} failed: {e!r}')
+                continue
+            what = 'text' if item.category == 'text' else os.path.basename(local_file(item) or '')
+            ActivityLog().info(f'[Message with {target}] Message {item.id} ({what}) forwarded as {message_id} from account {account.id}')
 
     def _delete_messages(self, items):
         """Delete several messages (the grid's ticked tiles) after one question; one's own
@@ -753,6 +817,15 @@ class MessagePane(QWidget):
     def _SH_DownloadChanged(self, message_id):
         self.transcript.bubble_delegate.forget(message_id)      # where its file is may have changed
         self.grid.forget(message_id)
+        if message_id in self._forward_after_download:
+            from blink.messagepane.files import local_file
+            item, target = self._forward_after_download[message_id]
+            if local_file(item):
+                del self._forward_after_download[message_id]
+                self._forward_to(target, [item])
+            elif self.fetcher.progress(message_id) is None:
+                del self._forward_after_download[message_id]
+                ActivityLog().warning(f'[Message with {target}] Message {message_id} not forwarded: its file could not be downloaded')
         model = self.models.get(self.key)
         row = model.row_of(message_id) if model is not None else None
         if row is not None:
