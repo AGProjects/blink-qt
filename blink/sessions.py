@@ -5189,6 +5189,9 @@ class FileTransferModel(QAbstractListModel):
             self.addItem(FileTransferItem(transfer))
 
     def _NH_BlinkFileTransferNewOutgoing(self, notification):
+        from blink.messagepane.uploads import is_http_upload
+        if is_http_upload(notification.sender):
+            return          # sent over HTTP: the message pane shows it (MSRP transfers only here)
         self.addItem(FileTransferItem(notification.sender))
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
@@ -5572,6 +5575,9 @@ class FileListModel(QAbstractListModel):
             self.addItem(FileTransferItem(transfer))
 
     def _NH_BlinkFileTransferNewOutgoing(self, notification):
+        from blink.messagepane.uploads import is_http_upload
+        if is_http_upload(notification.sender):
+            return          # sent over HTTP: the message pane shows it (MSRP transfers only here)
         self.addItem(FileTransferItem(notification.sender))
 
     def _NH_FileTransferItemDidChange(self, notification):

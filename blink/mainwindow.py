@@ -1400,6 +1400,9 @@ class MainWindow(base_class, ui_class):
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
 
     def _NH_BlinkFileTransferNewOutgoing(self, notification):
+        from blink.messagepane.uploads import is_http_upload
+        if is_http_upload(notification.sender):
+            return          # sent over HTTP: shown in the message pane, the window is for MSRP transfers
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
 
 

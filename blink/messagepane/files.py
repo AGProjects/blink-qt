@@ -4,7 +4,8 @@ Received files are kept as file_transfers/<account>/<peer>/<transfer id>/<name>
 (blink.configuration.datatypes.sylk_file_path), older ones as
 downloads/<transfer id>/<name>; an encrypted one may still have its .asc. The
 transfer id is the envelope's transfer_id, else the URL's id segment, else the
-message id: all are tried, under any peer folder of any account.
+message id: all are tried, under any peer folder of any account. A file being
+sent (MessageItem.upload) is where it was sent from.
 """
 
 import glob
@@ -14,7 +15,7 @@ from blink.message_envelopes import file_transfer_envelope
 from blink.resources import ApplicationData
 
 
-__all__ = ['local_file', 'file_info', 'failure_reason']
+__all__ = ['local_file', 'file_info', 'failure_reason', 'transfer_ids']
 
 
 def _candidates(item):
@@ -36,6 +37,15 @@ def _url_id(url):
     return parts[-2] if len(parts) >= 5 else None
 
 
+def transfer_ids(item):
+    """Every id a file transfer message may be known by: its envelope's transfer_id, its URL's id, its message id."""
+    meta = file_transfer_envelope(item.content) if item.content else None
+    ids = {str(item.id)}
+    if meta:
+        ids.update(str(transfer_id) for transfer_id in (meta.get('transfer_id'), _url_id(meta.get('url'))) if transfer_id)
+    return ids
+
+
 def file_info(item):
     """{'name', 'size', 'type'} of a file transfer message (from its envelope), or None."""
     meta = file_transfer_envelope(item.content) if item.content else None
@@ -55,6 +65,8 @@ def file_info(item):
 def failure_reason(item):
     """Why fetching the file failed, when it did and nothing has replaced the failure (.failure.json), else None."""
     import json
+    if getattr(item, 'upload', None) is not None:
+        return None
     _, ids = _candidates(item)
     for transfer_id in ids:
         for path in glob.glob(os.path.join(ApplicationData.get('file_transfers'), '*', '*', glob.escape(transfer_id), '.failure.json')) + \
@@ -71,6 +83,9 @@ def local_file(item):
     """The path of the message's file, or None when it is not a file or not downloaded."""
     if item.category not in ('image', 'audio', 'video', 'other'):
         return None
+    if getattr(item, 'upload', None) is not None:
+        path = item.upload['path']
+        return path if os.path.isfile(path) else None
     name, ids = _candidates(item)
     if not name:
         return None

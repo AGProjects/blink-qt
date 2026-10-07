@@ -242,6 +242,16 @@ class TranscriptView(QListView):
             menu.addSeparator()
             menu.addAction(translate('message_pane', 'Open'), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
             menu.addAction(translate('message_pane', 'Save As…'), lambda: self._save_as(path))
+        if item.upload is not None:
+            # being sent: not a message yet
+            menu.addSeparator()
+            if item.upload['state'] == 'failed':
+                menu.addAction(translate('message_pane', 'Retry Sending'), lambda: self.actionRequested.emit('retry_upload', item))
+                menu.addAction(translate('message_pane', 'Remove'), lambda: self.actionRequested.emit('discard_upload', item))
+            elif item.upload['state'] == 'uploading':
+                menu.addAction(translate('message_pane', 'Cancel Sending'), lambda: self.actionRequested.emit('discard_upload', item))
+            menu.exec(global_position)
+            return
         if bubble_kind(item) != 'note':
             menu.addSeparator()
             menu.addAction(translate('message_pane', 'Reply'), lambda: self.actionRequested.emit('reply', item))

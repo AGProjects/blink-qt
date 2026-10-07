@@ -14,6 +14,9 @@ live messages wait until they are reached.
 
 search(text) shows the conversation's text messages containing the text
 instead (newest 200, oldest first); search('') goes back to the conversation.
+
+Files being sent over HTTP (blink.messagepane.uploads) are rows too, after the
+newest page, until a message of their transfer is in history.
 """
 
 import bisect
@@ -40,7 +43,7 @@ class MessageItem(object):
 
     __slots__ = ('id', 'account_id', 'remote_uri', 'display_name', 'uri', 'timestamp', 'direction', 'content', 'content_type',
                  'state', 'encryption_type', 'decrypted', 'disposition', 'read', 'category', 'has_link', 'metadata',
-                 'related_msg_id', 'related_action', 'media_type', 'row_id', 'reply', 'caption', 'peaks')
+                 'related_msg_id', 'related_action', 'media_type', 'row_id', 'reply', 'caption', 'peaks', 'upload')
 
     def __init__(self, row):
         self.id = str(row.message_id)
@@ -68,6 +71,39 @@ class MessageItem(object):
         self.reply = None           # what it answers: {'id', 'timestamp', 'outgoing', 'name', 'text'} (attach_replies)
         self.caption = ''           # a picture's or movie's caption (label companion, the newest wins)
         self.peaks = None           # a recording's waveform samples (peaks companion), when the sender made one
+        self.upload = None          # a file being sent over HTTP: not in history yet (for_upload)
+
+    @classmethod
+    def for_upload(cls, upload):
+        """The row of a file being sent (blink.messagepane.uploads), drawn as its message will be."""
+        import json
+        from blink.message_envelopes import file_transfer_category
+        item = cls.__new__(cls)
+        content = json.dumps({'filename': upload.name, 'filesize': upload.size, 'filetype': upload.type, 'transfer_id': upload.id})
+        item.id = upload.id
+        item.row_id = float('inf')      # after the rows of history at the same time
+        item.account_id = upload.account_id
+        item.remote_uri = upload.key
+        item.display_name = ''
+        item.uri = ''
+        item.timestamp = upload.timestamp
+        item.direction = 'outgoing'
+        item.content = content
+        item.content_type = 'application/sylk-file-transfer'
+        item.state = {'uploading': 'pending', 'uploaded': 'sent'}.get(upload.state, 'failed-local')
+        item.encryption_type = ''
+        item.decrypted = None
+        item.disposition = ''
+        item.read = True
+        item.category = file_transfer_category(content) or 'other'
+        item.has_link = False
+        item.metadata = None
+        item.related_msg_id = item.related_action = item.media_type = None
+        item.reply = None
+        item.caption = ''
+        item.peaks = None
+        item.upload = {'path': upload.path, 'state': upload.state, 'reason': upload.reason}
+        return item
 
     @property
     def sort_key(self):
@@ -130,6 +166,11 @@ def attach_replies(items):
         by_id[link['reply_id']].reply = reply
 
 
+def _uploads_for(key):
+    from blink.messagepane.uploads import Uploads
+    return Uploads.instance().for_key(key)
+
+
 def is_renderable(row):
     """Rows the transcript draws: what history classified (keys, tokens and the like stay out)."""
     return row.category is not None
@@ -167,6 +208,8 @@ class ConversationModel(QAbstractListModel):
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(int(self.refresh_delay * 1000))
         self._refresh_timer.timeout.connect(self._refresh)
+        from blink.messagepane.uploads import Uploads
+        Uploads.instance().changed.connect(self._SH_UploadChanged)
         notification_center = NotificationCenter()
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
@@ -180,6 +223,8 @@ class ConversationModel(QAbstractListModel):
             return
         self.closed = True
         self._refresh_timer.stop()
+        from blink.messagepane.uploads import Uploads
+        Uploads.instance().changed.disconnect(self._SH_UploadChanged)
         notification_center = NotificationCenter()
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
@@ -319,7 +364,7 @@ class ConversationModel(QAbstractListModel):
         self._set_loading(False)
         ActivityLog().info(f'[Message with {self.key}] Loaded {len(newer)} newer messages, {len(self.items)} shown' + (', newer ones available' if self.has_newer else ', up to the newest'))
         if not self.has_newer:
-            self._schedule_refresh()        # what arrived in the meantime
+            self._schedule_refresh()        # what arrived in the meantime (and the files being sent)
 
     def load_older(self):
         """The page before the oldest loaded row; no-op while loading or when there is none."""
@@ -399,6 +444,7 @@ class ConversationModel(QAbstractListModel):
             self.has_newer = False
             self.search_truncated = False
             self.beginResetModel()
+            found = self._with_uploads(found)
             self.items = found
             self.ids = {item.id: item for item in found}
             self.endResetModel()
@@ -467,8 +513,11 @@ class ConversationModel(QAbstractListModel):
         if generation != self._generation or self.closed:
             return
         fresh = {item.id: item for item in found}
+        settled = self._settle_uploads(found)
         for position in reversed(range(len(self.items))):
             item = self.items[position]
+            if item.upload is not None and item.id not in settled:
+                continue                # a file being sent: not in history yet
             if item.id not in fresh and (oldest is None or item.sort_key >= oldest):
                 self.beginRemoveRows(QModelIndex(), position, position)
                 del self.items[position]
@@ -492,6 +541,61 @@ class ConversationModel(QAbstractListModel):
                 self.ids[item.id] = item
                 index = self.index(position)
                 self.dataChanged.emit(index, index)
+        if not self.has_newer:
+            for upload in _uploads_for(self.key):
+                if upload.id not in self.ids:
+                    self._insert(MessageItem.for_upload(upload))
+
+    # Files being sent (blink.messagepane.uploads)
+
+    def _settle_uploads(self, found):
+        """The ids of the uploads whose message is among found (forgotten by Uploads)."""
+        from blink.messagepane.files import transfer_ids
+        from blink.messagepane.uploads import Uploads
+        uploads = Uploads.instance()
+        if not uploads.for_key(self.key):
+            return set()
+        ids = set()
+        for item in found:
+            if item.category in ('image', 'audio', 'video', 'other'):
+                ids.update(transfer_ids(item))
+        settled = uploads.settle(self.key, ids)
+        if settled:
+            ActivityLog().info(f'[Message with {self.key}] Sent files now in history: {", ".join(sorted(settled))}')
+        return settled
+
+    def _with_uploads(self, found):
+        """found (a newest page) and the files being sent whose message is not there."""
+        self._settle_uploads(found)
+        known = {item.id for item in found}
+        uploads = [MessageItem.for_upload(upload) for upload in _uploads_for(self.key) if upload.id not in known]
+        return sorted(found + uploads, key=lambda item: item.sort_key) if uploads else found
+
+    def _insert(self, item):
+        position = bisect.bisect_right([existing.sort_key for existing in self.items], item.sort_key)
+        self.beginInsertRows(QModelIndex(), position, position)
+        self.items.insert(position, item)
+        self.ids[item.id] = item
+        self.endInsertRows()
+
+    def _SH_UploadChanged(self, key, transfer_id):
+        if key != self.key or self.closed or not self.loaded or self.search_text or self.has_newer:
+            return
+        from blink.messagepane.uploads import Uploads
+        upload = Uploads.instance().get(transfer_id)
+        current = self.ids.get(transfer_id)
+        if upload is None:
+            if current is not None and current.upload is not None:
+                self.remove_item(transfer_id)
+            return
+        item = MessageItem.for_upload(upload)
+        if current is None:
+            self._insert(item)
+        elif current.upload is not None:
+            position = self.items.index(current)
+            self.items[position] = self.ids[transfer_id] = item
+            index = self.index(position)
+            self.dataChanged.emit(index, index)
 
     @run_in_gui_thread
     def handle_notification(self, notification):

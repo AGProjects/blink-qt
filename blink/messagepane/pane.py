@@ -17,6 +17,8 @@ being read nothing is marked, and messages arriving stay unread.
 At the bottom the composer (blink.messagepane.composer): Enter sends the text
 on the conversation's account, typing tells the peer, unsent text is kept per
 conversation, files dropped anywhere on the conversation (or pasted) are sent.
+A file sent over HTTP is a bubble here while it uploads (blink.messagepane.uploads);
+the File Transfers window is for MSRP transfers only.
 A−/A+ in the strip set the text size of the transcript and the composer,
 kept across restarts.
 """
@@ -85,6 +87,8 @@ class MessagePane(QWidget):
         self.transcript.actionRequested.connect(self._SH_ActionRequested)
         self.transcript.quoteClicked.connect(self._SH_QuoteClicked)
         self.transcript.audioAction.connect(self._SH_AudioAction)
+        from blink.messagepane.uploads import Uploads
+        Uploads.instance()          # files sent over HTTP are shown here, from the first one
         from blink.messagepane.fetch import AutoFetcher
         self.fetcher = AutoFetcher(self)
         self.fetcher.changed.connect(self._SH_DownloadChanged)
@@ -470,7 +474,14 @@ class MessagePane(QWidget):
     # Message actions
 
     def _SH_ActionRequested(self, action, item):
-        if action == 'delete':
+        from blink.messagepane.uploads import Uploads
+        if item.upload is not None and action == 'open' and item.upload['state'] == 'failed':
+            action = 'retry_upload'
+        if action == 'retry_upload':
+            Uploads.instance().retry(item.id)
+        elif action == 'discard_upload':
+            Uploads.instance().discard(item.id)
+        elif action == 'delete':
             self._delete_message(item)
         elif action == 'open':
             from blink.messagepane.files import local_file

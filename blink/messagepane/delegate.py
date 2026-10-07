@@ -253,6 +253,9 @@ class BubbleDelegate(QStyledItemDelegate):
 
     def file_path(self, item):
         """Where the message's file is here, remembered until forget() (a download changed it)."""
+        if item.upload is not None:
+            from blink.messagepane.files import local_file
+            return local_file(item)         # being sent: where it is sent from
         try:
             return self._paths[item.id]
         except KeyError:
@@ -289,6 +292,8 @@ class BubbleDelegate(QStyledItemDelegate):
         document.setDocumentMargin(0)
         caption_height = 0
         text = item.caption
+        if item.upload is not None and item.upload['state'] != 'uploaded':
+            text = upload_note(item.upload)
         if pdf:
             from blink.messagepane.files import file_info
             info = file_info(item) or {}
@@ -350,7 +355,10 @@ class BubbleDelegate(QStyledItemDelegate):
         layout.file_meta = ' · '.join(part for part in (kind_text, format_size(size)) if part)
         layout.file_error = False
         layout.file_note = ''
-        if progress is not None and progress < 100:
+        if item.upload is not None:
+            if item.upload['state'] != 'uploaded':
+                layout.file_note, layout.file_error = upload_note(item.upload), item.upload['state'] == 'failed'
+        elif progress is not None and progress < 100:
             layout.file_note = translate('message_pane', 'downloading %d%%') % progress
         elif not path:
             reason = failure_reason(item)
@@ -843,6 +851,13 @@ class BubbleDelegate(QStyledItemDelegate):
         painter.setPen(colour)
         painter.setFont(font)
         painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, text)
+
+
+def upload_note(upload):
+    """What a file being sent says under its name: uploading, or why it failed."""
+    if upload['state'] == 'failed':
+        return '⚠ ' + translate('message_pane', 'Not sent: %s (click to retry)') % (upload['reason'] or translate('message_pane', 'failed'))
+    return translate('message_pane', 'Uploading…')
 
 
 def translate(context, text):
