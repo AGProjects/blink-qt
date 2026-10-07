@@ -22,10 +22,13 @@ from blink.util import run_in_gui_thread
 __all__ = ['ApplicationData', 'Resources', 'IconManager', 'themed_icon']
 
 
-def themed_icon(filename, dark_color='#b4b4b4', size=64):
+def themed_icon(filename, dark_color='#b4b4b4', size=64, outline=False):
     """QIcon of a dark monochrome glyph (the default avatar, the call buttons), redrawn light
     under a dark theme where the original disappears into the background. A vector image is
-    drawn at `size` pixels first, so the light copy stays sharp at any button size."""
+    drawn at `size` pixels first, so the light copy stays sharp at any button size.
+
+    outline: the glyph is dark lines on a light fill (a clock face): only the dark parts are
+    redrawn light, the light fill becomes transparent, instead of the whole shape becoming one blot."""
     from PyQt6.QtCore import QSize
     from PyQt6.QtGui import QColor, QPainter, QPalette
     from PyQt6.QtWidgets import QApplication
@@ -35,6 +38,18 @@ def themed_icon(filename, dark_color='#b4b4b4', size=64):
     pixmap = QIcon(filename).pixmap(QSize(size, size)) if filename.endswith('.svg') else QPixmap(filename)
     if pixmap.isNull():
         return QIcon(filename)
+    if outline:
+        from PyQt6.QtGui import QImage
+        image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        light = QColor(dark_color)
+        for y in range(image.height()):
+            for x in range(image.width()):
+                pixel = image.pixelColor(x, y)
+                if pixel.alpha() == 0:
+                    continue
+                darkness = 1.0 - pixel.valueF()
+                image.setPixelColor(x, y, QColor(light.red(), light.green(), light.blue(), round(pixel.alpha() * darkness)))
+        return QIcon(QPixmap.fromImage(image))
     painter = QPainter(pixmap)
     painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
     painter.fillRect(pixmap.rect(), QColor(dark_color))

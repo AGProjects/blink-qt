@@ -249,8 +249,10 @@ class ConversationHeader(QWidget):
         self.info_label.setPalette(palette)
         self.audio_button.setIcon(themed_icon(Resources.get('icons/handset.png'), '#d0d0d0'))
         self.video_button.setIcon(themed_icon(Resources.get('icons/camera.png'), '#d0d0d0'))
-        self.calendar_button.setIcon(themed_icon(Resources.get('icons/clock.svg'), '#d0d0d0'))
-        self.location_button.setIcon(themed_icon(Resources.get('icons/location-pin.svg'), '#d0d0d0'))
+        # the clock is lines on a white face and the pin is red with a white dot: a plain silhouette
+        # of either is a blot, so the clock keeps only its lines and the pin its own colours
+        self.calendar_button.setIcon(themed_icon(Resources.get('icons/clock.svg'), '#d0d0d0', outline=True))
+        self.location_button.setIcon(QIcon(Resources.get('icons/location-pin.svg')))
         self.update_lock()
 
     # Contents
