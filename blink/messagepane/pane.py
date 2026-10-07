@@ -84,6 +84,7 @@ class MessagePane(QWidget):
         self.transcript.verticalScrollBar().valueChanged.connect(self.strip.update_text)
         self.transcript.actionRequested.connect(self._SH_ActionRequested)
         self.transcript.quoteClicked.connect(self._SH_QuoteClicked)
+        self.transcript.audioAction.connect(self._SH_AudioAction)
         from blink.messagepane.fetch import AutoFetcher
         self.fetcher = AutoFetcher(self)
         self.fetcher.changed.connect(self._SH_DownloadChanged)
@@ -595,3 +596,13 @@ class MessagePane(QWidget):
             index = model.index(row)
             model.dataChanged.emit(index, index)
             self.transcript.scheduleDelayedItemsLayout()
+
+    def _SH_AudioAction(self, item, action, fraction):
+        from blink.messagepane.audio import AudioPlayer
+        path = self.transcript.bubble_delegate.file_path(item)
+        if not path:
+            return
+        if action == 'play':
+            AudioPlayer.instance().toggle(item.id, path)
+        else:
+            AudioPlayer.instance().seek(item.id, path, fraction)

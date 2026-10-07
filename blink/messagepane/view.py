@@ -31,6 +31,7 @@ class TranscriptView(QListView):
 
     actionRequested = pyqtSignal(str, object)      # ('delete', 'reply', 'edit', 'caption', 'info' or 'open', MessageItem)
     quoteClicked = pyqtSignal(object)              # the reply dict of a clicked quote
+    audioAction = pyqtSignal(object, str, float)   # MessageItem, 'play' or 'seek', fraction (seek)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,6 +50,11 @@ class TranscriptView(QListView):
         follow_theme(self)
         from blink.messagepane.media import MediaCache
         MediaCache.instance().ready.connect(self._SH_MediaReady)
+        from blink.messagepane.audio import audio_available
+        if audio_available():
+            from blink.messagepane.audio import AudioInfo, AudioPlayer
+            AudioPlayer.instance().changed.connect(self._SH_MediaReady)
+            AudioInfo.instance().measured.connect(self._SH_MediaReady)
         self._anchor = None         # (maximum, value) before rows were inserted at the top
         self._stick = True          # follow the bottom
         scrollbar = self.verticalScrollBar()
@@ -167,6 +173,12 @@ class TranscriptView(QListView):
 
     def mouseMoveEvent(self, event):
         position = event.position().toPoint()
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            index = self.indexAt(position)
+            hit = self.bubble_delegate.audio_hit(index, self.visualRect(index), position) if index.isValid() else None
+            if hit is not None and hit[0] == 'seek':
+                self.audioAction.emit(index.data(Qt.ItemDataRole.UserRole), 'seek', hit[1])     # dragging along the waveform
+                return
         index = self.indexAt(position)
         on_quote = index.isValid() and self.bubble_delegate.quote_at(index, self.visualRect(index), position) is not None
         if self._link_at(position) or self._on_actions_button(position) or on_quote:
@@ -194,6 +206,10 @@ class TranscriptView(QListView):
                 return
             if index.isValid():
                 item = index.data(Qt.ItemDataRole.UserRole)
+                hit = self.bubble_delegate.audio_hit(index, self.visualRect(index), position)
+                if hit is not None:
+                    self.audioAction.emit(item, hit[0], hit[1] if hit[1] is not None else -1.0)
+                    return
                 if item is not None and item.category in ('image', 'audio', 'video', 'other'):
                     self.actionRequested.emit('open', item)      # a file: open it, or fetch it
                     return

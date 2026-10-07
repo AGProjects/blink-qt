@@ -119,5 +119,20 @@ class SizeTests(unittest.TestCase):
         self.assertEqual(fmt.format_size(None), '')
 
 
+class AudioTests(unittest.TestCase):
+    def test_bars(self):
+        bars = fmt.waveform_bars([0, 1, 2, 4] * 24, 48)
+        self.assertEqual(len(bars), 48)
+        self.assertEqual(max(bars), 1.0)
+        self.assertEqual(fmt.waveform_bars([], 4), [0.0] * 4)
+        self.assertEqual(fmt.waveform_bars([0, 0], 3), [0.0] * 3)
+        self.assertEqual(fmt.waveform_bars([1, 3], 4), [1 / 3, 1 / 3, 1.0, 1.0])
+
+    def test_clock(self):
+        self.assertEqual(fmt.format_clock(7), '0:07')
+        self.assertEqual(fmt.format_clock(65.4), '1:05')
+        self.assertEqual(fmt.format_clock(3723), '1:02:03')
+
+
 if __name__ == '__main__':
     unittest.main()

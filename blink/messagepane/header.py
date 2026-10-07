@@ -180,7 +180,17 @@ class ConversationHeader(QWidget):
             button.setText(text)
             button.clicked.connect(lambda checked=False, step=step: self.fontStep.emit(step))
             self.font_buttons.append(button)
-        for button in (*self.font_buttons, self.lock_button, self.calendar_button, self.audio_button, self.video_button):
+        # ■ stops the clip playing anywhere in the application (one at a time; leaving a conversation does not stop it)
+        self.stop_audio_button = self._tool_button(translate('message_pane', 'Stop playing'))
+        self.stop_audio_button.setText('■')
+        self.stop_audio_button.hide()
+        from blink.messagepane.audio import audio_available
+        if audio_available():
+            from blink.messagepane.audio import AudioPlayer
+            player = AudioPlayer.instance()
+            self.stop_audio_button.clicked.connect(player.stop)
+            player.changed.connect(lambda *args: self.stop_audio_button.setVisible(player.message_id is not None))
+        for button in (self.stop_audio_button, *self.font_buttons, self.lock_button, self.calendar_button, self.audio_button, self.video_button):
             row.addWidget(button)
 
         self.apply_theme()

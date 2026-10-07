@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 
 
 __all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note',
-           'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason', 'format_size']
+           'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason', 'format_size', 'waveform_bars', 'format_clock']
 
 
 # Backgrounds for initials, white text on each reads in light and dark themes.
@@ -273,3 +273,31 @@ def format_size(size):
         size /= 1024.0
         if size < 1024 or unit == 'TB':
             return f'{size:.0f} {unit}' if size >= 100 or unit == 'KB' else f'{size:.1f} {unit}'
+
+
+def waveform_bars(samples, count=48):
+    """count bar heights in 0..1 from any number of amplitude samples: the loudest of each
+    stretch, scaled so the loudest bar is full height. Empty or silent input: all zero."""
+    values = []
+    for sample in samples or ():
+        try:
+            values.append(abs(float(sample)))
+        except (TypeError, ValueError):
+            values.append(0.0)
+    if not values:
+        return [0.0] * count
+    bars = []
+    for bar in range(count):
+        start = bar * len(values) // count
+        end = max(start + 1, (bar + 1) * len(values) // count)
+        bars.append(max(values[start:end]) if start < len(values) else 0.0)
+    top = max(bars)
+    return [value / top for value in bars] if top > 0 else [0.0] * count
+
+
+def format_clock(seconds):
+    """0:07, 1:05, 1:02:03."""
+    seconds = max(0, int(round(seconds or 0)))
+    hours, rest = divmod(seconds, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f'{hours}:{minutes:02d}:{secs:02d}' if hours else f'{minutes}:{secs:02d}'

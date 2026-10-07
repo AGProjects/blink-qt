@@ -40,7 +40,7 @@ class MessageItem(object):
 
     __slots__ = ('id', 'account_id', 'remote_uri', 'display_name', 'uri', 'timestamp', 'direction', 'content', 'content_type',
                  'state', 'encryption_type', 'decrypted', 'disposition', 'read', 'category', 'has_link', 'metadata',
-                 'related_msg_id', 'related_action', 'media_type', 'row_id', 'reply', 'caption')
+                 'related_msg_id', 'related_action', 'media_type', 'row_id', 'reply', 'caption', 'peaks')
 
     def __init__(self, row):
         self.id = str(row.message_id)
@@ -67,6 +67,7 @@ class MessageItem(object):
         self.media_type = row.media_type
         self.reply = None           # what it answers: {'id', 'timestamp', 'outgoing', 'name', 'text'} (attach_replies)
         self.caption = ''           # a picture's or movie's caption (label companion, the newest wins)
+        self.peaks = None           # a recording's waveform samples (peaks companion), when the sender made one
 
     @property
     def sort_key(self):
@@ -87,7 +88,7 @@ def attach_replies(items):
     """Fill in item.reply for the replies among items, from their reply links (metadata
     companions filed against them) and the messages they answer. In the db thread."""
     from blink.history import Message, MessageHistory
-    from blink.message_envelopes import label_metadata, reply_metadata
+    from blink.message_envelopes import label_metadata, peaks_metadata, reply_metadata
     from blink.messagepane.format import plain_summary
     if not items:
         return
@@ -106,6 +107,11 @@ def attach_replies(items):
                 if stamp >= caption_times.get(label['transfer_id'], ('', '')):
                     caption_times[label['transfer_id']] = stamp
                     by_id[label['transfer_id']].caption = label['label']
+            continue
+        if companion.related_action == 'peaks':
+            peaks = peaks_metadata(companion.content)
+            if peaks is not None and peaks['transfer_id'] in by_id:
+                by_id[peaks['transfer_id']].peaks = tuple(peaks['peaks']['l'] or peaks['peaks']['r'])
             continue
         if companion.related_action != 'reply':
             continue

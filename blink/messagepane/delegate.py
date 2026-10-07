@@ -22,7 +22,10 @@ icon, its name and "type · size" (with how far the download got, or in red why
 it failed); a PDF that is here shows its first page, with "PDF · N pages ·
 size" over it. A call is an arrow for its direction (red for one that wants
 attention: missed, rejected, failed), what happened ("Missed video call") and
-"duration — reason"; a click opens the call's details.
+"duration — reason"; a click opens the call's details. Audio that is here (with
+QtMultimedia) is a player: play/pause, 48 bars of waveform (the sender's peaks,
+else measured from the file) that fill as it plays and seek on a click or a
+drag, the position and the length, and a title (a recording's, else the name).
 Layouts are cached per message, width and font.
 """
 
@@ -44,7 +47,7 @@ __all__ = ['BubbleDelegate']
 class BubbleLayout(object):
     __slots__ = ('kind', 'run_start', 'day_text', 'document', 'text_size', 'bubble_size', 'size', 'time_text', 'mark', 'mark_kind', 'name_text', 'quote_name', 'quote_text', 'quote_height',
                  'image_path', 'image_size', 'file_name', 'file_meta', 'file_note', 'file_error', 'file_icon',
-                 'call_arrow', 'call_title', 'call_detail', 'call_attention')
+                 'call_arrow', 'call_title', 'call_detail', 'call_attention', 'audio_title')
 
 
 class BubbleDelegate(QStyledItemDelegate):
@@ -142,8 +145,12 @@ class BubbleDelegate(QStyledItemDelegate):
             layout.kind = kind = 'image'
         elif item.category in ('other', 'audio', 'video'):
             from blink.messagepane.media import pdf_available
-            # audio and video are files here until they have players of their own
-            layout.kind = kind = 'pdf' if image_path and image_path.lower().endswith('.pdf') and pdf_available() else 'file'
+            from blink.messagepane.audio import audio_available
+            # video is a file here until it has a player of its own
+            if item.category == 'audio' and image_path and audio_available():
+                layout.kind = kind = 'audio'
+            else:
+                layout.kind = kind = 'pdf' if image_path and image_path.lower().endswith('.pdf') and pdf_available() else 'file'
         layout.name_text = (item.display_name or '') if run_start and not item.outgoing and kind != 'note' else ''
         small = self._small_font(font)
         document = QTextDocument()
@@ -159,6 +166,8 @@ class BubbleDelegate(QStyledItemDelegate):
             return self._file_layout(key, layout, item, image_path, width, font, small, progress)
         if kind == 'call':
             return self._call_layout(key, layout, item, width, font, small)
+        if kind == 'audio':
+            return self._audio_layout(key, layout, item, image_path, width, font, small)
         if kind == 'note':
             document.setDefaultFont(small)
             option = QTextOption(Qt.AlignmentFlag.AlignHCenter)
@@ -402,6 +411,102 @@ class BubbleDelegate(QStyledItemDelegate):
         self._cache[key] = layout
         return layout
 
+    # Audio
+
+    audio_width = 300
+    audio_button = 34
+    audio_wave_height = 30
+    audio_bars = 48
+
+    def _audio_layout(self, key, layout, item, path, width, font, small):
+        from blink.message_envelopes import recording_title
+        from blink.messagepane.files import file_info
+        info = file_info(item) or {}
+        name = info.get('name') or os.path.basename(path)
+        layout.image_path = path
+        layout.audio_title = recording_title(name) or (translate('message_pane', 'Voice message') if item.peaks else name)
+        small_metrics = QFontMetricsF(small)
+        bubble_width = min(self._bubble_width_limit(width), self.audio_width)
+        layout.bubble_size = QSizeF(bubble_width, 2 * self.padding_v + small_metrics.height() + max(self.audio_button, self.audio_wave_height) + 4 + small_metrics.height())
+        height = layout.bubble_size.height()
+        if layout.name_text:
+            height += small_metrics.height() + 2
+        height += self.run_gap if layout.run_start else self.inner_gap
+        if layout.day_text:
+            height += self.divider_height
+        layout.size = QSize(width, int(height + 0.999))
+        self._cache[key] = layout
+        return layout
+
+    def _audio_geometry(self, layout, bubble, small):
+        """(button rect, waveform rect) inside an audio bubble."""
+        top = bubble.top() + self.padding_v + QFontMetricsF(small).height() + 2
+        row = max(self.audio_button, self.audio_wave_height)
+        button = QRectF(bubble.left() + self.padding_h, top + (row - self.audio_button) / 2, self.audio_button, self.audio_button)
+        wave = QRectF(button.right() + 10, top + (row - self.audio_wave_height) / 2, bubble.right() - self.padding_h - button.right() - 10, self.audio_wave_height)
+        return button, wave
+
+    def audio_hit(self, index, rect, position):
+        """('play', None) on the button, ('seek', fraction) on the waveform, else None."""
+        item = self._item(index)
+        if item is None or item.category != 'audio':
+            return None
+        font = self.parent().font()
+        layout = self.layout(index, rect.width(), font)
+        if layout.kind != 'audio':
+            return None
+        button, wave = self._audio_geometry(layout, self.bubble_rect(layout, item, QRectF(rect)), self._small_font(font))
+        point = QPointF(position)
+        if button.adjusted(-4, -4, 4, 4).contains(point):
+            return 'play', None
+        if wave.adjusted(0, -6, 0, 6).contains(point):
+            return 'seek', max(0.0, min(1.0, (point.x() - wave.left()) / max(1.0, wave.width())))
+        return None
+
+    def _paint_audio(self, painter, layout, item, bubble, small, secondary, text_colour):
+        from blink.messagepane.audio import AudioInfo, AudioPlayer
+        from blink.messagepane.format import format_clock, waveform_bars
+        player = AudioPlayer.instance()
+        fraction = player.fraction(item.id)
+        playing = fraction is not None and player.playing
+        info = AudioInfo.instance().get(layout.image_path)
+        bars = waveform_bars(item.peaks, self.audio_bars) if item.peaks else (info[1] if info else [0.15] * self.audio_bars)
+        duration = info[0] if info else None
+        accent = QColor('#58a6ff') if is_dark_theme() else QColor('#1a73e8')
+        small_metrics = QFontMetricsF(small)
+        painter.setFont(small)
+        painter.setPen(secondary)
+        title_rect = QRectF(bubble.left() + self.padding_h, bubble.top() + self.padding_v, bubble.width() - 2 * self.padding_h, small_metrics.height())
+        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, small_metrics.elidedText(layout.audio_title, Qt.TextElideMode.ElideRight, title_rect.width()))
+        button, wave = self._audio_geometry(layout, bubble, small)
+        circle = QPainterPath()
+        circle.addEllipse(button)
+        painter.fillPath(circle, accent)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor('#ffffff'))
+        centre, side = button.center(), button.width() * 0.34
+        if playing:
+            for offset in (-side * 0.45, side * 0.15):
+                painter.drawRect(QRectF(centre.x() + offset, centre.y() - side * 0.55, side * 0.3, side * 1.1))
+        else:
+            from PyQt6.QtGui import QPolygonF
+            painter.drawPolygon(QPolygonF([QPointF(centre.x() - side * 0.4, centre.y() - side * 0.6), QPointF(centre.x() - side * 0.4, centre.y() + side * 0.6),
+                                           QPointF(centre.x() + side * 0.65, centre.y())]))
+        step = wave.width() / len(bars)
+        played = fraction or 0.0
+        for number, value in enumerate(bars):
+            height = max(2.0, value * wave.height())
+            bar = QRectF(wave.left() + number * step + step * 0.2, wave.center().y() - height / 2, max(1.0, step * 0.6), height)
+            painter.setBrush(accent if (number + 0.5) / len(bars) <= played else secondary)
+            painter.drawRoundedRect(bar, bar.width() / 2, bar.width() / 2)
+        clock = format_clock(duration) if duration else ''
+        if fraction is not None:
+            clock = format_clock(player.position()) + (' / ' + format_clock(duration) if duration else '')
+        if clock:
+            painter.setPen(secondary)
+            painter.drawText(QRectF(wave.left(), bubble.bottom() - self.padding_v - small_metrics.height(), wave.width(), small_metrics.height()),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, clock)
+
     def _paint_call(self, painter, layout, bubble, font, small, secondary, text_colour):
         metrics, small_metrics = QFontMetricsF(font), QFontMetricsF(small)
         attention = QColor('#ff7b72') if is_dark_theme() else QColor('#c62828')
@@ -626,6 +731,8 @@ class BubbleDelegate(QStyledItemDelegate):
             self._paint_file(painter, layout, item, bubble, option.font, small, secondary, text_colour)
         if layout.kind == 'call':
             self._paint_call(painter, layout, bubble, option.font, small, secondary, text_colour)
+        if layout.kind == 'audio':
+            self._paint_audio(painter, layout, item, bubble, small, secondary, text_colour)
         if layout.kind in ('image', 'pdf'):
             self._paint_image(painter, layout, item, bubble, palette, small, secondary)
             if option.state & QStyle.StateFlag.State_MouseOver:
@@ -646,7 +753,7 @@ class BubbleDelegate(QStyledItemDelegate):
             painter.setPen(secondary)
             painter.drawText(QRectF(quote.left() + 9, quote.top() + 3 + metrics.height(), quote.width() - 12, metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.quote_text)
 
-        if layout.kind not in ('file', 'call'):
+        if layout.kind not in ('file', 'call', 'audio'):
             context.palette = self._text_palette(palette, text_colour if layout.kind == 'text' else secondary)
             painter.save()
             origin = self.text_origin(layout, bubble)
