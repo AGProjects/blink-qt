@@ -1156,10 +1156,11 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def restore_conversation(self, remote_uri):
-        """Un-hide every tombstoned row of a conversation."""
+        """Un-hide every tombstoned row of a conversation, under every spelling of its key."""
         db = Message._connection
+        keys = self._conversation_keys(remote_uri)
         try:
-            count = self._set_deleted(f'remote_uri = {db.sqlrepr(str(remote_uri))}', False)
+            count = self._set_deleted(f"remote_uri in ({', '.join(db.sqlrepr(key) for key in keys)})", False)
         except Exception as e:
             ActivityLog().error(f'[db] Restoring the conversation with {remote_uri} failed: {e}')
             return
@@ -1672,6 +1673,16 @@ class MessageHistory(object, metaclass=Singleton):
             keys.add(canonical_uri(text))
         except Exception:
             pass
+        # a conference room is stored under Sylk Mobile's videoconference.X spelling as
+        # well as under the bridge domain conference.X the addressbook keeps: both are it
+        for key in list(keys):
+            user, at, domain = key.rpartition('@')
+            if not at:
+                continue
+            if domain.lower().startswith('videoconference.'):
+                keys.add(f'{user}@{domain[len("video"):]}')
+            elif domain.lower().startswith('conference.'):
+                keys.add(f'{user}@video{domain}')
         return sorted(key for key in keys if key)
 
     @run_in_thread('db')
@@ -2019,8 +2030,7 @@ class MessageHistory(object, metaclass=Singleton):
                 stored = call_record(row.content, row.metadata)
                 merged = merge_call_records(stored, record)
                 if merged == stored:
-                    ActivityLog().info(f'[db] Call record of {what} already stored, unchanged')
-                    return
+                    return      # replayed (the server call history every 5 minutes): nothing to do, nothing to log
                 row.set(metadata=json.dumps(merged), content=call_summary(merged) or '',
                         media_type=dominant_media(merged.get('media') or []) or row.media_type)
                 ActivityLog().info(f"[db] Call record of {what} merged into the stored one: {(stored or {}).get('outcome')} -> {merged.get('outcome')}, source {merged.get('source')}")

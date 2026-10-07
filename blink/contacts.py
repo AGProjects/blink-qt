@@ -54,7 +54,7 @@ from sipsimple.threading.green import Command
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
 from blink import addressbook_notify, addressbook_origin
-from blink.contact_repair import merge_plan, repair_plan
+from blink.contact_repair import merge_plan, repair_plan, server_conference_uri
 from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_plan, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
@@ -749,6 +749,9 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                 new_group = True
             members = set(group.contacts)
             for key, display_name in keys.items():
+                # a room is kept under its bridge domain: Sylk Mobile's videoconference.X
+                # spelling would not match it and create a duplicate that repair then merges
+                key = server_conference_uri(key)
                 if not is_fileable_key(key):
                     skipped.append(key)
                     continue
@@ -809,8 +812,6 @@ class GroupKindStamper(object, metaclass=Singleton):
         if not groups:
             activity.info('[addressbook] No groups in the addressbook yet, not stamping group kinds')
             return
-        for group in sorted(groups, key=lambda group: str(group.name or '').lower()):
-            activity.info(f"[addressbook]   group '{group.name}' (id={group.id}, kind={group_kind(group) or '-'}, {len(group.contacts)} members)")
         written = 0
         with AddressbookNotifier().quiet(), addressbook_origin.reason('group-kind'), addressbook.AddressbookManager.transaction():
             for identity, group, action in stamp_plan(groups, STAMPED_KINDS):
@@ -868,7 +869,6 @@ class AddressbookReloadLog(object, metaclass=Singleton):
     """
 
     change_cap = 50
-    member_cap = 30
 
     def __init__(self):
         self._started = False
@@ -896,11 +896,6 @@ class AddressbookReloadLog(object, metaclass=Singleton):
         contacts = list(document.contacts or ())
         groups = list(document.groups or ())
         activity.info(f'[addressbook] Addressbook of {account_id} reloaded: ETag {etag or "-"}, {len(contacts)} contacts, {len(groups)} groups, {len(document.policies or ())} policies')
-        for group in sorted(groups, key=lambda group: str(group.name or '').lower()):
-            members = [getattr(member, 'name', None) or getattr(member, 'id', str(member)) for member in (group.contacts or ())]
-            kind = (group.attributes or {}).get('kind') or '-'
-            shown = ', '.join(str(name) for name in members[:self.member_cap]) + (f', ... {len(members) - self.member_cap} more' if len(members) > self.member_cap else '')
-            activity.info(f"[addressbook]   group '{group.name}' (id={group.id}, kind={kind}): {len(members)} members{': ' + shown if members else ''}")
 
         path = ApplicationData.get(f'addressbook_origins/{account_id}.json')
         previous = addressbook_origin.load_snapshot(path)
@@ -1546,15 +1541,6 @@ class MessageContactsManager(object, metaclass=Singleton):
     def _log_members(contacts, removed=0):
         activity = ActivityLog()
         activity.info(f'[contacts] Messages group has {len(contacts)} contacts' + (f', {removed} removed' if removed else ''))
-        for contact in sorted(contacts, key=lambda item: str(item.name or '').lower()):
-            try:
-                kind = contact.type
-            except Exception:
-                kind = 'unknown'
-            kind = 'history' if isinstance(contact.settings, MessageContact) else kind
-            uri = contact.uri.uri if contact.uri is not None else ''
-            key = neighbour_instance_id(contact, str(uri)) or uri
-            activity.info(f'[contacts]   {contact.name} <{key}> ({kind})')
 
     @staticmethod
     def _fallback_name(uri, contact_uri, display_name=None):
