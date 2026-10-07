@@ -722,6 +722,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         # a conference room is named after itself: the room, not the whole address
         new_contact.name = key.partition('@')[0] if is_conference_uri(key) else (display_name or key)
         new_contact.uris = [addressbook.ContactURI(uri=key, type='SIP' if '@' in key else 'tel')]
+        new_contact.preferred_media = 'messages'
         new_contact.save()
         publish_contact_for_groups(new_contact)    # several new members are added before the group saves
         existing.append(new_contact)
@@ -6551,11 +6552,11 @@ class ContactEditorDialog(base_class, ui_class):
 
     def setupUi(self, contact_editor):
         super(ContactEditorDialog, self).setupUi(contact_editor)
-        self.preferred_media.setItemData(0, translate('contact_editor', 'audio'))
-        self.preferred_media.setItemData(1, translate('contact_editor', 'video'))
-        self.preferred_media.setItemData(2, translate('contact_editor', 'chat'))
-        self.preferred_media.setItemData(3, translate('contact_editor', 'audio+chat'))
-        self.preferred_media.setItemData(4, translate('contact_editor', 'messages'))
+        self.preferred_media.setItemData(0, translate('contact_editor', 'messages'))
+        self.preferred_media.setItemData(1, translate('contact_editor', 'audio'))
+        self.preferred_media.setItemData(2, translate('contact_editor', 'video'))
+        self.preferred_media.setItemData(3, translate('contact_editor', 'chat'))
+        self.preferred_media.setItemData(4, translate('contact_editor', 'audio+chat'))
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
     def open_for_add(self, sip_address='', target_group=None):
@@ -6566,7 +6567,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.organization_editor.setText('')
         self.icon_selector.init_with_contact(None)
         self.presence.setChecked(True)
-        self.preferred_media.setCurrentIndex(0)
+        self.preferred_media.setCurrentIndex(self.preferred_media.findData('messages'))   # new contacts default to messages
         self.accept_button.setText(translate('contact_editor', 'Add'))
         self.accept_button.setEnabled(False)
         self.show()

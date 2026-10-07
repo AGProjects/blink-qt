@@ -250,6 +250,11 @@
      </property>
      <item>
       <property name="text">
+       <string>Send messages by default</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
        <string>Start voice calls by default</string>
       </property>
      </item>
@@ -266,11 +271,6 @@
      <item>
       <property name="text">
        <string>Start voice + chat sessions by default</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Send messages by default</string>
       </property>
      </item>
     </widget>
