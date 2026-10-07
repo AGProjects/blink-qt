@@ -68,6 +68,7 @@ from blink.logging import ActivityLog, LogManager
 from blink.mainwindow import MainWindow
 from blink.presence import PresenceManager
 from blink.resources import ApplicationData, Resources
+from blink.server_call_history import ServerCallHistory
 from blink.sessions import SessionManager
 from blink.update import UpdateManager
 from blink.util import QSingleton, run_in_gui_thread
@@ -216,6 +217,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self.presence_manager = PresenceManager()
         self.session_manager = SessionManager()
         self.update_manager = UpdateManager()
+        self.server_call_history = ServerCallHistory()
 
         # Prevent application from exiting after last window is closed if system tray was initialized
         if self.main_window.system_tray_icon:

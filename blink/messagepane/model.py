@@ -219,7 +219,7 @@ class ConversationModel(QAbstractListModel):
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
                      'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
-                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore'):
+                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore', 'BlinkMessageHistoryCallRecordDidStore'):
             notification_center.add_observer(self, name=name)
 
     def close(self):
@@ -234,7 +234,7 @@ class ConversationModel(QAbstractListModel):
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
                      'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
-                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore'):
+                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore', 'BlinkMessageHistoryCallRecordDidStore'):
             notification_center.discard_observer(self, name=name)
 
     # Qt model
@@ -629,6 +629,10 @@ class ConversationModel(QAbstractListModel):
     def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
         if str(notification.data.message.remote_uri) == self.key:
             self._schedule_refresh()
+
+    def _NH_BlinkMessageHistoryCallRecordDidStore(self, notification):
+        if str(notification.data.remote_uri) == self.key:
+            self._schedule_refresh()     # a call merged with another view of it (the server's, another device's)
 
     def _NH_BlinkMessageHistoryConversationDidRemove(self, notification):
         if str(notification.data.contact) == self.key:

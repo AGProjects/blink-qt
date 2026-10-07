@@ -110,10 +110,23 @@ def _plain(value):
     return text
 
 
+class _Link(object):
+    """A value drawn as a link that opens in the browser (http and https only)."""
+    def __init__(self, url, text=None):
+        self.url = url
+        self.text = text or url
+
+
+def _cell(value):
+    if isinstance(value, _Link):
+        return f'<a href="{html.escape(value.url, quote=True)}" title="{html.escape(value.url, quote=True)}">{html.escape(value.text)}</a>'
+    return html.escape(_plain(value))
+
+
 def _section(title, pairs):
     rows = ''.join(f'<tr><td style="color:gray;padding-right:12px;vertical-align:top;white-space:nowrap">{html.escape(str(key))}</td>'
-                   f'<td style="white-space:pre-wrap">{html.escape(_plain(value))}</td></tr>'
-                   for key, value in pairs if value not in (None, '', [], {}, (), '[]'))
+                   f'<td style="white-space:pre-wrap">{_cell(value)}</td></tr>'
+                   for key, value in pairs if isinstance(value, _Link) or value not in (None, '', [], {}, (), '[]'))
     return f'<h3 style="margin-top:14px">{html.escape(title)}</h3><table cellspacing="2">{rows}</table>' if rows else ''
 
 
@@ -121,6 +134,13 @@ def _show(parent, item, shown, stored, related_rows, answers, agents=()):
     from blink.message_envelopes import file_transfer_envelope
     from blink.messagepane.files import failure_reason, local_file
     row = stored[0] if stored else {}
+    if item.category == 'call' or item.content_type in ('application/blink-call-detail-record', 'application/blink-call-history'):
+        from blink.message_envelopes import call_record
+        record = call_record(item.content, getattr(item, 'metadata', None) or row.get('metadata'))
+        if record:
+            # a call detail record: only what the call was, not the row it is stored in
+            _dialog(parent, translate('message_info', 'Message Info'), _call_sections(record)[0])
+            return
     parts = []
     parts.append(_section(translate('message_info', 'Message'), [
         ('Message id', item.id),
@@ -163,7 +183,7 @@ def _show(parent, item, shown, stored, related_rows, answers, agents=()):
         parts.append(_section(translate('message_info', 'Location'), [(key, body[key]) for key in sorted(body) if not isinstance(body[key], (dict, list))] +
                               [('Metadata', item.metadata)]))
     parts.append(_section(translate('message_info', 'Shown'), list(shown.items())))
-    storage = [(column, value) for column, value in row.items() if column not in ('content',)]
+    storage = [(column, _pretty_json(value) if column == 'metadata' else value) for column, value in row.items() if column not in ('content',)]
     if row.get('content') is not None:
         content = row['content']
         storage.append(('content', content if len(content) <= 4000 else content[:4000] + f'… ({len(content)} characters)'))
@@ -197,25 +217,152 @@ _CALL_FIELDS = (('direction', 'Direction'), ('outcome', 'Outcome'), ('duration',
                 ('sessionId', 'Call-ID'), ('fromTag', 'From tag'), ('toTag', 'To tag'), ('proxyIP', 'Proxy'), ('sipTraceUrl', 'SIP trace'))
 
 
+_CALL_WORDS = {'incoming': 'Incoming', 'outgoing': 'Outgoing', 'completed': 'Completed', 'missed': 'Missed',
+               'cancelled': 'Cancelled', 'failed': 'Failed', 'answered_elsewhere': 'Answered on another device',
+               'busy': 'Busy', 'declined': 'Declined', 'local': 'This device', 'server': 'Server', 'remote': 'Another device'}
+
+_CALL_SUBKEYS = {'deviceId': 'Device id', 'streams': 'Streams', 'userAgent': 'Client', 'answeredBy': 'Answered by device'}
+
+
+def _call_time(value):
+    """An ISO time of a call record in local time, as people read it."""
+    if not value:
+        return value
+    try:
+        from dateutil.parser import parse
+        when = parse(str(value))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return when.astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
+    except (ValueError, OverflowError, TypeError):
+        return value
+
+
+def _call_value(field, value):
+    from blink.message_envelopes import format_call_duration
+    if value in (None, '', [], {}):
+        return None
+    if field == 'duration':
+        return format_call_duration(value) or f'{value} s'
+    if field in ('startTime', 'stopTime'):
+        return _call_time(value)
+    if field == 'sipTraceUrl':
+        url = str(value).strip()
+        # the record is synced between devices: only a web link is offered to the browser
+        return _Link(url, translate('call_details', 'Open SIP trace')) if url.lower().startswith(('https://', 'http://')) else url
+    if field in ('direction', 'outcome', 'source') and isinstance(value, str):
+        return _CALL_WORDS.get(value, value.replace('_', ' ').capitalize())
+    if field == 'media':
+        if isinstance(value, str) and value.lstrip().startswith('['):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                pass
+        if isinstance(value, (list, tuple)):
+            return ', '.join(_media_name(part) for part in value)
+        return _media_name(value)
+    return _readable(value)
+
+
+def _media_name(part):
+    """One media of a call record: a stream type, or a stream described by a dict."""
+    if isinstance(part, dict):
+        kind = part.get('type') or part.get('media') or part.get('kind')
+        rest = ', '.join(f'{_title(key)} {value}' for key, value in part.items() if key not in ('type', 'media', 'kind') and value not in (None, ''))
+        return f"{str(kind or '').capitalize()} ({rest})" if rest else str(kind or '').capitalize()
+    return str(part).capitalize()
+
+
+def _readable(value, indent=''):
+    """Nested record values as indented lines of text instead of JSON."""
+    if isinstance(value, dict):
+        lines = []
+        for key, part in value.items():
+            if part is None or part == '' or part == [] or part == {}:
+                continue
+            label = _CALL_SUBKEYS.get(key, _title(key))
+            text = str(_readable(part, indent + '    '))
+            if isinstance(part, dict) or '\n' in text:
+                lines.append(f'{indent}{label}:')
+                lines.append(text if isinstance(part, dict) else '\n'.join(indent + '    ' + line.lstrip() for line in text.split('\n')))
+            else:
+                lines.append(f'{indent}{label}: {text}')
+        return '\n'.join(lines)
+    if isinstance(value, (list, tuple)):
+        if all(isinstance(part, (str, int, float, bool)) for part in value):
+            return ', '.join(str(part) for part in value)
+        return '\n'.join(str(_readable(part, indent)) for part in value)
+    if isinstance(value, bool):
+        return 'yes' if value else 'no'
+    return value
+
+
+def _title(key):
+    """camelCase or snake_case key as words."""
+    import re
+    if not re.fullmatch(r'[A-Za-z_]+', str(key)):
+        return str(key)         # an id (a device, a stream), not a field name
+    words = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', str(key)).replace('_', ' ').strip()
+    return words[:1].upper() + words[1:].lower()
+
+
+def _pretty_json(value):
+    """A JSON text indented for reading, a list of plain values on one line; anything else unchanged."""
+    if isinstance(value, str) and value.lstrip().startswith(('{', '[')):
+        try:
+            return _json_lines(json.loads(value))
+        except (TypeError, ValueError):
+            pass
+    return value
+
+
+def _json_lines(value, indent=''):
+    inner = indent + '  '
+    if isinstance(value, dict):
+        if not value:
+            return '{}'
+        items = [f'{inner}{json.dumps(key)}: {_json_lines(value[key], inner)}' for key in sorted(value)]
+        return '{\n' + ',\n'.join(items) + '\n' + indent + '}'
+    if isinstance(value, list):
+        if all(not isinstance(part, (dict, list)) for part in value):
+            return '[' + ', '.join(json.dumps(part) for part in value) + ']'
+        return '[\n' + ',\n'.join(inner + _json_lines(part, inner) for part in value) + '\n' + indent + ']'
+    return json.dumps(value)
+
+
+def _call_sections(record):
+    """The call record of a call row as readable sections: the call, this device's part,
+    and any other part of the record (merged views of other devices, the server's)."""
+    from blink.message_envelopes import call_summary, this_device_id
+    known = {field for field, title in _CALL_FIELDS} | {'version', 'local'}
+    pairs = [(translate('call_details', 'Summary'), call_summary(record, this_device_id()))]
+    pairs += [(translate('call_details', title), _call_value(field, record.get(field))) for field, title in _CALL_FIELDS]
+    pairs += [(_title(key), _readable(value)) for key, value in sorted(record.items())
+              if key not in known and not isinstance(value, dict)]
+    sections = [_section(translate('call_details', 'Call'), pairs)]
+    local = record.get('local') if isinstance(record.get('local'), dict) else {}
+    sections.append(_section(translate('call_details', 'This device'),
+                             [(_CALL_SUBKEYS.get(key, _title(key)), _readable(value)) for key, value in sorted(local.items())]))
+    for key, value in sorted(record.items()):
+        if key not in known and isinstance(value, dict):
+            sections.append(_section(_title(key), [(_CALL_SUBKEYS.get(sub, _title(sub)), _readable(part)) for sub, part in sorted(value.items())]))
+    return sections
+
+
 def show_call_details(parent, item, record):
     """The call details dialog: what the call record says, field by field (selectable)."""
-    from blink.message_envelopes import call_summary, format_call_duration, this_device_id
     if not record:
         show_message_info(parent, item, {'Drawn as': 'call'})
         return
-    pairs = [(translate('call_details', 'Summary'), call_summary(record, this_device_id()))]
-    for field, title in _CALL_FIELDS:
-        value = record.get(field)
-        if field == 'duration':
-            value = format_call_duration(value) or value
-        elif isinstance(value, (list, tuple)):
-            value = ', '.join(str(part) for part in value)
-        pairs.append((translate('call_details', title), value))
-    local = record.get('local') if isinstance(record.get('local'), dict) else {}
-    parts = [_section(translate('call_details', 'Call'), pairs),
-             _section(translate('call_details', 'This device'), [(key, ', '.join(map(str, value)) if isinstance(value, list) else value) for key, value in sorted(local.items())]),
-             _section(translate('call_details', 'Record'), [('JSON', json.dumps(record, indent=2, sort_keys=True))])]
+    parts = _call_sections(record)
+    parts.append(_section(translate('call_details', 'Record'), [('JSON', _json_lines(record))]))
     _dialog(parent, translate('call_details', 'Call Details'), ''.join(parts))
+
+
+def _open_link(url):
+    from PyQt6.QtGui import QDesktopServices
+    if url.scheme() in ('http', 'https'):
+        QDesktopServices.openUrl(url)
 
 
 def _dialog(parent, title, body):
@@ -228,6 +375,7 @@ def _dialog(parent, title, body):
     browser.setOpenLinks(False)
     browser.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
     browser.setHtml(body)
+    browser.anchorClicked.connect(_open_link)
     layout.addWidget(browser)
     buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
     buttons.rejected.connect(dialog.close)

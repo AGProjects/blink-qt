@@ -2014,6 +2014,7 @@ class MessageHistory(object, metaclass=Singleton):
                 row.set(metadata=json.dumps(merged), content=call_summary(merged) or '',
                         media_type=dominant_media(merged.get('media') or []) or row.media_type)
                 ActivityLog().info(f"[db] Call record of {what} merged into the stored one: {(stored or {}).get('outcome')} -> {merged.get('outcome')}, source {merged.get('source')}")
+                self._call_record_stored(account, row.remote_uri)
                 return
             remote_party = str(record.get('remoteParty') or '')
             timestamp = self._storage_time(record.get('startTime')) or datetime.now(timezone.utc).replace(tzinfo=None)
@@ -2041,6 +2042,14 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().error(f'[db] Storing the call record of {what} failed: {e!r}')
         else:
             ActivityLog().info(f"[db] Call record of {what} stored: {record.get('outcome')}, source {record.get('source')}")
+            self._call_record_stored(account, canonical_uri(remote_party, account) or remote_party)
+
+    @staticmethod
+    def _call_record_stored(account, remote_uri):
+        """Tell the transcript and the previews that a call row of remote_uri was added or changed
+        (not BlinkMessageHistoryMessageDidStore: a call is not a message that files its party in Messages)."""
+        NotificationCenter().post_notification('BlinkMessageHistoryCallRecordDidStore', sender=account,
+                                               data=NotificationData(remote_uri=remote_uri))
 
     @classmethod
     @run_in_thread('db')
@@ -2543,7 +2552,8 @@ class ConversationPreviews(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         for name in ('SIPApplicationDidStart', 'BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryAllContactsDidSucceed',
                      'BlinkMessageHistoryConversationDidRemove', 'BlinkMessageDidDecrypt', 'BlinkMessageWillDelete',
-                     'BlinkGotHistoryMessageUpdate', 'BlinkMessageHistoryCallHistoryDidStore', 'BlinkGotHistoryCallRecord'):
+                     'BlinkGotHistoryMessageUpdate', 'BlinkMessageHistoryCallHistoryDidStore', 'BlinkGotHistoryCallRecord',
+                     'BlinkMessageHistoryCallRecordDidStore'):
             notification_center.add_observer(self, name=name)
 
     def handle_notification(self, notification):
@@ -2561,6 +2571,9 @@ class ConversationPreviews(object, metaclass=Singleton):
 
     def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
         self.invalidate([notification.data.message.remote_uri])
+
+    def _NH_BlinkMessageHistoryCallRecordDidStore(self, notification):
+        self.invalidate([notification.data.remote_uri])
 
     def preview(self, keys):
         """The newest preview among a contact's conversation keys, or None."""
