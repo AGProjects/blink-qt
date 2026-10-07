@@ -378,6 +378,14 @@ class MessagePane(QWidget):
             account = self.header.account or session.account
             message_id = str(uuid.uuid4())
             reply = self.composer.reply
+            editing = self.composer.editing
+            timestamp = None
+            if editing is not None:
+                # an edit is the old message removed (here and at the peer) and the new text sent in its place
+                timestamp = ISOTimestamp(editing['timestamp'])
+                account = self._account(editing['account_id']) or account
+                self._remove_message(editing['id'], editing['account_id'], for_both=True, why='edited')
+                ActivityLog().info(f'[Message with {self.key}] Message {editing["id"]} edited: sent again as {message_id} at its original time')
             if reply is not None:
                 # the link first, so the peer has it in hand when the reply arrives (as mobile and Blink for macOS do)
                 from blink.message_envelopes import METADATA_CONTENT_TYPE, reply_envelope
@@ -385,7 +393,7 @@ class MessagePane(QWidget):
                 envelope = reply_envelope(message_id, reply['id'], metadata_id, str(self.uri.uri), ISOTimestamp.now())
                 MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
                 ActivityLog().info(f'[Message with {self.key}] Replying to message {reply["id"]} with {message_id}')
-            MessageManager().send_message(account, session.contact, text, 'text/plain', id=message_id)
+            MessageManager().send_message(account, session.contact, text, 'text/plain', timestamp=timestamp, id=message_id)
         except Exception as e:
             ActivityLog().error(f'[Message with {self.key}] Sending a message from the message pane failed: {e!r}')
             self.composer.set_text(text)      # nothing lost
@@ -471,6 +479,14 @@ class MessagePane(QWidget):
                 QDesktopServices.openUrl(QUrl.fromLocalFile(path))
             elif self.fetcher.progress(item.id) is None:
                 self.fetcher.fetch(item, force=True)        # asked for: whatever its size, and again after a failure
+        elif action == 'edit':
+            from blink.messagepane.format import plain_summary
+            content = item.content if isinstance(item.content, str) else (item.content or b'').decode('utf-8', 'replace')
+            if item.content_type == 'text/html':
+                content = plain_summary(item)
+            self.composer.set_editing({'id': item.id, 'text': content, 'timestamp': item.timestamp, 'account_id': item.account_id})
+        elif action == 'caption':
+            self._edit_caption(item)
         elif action == 'reply':
             from blink.messagepane.format import plain_summary
             name = translate('message_pane', 'yourself') if item.outgoing else (getattr(self.contact, 'name', '') or item.display_name or self.key)
@@ -515,20 +531,46 @@ class MessagePane(QWidget):
         if box.clickedButton() is not delete_button:
             return
         for_both = both is not None and both.isChecked()
-        MessageHistory().tombstone_message(item.id, account_id=item.account_id, remote_uri=key, source='deleted here')
-        HistoryManager().download_history.remove(item.id)          # the downloaded file goes with it
         ActivityLog().info(f'[Message with {key}] Deleted {what} {item.id} from the message pane' + (', also for the other party' if for_both else ''))
-        if for_both:
+        self._remove_message(item.id, item.account_id, for_both, why='deleted here')
+
+    def _remove_message(self, message_id, account_id, for_both, why):
+        """Hide a message here (with its downloaded file) and, for_both, ask the other party's devices to remove it."""
+        from blink.history import HistoryManager, MessageHistory
+        key = self.key
+        MessageHistory().tombstone_message(message_id, account_id=account_id, remote_uri=key, source=why)
+        HistoryManager().download_history.remove(message_id)       # the downloaded file goes with it
+        if for_both and account_id != 'bonjour@local':
             from blink.messages import MessageManager
             try:
                 session = self._message_session()
-                account = self._account(item.account_id) or session.account
-                MessageManager().send_remove_message(session, item.id, account)
+                account = self._account(account_id) or session.account
+                MessageManager().send_remove_message(session, message_id, account)
             except Exception as e:
-                ActivityLog().warning(f'[Message with {key}] Cannot ask the other party to delete message {item.id}: {e!r}')
+                ActivityLog().warning(f'[Message with {key}] Cannot ask the other party to remove message {message_id}: {e!r}')
         model = self.models.get(key)
         if model is not None:
-            model.remove_item(item.id)
+            model.remove_item(message_id)
+
+    def _edit_caption(self, item):
+        """Set or clear the caption of one's own picture or video: a label companion, as mobile sends it."""
+        import uuid
+        from PyQt6.QtWidgets import QInputDialog
+        from blink.message_envelopes import METADATA_CONTENT_TYPE, label_envelope
+        from blink.messages import MessageManager
+        text, accepted = QInputDialog.getText(self, translate('message_pane', 'Edit Caption'), translate('message_pane', 'Caption (empty to remove it):'), text=item.caption or '')
+        if not accepted or text.strip() == (item.caption or ''):
+            return
+        try:
+            session = self._message_session()
+            account = self._account(item.account_id) or session.account
+            metadata_id = str(uuid.uuid4())
+            envelope = label_envelope(item.id, metadata_id, text.strip(), str(self.uri.uri), ISOTimestamp.now())
+            MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
+        except Exception as e:
+            ActivityLog().error(f'[Message with {self.key}] Setting the caption of {item.id} failed: {e!r}')
+            return
+        ActivityLog().info(f'[Message with {self.key}] Caption of {item.id} ' + (f'set to {text.strip()!r}' if text.strip() else 'removed'))
 
     def _SH_DownloadChanged(self, message_id):
         self.transcript.bubble_delegate.forget(message_id)      # where its file is may have changed

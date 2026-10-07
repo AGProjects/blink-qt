@@ -9,7 +9,9 @@ paperclip menu (as on Blink for macOS; Grab a Screenshot...,
 then Choose Files... and Paste from Clipboard).
 
 In reply mode (set_reply) a line above the text says what is being answered,
-with a button to cancel; the next message sent is that reply.
+with a button to cancel; the next message sent is that reply. In edit mode
+(set_editing) the line says a message is being edited and the text is that
+message's; sending replaces it.
 """
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
@@ -105,11 +107,12 @@ class Composer(QWidget):
         cancel.setAutoRaise(True)
         cancel.setText('✕')
         cancel.setToolTip(translate('message_pane', 'Do not reply (Escape)'))
-        cancel.clicked.connect(lambda: self.set_reply(None))
+        cancel.clicked.connect(self.cancel_mode)
         reply_row.addWidget(cancel)
         self.reply_bar.hide()
         outer.addWidget(self.reply_bar)
         self.reply = None
+        self.editing = None
         row = QHBoxLayout()
         row.setContentsMargins(8, 6, 8, 6)
         row.setSpacing(6)
@@ -222,11 +225,34 @@ class Composer(QWidget):
             self.composing.emit('active')
             self._composing_timer.start()
 
+    def cancel_mode(self):
+        if self.editing is not None:
+            self.editing = None
+            self.set_text(self._draft)
+        self.set_reply(None)
+
+    def set_editing(self, editing):
+        """Edit mode: editing is {'id', 'text', 'timestamp', 'account_id'} of one's own message."""
+        if self.editing is None:
+            self._draft = self.text()
+        self.reply = None
+        self.editing = editing
+        self.reply_label.setText(translate('message_pane', 'Editing the message (Escape to leave it as it was)'))
+        self.reply_bar.show()
+        self.set_text(editing['text'])
+        self.edit.setFocus()
+
+    _draft = ''
+
     def set_reply(self, reply):
         """Reply mode: reply is {'id', 'name', 'text'} of the message answered, or None."""
+        if reply is not None and self.editing is not None:
+            self.editing = None
+            self.set_text(self._draft)
         self.reply = reply
         if reply is None:
-            self.reply_bar.hide()
+            if self.editing is None:
+                self.reply_bar.hide()
             return
         text = ' '.join(str(reply.get('text') or '').split())
         self.reply_label.setText(translate('message_pane', 'Replying to %s: %s') % (reply.get('name') or translate('message_pane', 'the message'), text))
@@ -234,8 +260,8 @@ class Composer(QWidget):
         self.edit.setFocus()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self.reply is not None:
-            self.set_reply(None)
+        if event.key() == Qt.Key.Key_Escape and (self.reply is not None or self.editing is not None):
+            self.cancel_mode()
             return
         super().keyPressEvent(event)
 
@@ -244,7 +270,9 @@ class Composer(QWidget):
         if not text.strip():
             return
         self._composing_timer.stop()
-        self.sendText.emit(text)       # reads self.reply, then it is cleared
+        self.sendText.emit(text)       # reads self.reply and self.editing, then they are cleared
+        self.editing = None
+        self._draft = ''
         self.set_reply(None)
         self._loading = True
         self.edit.clear()

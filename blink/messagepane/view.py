@@ -29,7 +29,7 @@ __all__ = ['TranscriptView']
 class TranscriptView(QListView):
     load_margin = 48        # pixels from the top that load the page before
 
-    actionRequested = pyqtSignal(str, object)      # ('delete', 'reply' or 'open', MessageItem)
+    actionRequested = pyqtSignal(str, object)      # ('delete', 'reply', 'edit', 'caption' or 'open', MessageItem)
     quoteClicked = pyqtSignal(object)              # the reply dict of a clicked quote
 
     def __init__(self, parent=None):
@@ -226,6 +226,10 @@ class TranscriptView(QListView):
         if bubble_kind(item) != 'note':
             menu.addSeparator()
             menu.addAction(translate('message_pane', 'Reply'), lambda: self.actionRequested.emit('reply', item))
+            if item.outgoing and bubble_kind(item) == 'text':
+                menu.addAction(translate('message_pane', 'Edit'), lambda: self.actionRequested.emit('edit', item))
+            if item.outgoing and item.category in ('image', 'video'):
+                menu.addAction(translate('message_pane', 'Edit Caption…'), lambda: self.actionRequested.emit('caption', item))
         menu.addSeparator()
         delete = menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
         delete.setEnabled(bubble_kind(item) != 'note' or item.category is not None)
