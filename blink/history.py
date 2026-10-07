@@ -33,20 +33,21 @@ from blink.logging import ActivityLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_record, call_summary, dominant_media, legacy_call_record, merge_call_records, this_device_id
 from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link, reply_metadata
+from blink.message_envelopes import conversation_preview, is_pgp_armoured
 from blink.location import storage_fields as location_storage_fields
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
 from blink.sessions import BlinkSession
 
 from blink.uris import BONJOUR_ACCOUNT_ID, bare_instance_id, canonical_uri, is_instance_id, placeholder_instance_id
-from blink.util import run_in_gui_thread, translate
+from blink.util import call_later, run_in_gui_thread, translate
 import traceback
 
 from sqlobject import SQLObject, StringCol, DateTimeCol, IntCol, UnicodeCol, DatabaseIndex, AND, OR
 from sqlobject import connectionForURI
 from sqlobject import dberrors
 
-__all__ = ['HistoryManager']
+__all__ = ['HistoryManager', 'ConversationPreviews']
 
 
 @implementer(IObserver)
@@ -59,6 +60,7 @@ class HistoryManager(object, metaclass=Singleton):
         self.calls = []
         self.message_history = MessageHistory()
         self.download_history = DownloadHistory()
+        ConversationPreviews()
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
@@ -2240,6 +2242,158 @@ class MessageHistory(object, metaclass=Singleton):
         for message in result:
             log.info(f'== Removing message: {id}')
             message.destroySelf()
+
+
+@implementer(IObserver)
+class ConversationPreviews(object, metaclass=Singleton):
+    """The last typed message of every conversation, for the second line of its contact row.
+
+    {conversation key: (timestamp, text)}, filled from history in the db thread
+    (queued after the writes that prompted it) and read in the GUI thread. An
+    encrypted candidate is decrypted with its account's key and the plaintext
+    written back, as opening the conversation would. Changes are coalesced and
+    announced as BlinkConversationPreviewsDidChange with data.keys (None: all).
+    """
+
+    delay = 0.5
+
+    def __init__(self):
+        self.previews = {}
+        self._dirty = set()
+        self._dirty_all = False
+        self._scheduled = False
+        self._keys = {}             # account id: (path, mtime, PGPKey or None)
+        self._undecryptable = set()
+        notification_center = NotificationCenter()
+        for name in ('SIPApplicationDidStart', 'BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryAllContactsDidSucceed',
+                     'BlinkMessageHistoryConversationDidRemove', 'BlinkMessageDidDecrypt', 'BlinkMessageWillDelete',
+                     'BlinkGotHistoryMessageUpdate'):
+            notification_center.add_observer(self, name=name)
+
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, None)
+        if handler is not None:
+            handler(notification)
+        else:
+            self.invalidate()
+
+    def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        self.invalidate([notification.data.remote_uri])
+
+    def _NH_BlinkMessageHistoryConversationDidRemove(self, notification):
+        self.invalidate([notification.data.contact])
+
+    def preview(self, keys):
+        """The newest preview among a contact's conversation keys, or None."""
+        found = [self.previews[key] for key in keys if key in self.previews]
+        return max(found)[1] if found else None
+
+    @run_in_gui_thread
+    def invalidate(self, keys=None):
+        if keys is None:
+            self._dirty_all = True
+        else:
+            self._dirty.update(str(key) for key in keys if key)
+        if not self._scheduled:
+            self._scheduled = True
+            call_later(self.delay, self._flush)
+
+    def _flush(self):
+        keys = None if self._dirty_all else sorted(self._dirty)
+        self._dirty.clear()
+        self._dirty_all = False
+        self._scheduled = False
+        if keys == []:
+            return
+        self._load(keys)
+
+    @run_in_thread('db')
+    def _load(self, keys):
+        try:
+            rows, reaction_ids = MessageHistory().last_text_messages(remote_uri=keys)
+        except Exception as e:
+            ActivityLog().error(f'[db] Loading conversation previews failed: {e}')
+            return
+        found = {}
+        for row in rows:        # newest first within each conversation
+            remote = row['remote_uri']
+            if remote in found:
+                continue
+            body = row['content']
+            if isinstance(body, bytes):
+                body = body.decode('utf-8', 'replace')
+            if is_pgp_armoured(body):
+                body = self._decrypt(row, body)
+            text = conversation_preview(body, row['content_type'], row['message_id'], reaction_ids)
+            if text:
+                found[remote] = (row['timestamp'], text)
+        self._apply(keys, found)
+
+    @run_in_gui_thread
+    def _apply(self, keys, found):
+        if keys is None:
+            changed = set(self.previews) | set(found)
+            changed = {key for key in changed if self.previews.get(key) != found.get(key)}
+            self.previews = found
+        else:
+            changed = set()
+            for key in keys:
+                value = found.get(key)
+                if self.previews.get(key) != value:
+                    changed.add(key)
+                    if value is None:
+                        self.previews.pop(key, None)
+                    else:
+                        self.previews[key] = value
+        if changed:
+            NotificationCenter().post_notification('BlinkConversationPreviewsDidChange', sender=self, data=NotificationData(keys=changed))
+
+    # Decryption (db thread)
+
+    def _private_key(self, account_id):
+        if account_id == BONJOUR_ACCOUNT_ID:
+            account = BonjourAccount()
+        else:
+            try:
+                account = AccountManager().get_account(account_id)
+            except KeyError:
+                return None
+        setting = account.sms.private_key
+        path = setting.normalized if setting is not None else None
+        if not path or not os.path.exists(path):
+            return None
+        mtime = os.path.getmtime(path)
+        cached = self._keys.get(account_id)
+        if cached is not None and cached[:2] == (path, mtime):
+            return cached[2]
+        try:
+            import pgpy
+            key, _ = pgpy.PGPKey.from_file(path)
+        except Exception as e:
+            ActivityLog().warning(f'[pgp] Cannot read the private key of {account_id} for conversation previews: {e}')
+            key = None
+        self._keys[account_id] = (path, mtime, key)
+        self._undecryptable.clear()     # a new key may open what the old one could not
+        return key
+
+    def _decrypt(self, row, body):
+        message_id = row['message_id']
+        if not message_id or message_id in self._undecryptable:
+            return None
+        key = self._private_key(row['account_id'])
+        if key is None:
+            return None
+        try:
+            import pgpy
+            plaintext = key.decrypt(pgpy.PGPMessage.from_blob(body)).message
+            if isinstance(plaintext, (bytes, bytearray)):
+                plaintext = bytes(plaintext).decode('utf-8')
+        except Exception as e:
+            self._undecryptable.add(message_id)
+            log.debug(f'Message {message_id} could not be decrypted for its preview: {e}')
+            return None
+        MessageHistory().update_decrypted_message(message_id, plaintext)
+        return plaintext
 
 
 class IconDescriptor(object):

@@ -1341,6 +1341,9 @@ class MessageManager(object, metaclass=Singleton):
 
                 stream.decrypt(message)
 
+        from blink.history import ConversationPreviews
+        ConversationPreviews().invalidate()     # previews of messages the key can now open
+
     def _SH_ExportPGPKeys(self, request, message):
         account = request.account
         from blink.contacts import URIUtils

@@ -1855,6 +1855,33 @@ def neighbour_instance_id(contact, uri=None):
     return placeholder_instance_id(uri) if uri else None
 
 
+@lru_cache(maxsize=4096)
+def _conversation_key(uri, account):
+    from blink.history import conversation_key
+    return conversation_key(uri, account)
+
+
+def contact_conversation_keys(contact):
+    """The keys history files a contact's conversations under: every address, as
+    the default account's dial rules spell it, and a neighbour's instance id."""
+    keys = set()
+    account = AccountManager().default_account
+    try:
+        uris = list(contact.uris)
+    except (AttributeError, TypeError):
+        uris = []
+    for uri in uris:
+        address = str(getattr(uri, 'uri', uri) or '')
+        if address:
+            keys.add(_conversation_key(address, account))
+    default = contact.uri
+    instance_id = neighbour_instance_id(contact, str(default.uri) if default is not None else None)
+    if instance_id:
+        keys.add(instance_id)
+    keys.discard('')
+    return keys
+
+
 class BonjourPresence(object):
     def __init__(self, state=None, note=None):
         self.state = state
@@ -2972,6 +2999,12 @@ class Contact(object):
             # In the Messages group a row is a conversation, and a Bonjour
             # conversation is the neighbour's instance id.
             in_messages_group = is_messages_group(getattr(self.group, 'settings', None))
+            if in_messages_group:
+                # the last typed message of the conversation, when there is one
+                from blink.history import ConversationPreviews
+                preview = ConversationPreviews().preview(self.conversation_keys)
+                if preview:
+                    return preview
             instance_id = neighbour_instance_id(self, str(self.uri.uri) if self.uri is not None else None)
             if instance_id and (in_messages_group or self.type != 'bonjour'):
                 return instance_id
@@ -2991,6 +3024,10 @@ class Contact(object):
             return self.settings.uris.default or next(iter(self.settings.uris))
         except StopIteration:
             return None
+
+    @property
+    def conversation_keys(self):
+        return contact_conversation_keys(self)
 
     @property
     def state(self):
@@ -3313,6 +3350,7 @@ class ContactWidget(base_class, ui_class):
 
     def init_from_contact(self, contact):
         self.name_label.setText(getattr(contact, 'display_name', contact.name))
+        self.info_label.setTextFormat(Qt.TextFormat.PlainText)     # may quote a message
         self.info_label.setText(contact.info)
         self.icon_label.setPixmap(contact.pixmap)
         self.state_label.state = contact.state
@@ -4042,6 +4080,17 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='VirtualGroupDidRemoveContact')
         notification_center.add_observer(self, name='BlinkContactDidChange')
         notification_center.add_observer(self, name='BlinkMessagesGroupShouldPromote')
+        notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
+
+    def _NH_BlinkConversationPreviewsDidChange(self, notification):
+        # the second line of Messages group rows quotes the last message
+        keys = notification.data.keys
+        for position, item in enumerate(self.items):
+            if not isinstance(item, Contact) or not is_messages_group(getattr(item.group, 'settings', None)):
+                continue
+            if keys is None or not keys.isdisjoint(item.conversation_keys):
+                index = self.index(position)
+                self.dataChanged.emit(index, index)
 
     def _NH_BlinkMessagesGroupShouldPromote(self, notification):
         groups = self.items[GroupList]
