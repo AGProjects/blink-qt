@@ -3,6 +3,7 @@ import bisect
 import pickle as pickle
 import contextlib
 import io
+import json
 import os
 import re
 import requests
@@ -31,7 +32,7 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null, limit
 from application.python.types import MarkerType, Singleton
 from application.python.weakref import weakobjectmap, defaultweakobjectmap
-from application.system import makedirs, openfile, FileExistsError
+from application.system import makedirs, openfile, unlink, FileExistsError
 from eventlib.proc import spawn
 from zope.interface import implementer
 
@@ -5795,8 +5796,8 @@ class FileListView(QListView, ColorHelperMixin):
         if item.expired:
             return True
 
-        if 'downloads/%s' % item.id in item.filename:
-            folder = "%s/%s" % (ApplicationData.get('downloads'), item.id)
+        if 'downloads/%s' % item.id in item.filename or os.path.abspath(item.filename).startswith(os.path.abspath(ApplicationData.get('file_transfers')) + os.sep):
+            folder = os.path.dirname(item.filename)
             temporary_download_file = "%s.download" % item.filename
             if not os.path.exists(temporary_download_file):
                 try:
@@ -5809,7 +5810,7 @@ class FileListView(QListView, ColorHelperMixin):
         if item.hash and item.file.protocol == 'msrp':
             SessionManager().get_file(model.session.contact, model.session.contact_uri, item.filename, item.hash, item.id, account=item.account)
         else:
-            SessionManager().get_file_from_url(model.session, item.file)
+            SessionManager().get_file_from_url(model.session, item.file, force=True)
 
     def _AH_RemoveFile(self):
         item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
@@ -6942,13 +6943,31 @@ class SessionManager(object, metaclass=Singleton):
             notification_center.post_notification('BlinkFileTransferDidEnd', sender=session, data=data)
 
     @run_in_thread('file-io')
-    def get_file_from_url(self, session, file, must_open=False):
+    def get_file_from_url(self, session, file, must_open=False, force=False):
+        """Download a file received over HTTP. A failure retrying cannot fix (any 4xx) is kept in
+        the transfer's folder (.failure.json) and answered from there, across restarts, unless
+        the user asks again (force)."""
         notification_center = NotificationCenter()
-        directory = ApplicationData.get(f'downloads/{file.id}')
+        # file.name is where the file is kept: file_transfers/<account>/<peer>/<id>/<name> (blink.configuration.datatypes.sylk_file_path)
+        full_filepath = file.name if os.path.isabs(file.name) else os.path.join(ApplicationData.get(f'downloads/{file.id}'), file.name)
+        directory = os.path.dirname(full_filepath)
         makedirs(directory)
-        full_filepath = os.path.join(directory, file.name)
         file.name = full_filepath
         tmp_path = "%s.download" % full_filepath
+        failure_path = os.path.join(directory, '.failure.json')
+
+        if not os.path.exists(full_filepath) and os.path.exists(failure_path):
+            if force:
+                ActivityLog().info(f'[transfer] Retrying {os.path.basename(full_filepath)} after an earlier failure')
+                unlink(failure_path)
+            else:
+                try:
+                    with open(failure_path) as failure_file:
+                        failure = json.load(failure_file)
+                except (OSError, ValueError):
+                    failure = {}
+                notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason=failure.get('reason') or 'failed before', kind=failure.get('kind')))
+                return
 
         if os.path.exists(full_filepath):
             message_log.info(f"File {file.id} already downloaded {full_filepath}")
@@ -6966,18 +6985,30 @@ class SessionManager(object, metaclass=Singleton):
         message_log.info(f"Downloading file {file.id} from {file.url} from {downloaded_size}")
         notification_center = NotificationCenter()
 
+        from blink.file_transfer import FAILURE_GONE, FAILURE_TRANSIENT, classify_download_failure, normalized_url
+        url = normalized_url(file.url)
         try:
-            r = requests.get(file.url, timeout=10, stream=True, headers=resume_header)
+            r = requests.get(url, timeout=10, stream=True, headers=resume_header)
+            if r.status_code == 416 and resume_header:
+                # the partial download is not a prefix of what the server has: start again
+                r.close()
+                os.unlink(tmp_path)
+                resume_header = {}
+                r = requests.get(url, timeout=10, stream=True)
             r.raise_for_status()
-        except (requests.ConnectionError, requests.Timeout) as e:
-            message_log.warning(f'HTTP filetransfer connection error: {e}')
-            notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='Connection timeout'))
-        except requests.HTTPError as e:
-            message_log.warning(f'HTTP filetransfer error {e}')
-            notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='Error %s' % str(e)))
         except requests.RequestException as e:
-            message_log.warning(f'HTTP filetransfer error {e}')
-            notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='Error: %s' % str(e)))
+            status = getattr(getattr(e, 'response', None), 'status_code', None)
+            reason, kind = classify_download_failure(status, 'Connection timeout' if isinstance(e, (requests.ConnectionError, requests.Timeout)) else e)
+            ActivityLog().warning(f'[transfer] Cannot fetch {os.path.basename(full_filepath)}: {reason} ({kind})\n    url: {url}\n    transfer: {file.id}')
+            notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason=reason, kind=kind))
+            if kind != FAILURE_TRANSIENT:
+                try:
+                    with open(failure_path, 'w') as failure_file:
+                        json.dump({'reason': reason, 'kind': kind, 'url': url, 'time': str(ISOTimestamp.now())}, failure_file)
+                except OSError:
+                    pass
+            if kind == FAILURE_GONE:
+                self._file_transfer_gone(session, file, reason)
         else:
             file_size = int(r.headers.get('Content-Length', 0))
             #print(r.headers)
@@ -7002,10 +7033,32 @@ class SessionManager(object, metaclass=Singleton):
                     return
 
             os.rename(tmp_path, full_filepath)
+            ActivityLog().info(f'[transfer] Downloaded {os.path.basename(full_filepath)} ({current_bytes} bytes) to {directory}')
 
             message_log.info(f'File {file.id} downloaded {current_bytes} bytes saved to {file.name} size {os.path.getsize(full_filepath)}')
             notification_center.post_notification('BlinkHTTPTransferCompleted', sender=file)
             notification_center.post_notification('BlinkHTTPFileTransferDidEnd', sender=session, data=NotificationData(file=file, must_open=must_open))
+
+    @run_in_gui_thread
+    def _file_transfer_gone(self, session, file, reason):
+        """The server says the file is not there and never will be: a message that only points at
+        it is a reference to nothing, so it leaves the conversation, unless the file is on this disk."""
+        decrypted = file.name[:-4] if file.name.endswith('.asc') else file.name
+        if os.path.exists(file.name) or os.path.exists(decrypted):
+            return
+        account = getattr(session, 'account', None) or file.account
+        remote_uri = getattr(getattr(session, 'contact_uri', None), 'uri', None)
+        ActivityLog().info(f'[transfer] Removing the message of {os.path.basename(file.name)} ({file.id}): {reason}')
+        notification_center = NotificationCenter()
+        notification_center.post_notification('BlinkGotHistoryMessageDelete', sender=account,
+                                               data=NotificationData(message_id=file.id, timestamp=None, remote_uri=remote_uri, source='file gone from the server'))
+        notification_center.post_notification('BlinkGotMessageDelete', sender=session, data=file.id)
+        folder = os.path.dirname(file.name)
+        unlink(os.path.join(folder, '.failure.json'))
+        try:
+            os.rmdir(folder)        # the transfer's folder, if nothing else is in it
+        except OSError:
+            pass
 
     def update_ringtone(self):
         settings = SIPSimpleSettings()

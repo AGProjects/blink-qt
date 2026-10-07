@@ -617,7 +617,9 @@ class DownloadHistory(object, metaclass=Singleton):
         filename = os.path.basename(file.filename)
         if filename.endswith('.asc'):
             filename = filename.rsplit('.', 1)[0]
-        cached_file = os.path.join(ApplicationData.get('downloads'), file.file_id, filename)
+        # file_transfers/<account>/<peer>/<id>/ (or downloads/<id>/ before that layout): the folder the file was stored in
+        folder = os.path.dirname(file.filename) if os.path.isabs(file.filename) else os.path.join(ApplicationData.get('downloads'), file.file_id)
+        cached_file = os.path.join(folder, filename)
         file_in_cache = os.path.exists(cached_file)
         if not file_in_cache:
             #log.info(f'== Not removing file, not present in cache: {file.file_id} {cached_file}')

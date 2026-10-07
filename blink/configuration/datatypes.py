@@ -212,13 +212,32 @@ class GraphTimeScale(int):
         return value
 
 
+def sylk_file_path(name, transfer_id, account, sender):
+    """Where a file received over HTTP is kept: file_transfers/<account>/<peer>/<transfer id>/<name>.
+
+    A file downloaded before this layout, under downloads/<transfer id>/, stays where it is.
+    """
+    from blink.file_transfer import transfer_filename, transfer_folder
+    filename = transfer_filename(name)
+    legacy = os.path.join(ApplicationData.get('downloads'), str(transfer_id), filename)
+    plain = legacy[:-4] if legacy.endswith('.asc') else legacy
+    if any(os.path.exists(path) for path in (legacy, plain, legacy + '.download')):
+        return legacy
+    account_id = str(getattr(account, 'id', None) or 'unknown')
+    peer = getattr(getattr(sender, 'uri', None), 'uri', None) if sender is not None else None
+    if peer:
+        from blink.uris import canonical_uri
+        peer = canonical_uri(str(peer), account if hasattr(account, 'id') else None) or str(peer)
+    return os.path.join(transfer_folder(ApplicationData.get('file_transfers'), account_id, peer or 'unknown', transfer_id), filename)
+
+
 class File(object):
     def __init__(self, name, size, sender, hash, id, until=None, url=None, type=None, account=None, protocol='msrp', downloading=False):
         if protocol == 'msrp':
             basename = os.path.basename(name)
             self.name = os.path.join(SIPSimpleSettings().file_transfer.directory.normalized, basename)
         elif protocol == 'sylk':
-            self.name = os.path.join(ApplicationData.get('downloads'), id, name)
+            self.name = sylk_file_path(name, id, account, sender)
         else:
             self.name = name
 

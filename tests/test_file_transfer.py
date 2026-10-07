@@ -41,5 +41,31 @@ class URLTests(unittest.TestCase):
         self.assertIsNone(ft.derive_base_url(None))
 
 
+class DownloadTests(unittest.TestCase):
+    def test_safe_component(self):
+        self.assertEqual(ft.safe_component('bob@sip2sip.info'), 'bob@sip2sip.info')
+        self.assertEqual(ft.safe_component('../etc/passwd'), '.._etc_passwd')
+        self.assertEqual(ft.safe_component('..'), '_')
+        self.assertEqual(ft.safe_component(''), '_')
+        self.assertEqual(len(ft.safe_component('x' * 200)), 96)
+
+    def test_transfer_filename(self):
+        self.assertEqual(ft.transfer_filename('photo 1.jpg'), 'photo 1.jpg')
+        self.assertEqual(ft.transfer_filename('../../.bashrc'), 'bashrc')
+        self.assertEqual(ft.transfer_filename('a\\b\\c.txt'), 'c.txt')
+        self.assertEqual(ft.transfer_filename(''), 'file')
+
+    def test_transfer_folder(self):
+        folder = ft.transfer_folder('/cache', 'me@x', 'bob@y', '../id')
+        self.assertEqual(folder, os.path.join('/cache', 'me@x', 'bob@y', '.._id'))
+
+    def test_classify(self):
+        self.assertEqual(ft.classify_download_failure(404)[1], ft.FAILURE_GONE)
+        self.assertEqual(ft.classify_download_failure(410)[1], ft.FAILURE_GONE)
+        self.assertEqual(ft.classify_download_failure(403), ('HTTP 403', ft.FAILURE_PERMANENT))
+        self.assertEqual(ft.classify_download_failure(503), ('HTTP 503', ft.FAILURE_TRANSIENT))
+        self.assertEqual(ft.classify_download_failure(error='timed out'), ('timed out', ft.FAILURE_TRANSIENT))
+
+
 if __name__ == '__main__':
     unittest.main()
