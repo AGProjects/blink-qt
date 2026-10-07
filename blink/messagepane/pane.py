@@ -3,23 +3,32 @@
 The contact list is the conversation switcher; this shows the conversation.
 It follows the selection in the contact list (it never opens because of it):
 one contact selected shows that contact's conversation, anything else the
-empty state. The header, the transcript and the composer come with the next
-patches (docs/messaging/ui-plan.md, B2-B6); until then a conversation is its
-name and address.
+empty state. A conversation has its header (blink.messagepane.header); the
+transcript and the composer come with the next patches
+(docs/messaging/ui-plan.md, B3-B6).
 """
+
+from application.notification import IObserver, NotificationCenter
+from application.python import Null
+from zope.interface import implementer
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 
+from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.threading import run_in_thread
+
 from blink.logging import MessagingTrace as log
-from blink.util import translate
+from blink.messagepane.header import ConversationHeader
+from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.color import follow_theme, secondary_text_color
 
 
 __all__ = ['MessagePane']
 
 
+@implementer(IObserver)
 class MessagePane(QWidget):
     minimum_width = 320
     default_width = 480
@@ -35,21 +44,19 @@ class MessagePane(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        self.header = ConversationHeader(self)
+        self.header.hide()
+        layout.addWidget(self.header)
         self.stack = QStackedWidget(self)
-        layout.addWidget(self.stack)
+        layout.addWidget(self.stack, 1)
 
         self.empty_label = QLabel(translate('message_pane', 'Select a contact to see messages'), self.stack)
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setWordWrap(True)
         self.empty_label.setMargin(24)
         self.stack.addWidget(self.empty_label)
-
-        self.conversation_label = QLabel(self.stack)
-        self.conversation_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.conversation_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.conversation_label.setWordWrap(True)
-        self.conversation_label.setMargin(24)
-        self.stack.addWidget(self.conversation_label)
+        self.conversation_area = QWidget(self.stack)     # the transcript goes here
+        self.stack.addWidget(self.conversation_area)
         self.stack.setCurrentWidget(self.empty_label)
 
         self.contact = None
@@ -58,6 +65,11 @@ class MessagePane(QWidget):
 
         self.apply_theme()
         follow_theme(self)
+
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
+        notification_center.add_observer(self, name='PGPKeysShouldReload')
+        notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
 
     def apply_theme(self):
         palette = self.empty_label.palette()
@@ -70,9 +82,10 @@ class MessagePane(QWidget):
         if contact is self.contact and key == self.key:
             return
         self.contact, self.uri, self.key = contact, uri, key
-        name = getattr(contact, 'name', '') or str(uri.uri)
-        self.conversation_label.setText(f'{name}\n{uri.uri}')
-        self.stack.setCurrentWidget(self.conversation_label)
+        self.header.set_conversation(contact, uri, key, self._default_account())
+        self.header.show()
+        self.stack.setCurrentWidget(self.conversation_area)
+        self._find_account(key)
         log.debug(f'Message pane shows the conversation with {key}')
 
     def clear(self):
@@ -80,4 +93,61 @@ class MessagePane(QWidget):
         if self.contact is None:
             return
         self.contact = self.uri = self.key = None
+        self.header.hide()
         self.stack.setCurrentWidget(self.empty_label)
+
+    # The conversation's account: the one its newest message was on
+
+    def _default_account(self):
+        if self.key and self.contact is not None and getattr(self.contact, 'type', None) == 'bonjour':
+            return BonjourAccount()
+        from blink.uris import is_instance_id
+        if is_instance_id(self.key or ''):
+            return BonjourAccount()
+        return AccountManager().default_account
+
+    @run_in_thread('db')
+    def _find_account(self, key):
+        from blink.history import MessageHistory
+        try:
+            account_id = MessageHistory().last_message_accounts(remote_uri=key).get(key)
+        except Exception as e:
+            log.warning(f'Cannot find the account of the conversation with {key}: {e}')
+            return
+        if account_id:
+            call_in_gui_thread(self._set_account, key, account_id)
+
+    def _set_account(self, key, account_id):
+        if key != self.key:
+            return
+        from blink.uris import BONJOUR_ACCOUNT_ID
+        if account_id == BONJOUR_ACCOUNT_ID:
+            account = BonjourAccount()
+        else:
+            try:
+                account = AccountManager().get_account(account_id)
+            except KeyError:
+                return
+            if not account.enabled:
+                return
+        self.header.set_account(account)
+
+    # Notifications
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkConversationPreviewsDidChange(self, notification):
+        keys = notification.data.keys
+        if self.key is not None and (keys is None or self.key in keys):
+            self.header.update_info()
+
+    def _NH_PGPKeysShouldReload(self, notification):
+        self.header.update_lock()
+
+    def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
+        if self.contact is not None:
+            self.header.set_account(self._default_account())
+            self._find_account(self.key)

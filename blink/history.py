@@ -1165,10 +1165,10 @@ class MessageHistory(object, metaclass=Singleton):
                  + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
         return {str(remote_uri): str(newest) for remote_uri, newest in self.db.queryAll(query) if remote_uri and newest}
 
-    def last_message_accounts(self, accounts=None):
+    def last_message_accounts(self, accounts=None, remote_uri=None):
         """{conversation key: account id of its newest message}, the account a conversation continues on."""
         table = Message.sqlmeta.table
-        where = f' where {NOT_DELETED_SQL} and category is not null' + self._in_sql('account_id', accounts)
+        where = f' where {NOT_DELETED_SQL} and category is not null' + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri)
         query = (f'select m.remote_uri, m.account_id from {table} m'
                  f' join (select remote_uri, max(timestamp) as newest from {table}{where} group by remote_uri) latest'
                  f' on m.remote_uri = latest.remote_uri and m.timestamp = latest.newest'
