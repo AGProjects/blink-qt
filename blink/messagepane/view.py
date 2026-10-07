@@ -54,7 +54,11 @@ class TranscriptView(QListView):
         if audio_available():
             from blink.messagepane.audio import AudioInfo, AudioPlayer
             AudioPlayer.instance().changed.connect(self._SH_MediaReady)
+            AudioPlayer.instance().frameChanged.connect(self._SH_VideoFrame)
             AudioInfo.instance().measured.connect(self._SH_MediaReady)
+        from blink.messagepane.video import VideoProbe, video_available
+        if video_available():
+            VideoProbe.instance().probed.connect(self._SH_VideoProbed)
         self._anchor = None         # (maximum, value) before rows were inserted at the top
         self._stick = True          # follow the bottom
         scrollbar = self.verticalScrollBar()
@@ -292,6 +296,18 @@ class TranscriptView(QListView):
         self.scrollTo(model.index(row, 0), QAbstractItemView.ScrollHint.PositionAtCenter)
         self.bubble_delegate.flash(message_id)
         return True
+
+    def _SH_VideoFrame(self, message_id):
+        """A new frame of the movie playing: repaint its row only."""
+        model = self.model()
+        row = model.row_of(message_id) if model is not None else None
+        if row is not None:
+            self.viewport().update(self.visualRect(model.index(row, 0)))
+
+    def _SH_VideoProbed(self, path):
+        """A movie's size is known: its bubble takes the poster's shape."""
+        self.scheduleDelayedItemsLayout()
+        self.viewport().update()
 
     def _SH_MediaReady(self, path):
         """A picture finished decoding: repaint (a bubble that waited for it draws it now)."""

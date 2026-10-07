@@ -26,6 +26,10 @@ attention: missed, rejected, failed), what happened ("Missed video call") and
 QtMultimedia) is a player: play/pause, 48 bars of waveform (the sender's peaks,
 else measured from the file) that fill as it plays and seek on a click or a
 drag, the position and the length, and a title (a recording's, else the name).
+A movie that is here is its poster (blink.messagepane.video) with a play badge
+and its length; a click plays it in the bubble (AudioPlayer, one clip at a time)
+with a transport over its bottom (play/pause, a track to seek on, the clock);
+one GStreamer cannot read is a plain file, Open gives it to the system player.
 Layouts are cached per message, width and font.
 """
 
@@ -123,7 +127,13 @@ class BubbleDelegate(QStyledItemDelegate):
         progress = self.progress_of(item.id) if self.progress_of is not None else None
         progress = None if progress is None else int(progress * 100)
         image_path = self.file_path(item) if item.category in ('image', 'other', 'audio', 'video') else None
-        key = (image_path, item.caption, progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
+        video_info = video_state = None
+        if item.category == 'video' and image_path:
+            from blink.messagepane.video import VideoProbe, video_available
+            if video_available():
+                video_info = VideoProbe.instance().info(image_path)
+                video_state = 'pending' if video_info is None else 'ok' if video_info else 'bad'
+        key = (image_path, video_state, item.caption, progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
                (reply['id'], reply['text']) if reply else None)
         layout = self._cache.get(key)
         if layout is not None:
@@ -143,6 +153,8 @@ class BubbleDelegate(QStyledItemDelegate):
             layout.kind = kind = 'call'
         elif item.category == 'image':
             layout.kind = kind = 'image'
+        elif video_state in ('pending', 'ok'):
+            layout.kind = kind = 'video'
         elif item.category in ('other', 'audio', 'video'):
             from blink.messagepane.media import pdf_available
             from blink.messagepane.audio import audio_available
@@ -157,6 +169,10 @@ class BubbleDelegate(QStyledItemDelegate):
         document.setDocumentMargin(0)
         if kind == 'image':
             return self._image_layout(key, layout, item, image_path, width, font, small, progress)
+        if kind == 'video':
+            # until it is probed, a 16:9 well (the poster replaces it a moment later)
+            natural = video_info['size'] if video_info and video_info['size'].isValid() else QSize(16, 9)
+            return self._image_layout(key, layout, item, image_path, width, font, small, progress, natural=natural)
         if kind == 'pdf':
             layout = self._image_layout(key, layout, item, image_path, width, font, small, progress, pdf=True)
             if layout.image_path:
@@ -247,6 +263,8 @@ class BubbleDelegate(QStyledItemDelegate):
     image_large_max_height = 640
     image_large_source = 1600       # pixels on the long side
     image_min_width = 120
+    video_max_height = 360
+    video_min_width = 240           # room for the transport
     image_placeholder = (220, 150)
 
     _paths = {}         # message id: local path or None
@@ -269,25 +287,27 @@ class BubbleDelegate(QStyledItemDelegate):
     pdf_width = 260
     pdf_max_height = 360
 
-    def _image_layout(self, key, layout, item, path, width, font, small, progress, pdf=False):
+    def _image_layout(self, key, layout, item, path, width, font, small, progress, pdf=False, natural=None):
         from blink.messagepane.media import MediaCache
         limit = self._bubble_width_limit(width) - 2 * self.image_padding
         if pdf:
             limit = min(limit, self.pdf_width)
-        natural = MediaCache.instance().natural_size(path) if path else None
+        video = natural is not None
+        if natural is None:
+            natural = MediaCache.instance().natural_size(path) if path else None
         if pdf and not (natural is not None and natural.isValid() and natural.width() > 0):
             return layout
         if natural is not None and natural.isValid() and natural.width() > 0 and natural.height() > 0:
-            if pdf:
-                natural = natural.scaled(limit, 100000, Qt.AspectRatioMode.KeepAspectRatio)    # pages are drawn to fit, never at their size in points
-            max_height = self.pdf_max_height if pdf else self.image_large_max_height if max(natural.width(), natural.height()) >= self.image_large_source else self.image_max_height
+            if pdf or video:
+                natural = natural.scaled(limit, 100000, Qt.AspectRatioMode.KeepAspectRatio)    # pages and movies are drawn to fit, never at their own size
+            max_height = self.video_max_height if video else self.pdf_max_height if pdf else self.image_large_max_height if max(natural.width(), natural.height()) >= self.image_large_source else self.image_max_height
             scale = min(1.0, limit / natural.width(), max_height / natural.height())
             box = (max(1, round(natural.width() * scale)), max(1, round(natural.height() * scale)))
             layout.image_path = path
         else:
             box = (min(self.image_placeholder[0], limit), self.image_placeholder[1])
         layout.image_size = box
-        bubble_width = max(box[0], self.image_min_width) + 2 * self.image_padding
+        bubble_width = max(box[0], self.video_min_width if video else self.image_min_width) + 2 * self.image_padding
         document = QTextDocument()
         document.setDocumentMargin(0)
         caption_height = 0
@@ -455,12 +475,26 @@ class BubbleDelegate(QStyledItemDelegate):
         return button, wave
 
     def audio_hit(self, index, rect, position):
-        """('play', None) on the button, ('seek', fraction) on the waveform, else None."""
+        """('play', None) on the button, ('seek', fraction) on the waveform, else None.
+        A movie: ('play', None) on it, ('seek', fraction) on its track while it is the one playing."""
         item = self._item(index)
-        if item is None or item.category != 'audio':
+        if item is None or item.category not in ('audio', 'video'):
             return None
         font = self.parent().font()
         layout = self.layout(index, rect.width(), font)
+        if layout.kind == 'video':
+            from blink.messagepane.audio import AudioPlayer
+            if item.upload is not None and item.upload['state'] == 'failed':
+                return None             # a click retries the upload
+            box = self._image_box(layout, self.bubble_rect(layout, item, QRectF(rect)))
+            point = QPointF(position)
+            if not box.contains(point):
+                return None
+            if AudioPlayer.instance().is_current(item.id):
+                band, key, track = self._video_geometry(box)
+                if track.adjusted(-2, -10, 2, 10).contains(point):
+                    return 'seek', max(0.0, min(1.0, (point.x() - track.left()) / max(1.0, track.width())))
+            return 'play', None
         if layout.kind != 'audio':
             return None
         button, wave = self._audio_geometry(layout, self.bubble_rect(layout, item, QRectF(rect)), self._small_font(font))
@@ -554,37 +588,127 @@ class BubbleDelegate(QStyledItemDelegate):
             painter.setPen((QColor('#ff7b72') if is_dark_theme() else QColor('#c62828')) if layout.file_error else secondary)
             painter.drawText(QRectF(left, top, width, small_metrics.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.file_note)
 
-    def _paint_image(self, painter, layout, item, bubble, palette, small, secondary):
-        from blink.messagepane.media import MediaCache
+    def _image_box(self, layout, bubble):
         box = QRectF(bubble.left() + self.image_padding, bubble.top() + self.image_padding, layout.image_size[0], layout.image_size[1])
         if bubble.width() - 2 * self.image_padding > box.width():
             box.moveLeft(bubble.left() + (bubble.width() - box.width()) / 2)
+        return box
+
+    # Movies
+
+    transport_height = 34
+    badge_size = 54
+    badge_min = 26
+
+    def _video_geometry(self, box):
+        """(transport band, play key, track) over the bottom of a movie's box."""
+        band = QRectF(box.left(), box.bottom() - self.transport_height, box.width(), self.transport_height)
+        key = QRectF(band.left() + 8, band.top() + (band.height() - 22) / 2, 22, 22)
+        clock_width = 84
+        track = QRectF(key.right() + 10, band.center().y() - 3, max(10.0, band.right() - 10 - clock_width - key.right() - 10), 6)
+        return band, key, track
+
+    def _paint_play_glyph(self, painter, centre, side, playing):
+        from PyQt6.QtGui import QPolygonF
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor('#ffffff'))
+        if playing:
+            for offset in (-side * 0.45, side * 0.15):
+                painter.drawRect(QRectF(centre.x() + offset, centre.y() - side * 0.55, side * 0.3, side * 1.1))
+        else:
+            painter.drawPolygon(QPolygonF([QPointF(centre.x() - side * 0.4, centre.y() - side * 0.6), QPointF(centre.x() - side * 0.4, centre.y() + side * 0.6),
+                                           QPointF(centre.x() + side * 0.65, centre.y())]))
+
+    def _paint_video_overlay(self, painter, layout, item, box, small):
+        """The play badge and the length over a poster, or the transport over the movie playing."""
+        from blink.messagepane.audio import AudioPlayer
+        from blink.messagepane.format import format_clock
+        from blink.messagepane.video import VideoProbe
+        player = AudioPlayer.instance()
+        info = VideoProbe.instance().info(layout.image_path) or {}
+        duration = info.get('duration')
+        metrics = QFontMetricsF(small)
+        painter.save()
+        if player.is_current(item.id):
+            band, key, track = self._video_geometry(box)
+            painter.fillRect(band, QColor(0, 0, 0, 140))
+            self._paint_play_glyph(painter, key.center(), key.width() * 0.5, player.playing)
+            fraction = player.fraction(item.id) or 0.0
+            painter.setBrush(QColor(255, 255, 255, 90))
+            painter.drawRoundedRect(track, 3, 3)
+            painter.setBrush(QColor('#ffffff'))
+            painter.drawRoundedRect(QRectF(track.left(), track.top(), max(track.height(), track.width() * fraction), track.height()), 3, 3)
+            length = player.player.duration() / 1000.0 or duration
+            clock = format_clock(player.position()) + (' / ' + format_clock(length) if length else '')
+            painter.setFont(small)
+            painter.setPen(QColor('#ffffff'))
+            painter.drawText(QRectF(track.right() + 8, band.top(), band.right() - track.right() - 14, band.height()), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, clock)
+        else:
+            size = min(self.badge_size, max(min(box.width(), box.height()) * 0.28, self.badge_min))
+            disc = QRectF(box.center().x() - size / 2, box.center().y() - size / 2, size, size)
+            circle = QPainterPath()
+            circle.addEllipse(disc)
+            painter.fillPath(circle, QColor(0, 0, 0, 130))
+            painter.setPen(QColor(255, 255, 255, 160))
+            painter.drawEllipse(disc)
+            self._paint_play_glyph(painter, disc.center() + QPointF(size * 0.04, 0), size * 0.3, False)
+            if duration:
+                text = format_clock(duration)
+                pill = QRectF(0, 0, metrics.horizontalAdvance(text) + 12, metrics.height() + 4)
+                pill.moveBottomLeft(box.bottomLeft() + QPointF(6, -6))
+                pill_path = QPainterPath()
+                pill_path.addRoundedRect(pill, pill.height() / 2, pill.height() / 2)
+                painter.fillPath(pill_path, QColor(0, 0, 0, 120))
+                painter.setFont(small)
+                painter.setPen(QColor('#ffffff'))
+                painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, text)
+        painter.restore()
+
+    def _paint_image(self, painter, layout, item, bubble, palette, small, secondary):
+        from blink.messagepane.media import MediaCache
+        box = self._image_box(layout, bubble)
         clip = QPainterPath()
         clip.addRoundedRect(box, self.radius - 3, self.radius - 3)
         pixmap = None
         if layout.image_path:
             ratio = painter.device().devicePixelRatioF() if painter.device() is not None else 1.0
             pixmap = MediaCache.instance().thumbnail(layout.image_path, (box.width() * ratio, box.height() * ratio))
+        frame = None
+        if layout.kind == 'video':
+            from blink.messagepane.audio import AudioPlayer
+            player = AudioPlayer.instance()
+            frame = player.frame if player.is_current(item.id) else None
         painter.save()
         painter.setClipPath(clip)
-        if pixmap is not None:
+        if frame is not None:
+            painter.fillRect(box, QColor('#000000'))
+            target = QSizeF(frame.size()).scaled(box.size(), Qt.AspectRatioMode.KeepAspectRatio)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            painter.drawImage(QRectF(box.center().x() - target.width() / 2, box.center().y() - target.height() / 2, target.width(), target.height()), frame)
+        elif pixmap is not None:
             if layout.kind == 'pdf':
                 painter.fillRect(box, QColor('#ffffff'))       # pages are drawn without their paper
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.drawPixmap(box, pixmap, QRectF(pixmap.rect()))
         else:
-            painter.fillRect(box, QColor(0, 0, 0, 30) if not is_dark_theme() else QColor(255, 255, 255, 24))
+            painter.fillRect(box, QColor(0, 0, 0, 200) if layout.kind == 'video' else QColor(0, 0, 0, 30) if not is_dark_theme() else QColor(255, 255, 255, 24))
             if not layout.image_path:
                 context = QAbstractTextDocumentLayout.PaintContext()
                 context.palette = self._text_palette(palette, secondary)
                 painter.translate(box.left() + (box.width() - layout.text_size.width()) / 2, box.top() + (box.height() - layout.text_size.height()) / 2)
                 layout.document.documentLayout().draw(painter, context)
         painter.restore()
-        # the time (and the delivery state) on a dark pill over the picture's corner
+        if layout.kind == 'video':
+            self._paint_video_overlay(painter, layout, item, box, small)
+        # the time (and the delivery state) on a dark pill over the picture's corner (above the transport while it plays)
         metrics = QFontMetricsF(small)
         label = layout.time_text + ('  ' + layout.mark if layout.mark else '')
         pill = QRectF(0, 0, metrics.horizontalAdvance(label) + 12, metrics.height() + 4)
         pill.moveBottomRight(box.bottomRight() - QPointF(6, 6))
+        if layout.kind == 'video':
+            from blink.messagepane.audio import AudioPlayer
+            if AudioPlayer.instance().is_current(item.id):
+                pill.moveBottom(box.bottom() - self.transport_height - 6)
         pill_path = QPainterPath()
         pill_path.addRoundedRect(pill, pill.height() / 2, pill.height() / 2)
         painter.fillPath(pill_path, QColor(0, 0, 0, 120))
@@ -741,7 +865,7 @@ class BubbleDelegate(QStyledItemDelegate):
             self._paint_call(painter, layout, bubble, option.font, small, secondary, text_colour)
         if layout.kind == 'audio':
             self._paint_audio(painter, layout, item, bubble, small, secondary, text_colour)
-        if layout.kind in ('image', 'pdf'):
+        if layout.kind in ('image', 'pdf', 'video'):
             self._paint_image(painter, layout, item, bubble, palette, small, secondary)
             if option.state & QStyle.StateFlag.State_MouseOver:
                 self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)

@@ -614,10 +614,11 @@ class MessagePane(QWidget):
         path = self.transcript.bubble_delegate.file_path(item)
         if not path:
             return
+        video = item.category == 'video'
         if action == 'play':
-            AudioPlayer.instance().toggle(item.id, path)
+            AudioPlayer.instance().toggle(item.id, path, video)
         else:
-            AudioPlayer.instance().seek(item.id, path, fraction)
+            AudioPlayer.instance().seek(item.id, path, fraction, video)
 
     def _send_voice_note(self, note):
         """Compress a recorded voice note to AAC (blink.messagepane.transcode; the WAV when that cannot be

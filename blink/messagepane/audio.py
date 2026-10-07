@@ -3,7 +3,9 @@
 AudioPlayer.instance() plays one clip at a time, app-wide: starting another
 stops the first, and leaving a conversation does not stop it (the header's ■
 does). It tells (changed) which message is playing and where it is, for the
-bubbles to draw their progress.
+bubbles to draw their progress. A movie plays through it too (toggle(...,
+video=True)): its frames go to a QVideoSink, the newest is kept (frame) and
+frameChanged names the message, for its bubble to paint.
 
 Waveforms come from the recording's peaks companion when the sender made one;
 otherwise measure(path) decodes the file once (QAudioDecoder, in the
@@ -19,9 +21,9 @@ from collections import deque
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal
 
 try:
-    from PyQt6.QtMultimedia import QAudioDecoder, QAudioFormat, QAudioOutput, QMediaPlayer
+    from PyQt6.QtMultimedia import QAudioDecoder, QAudioFormat, QAudioOutput, QMediaPlayer, QVideoSink
 except ImportError:
-    QAudioDecoder = QAudioFormat = QAudioOutput = QMediaPlayer = None
+    QAudioDecoder = QAudioFormat = QAudioOutput = QMediaPlayer = QVideoSink = None
 
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.messagepane.format import waveform_bars
@@ -36,6 +38,7 @@ def audio_available():
 
 class AudioPlayer(QObject):
     changed = pyqtSignal(str)           # the message id whose playback changed ('' when none)
+    frameChanged = pyqtSignal(str)      # the message id of the movie with a new frame
 
     _instance = None
 
@@ -49,6 +52,10 @@ class AudioPlayer(QObject):
         super().__init__()
         self.message_id = None
         self.path = None
+        self.video = False
+        self.frame = None               # the newest frame of the movie playing (QImage)
+        self.sink = QVideoSink(self)
+        self.sink.videoFrameChanged.connect(self._SH_Frame)
         self.player = QMediaPlayer(self)
         self.output = QAudioOutput(self)
         self.player.setAudioOutput(self.output)
@@ -74,8 +81,8 @@ class AudioPlayer(QObject):
     def position(self):
         return self.player.position() / 1000.0
 
-    def toggle(self, message_id, path):
-        """Play this message's clip, or pause it when it is the one playing."""
+    def toggle(self, message_id, path, video=False):
+        """Play this message's clip (or movie), or pause it when it is the one playing."""
         if self.is_current(message_id):
             if self.playing:
                 self.player.pause()
@@ -83,14 +90,15 @@ class AudioPlayer(QObject):
                 self.player.play()
             return
         self.player.stop()
-        self.message_id, self.path = message_id, path
+        self.message_id, self.path, self.video, self.frame = message_id, path, video, None
+        self.player.setVideoOutput(self.sink if video else None)
         self.player.setSource(QUrl.fromLocalFile(path))
         self.player.play()
-        ActivityLog().info(f'[audio] Playing {os.path.basename(path)} of message {message_id}')
+        ActivityLog().info(f'[{"video" if video else "audio"}] Playing {os.path.basename(path)} of message {message_id}')
 
-    def seek(self, message_id, path, fraction):
+    def seek(self, message_id, path, fraction, video=False):
         if not self.is_current(message_id):
-            self.toggle(message_id, path)
+            self.toggle(message_id, path, video)
         duration = self.player.duration()
         if duration > 0:
             self.player.setPosition(int(duration * max(0.0, min(1.0, fraction))))
@@ -103,8 +111,17 @@ class AudioPlayer(QObject):
         if self.message_id is None:
             return
         self.player.stop()
-        message_id, self.message_id, self.path = self.message_id, None, None
+        self.player.setVideoOutput(None)
+        message_id, self.message_id, self.path, self.video, self.frame = self.message_id, None, None, False, None
         self.changed.emit(message_id)
+
+    def _SH_Frame(self, frame):
+        if not self.video or self.message_id is None or not frame.isValid():
+            return
+        image = frame.toImage()
+        if not image.isNull():
+            self.frame = image
+            self.frameChanged.emit(self.message_id)
 
     def _SH_Changed(self, *args):
         if self._pending_seek is not None and self.player.duration() > 0:
@@ -118,8 +135,8 @@ class AudioPlayer(QObject):
     def _SH_Error(self, error, text):
         if self.message_id is None:
             return          # a later error of a clip already given up on (GStreamer reports the same failure twice)
-        hint = ' (an AAC/MP4 voice note needs gstreamer1.0-libav)' if 'plug-in' in text or 'plugin' in text else ''
-        ActivityLog().warning(f'[audio] Cannot play {self.path}: {text}{hint}')
+        hint = ' (AAC/MP4 audio and H.264 video need gstreamer1.0-libav)' if 'plug-in' in text or 'plugin' in text else ''
+        ActivityLog().warning(f'[{"video" if self.video else "audio"}] Cannot play {self.path}: {text}{hint}')
         self.stop()
 
 
