@@ -736,7 +736,7 @@ All rights reserved.</source>
     </message>
     <message>
         <location filename="../chat_window.ui" line="20"/>
-        <source>Messages</source>
+        <source>Chat sessions (MSRP)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2223,8 +2223,8 @@ padding: 2px;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1457"/>
-        <source>&amp;Messages</source>
+        <location filename="../blink.ui" line="1434"/>
+        <source>&amp;Chat sessions (MSRP)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

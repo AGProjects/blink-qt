@@ -209,8 +209,6 @@ class Blink(QApplication, metaclass=QSingleton):
         self.chat_window.addAction(self.main_window.preferences_action)
         self.chat_window.addAction(self.main_window.transfers_window_action)
         self.chat_window.addAction(self.main_window.logs_window_action)
-        self.chat_window.addAction(self.main_window.received_files_window_action)
-        self.chat_window.addAction(self.main_window.screenshots_window_action)
 
         self.ip_address_monitor = IPAddressMonitor()
         self.log_manager = LogManager()

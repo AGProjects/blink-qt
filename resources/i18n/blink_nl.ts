@@ -768,8 +768,8 @@ Alle rechten voorbehouden.</translation>
     </message>
     <message>
         <location filename="../chat_window.ui" line="20"/>
-        <source>Messages</source>
-        <translation>Berichten</translation>
+        <source>Chat sessions (MSRP)</source>
+        <translation>Chatsessies (MSRP)</translation>
     </message>
     <message>
         <location filename="../chat_window.ui" line="1562"/>
@@ -2383,9 +2383,9 @@ padding: 2px;</source>
         <translation>In gesprek</translation>
     </message>
     <message>
-        <location filename="../blink.ui" line="1457"/>
-        <source>&amp;Messages</source>
-        <translation>&amp;Berichten</translation>
+        <location filename="../blink.ui" line="1434"/>
+        <source>&amp;Chat sessions (MSRP)</source>
+        <translation>&amp;Chatsessies (MSRP)</translation>
     </message>
     <message>
         <location filename="../blink.ui" line="1405"/>

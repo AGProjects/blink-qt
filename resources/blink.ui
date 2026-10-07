@@ -1133,6 +1133,11 @@ padding: 2px;</string>
      <addaction name="manage_accounts_action"/>
      <addaction name="google_contacts_action"/>
      <addaction name="separator"/>
+     <addaction name="export_pgp_key_action"/>
+     <addaction name="generate_pgp_key"/>
+     <addaction name="separator"/>
+     <addaction name="received_messages_sound_action"/>
+     <addaction name="separator"/>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
@@ -1176,20 +1181,6 @@ padding: 2px;</string>
     <addaction name="auto_record_action"/>
     <addaction name="separator"/>
     <addaction name="history_menu"/>
-   </widget>
-   <widget class="QMenu" name="chat_menu">
-    <property name="title">
-     <string>&amp;Messages</string>
-    </property>
-    <addaction name="show_unread_messages_action"/>
-    <addaction name="show_last_messages_action"/>
-    <addaction name="separator"/>
-    <addaction name="export_pgp_key_action"/>
-    <addaction name="generate_pgp_key"/>
-    <addaction name="separator"/>
-    <addaction name="auto_accept_chat_action"/>
-    <addaction name="separator"/>
-    <addaction name="received_messages_sound_action"/>
    </widget>
    <widget class="QMenu" name="devices_menu">
     <property name="title">
@@ -1246,9 +1237,6 @@ padding: 2px;</string>
     <addaction name="chat_window_action"/>
     <addaction name="transfers_window_action"/>
     <addaction name="logs_window_action"/>
-    <addaction name="received_files_window_action"/>
-    <addaction name="screenshots_window_action"/>
-    <addaction name="audio_recordings_action"/>
     <addaction name="separator"/>
     <addaction name="sip_server_settings_action"/>
     <addaction name="history_on_server_action"/>
@@ -1257,7 +1245,6 @@ padding: 2px;</string>
    <addaction name="blink_menu"/>
    <addaction name="devices_menu"/>
    <addaction name="call_menu"/>
-   <addaction name="chat_menu"/>
    <addaction name="window_menu"/>
   </widget>
   <action name="quit_action">
@@ -1335,14 +1322,6 @@ padding: 2px;</string>
     <enum>Qt::ApplicationShortcut</enum>
    </property>
   </action>
-  <action name="audio_recordings_action">
-   <property name="text">
-    <string>Audio Recordings</string>
-   </property>
-   <property name="shortcutContext">
-    <enum>Qt::ApplicationShortcut</enum>
-   </property>
-  </action>
   <action name="answering_machine_action">
    <property name="checkable">
     <bool>true</bool>
@@ -1403,14 +1382,6 @@ padding: 2px;</string>
     <string>Search for &amp;people</string>
    </property>
   </action>
-  <action name="auto_accept_chat_action">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Auto-accept MSRP chat from my contacts</string>
-   </property>
-  </action>
   <action name="add_account_action">
    <property name="text">
     <string>&amp;Add account...</string>
@@ -1460,7 +1431,7 @@ padding: 2px;</string>
   </action>
   <action name="chat_window_action">
    <property name="text">
-    <string>&amp;Messages</string>
+    <string>&amp;Chat sessions (MSRP)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+M</string>
@@ -1477,28 +1448,6 @@ padding: 2px;</string>
     <string>Play a sound for new incoming messages</string>
    </property>
   </action>
-  <action name="received_files_window_action">
-   <property name="text">
-    <string>Received &amp;Files</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+D</string>
-   </property>
-   <property name="shortcutContext">
-    <enum>Qt::ApplicationShortcut</enum>
-   </property>
-  </action>
-  <action name="screenshots_window_action">
-   <property name="text">
-    <string>&amp;Screenshots</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+E</string>
-   </property>
-   <property name="shortcutContext">
-    <enum>Qt::ApplicationShortcut</enum>
-   </property>
-  </action>
   <action name="auto_answer_action">
    <property name="checkable">
     <bool>true</bool>
@@ -1508,28 +1457,6 @@ padding: 2px;</string>
    </property>
    <property name="text">
     <string>&amp;Auto-answer</string>
-   </property>
-  </action>
-  <action name="show_unread_messages_action">
-   <property name="text">
-    <string>&amp;Unread messages</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+U</string>
-   </property>
-   <property name="shortcutContext">
-    <enum>Qt::ApplicationShortcut</enum>
-   </property>
-  </action>
-  <action name="show_last_messages_action">
-   <property name="text">
-    <string>&amp;Recent conversations</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+O</string>
-   </property>
-   <property name="shortcutContext">
-    <enum>Qt::ApplicationShortcut</enum>
    </property>
   </action>
   <action name="export_pgp_key_action">

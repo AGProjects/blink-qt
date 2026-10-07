@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import QMessageBox, QProgressBar, QSplitter
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
-from application.system import makedirs
 from zope.interface import implementer
 
 from sipsimple.account import Account, AccountManager, BonjourAccount
@@ -201,7 +200,6 @@ class MainWindow(base_class, ui_class):
         self.manage_accounts_action.triggered.connect(self.preferences_window.show_for_accounts)
         self.help_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('https://icanblink.com/help/manual-qt/')))
         self.preferences_action.triggered.connect(self.preferences_window.show)
-        self.auto_accept_chat_action.triggered.connect(self._AH_AutoAcceptChatActionTriggered)
         self.received_messages_sound_action.triggered.connect(self._AH_ReceivedMessagesSoundActionTriggered)
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineActionTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('https://icanblink.com/changelog-linux/')))
@@ -229,8 +227,6 @@ class MainWindow(base_class, ui_class):
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
 
-        self.show_unread_messages_action.triggered.connect(self._AH_ShowUnreadMessagesActionTriggered)
-        self.show_last_messages_action.triggered.connect(self._AH_ShowLastMessagesActionTriggered)
         self.export_pgp_key_action.triggered.connect(self._AH_ExportPGPkeyActionTriggered)
         self.generate_pgp_key.triggered.connect(self._AH_GeneratePGPkeyActionTriggered)
 
@@ -241,9 +237,6 @@ class MainWindow(base_class, ui_class):
         self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
         self.transfers_window_action.triggered.connect(self._AH_TransfersWindowActionTriggered)
         self.logs_window_action.triggered.connect(self._AH_LogsWindowActionTriggered)
-        self.received_files_window_action.triggered.connect(self._AH_ReceivedFilesWindowActionTriggered)
-        self.screenshots_window_action.triggered.connect(self._AH_ScreenshotsWindowActionTriggered)
-        self.audio_recordings_action.triggered.connect(self._AH_AudioRecordingsActionTriggered)
         self.message_pane_action.toggled.connect(self.set_message_pane_visible)
 
     def refresh_devices(self):
@@ -605,11 +598,6 @@ class MainWindow(base_class, ui_class):
         settings.video.device = action.data()
         settings.save()
 
-    def _AH_AutoAcceptChatActionTriggered(self, checked):
-        settings = SIPSimpleSettings()
-        settings.chat.auto_accept = checked
-        settings.save()
-
     def _AH_ReceivedMessagesSoundActionTriggered(self, checked):
         settings = SIPSimpleSettings()
         settings.sounds.play_message_alerts = checked
@@ -619,12 +607,6 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         settings.answering_machine.enabled = checked
         settings.save()
-
-    def _AH_AudioRecordingsActionTriggered(self, checked):
-        settings = SIPSimpleSettings()
-        directory = settings.audio.recordings_directory.normalized
-        makedirs(directory)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def _AH_GoogleContactsActionTriggered(self):
         settings = SIPSimpleSettings()
@@ -653,26 +635,9 @@ class MainWindow(base_class, ui_class):
         self.server_tools_window.open_history_page(account)
 
     def _AH_ChatWindowActionTriggered(self, checked):
-        """The chat window is for MSRP chat, video and screen sharing; without any, messages are in the pane."""
+        """Window > MSRP sessions: the window for MSRP chat, video and screen sharing, even if it has none."""
         blink = QApplication.instance()
-        if blink.chat_window.has_visible_sessions():
-            blink.chat_window.show()
-        else:
-            self.set_message_pane_visible(True)
-            self._bring_to_front()
-
-    def _AH_ShowLastMessagesActionTriggered(self, checked):
-        """The message pane, on the conversation with the newest message."""
-        from blink.history import ConversationPreviews
-        times = ConversationPreviews().message_times
-        if times:
-            key = max(times, key=times.get)
-            if self._select_conversation_row(key) is None:
-                contact, contact_uri = URIUtils.find_contact(key)
-                self.show_conversation_in_pane(contact, contact_uri)
-                return
-        self.set_message_pane_visible(True)
-        self._bring_to_front()
+        blink.chat_window.show()
 
     def _AH_ShowUnreadMessagesActionTriggered(self, checked):
         """The conversation with the newest unread message, in the message pane."""
@@ -746,18 +711,6 @@ class MainWindow(base_class, ui_class):
     def _AH_LogsWindowActionTriggered(self, checked):
         blink = QApplication.instance()
         blink.logs_window.show()
-
-    def _AH_ReceivedFilesWindowActionTriggered(self, checked):
-        settings = BlinkSettings()
-        directory = settings.transfers_directory.normalized
-        makedirs(directory)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
-
-    def _AH_ScreenshotsWindowActionTriggered(self, checked):
-        settings = BlinkSettings()
-        directory = settings.screenshots_directory.normalized
-        makedirs(directory)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def _AH_VoicemailActionTriggered(self, checked):
         account = self.sender().data()
@@ -1152,7 +1105,6 @@ class MainWindow(base_class, ui_class):
     def _NH_BlinkUnreadMessagesChanged(self, notification):
         self.active_sessions_label.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
         self.active_sessions_label.setVisible(bool(self.total_unread_messages))
-        self.show_unread_messages_action.setEnabled(bool(self.total_unread_messages))
         self.open_unread_messages_button.setEnabled(bool(self.total_unread_messages))
         self.open_unread_messages_button.setText(translate('main_window', 'There is 1 new message') if self.total_unread_messages == 1 else translate('main_window', 'There are %d new messages') % self.total_unread_messages)
         self.open_unread_messages_button.setVisible(bool(self.total_unread_messages))
@@ -1275,7 +1227,6 @@ class MainWindow(base_class, ui_class):
         self.auto_answer_action.setChecked(settings.sip.auto_answer)
         self.auto_record_action.setChecked(settings.sip.auto_record)
         self.answering_machine_action.setChecked(settings.answering_machine.enabled)
-        self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
         self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
         if settings.google_contacts.enabled:
             self.google_contacts_action.setText(translate('main_window', 'Disable &Google Contacts'))
@@ -1349,8 +1300,6 @@ class MainWindow(base_class, ui_class):
                 action.setChecked(True)
             if 'answering_machine.enabled' in notification.data.modified:
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)
-            if 'chat.auto_accept' in notification.data.modified:
-                self.auto_accept_chat_action.setChecked(settings.chat.auto_accept)
             if 'sounds.play_message_alerts' in notification.data.modified:
                 self.received_messages_sound_action.setChecked(settings.sounds.play_message_alerts)
             if 'google_contacts.enabled' in notification.data.modified:

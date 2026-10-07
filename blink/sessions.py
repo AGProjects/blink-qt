@@ -56,6 +56,7 @@ from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
+from blink.sessioninfo import SessionInfoPanel
 from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status, StateColor
@@ -2245,7 +2246,7 @@ class AudioSessionItem(object):
 
     def _SH_InfoButtonClicked(self, checked):
         blink = QApplication.instance()
-        blink.chat_window.show_session_info()
+        blink.main_window.session_list.toggle_session_info(self)
 
     def _SH_MuteButtonClicked(self, checked):
         if self.audio_stream is not None:
@@ -2416,16 +2417,27 @@ class AudioSessionDelegate(QStyledItemDelegate):
         return session.widget
 
     def updateEditorGeometry(self, editor, option, index):
-        editor.setGeometry(option.rect)
+        # the row of the session showing the info panel is taller: the session widget keeps the top
+        rect = QRect(option.rect)
+        rect.setHeight(self.size_hint.height())
+        editor.setGeometry(rect)
 
     def paint(self, painter, option, index):
         session = index.data(Qt.ItemDataRole.UserRole)
-        if session.widget.size() != option.rect.size():
+        size = QSize(option.rect.width(), self.size_hint.height())
+        if session.widget.size() != size:
             # For some reason updateEditorGeometry only receives the peak value
             # of the size that the widget ever had, so it will never shrink it.
-            session.widget.resize(option.rect.size())
+            session.widget.resize(size)
+        session_list = self.parent()
+        if session is getattr(session_list, 'info_session', None):
+            session_list.place_info_panel()
 
     def sizeHint(self, option, index):
+        session_list = self.parent()
+        session = index.data(Qt.ItemDataRole.UserRole)
+        if session is not None and session is getattr(session_list, 'info_session', None):
+            return QSize(self.size_hint.width(), self.size_hint.height() + session_list.info_panel_height)
         return self.size_hint
 
     def _SH_HoldButtonClicked(self, checked):
@@ -2866,6 +2878,9 @@ class AudioSessionListView(QListView):
         self.actions.add_chat = QAction(translate('audio_session', "Add MSRP chat"), self, triggered=self._AH_AddChat)
         self.actions.remove_chat = QAction(translate('audio_session', "Remove MSRP chat"), self, triggered=self._AH_RemoveChat)
         self.actions.session_info = QAction(translate('audio_session', "Show session info"), self, triggered=self._AH_ShowSessionInfo)
+        self.info_panel = None    # created on first use, then moved under the session it shows
+        self.info_session = None  # the AudioSessionItem whose info is shown (only one at a time)
+        self._menu_item = None    # the session the context menu was built for
         self.dragged_session = None
         self.ignore_selection_changes = False
         self._pressed_position = None
@@ -2881,6 +2896,7 @@ class AudioSessionListView(QListView):
     def _update_control_menu(self, item):
         menu = self.context_menu
         menu.hide()
+        self._menu_item = item
         blink_session = item.blink_session
         state = blink_session.state
         if state == 'connected':
@@ -2905,7 +2921,102 @@ class AudioSessionListView(QListView):
                 menu.addAction(self.actions.end_screen_sharing)
             menu.addAction(self.actions.send_files)
             menu.addSeparator()
+        if item is self.info_session:
+            self.actions.session_info.setText(translate('audio_session', "Hide session info"))
+        else:
+            self.actions.session_info.setText(translate('audio_session', "Show session info"))
         menu.addAction(self.actions.session_info)
+
+    # session info panel
+    #
+    @property
+    def info_panel_height(self):
+        return self.info_panel.sizeHint().height() if self.info_panel is not None else 0
+
+    def toggle_session_info(self, session):
+        if session is self.info_session:
+            self.hide_session_info()
+        else:
+            self.show_session_info(session)
+
+    def show_session_info(self, session):
+        model = self.model()
+        if session not in model.sessions:
+            return
+        if self.info_panel is None:
+            self.info_panel = SessionInfoPanel(self.viewport())
+            self.info_panel.hide()
+        previous = self.info_session
+        if previous is session:
+            return
+        self.info_session = session
+        self.info_panel.blink_session = session.blink_session
+        delegate = self.itemDelegate()
+        if previous is not None and previous in model.sessions:
+            delegate.sizeHintChanged.emit(model.index(model.sessions.index(previous)))
+        index = model.index(model.sessions.index(session))
+        delegate.sizeHintChanged.emit(index)
+        self.info_panel.show()
+        self.info_panel.raise_()
+        self.place_info_panel()
+        QTimer.singleShot(0, lambda: self._ensure_info_visible(session))
+
+    def hide_session_info(self):
+        session = self.info_session
+        if session is None:
+            return
+        self.info_session = None
+        self.info_panel.close_panel()
+        model = self.model()
+        if session in model.sessions:
+            self.itemDelegate().sizeHintChanged.emit(model.index(model.sessions.index(session)))
+
+    def place_info_panel(self):
+        panel = self.info_panel
+        session = self.info_session
+        if panel is None or session is None:
+            return
+        model = self.model()
+        try:
+            row = model.sessions.index(session)
+        except ValueError:
+            return
+        rect = self.visualRect(model.index(row))
+        if not rect.isValid():
+            return
+        top = rect.top() + AudioSessionDelegate.size_hint.height()
+        geometry = QRect(rect.left(), top, rect.width(), max(rect.bottom() - top + 1, 0))
+        if panel.geometry() != geometry:
+            panel.setGeometry(geometry)
+
+    def _ensure_info_visible(self, session):
+        if session is not self.info_session:
+            return
+        model = self.model()
+        self.scrollTo(model.index(model.sessions.index(session)), self.ScrollHint.EnsureVisible)
+        self.place_info_panel()
+
+    def _SH_ModelSessionAboutToBeRemoved(self, session):
+        if session is self.info_session:
+            self.hide_session_info()
+        if session is self._menu_item:
+            self._menu_item = None
+
+    def setModel(self, model):
+        old_model = self.model()
+        if isinstance(old_model, AudioSessionModel):
+            old_model.sessionAboutToBeRemoved.disconnect(self._SH_ModelSessionAboutToBeRemoved)
+        super(AudioSessionListView, self).setModel(model)
+        if isinstance(model, AudioSessionModel):
+            model.sessionAboutToBeRemoved.connect(self._SH_ModelSessionAboutToBeRemoved)
+
+    def updateGeometries(self):
+        super(AudioSessionListView, self).updateGeometries()
+        self.place_info_panel()
+
+    def scrollContentsBy(self, dx, dy):
+        super(AudioSessionListView, self).scrollContentsBy(dx, dy)
+        self.place_info_panel()
 
     def contextMenuEvent(self, event):
         menu = self.context_menu
@@ -3011,6 +3122,7 @@ class AudioSessionListView(QListView):
         if self._pressed_index is not None and self._pressed_index.isValid():
             self.dragged_session = self._pressed_index.data(Qt.ItemDataRole.UserRole)
             rect = self.visualRect(self._pressed_index)
+            rect.setHeight(AudioSessionDelegate.size_hint.height())  # leave out the info panel
             rect.adjust(1, 1, -1, -1)
             pixmap = QPixmap(rect.size())
             pixmap.fill(Qt.GlobalColor.transparent)
@@ -3214,8 +3326,12 @@ class AudioSessionListView(QListView):
             blink.main_window.set_message_pane_visible(True)
 
     def _AH_ShowSessionInfo(self):
-        blink = QApplication.instance()
-        blink.chat_window.show_session_info()
+        session = self._menu_item
+        if session is None:
+            selected_indexes = self.selectionModel().selectedIndexes()
+            session = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
+        if session is not None:
+            self.toggle_session_info(session)
 
     def _AH_SendFiles(self, uri=None):
         selected_indexes = self.selectedIndexes()
