@@ -164,6 +164,9 @@
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout">
+       <property name="spacing">
+        <number>6</number>
+       </property>
        <item>
         <widget class="ElidedLabel" name="info_label">
          <property name="sizePolicy">
@@ -177,22 +180,19 @@
          </property>
         </widget>
        </item>
+       <item alignment="Qt::AlignVCenter">
+        <widget class="ElidedLabel" name="unread_label">
+         <property name="text">
+          <string>0</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
     </layout>
-   </item>
-   <item alignment="Qt::AlignVCenter">
-    <widget class="ElidedLabel" name="unread_label">
-     <property name="text">
-      <string>0</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignCenter</set>
-     </property>
-     <property name="margin">
-      <number>1</number>
-     </property>
-    </widget>
    </item>
    <item>
     <widget class="ContactState" name="state_label">

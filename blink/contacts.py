@@ -3453,8 +3453,9 @@ class ContactWidget(base_class, ui_class):
             self.unread_label.setVisible(False)
         else:
             # the label only holds the badge's place: ContactDelegate paints it, round and antialiased
+            # on the second line, under the time and right-aligned with it
             metrics = QFontMetrics(self.unread_label.font())
-            height = metrics.height() + 4
+            height = metrics.height() + 2
             width = max(height, metrics.horizontalAdvance(self.unread_label.text()) + height // 2 + 2)
             self.unread_label.setFixedSize(width, height)
             self.unread_label.setStyleSheet('color: transparent; background: transparent; padding: 0px;')
