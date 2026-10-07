@@ -47,6 +47,8 @@ class TranscriptView(QListView):
         self.setItemDelegate(self.bubble_delegate)
         self._set_background()
         follow_theme(self)
+        from blink.messagepane.media import MediaCache
+        MediaCache.instance().ready.connect(self._SH_MediaReady)
         self._anchor = None         # (maximum, value) before rows were inserted at the top
         self._stick = True          # follow the bottom
         scrollbar = self.verticalScrollBar()
@@ -251,3 +253,7 @@ class TranscriptView(QListView):
         self.scrollTo(model.index(row, 0), QAbstractItemView.ScrollHint.PositionAtCenter)
         self.bubble_delegate.flash(message_id)
         return True
+
+    def _SH_MediaReady(self, path):
+        """A picture finished decoding: repaint (a bubble that waited for it draws it now)."""
+        self.viewport().update()
