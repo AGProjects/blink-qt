@@ -71,6 +71,20 @@ class ActivityLog(object, metaclass=Singleton):
         if enabled:
             self._log('DEBUG', message)
 
+    def show(self, message, level='INFO'):
+        """Only in the Activity tab of the logs window (kept in the backlog until one is attached):
+        for lines that have a file of their own (JournalLog), not activity.txt or stdout."""
+        timestamp = datetime.now()
+        with self._lock:
+            gui_logger = self._gui_logger
+            if gui_logger is None:
+                self._backlog.append((level, timestamp, message))
+        if gui_logger is not None:
+            try:
+                gui_logger(level, timestamp, message)
+            except Exception:
+                pass
+
     def set_gui_logger(self, logger):
         """Attach a callable(level, timestamp, message) and replay the backlog to it."""
         with self._lock:
@@ -134,7 +148,7 @@ class JournalLog(object, metaclass=Singleton):
 
         <date time.ms> [<account>] <event> key=value ...
 
-    Always on, also shown in the Messages tab of the logs window; the file is
+    Always on, also shown in the Activity tab of the logs window; the file is
     rotated to journal.txt.1 at max_size.
     """
 
@@ -161,8 +175,8 @@ class JournalLog(object, metaclass=Singleton):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
         text = f'[{account}] {event}' + ''.join(f' {key}={self._value(value)}' for key, value in fields.items() if value is not None)
         line = f'{timestamp} {text}\n'
-        # also in the Messages tab of the logs window, whatever logs.trace_messaging is (it is not a trace)
-        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=f'{timestamp} (journal) {text}', section='messaging'))
+        # also in the Activity tab of the logs window (not in activity.txt: this file has them)
+        ActivityLog().show(f'[journal] {text}')
         with self._lock:
             try:
                 if self._file is None:
