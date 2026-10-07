@@ -3324,14 +3324,11 @@ class ContactWidget(base_class, ui_class):
         with Resources.directory:
             self.setupUi(self)
         self.unread_label.setFont(badge_font(self.font()))
-        if is_dark_theme():
-            palette = self.info_label.palette()
-            for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
-                palette.setColor(color_group, QPalette.ColorRole.WindowText, secondary_text_color(QApplication.palette(), color_group))
-            self.info_label.setPalette(palette)
-            self.info_label.setForegroundRole(QPalette.ColorRole.WindowText)
-        else:
-            self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
+        palette = self.info_label.palette()
+        for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+            palette.setColor(color_group, QPalette.ColorRole.WindowText, secondary_text_color(QApplication.palette(), color_group))
+        self.info_label.setPalette(palette)
+        self.info_label.setForegroundRole(QPalette.ColorRole.WindowText)
         # AlternateBase set to #f0f4ff or #e0e9ff
 
     def paintEvent(self, event):

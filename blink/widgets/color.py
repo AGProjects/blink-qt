@@ -170,12 +170,12 @@ def is_dark_theme():
 
 
 def secondary_text_color(palette, color_group=QPalette.ColorGroup.Normal):
-    """The colour of secondary text (the address line under a name): the palette's Dark in a
-    light theme; in a dark theme Dark is near black, so a grey between the text and the window."""
-    if is_dark_theme():
-        text, window = palette.color(color_group, QPalette.ColorRole.WindowText), palette.color(color_group, QPalette.ColorRole.Window)
-        return QColor((text.red() * 3 + window.red() * 2) // 5, (text.green() * 3 + window.green() * 2) // 5, (text.blue() * 3 + window.blue() * 2) // 5)
-    return palette.color(color_group, QPalette.ColorRole.Dark)
+    """The colour of secondary text (the address or last message under a name): a grey between
+    the text and the window colours, nearer the text. The palette's Dark role is too faint in a
+    light theme and near black in a dark one."""
+    weight = 0.7 if is_dark_theme() else 0.62
+    text, window = palette.color(color_group, QPalette.ColorRole.WindowText), palette.color(color_group, QPalette.ColorRole.Window)
+    return QColor(*(round(t * weight + w * (1 - weight)) for t, w in ((text.red(), window.red()), (text.green(), window.green()), (text.blue(), window.blue()))))
 
 
 class HCYColor(object):
