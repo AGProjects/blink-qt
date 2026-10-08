@@ -1,8 +1,8 @@
 
 import re
 
-from PyQt6.QtCore import Qt, QEvent, pyqtSignal
-from PyQt6.QtGui import QPainter, QPalette, QPixmap
+from PyQt6.QtCore import Qt, QEvent, QLineF, QRect, QRectF, QSize, pyqtSignal
+from PyQt6.QtGui import QIcon, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
 
 from blink.resources import Resources
@@ -193,18 +193,20 @@ class SearchIcon(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setVisible(True)
         self.setMinimumSize(size+2, size+2)
-        pixmap = QPixmap()
-        if pixmap.load(Resources.get("icons/search.svg")):
-            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        else:
-            self.icon = None
+        self.size = size
+        # drawn from the SVG at the screen's pixel density: a 16px pixmap scaled up is blurry on HiDPI
+        self.svg_icon = QIcon(Resources.get("icons/search.svg"))
+        self.icon = None if self.svg_icon.isNull() else self.svg_icon
 
     def paintEvent(self, event):
+        if self.icon is None:
+            return
         painter = QPainter(self)
-        if self.icon is not None:
-            x = int((self.width() - self.icon.width()) / 2)
-            y = int((self.height() - self.icon.height()) / 2)
-            painter.drawPixmap(x, y, self.icon)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        pixmap = self.svg_icon.pixmap(QSize(self.size, self.size), self.devicePixelRatioF())
+        x = int((self.width() - self.size) / 2)
+        y = int((self.height() - self.size) / 2)
+        painter.drawPixmap(QRect(x, y, self.size, self.size), pixmap)
 
 
 class ClearButton(QAbstractButton):
@@ -215,27 +217,37 @@ class ClearButton(QAbstractButton):
         self.setToolTip("Clear")
         self.setVisible(False)
         self.setMinimumSize(size+2, size+2)
-        pixmap = QPixmap()
-        if pixmap.load(Resources.get("icons/delete.svg")):
-            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            # Use QImage because QPainter using a QPixmap does not support CompositionMode_Multiply -Dan
-            image = self.icon.toImage()
-            painter = QPainter(image)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
-            painter.drawPixmap(0, 0, self.icon)
-            painter.end()
-            self.icon_pressed = QPixmap(image)
-        else:
-            self.icon = self.icon_pressed = None
+        self.size = size
+        # drawn from the SVG at the screen's pixel density: a 16px pixmap scaled up is blurry on HiDPI
+        svg_icon = QIcon(Resources.get("icons/delete.svg"))
+        self.icon = None if svg_icon.isNull() else svg_icon
+        self._pixmaps = {}      # (device pixel ratio, pressed): pixmap
+
+    def _pixmap(self, pressed):
+        ratio = self.devicePixelRatioF()
+        key = (ratio, pressed)
+        if key not in self._pixmaps:
+            pixmap = self.icon.pixmap(QSize(self.size, self.size), ratio)
+            if pressed:
+                # darker while pressed: the icon multiplied with itself (an image: a QPainter on
+                # a QPixmap does not do CompositionMode_Multiply -Dan)
+                image = pixmap.toImage()
+                painter = QPainter(image)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
+                painter.drawPixmap(0, 0, pixmap)
+                painter.end()
+                pixmap = QPixmap.fromImage(image)
+                pixmap.setDevicePixelRatio(ratio)
+            self._pixmaps[key] = pixmap
+        return self._pixmaps[key]
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        icon = self.icon_pressed if self.isDown() else self.icon
-        if icon is not None:
-            x = int((self.width() - icon.width()) / 2)
-            y = int((self.height() - icon.height()) / 2)
-            painter.drawPixmap(x, y, icon)
+        if self.icon is not None:
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            x = int((self.width() - self.size) / 2)
+            y = int((self.height() - self.size) / 2)
+            painter.drawPixmap(QRect(x, y, self.size, self.size), self._pixmap(self.isDown()))
         else:
             width = self.width()
             height = self.height()
@@ -252,12 +264,12 @@ class ClearButton(QAbstractButton):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setBrush(bg_color)
             painter.setPen(bg_color)
-            painter.drawEllipse(padding, padding, radius, radius)
+            painter.drawEllipse(QRectF(padding, padding, radius, radius))
 
             padding = padding * 2
             painter.setPen(fg_color)
-            painter.drawLine(padding, padding, width-padding, height-padding)
-            painter.drawLine(padding, height-padding, width-padding, padding)
+            painter.drawLine(QLineF(padding, padding, width-padding, height-padding))
+            painter.drawLine(QLineF(padding, height-padding, width-padding, padding))
 
 
 class SearchBox(LineEdit):
