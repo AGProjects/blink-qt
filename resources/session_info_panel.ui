@@ -1,0 +1,910 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>session_info_panel</class>
+ <widget class="QWidget" name="session_info_panel">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>260</width>
+    <height>360</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Session info</string>
+  </property>
+  <property name="autoFillBackground">
+   <bool>false</bool>
+  </property>
+  <layout class="QVBoxLayout" name="session_info_layout">
+   <property name="leftMargin">
+    <number>8</number>
+   </property>
+   <property name="topMargin">
+    <number>2</number>
+   </property>
+   <property name="rightMargin">
+    <number>4</number>
+   </property>
+   <property name="bottomMargin">
+    <number>6</number>
+   </property>
+   <item>
+    <widget class="QWidget" name="info_panel_container_widget" native="true">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">#info_panel_container_widget &gt; [role="title"] {
+	background-color: rbga(0, 0, 0, 10);
+	border-top-left-radius: 3px;
+	border-bottom-left-radius: 3px;
+	border: 1px solid rgba(0, 0, 0, 50);
+	border-right: 0px;
+	padding-right: 7px;
+}
+
+#info_panel_container_widget &gt; [role="value"] {
+	background-color: rbga(0, 0, 0, 10);
+	border-top-right-radius: 3px;
+	border-bottom-right-radius: 3px;
+	border: 1px solid rgba(0, 0, 0, 50);
+	border-left: 0px;
+	padding-right: 2px;
+}
+
+#info_panel_container_widget &gt; [role="alt-title"] {
+	background-color: transparent;
+	border-left: 1px solid transparent;
+	border-top: 1px solid transparent;
+	border-right: 0px;
+	border-bottom: 1px solid rgba(0, 0, 0, 50);
+	padding-right: 7px;
+}
+
+#info_panel_container_widget &gt; [role="alt-value"] {
+	background-color: transparent;
+	border-left: 0px;
+	border-top: 1px solid transparent;
+	border-right: 1px solid transparent;
+	border-bottom: 1px solid rgba(0, 0, 0, 50);
+	padding-right: 2px;
+}
+</string>
+     </property>
+     <layout class="QGridLayout" name="info_panel_container_layout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>2</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <property name="horizontalSpacing">
+       <number>0</number>
+      </property>
+      <property name="verticalSpacing">
+       <number>2</number>
+      </property>
+      <item row="9" column="0">
+       <widget class="QLabel" name="screen_title_label">
+        <property name="text">
+         <string>Screen</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0" colspan="2">
+       <spacer name="session_spacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>5</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="status_title_label">
+        <property name="text">
+         <string>Status</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="DurationLabel" name="duration_value_label">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+          <horstretch>1</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>01:27</string>
+        </property>
+        <property name="indent">
+         <number>0</number>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QWidget" name="chat_value_widget" native="true">
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+        <layout class="QHBoxLayout" name="chat_value_layout">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="ElidedLabel" name="chat_value_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Using relay</string>
+           </property>
+           <property name="indent">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="chat_connection_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/connection-relay.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="chat_encryption_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/lock-grey-12.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="9" column="1">
+       <widget class="QWidget" name="screen_value_widget" native="true">
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+        <layout class="QHBoxLayout" name="screen_value_layout">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="ElidedLabel" name="screen_value_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Viewing remote</string>
+           </property>
+           <property name="indent">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="screen_connection_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/connection-relay.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="screen_encryption_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/lock-grey-12.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="6" column="0">
+       <widget class="QLabel" name="audio_title_label">
+        <property name="text">
+         <string>Audio</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="remote_agent_title_label">
+        <property name="text">
+         <string>Remote Agent</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="11" column="0" colspan="2">
+       <widget class="QWidget" name="packet_loss_widget" native="true">
+        <layout class="QVBoxLayout" name="packet_loss_layout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>3</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="packet_loss_label">
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+	border-top-left-radius: 4px;
+	border-top-right-radius: 4px;
+	border: 1px solid #606060;
+	background-color: rgba(0, 0, 0, 60);
+}
+</string>
+           </property>
+           <property name="text">
+            <string>Packet Loss: 0.0%, max=0.0%</string>
+           </property>
+           <property name="indent">
+            <number>5</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="GraphWidget" name="packet_loss_graph" native="true">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>50</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QWidget#packet_loss_graph {
+	border: 1px solid #606060;
+	border-top: 1px solid transparent;
+	background-color: #f8f8f8;
+}</string>
+           </property>
+           <property name="minHeight" stdset="0">
+            <double>10.000000000000000</double>
+           </property>
+           <property name="boundary" stdset="0">
+            <double>3.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="account_title_label">
+        <property name="text">
+         <string>Account</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="12" column="0" colspan="2">
+       <widget class="QWidget" name="traffic_widget" native="true">
+        <layout class="QVBoxLayout" name="speed_layout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>3</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="traffic_label">
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+	border-top-left-radius: 4px;
+	border-top-right-radius: 4px;
+	border: 1px solid #606060;
+	background-color: rgba(0, 0, 0, 60);
+}
+</string>
+           </property>
+           <property name="text">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Traffic: &lt;span style="font-family: sans-serif; color:#d70000;"&gt;↓&lt;/span&gt; 0kbps &lt;span style="font-family: sans-serif; color:#0064d7;"&gt;↑&lt;/span&gt; 0kbps&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="indent">
+            <number>5</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="GraphWidget" name="traffic_graph" native="true">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>50</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QWidget#traffic_graph {
+	border: 1px solid #606060;
+	border-top: 1px solid transparent;
+	background-color: #f8f8f8;
+}</string>
+           </property>
+           <property name="fillTransparency" stdset="0">
+            <number>25</number>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="ElidedLabel" name="account_value_label">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>user@domain</string>
+        </property>
+        <property name="indent">
+         <number>0</number>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="ElidedLabel" name="status_value_label">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+          <horstretch>1</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="palette">
+         <palette>
+          <active>
+           <colorrole role="Button">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="Base">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="Window">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="AlternateBase">
+            <brush brushstyle="SolidPattern">
+             <color alpha="255">
+              <red>144</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+          </active>
+          <inactive>
+           <colorrole role="Button">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="Base">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="Window">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="AlternateBase">
+            <brush brushstyle="SolidPattern">
+             <color alpha="255">
+              <red>144</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+          </inactive>
+          <disabled>
+           <colorrole role="Button">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="Base">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="Window">
+            <brush brushstyle="SolidPattern">
+             <color alpha="10">
+              <red>0</red>
+              <green>0</green>
+              <blue>0</blue>
+             </color>
+            </brush>
+           </colorrole>
+           <colorrole role="AlternateBase">
+            <brush brushstyle="SolidPattern">
+             <color alpha="255">
+              <red>144</red>
+              <green>96</green>
+              <blue>96</blue>
+             </color>
+            </brush>
+           </colorrole>
+          </disabled>
+         </palette>
+        </property>
+        <property name="text">
+         <string>Connected</string>
+        </property>
+        <property name="indent">
+         <number>0</number>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+       </widget>
+      </item>
+      <item row="10" column="0" colspan="2">
+       <widget class="QWidget" name="latency_widget" native="true">
+        <layout class="QVBoxLayout" name="latency_layout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>5</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="latency_label">
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+	border-top-left-radius: 4px;
+	border-top-right-radius: 4px;
+	border: 1px solid #606060;
+	background-color: rgba(0, 0, 0, 60);
+}
+</string>
+           </property>
+           <property name="text">
+            <string>Network Latency: 0ms, max=0ms</string>
+           </property>
+           <property name="indent">
+            <number>5</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="GraphWidget" name="latency_graph" native="true">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>50</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">QWidget#latency_graph {
+	border: 1px solid #606060;
+	border-top: 1px solid transparent;
+	background-color: #f8f8f8;
+}</string>
+           </property>
+           <property name="boundary" stdset="0">
+            <double>300.000000000000000</double>
+           </property>
+           <property name="minHeight" stdset="0">
+            <double>10.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QWidget" name="audio_value_widget" native="true">
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+        <layout class="QHBoxLayout" name="audio_value_layout">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="ElidedLabel" name="audio_value_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>opus 48kHz</string>
+           </property>
+           <property name="indent">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="audio_connection_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/connection-direct.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="audio_encryption_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/lock-grey-12.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="duration_title_label">
+        <property name="text">
+         <string>Duration</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="chat_title_label">
+        <property name="text">
+         <string>Chat</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="ElidedLabel" name="remote_agent_value_label">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>Blink Qt 1.0.0</string>
+        </property>
+        <property name="indent">
+         <number>0</number>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="0">
+       <widget class="QLabel" name="video_title_label">
+        <property name="text">
+         <string>Video</string>
+        </property>
+        <property name="role" stdset="0">
+         <string notr="true">title</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="QWidget" name="video_value_widget" native="true">
+        <property name="role" stdset="0">
+         <string notr="true">value</string>
+        </property>
+        <layout class="QHBoxLayout" name="video_value_layout">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="ElidedLabel" name="video_value_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>H264 25fps</string>
+           </property>
+           <property name="indent">
+            <number>0</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="video_connection_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/connection-direct.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="video_encryption_label">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string />
+           </property>
+           <property name="pixmap">
+            <pixmap>icons/lock-grey-12.svg</pixmap>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ElidedLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
+  </customwidget>
+  <customwidget>
+   <class>DurationLabel</class>
+   <extends>QLabel</extends>
+   <header>blink.widgets.labels</header>
+  </customwidget>
+  <customwidget>
+   <class>GraphWidget</class>
+   <extends>QWidget</extends>
+   <header>blink.widgets.graph</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources />
+ <connections />
+</ui>
