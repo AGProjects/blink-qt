@@ -141,6 +141,35 @@ def is_managed_group(group_settings):
             is_group(group_settings, TEL) or is_group(group_settings, CONFERENCE))
 
 
+def is_deleted_contact(contact):
+    """Whether an addressbook contact (its settings) is in the Deleted group."""
+    try:
+        group = addressbook.AddressbookManager().get_group(DELETED_GROUP_ID)
+    except KeyError:
+        return False
+    return getattr(contact, 'id', None) in {member.id for member in group.contacts}
+
+
+def deleted_contact_menu(menu, parent, contacts):
+    """What a deleted contact offers, wherever it is shown: Restore and Delete Permanently,
+    no calls, messages or edits (it comes back to use only by being restored)."""
+    menu.addAction(translate('contact_list', 'Restore'), lambda: ContactTrash.restore(contacts))
+    menu.addAction(translate('contact_list', 'Delete Permanently'), lambda: confirm_delete_permanently(parent, contacts))
+
+
+def confirm_delete_permanently(parent, contacts):
+    if not contacts:
+        return False
+    names = [contact.name or contact.id for contact in contacts]
+    question = (translate('contact_list', "Permanently delete '%s'?") % names[0] if len(contacts) == 1 else
+                translate('contact_list', 'Permanently delete %d contacts?') % len(contacts))
+    text = question + '\n\n' + translate('contact_list', 'The contact is removed from the server address book, and its messages are deleted on all your devices. This cannot be undone.')
+    if QMessageBox.warning(parent, translate('contact_list', 'Delete Permanently'), text, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+        return False
+    ContactTrash.delete_permanently(contacts)
+    return True
+
+
 def publish_contact_for_groups(contact):
     """Make a just-created contact safe to put in a group (macOS _publish_contact_for_groups).
 
@@ -218,22 +247,29 @@ class ContactTrash(object):
         history = HistoryManager().message_history
         with addressbook_origin.reason('delete'), addressbook.AddressbookManager.transaction():
             deleted_group = cls.deleted_group(create=True)
-            try:
-                messages_group = addressbook.AddressbookManager().get_group(MESSAGES_GROUP_ID)
-            except KeyError:
-                messages_group = None
+            # out of every other group (Messages, Calls, Tel, Conference and the user's own): in
+            # Deleted only. A restore files it back into Tel and Conference (ContactRepair) and
+            # Messages (from history); Calls takes it back with its next call.
+            other_groups = [group for group in addressbook.AddressbookManager().get_groups() if group.id != DELETED_GROUP_ID]
+            changed = set()
             for contact in contacts:
                 keys = cls._keys(contact)
                 for key in keys:
                     history.tombstone_conversation(key)
                 if contact.id not in {member.id for member in deleted_group.contacts}:
                     deleted_group.contacts.add(contact)
-                if messages_group is not None and contact.id in {member.id for member in messages_group.contacts}:
-                    messages_group.contacts.remove(contact)
-                ActivityLog().info(f"[trash] Contact {contact.name or contact.id} moved to Deleted, conversations hidden: {', '.join(keys) or 'none'}")
+                left = []
+                for group in other_groups:
+                    if contact.id in {member.id for member in group.contacts}:
+                        group.contacts.remove(contact)
+                        changed.add(group.id)
+                        left.append(group.name)
+                ActivityLog().info(f"[trash] Contact {contact.name or contact.id} moved to Deleted" + (f" (out of {', '.join(left)})" if left else '')
+                                   + f", conversations hidden: {', '.join(keys) or 'none'}")
             deleted_group.save()
-            if messages_group is not None:
-                messages_group.save()
+            for group in other_groups:
+                if group.id in changed:
+                    group.save()
 
     @classmethod
     def restore(cls, contacts):
@@ -249,9 +285,26 @@ class ContactTrash(object):
                 ActivityLog().info(f'[trash] Contact {contact.name or contact.id} restored from Deleted')
             if group is not None:
                 group.save()
-        # back into Messages when it has a conversation (MessagesGroupFiler files from history)
+        # back into Tel and Conference by its addresses, and into Messages when it has a conversation
+        # (MessagesGroupFiler files from history)
+        try:
+            with AddressbookNotifier().quiet():
+                ContactRepair().file_into_kind_groups()
+        except Exception as e:
+            ActivityLog().warning(f'[trash] Filing restored contacts into Tel and Conference failed: {e!r}')
         if BlinkSettings().interface.show_messages_group:
             history.get_all_contacts()
+
+    # conversation key: when its contact was deleted for good. Its history is erased in the db
+    # thread a moment later; until then a list of conversations read before the erasing still
+    # has it, and MessagesGroupFiler would make a new contact for it.
+    purging = {}
+    purge_window = 60       # seconds
+
+    @classmethod
+    def is_purging(cls, key):
+        started = cls.purging.get(canonical_uri(key) or key)
+        return started is not None and time.monotonic() - started < cls.purge_window
 
     @classmethod
     def delete_permanently(cls, contacts):
@@ -266,6 +319,9 @@ class ContactTrash(object):
         for contact in contacts:
             for key in cls._keys(contact):
                 (kept if key in claimed else purged).append(key)
+        now = time.monotonic()
+        cls.purging = {key: started for key, started in cls.purging.items() if now - started < cls.purge_window}
+        cls.purging.update((key, now) for key in purged)
         with addressbook_origin.reason('delete-permanently'), addressbook.AddressbookManager.transaction():
             group = cls.deleted_group()
             if group is not None:
@@ -582,7 +638,9 @@ class ContactRepair(object, metaclass=Singleton):
         activity = ActivityLog()
         manager = addressbook.AddressbookManager()
         account = AccountManager().default_account
-        contacts = list(manager.get_contacts())
+        deleted = ContactTrash.deleted_group()
+        in_trash = {member.id for member in deleted.contacts} if deleted is not None else set()
+        contacts = [contact for contact in manager.get_contacts() if contact.id not in in_trash]      # a deleted contact stays out
 
         def addresses(contact):
             return [str(uri.uri) for uri in contact.uris]
@@ -754,6 +812,9 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                 key = server_conference_uri(key)
                 if not is_fileable_key(key):
                     skipped.append(key)
+                    continue
+                if ContactTrash.is_purging(key):
+                    skipped.append(key)         # its contact was just deleted for good: its history is going too
                     continue
                 contact = self._contact_for(key, display_name, existing, created)
                 if contact is None:
@@ -1386,21 +1447,38 @@ class VirtualGroup(SettingsState, metaclass=VirtualGroupMeta):
             notification_center.post_notification('CFGManagerSaveFailed', sender=configuration, data=NotificationData(object=self, operation='save', modified=modified_data, exception=e))
 
 
+def deleted_contact_ids():
+    """The ids of the contacts in the Deleted group."""
+    try:
+        group = addressbook.AddressbookManager().get_group(DELETED_GROUP_ID)
+    except KeyError:
+        return set()
+    return {member.id for member in group.contacts}
+
+
 class AllContactsList(object):
+    """Every addressbook contact but the deleted ones: Deleted and All Contacts do not share members."""
+
     def __init__(self):
         self.manager = addressbook.AddressbookManager()
 
+    def _contacts(self):
+        deleted = deleted_contact_ids()
+        return [contact for contact in self.manager.get_contacts() if contact.id not in deleted]
+
     def __iter__(self):
-        return iter(self.manager.get_contacts())
+        return iter(self._contacts())
 
     def __getitem__(self, id):
+        if id in deleted_contact_ids():
+            raise KeyError(id)
         return self.manager.get_contact(id)
 
     def __contains__(self, id):
-        return self.manager.has_contact(id)
+        return self.manager.has_contact(id) and id not in deleted_contact_ids()
 
     def __len__(self):
-        return len(self.manager.get_contacts())
+        return len(self._contacts())
 
     __hash__ = None
 
@@ -1415,11 +1493,15 @@ class AllContactsGroup(VirtualGroup):
 
     def __init__(self):
         self.contacts = AllContactsList()
+        self._deleted = set()       # the members of Deleted as last seen: they are not shown here
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='AddressbookContactWasActivated')
         notification_center.add_observer(self, name='AddressbookContactWasDeleted')
+        notification_center.add_observer(self, name='AddressbookGroupWasActivated')
+        notification_center.add_observer(self, name='AddressbookGroupDidChange')
 
     def __establish__(self):
+        self._deleted = deleted_contact_ids()
         notification_center = NotificationCenter()
         notification_center.post_notification('VirtualGroupWasActivated', sender=self, data=NotificationData(contacts=list(self.contacts)))
 
@@ -1429,11 +1511,37 @@ class AllContactsGroup(VirtualGroup):
 
     def _NH_AddressbookContactWasActivated(self, notification):
         contact = notification.sender
+        if contact.id in self._deleted:
+            return
         notification.center.post_notification('VirtualGroupDidAddContact', sender=self, data=NotificationData(contact=contact))
 
     def _NH_AddressbookContactWasDeleted(self, notification):
         contact = notification.sender
+        if contact.id in self._deleted:
+            self._deleted.discard(contact.id)       # it was not shown here
+            return
         notification.center.post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=contact))
+
+    def _NH_AddressbookGroupWasActivated(self, notification):
+        if notification.sender.id == DELETED_GROUP_ID:
+            self._deleted_changed(notification.sender)
+
+    def _NH_AddressbookGroupDidChange(self, notification):
+        if notification.sender.id == DELETED_GROUP_ID:
+            self._deleted_changed(notification.sender)
+
+    def _deleted_changed(self, group):
+        # moved to Deleted: out of All Contacts; restored: back in it
+        deleted = {member.id for member in group.contacts}
+        manager = addressbook.AddressbookManager()
+        gone, back = deleted - self._deleted, self._deleted - deleted
+        self._deleted = deleted
+        for contact_id in gone:
+            if manager.has_contact(contact_id):
+                NotificationCenter().post_notification('VirtualGroupDidRemoveContact', sender=self, data=NotificationData(contact=manager.get_contact(contact_id), hidden=True))
+        for contact_id in back:
+            if manager.has_contact(contact_id):
+                NotificationCenter().post_notification('VirtualGroupDidAddContact', sender=self, data=NotificationData(contact=manager.get_contact(contact_id)))
 
 
 class MessageContact(object):
@@ -2888,12 +2996,22 @@ class Group(object):
         self._show_unread()
 
     def _show_unread(self):
+        # Messages: its unread messages, on another background; Deleted: how many contacts are in it
         widget = self.widget
         if widget is Null:
             return
+        if getattr(self.settings, 'id', None) == DELETED_GROUP_ID:
+            try:
+                count = len(list(self.settings.contacts))
+            except Exception:
+                count = 0
+            highlighted = False
+        else:
+            count = self.unread
+            highlighted = bool(count)
         if not widget.editing:
-            widget.name_label.setText(f'{self.name} ({self.unread})' if self.unread else self.name)
-        widget.highlighted = bool(self.unread)
+            widget.name_label.setText(f'{self.name} ({count})' if count else self.name)
+        widget.highlighted = highlighted
         widget.update()
 
     @property
@@ -2939,7 +3057,7 @@ class Group(object):
     def _NH_AddressbookGroupDidChange(self, notification):
         if 'name' in notification.data.modified:
             self.widget.name = notification.sender.name
-            self._show_unread()
+        self._show_unread()         # the name, or the members of Deleted, may have changed
 
 
 class ContactIconDescriptor(object):
@@ -4603,8 +4721,13 @@ class ContactModel(QAbstractListModel):
             self.addContact(Contact(notification.data.contact, group))
 
     def _NH_VirtualGroupDidRemoveContact(self, notification):
-        contact = self.items[GroupContacts, notification.sender][notification.data.contact]
+        try:
+            contact = self.items[GroupContacts, notification.sender][notification.data.contact]
+        except KeyError:
+            return
         self.removeContact(contact)
+        if getattr(notification.data, 'hidden', False):
+            return          # only hidden (moved to Deleted): the contact and its pictures stay
         if notification.sender is AllContactsGroup():
             icon_manager = IconManager()
             icon_manager.remove(contact.settings.id)
@@ -5250,6 +5373,10 @@ class ContactListView(QListView):
             menu.addAction(self.actions.add_contact)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        elif len(selected_items) > 1 and all(isinstance(item, Contact) and getattr(item.group.settings, 'id', None) == DELETED_GROUP_ID for item in selected_items):
+            # deleted contacts: restored or deleted for good, nothing else
+            menu.addAction(self.actions.restore_contact)
+            menu.addAction(self.actions.delete_permanently)
         elif len(selected_items) > 1:
             menu.addAction(self.actions.delete_selection)
             self.actions.undo_last_delete.setText(undo_delete_text)
@@ -5258,6 +5385,13 @@ class ContactListView(QListView):
             menu.addSeparator()
             menu.addAction(self.actions.add_group)
             menu.addAction(self.actions.add_contact)
+        elif isinstance(selected_items[0], Group) and getattr(selected_items[0].settings, 'id', None) == DELETED_GROUP_ID:
+            # the trash: everything in it restored, or deleted for good
+            members = list(selected_items[0].settings.contacts)
+            restore = menu.addAction(translate('contact_list', 'Restore All (%d)') % len(members), lambda: ContactTrash.restore(members))
+            purge = menu.addAction(translate('contact_list', 'Delete All Permanently (%d)') % len(members), lambda: confirm_delete_permanently(self, members))
+            restore.setEnabled(bool(members))
+            purge.setEnabled(bool(members))
         elif isinstance(selected_items[0], Group):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
@@ -5602,12 +5736,7 @@ class ContactListView(QListView):
         contacts = self._selected_deleted_contacts()
         if not contacts:
             return
-        names = [contact.name or contact.id for contact in contacts]
-        question = (translate('contact_list', "Permanently delete '%s'?") % names[0] if len(contacts) == 1 else
-                    translate('contact_list', 'Permanently delete %d contacts?') % len(contacts))
-        text = question + '\n\n' + translate('contact_list', 'The contact is removed from the server address book, and its messages are deleted on all your devices. This cannot be undone.')
-        if QMessageBox.warning(self, translate('contact_list', 'Delete Permanently'), text, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-            ContactTrash.delete_permanently(contacts)
+        confirm_delete_permanently(self, contacts)
         self.selectionModel().clearSelection()
 
     def _AH_UndoLastDelete(self):
@@ -5885,6 +6014,8 @@ class ContactSearchListView(QListView):
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
+        elif isinstance(selected_items[0], Contact) and selected_items[0].type == 'addressbook' and is_deleted_contact(selected_items[0].settings):
+            deleted_contact_menu(menu, self, [selected_items[0].settings])
         else:
             contact = selected_items[0]
             menu.addAction(self.actions.start_audio_call)
@@ -6247,6 +6378,10 @@ class ContactDetailView(QListView):
         contact_has_uris = model.rowCount() > 1
         menu = self.context_menu
         menu.clear()
+        if is_deleted_contact(model.contact):
+            deleted_contact_menu(menu, self, [model.contact])
+            menu.exec(event.globalPos())
+            return
         menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.start_audio_call)
         menu.addAction(self.actions.start_video_call)
