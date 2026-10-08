@@ -625,9 +625,9 @@ class BubbleDelegate(QStyledItemDelegate):
         import html as _html
         if share:
             detail = share_detail(share)
-            document.setHtml(f'<b>{_html.escape(share_title(share))}</b>' + (f'<br><span style="font-size:small">{_html.escape(detail)}</span>' if detail else ''))
+            document.setHtml(f'<span style="font-weight:500">{_html.escape(share_title(share))}</span>' + (f'<br><span style="font-size:small">{_html.escape(detail)}</span>' if detail else ''))
         else:
-            document.setHtml(f'<b>{_html.escape(translate("message_pane", "Location"))}</b>')
+            document.setHtml(f'<span style="font-weight:500">{_html.escape(translate("message_pane", "Location"))}</span>')
         bubble_width = box_width + 2 * self.image_padding
         document.setTextWidth(bubble_width - 2 * self.padding_h)
         layout.document = document
