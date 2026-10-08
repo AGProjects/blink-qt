@@ -37,7 +37,7 @@ from blink.logging import ActivityLog, JournalLog, MessagingTrace as log
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPES, LOCATION_CONTENT_TYPE, CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, classify_category, has_link
 from blink.message_envelopes import build_call_record, call_record, call_summary, dominant_media, legacy_call_record, merge_call_records, this_device_id
 from blink.message_envelopes import METADATA_CONTENT_TYPE, metadata_link, reply_metadata
-from blink.message_envelopes import conversation_preview, is_pgp_armoured
+from blink.message_envelopes import conversation_preview, file_transfer_envelope, is_pgp_armoured
 from blink.location import storage_fields as location_storage_fields
 from blink.messages import BlinkMessage
 from blink.resources import ApplicationData, Resources
@@ -2003,11 +2003,50 @@ class MessageHistory(object, metaclass=Singleton):
         """A call this device recorded, as an audio message of the conversation with the other
         party. The file is already where local_file looks (file_transfers/<account>/<peer>/<id>/);
         the envelope has no url: the recording stays on this device."""
-        content = json.dumps({'filename': os.path.basename(path),
-                              'filesize': os.path.getsize(path),
-                              'filetype': 'audio/wav',
-                              'transfer_id': transfer_id,
-                              'call_recording': True})
+        cls._add_own_file(path, transfer_id, key, account, uri, display_name, timestamp, 'audio/wav', {'call_recording': True}, 'Call recording')
+
+    @classmethod
+    @run_in_thread('db')
+    def add_call_screenshot(cls, path, transfer_id, key, account, uri, display_name, timestamp):
+        """A screenshot of a video call, as a picture of the conversation with the other party.
+        The file is already where local_file looks; when it was also uploaded to our own devices
+        the server's copy of the transfer comes back with the same id and is not stored again
+        (_own_self_transfer)."""
+        cls._add_own_file(path, transfer_id, key, account, uri, display_name, timestamp, 'image/png', {}, 'Screenshot')
+
+    @staticmethod
+    def _own_self_transfer(account, message):
+        """Whether message is the server's copy of a file this device uploaded to its own account
+        (a call screenshot), already filed here under the other party. In the db thread."""
+        if str(message.content_type).lower() not in FILE_TRANSFER_CONTENT_TYPES:
+            return False
+        meta = file_transfer_envelope(message.content) or {}
+        transfer_id = str(meta.get('transfer_id') or '')
+        account_id = str(account.id)
+        sender = str((meta.get('sender') or {}).get('uri') or '').replace('sip:', '')
+        receiver = str((meta.get('receiver') or {}).get('uri') or '').replace('sip:', '')
+        if not transfer_id or sender != account_id or receiver != account_id:
+            return False
+        try:
+            if not Message.selectBy(message_id=transfer_id, account_id=account_id).count():
+                return False
+        except Exception:
+            return False
+        ActivityLog().info(f'[db] The server copy of our own transfer {transfer_id} is already filed here, not stored again')
+        return True
+
+    @classmethod
+    def _add_own_file(cls, path, transfer_id, key, account, uri, display_name, timestamp, filetype, extra, what):
+        """A file made on this device during a call, filed as an outgoing transfer of the
+        conversation with the other party: from us, to us (it was never sent to them)."""
+        envelope = {'filename': os.path.basename(path),
+                    'filesize': os.path.getsize(path),
+                    'filetype': filetype,
+                    'transfer_id': transfer_id,
+                    'sender': {'uri': str(account.id)},
+                    'receiver': {'uri': str(account.id)}}
+        envelope.update(extra)
+        content = json.dumps(envelope)
         fields = cls._content_fields(FILE_TRANSFER_CONTENT_TYPE, content)
         try:
             Message(remote_uri=key,
@@ -2028,9 +2067,9 @@ class MessageHistory(object, metaclass=Singleton):
         except dberrors.DuplicateEntryError:
             return
         except Exception as e:
-            ActivityLog().error(f'[db] Storing the call recording {path} failed: {e!r}')
+            ActivityLog().error(f'[db] Storing the {what.lower()} {path} failed: {e!r}')
             return
-        ActivityLog().info(f'[db] Call recording with {key} stored as message {transfer_id}')
+        ActivityLog().info(f'[db] {what} with {key} stored as message {transfer_id}')
         NotificationCenter().post_notification('BlinkMessageHistoryMessageDidStore', sender=account,
                                                data=NotificationData(remote_uri=key, state='displayed', direction='outgoing'))
 
@@ -2095,6 +2134,8 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def add_from_server_history(cls, account, remote_uri, message, state=None, encryption=None):
         if message.content.startswith('?OTRv'):
+            return
+        if cls._own_self_transfer(account, message):
             return
 
         remote_uri = conversation_key(remote_uri, account)
@@ -2163,6 +2204,8 @@ class MessageHistory(object, metaclass=Singleton):
     @run_in_thread('db')
     def add_from_session(cls, session, message, direction, state=None):
         if message.content.startswith('?OTRv'):
+            return
+        if cls._own_self_transfer(session.account, message):
             return
 
         if session.remote_instance_id:

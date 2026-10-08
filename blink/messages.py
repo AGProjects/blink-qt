@@ -44,8 +44,8 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.file_transfer import base_url_from_transfer, derive_base_url
-from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
+from blink.file_transfer import base_url_from_transfer, derive_base_url, upload_url
+from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, call_recording_envelope, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
 from blink.journal import FIRST_SYNC_MARKER, KNOWN_INERT_CONTENT_TYPES, is_file_transfer_notice, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
@@ -392,8 +392,9 @@ class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
     __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
-    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True, skip_journal=False):
+    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True, skip_journal=False, sessionless=False):
         self.lookup = None
+        self.sessionless = sessionless     # sent without a conversation, straight to the account's proxy
         self.skip_journal = skip_journal
         self.account = account
         self.uri = contact.uri.uri
@@ -513,7 +514,7 @@ class OutgoingMessage(object):
     __sessionless_content_types__ = ('text/pgp-private-key', 'application/sylk-api-token', 'application/sylk-api-pgp-key-lookup')
 
     def send(self):
-        if self.content_type.lower() in self.__sessionless_content_types__:
+        if self.sessionless or self.content_type.lower() in self.__sessionless_content_types__:
             self._lookup()
             return
 
@@ -543,7 +544,7 @@ class OutgoingMessage(object):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
             routes = notification.data.result
-            if self.content_type.lower() in self.__sessionless_content_types__:
+            if self.sessionless or self.content_type.lower() in self.__sessionless_content_types__:
                 self._send(routes)
                 return
 
@@ -1617,6 +1618,88 @@ class MessageManager(object, metaclass=Singleton):
             return
         logged[account.id] = url
         ActivityLog().info(message)
+
+    # files for our own devices
+
+    def share_with_own_devices(self, account, path, transfer_id, party_uri, display_name, filename):
+        """Upload a file made during a call (a screenshot) to this account itself, so that our
+        other devices get it and the other party gets nothing. Only for an account that speaks
+        SylkServer's API (a file transfer service and an API token); otherwise the file stays on
+        this device, where it is already filed. Returns whether it is being uploaded.
+
+        The server rebuilds the transfer message it broadcasts from the upload URL, which names
+        us at both ends; which conversation the file belongs in travels first, as a
+        call_recording metadata note sealed to our own key and sent to our own account.
+        """
+        if account is BonjourAccount() or not isinstance(account, Account):
+            return False
+        base = self.file_transfer_base_url(account)
+        token = account.sms.history_synchronization_token
+        if not base or not token:
+            ActivityLog().info(f'[transfer] {filename} kept on this device only: {account.id} has ' + ('no file transfer service' if not base else 'no API token yet'))
+            return False
+        public_key = self._own_public_key(account)
+        note = call_recording_envelope(transfer_id, party_uri, display_name, None, ISOTimestamp.now(),
+                                       encrypt=(lambda text: self._seal(public_key, text)) if public_key is not None else None)
+        if note is None:
+            ActivityLog().warning(f'[transfer] {filename} ({transfer_id}): no own public key to seal where it belongs, our other devices will not know the conversation')
+        else:
+            from blink.contacts import URIUtils
+            contact, contact_uri = URIUtils.find_contact(account.uri)
+            self._send_message(OutgoingMessage(account, contact, note, METADATA_CONTENT_TYPE, sessionless=True))
+            ActivityLog().info(f'[transfer] {filename} ({transfer_id}) placed in the conversation with {party_uri} for our other devices')
+        self._upload_to_self(account, base, token, path, transfer_id, filename, public_key)
+        return True
+
+    @staticmethod
+    def _own_public_key(account):
+        if not account.sms.enable_pgp:
+            return None
+        filename = os.path.join(SIPSimpleSettings().chat.keys_directory.normalized, 'private', f'{account.id}.pubkey')
+        try:
+            key, _ = pgpy.PGPKey.from_file(filename)
+        except Exception:
+            return None
+        return key
+
+    @staticmethod
+    def _seal(public_key, text):
+        try:
+            return str(public_key.encrypt(PGPMessage.new(text)))
+        except Exception as e:
+            ActivityLog().warning(f'[transfer] Cannot seal a note to our own key: {e}')
+            return None
+
+    @run_in_thread('file-transfer')
+    def _upload_to_self(self, account, base, token, path, transfer_id, filename, public_key):
+        try:
+            with open(path, 'rb') as f:
+                data = f.read()
+        except OSError as e:
+            ActivityLog().error(f'[transfer] Cannot read {path}: {e}')
+            return
+        name = re.sub(r'[\s:]', '_', filename).lstrip('./') or f'file-{transfer_id}'
+        content_type = 'application/octet-stream'
+        if public_key is not None:
+            try:
+                data = str(public_key.encrypt(PGPMessage.new(data, file=True, filename=name))).encode()
+                name += '.asc'
+            except Exception as e:
+                ActivityLog().warning(f'[transfer] Cannot encrypt {name} to our own key, uploading it as it is: {e}')
+        else:
+            import mimetypes
+            content_type = mimetypes.guess_type(name)[0] or content_type
+        url = upload_url(base, account.id, account.id, transfer_id, name)
+        ActivityLog().info(f'[transfer] Uploading {name} ({len(data)} bytes) for our own devices to {url}')
+        try:
+            response = requests.post(url, data=data, headers={'Content-Type': content_type, 'Authorization': f'Apikey {token}'}, timeout=(15, 600))
+        except requests.RequestException as e:
+            ActivityLog().warning(f'[transfer] Uploading {name} for our own devices failed: {e}')
+            return
+        if 200 <= response.status_code < 300:
+            ActivityLog().info(f'[transfer] {name} uploaded for our own devices: {response.status_code}')
+        else:
+            ActivityLog().warning(f'[transfer] Uploading {name} for our own devices failed: HTTP {response.status_code} {response.reason}')
 
     def note_file_transfer_url(self, account, body):
         """Learn the endpoint from a transfer that has just arrived (live or from the journal).

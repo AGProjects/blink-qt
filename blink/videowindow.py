@@ -1284,9 +1284,46 @@ class VideoWindow(QWidget):
             return
         if filename is not None:
             ActivityLog().info(f'[video] Screenshot saved in {filename}')
+            self._file_screenshot(filename)
             self.toast.show_message(translate('video_window', 'Screenshot saved'), translate('video_window', 'Show in Folder'), lambda: self.open_screenshots_folder())
         else:
             self.toast.show_message(translate('video_window', 'Screenshot failed'))
+
+    def _file_screenshot(self, filename):
+        """Put the screenshot in the conversation with the other party, and on our own devices
+        when the account speaks SylkServer's API. Never sent to the other party.
+
+        Filed as a call recording is: a copy where a received file of that conversation is kept
+        (file_transfers/<account>/<peer>/<id>/), as an outgoing picture from us to us.
+        """
+        import shutil
+        import uuid
+        from datetime import timezone
+        from blink.file_transfer import transfer_folder
+        from blink.history import MessageHistory, conversation_key
+        from blink.messages import MessageManager
+        from blink.resources import ApplicationData
+        session = self.blink_session
+        account = session.account
+        if account is None or session.contact_uri is None:
+            return
+        party_uri = str(session.contact_uri.uri)
+        display_name = session.contact.name if session.contact is not None else ''
+        key = conversation_key(party_uri, account)
+        transfer_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        # a neutral name: it goes to the server and into the file list of every device
+        name = 'screenshot-%s.png' % now.astimezone().strftime('%Y%m%d-%H%M%S')
+        directory = transfer_folder(ApplicationData.get('file_transfers'), account.id, key, transfer_id)
+        path = os.path.join(directory, name)
+        try:
+            os.makedirs(directory, exist_ok=True)
+            shutil.copyfile(filename, path)
+        except OSError as e:
+            ActivityLog().error(f'[video] Cannot put the screenshot in the conversation with {key}: {e}')
+            return
+        MessageHistory().add_call_screenshot(path, transfer_id, key, account, party_uri, display_name, now.replace(tzinfo=None))
+        MessageManager().share_with_own_devices(account, path, transfer_id, party_uri, display_name, name)
 
     def open_screenshots_folder(self):
         directory = BlinkSettings().screenshots_directory.normalized
