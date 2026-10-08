@@ -3736,7 +3736,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         message = notification.data.message
 
         if message.content_type.startswith('image/'):
-            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, img_content.decode().rstrip())
+            # an MSRP image arrives as raw bytes; text was already base64 encoded by the sender
+            image_data = base64.b64encode(message.content).decode() if isinstance(message.content, bytes) else message.content.strip()
+            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, image_data)
         elif message.content_type.startswith('text/'):
             content = message.content
             content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
