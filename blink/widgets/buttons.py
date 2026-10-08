@@ -321,6 +321,8 @@ class SwitchViewButton(QPushButton):
         self.dnd_timer.timeout.connect(self._update_dnd)
         self.dnd_timer.phase = 0
         self.clicked.connect(self._change_view)
+        from blink.widgets.color import follow_theme
+        follow_theme(self)
 
     def _get_view(self):
         return self.__dict__['view']
