@@ -165,7 +165,13 @@ class MainWindow(base_class, ui_class):
         self.account_state.stateChanged.connect(self._SH_AccountStateChanged)
         self.account_state.clicked.connect(self._SH_AccountStateClicked)
         self.activity_note.editingFinished.connect(self._SH_ActivityNoteEditingFinished)
-        self.add_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
+        # a person, as on macOS: a menu to add a contact or a group, or to go to a group
+        self.contacts_menu = QMenu(self.add_contact_button)
+        self.contacts_menu.aboutToShow.connect(self._fill_contacts_menu)
+        self.add_contact_button.setMenu(self.contacts_menu)
+        self.add_contact_button.setPopupMode(self.add_contact_button.ToolButtonPopupMode.InstantPopup)
+        self.add_contact_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
+        self.add_contact_button.setToolTip(translate('main_window', 'Add a contact or a group, or go to a group'))
         self.add_search_contact_button.clicked.connect(self._SH_AddContactButtonClicked)
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
         self.video_call_button.clicked.connect(self._SH_VideoCallButtonClicked)
@@ -418,7 +424,7 @@ class MainWindow(base_class, ui_class):
 
     def _set_button_icons(self):
         """The bottom bar's glyphs are dark: light copies under a dark theme."""
-        for button, filename in ((self.add_contact_button, 'icons/plus18.svg'), (self.audio_call_button, 'icons/handset.png'),
+        for button, filename in ((self.add_contact_button, 'icons/user.svg'), (self.audio_call_button, 'icons/handset.png'),
                                  (self.video_call_button, 'icons/camera.png'), (self.chat_session_button, 'icons/chat.png'),
                                  (self.screen_sharing_button, 'icons/screen.png')):
             button.setIcon(themed_icon(Resources.get(filename), '#d0d0d0'))
@@ -876,6 +882,38 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AddContactButtonClicked(self, clicked):
         self.contact_editor_dialog.open_for_add(self.search_box.text(), None)
+
+    def _fill_contacts_menu(self):
+        """Add Contact..., Add Group..., then every group shown in the list to scroll to (macOS's group menu)."""
+        from blink.contacts import Group
+        menu = self.contacts_menu
+        menu.clear()
+        menu.addAction(translate('main_window', 'Add Contact...'), lambda: self._SH_AddContactButtonClicked(False))
+        menu.addAction(translate('main_window', 'Add Group...'), self._add_group)
+        menu.addSeparator()
+        menu.addAction(translate('main_window', 'Scroll to:')).setEnabled(False)
+        for row, item in enumerate(self.contact_model.items):
+            if isinstance(item, Group) and not self.contact_list.isRowHidden(row):
+                menu.addAction('    ' + item.name, lambda group=item: self._go_to_group(group))
+
+    def _show_contact_list(self):
+        if self.contacts_view.currentWidget() is not self.contact_list_panel:
+            self.search_box.clear()         # back from the search results to the list
+        self.switch_view_button.view = SwitchViewButton.ContactView
+
+    def _add_group(self):
+        self._show_contact_list()
+        self.contact_list._AH_AddGroup()
+
+    def _go_to_group(self, group):
+        self._show_contact_list()
+        model = self.contact_model
+        if group not in model.items:
+            return
+        index = model.index(model.items.index(group))       # only scrolled to: the selection stays as it is
+        if group.collapsed:
+            group.expand()
+        self.contact_list.scrollTo(index, self.contact_list.ScrollHint.PositionAtTop)
 
     def _SH_AudioCallButtonClicked(self):
         list_view = self.contact_list if self.contacts_view.currentWidget() is self.contact_list_panel else self.search_list
