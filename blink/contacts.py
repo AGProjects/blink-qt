@@ -55,7 +55,7 @@ from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
 from blink import addressbook_notify, addressbook_origin
 from blink.contact_repair import merge_plan, repair_plan, server_conference_uri
-from blink.group_kinds import CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_plan, find_group, group_kind, is_group, stamp_plan
+from blink.group_kinds import BLOCKED, CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_plan, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData, Resources, IconManager, themed_icon
@@ -136,6 +136,47 @@ def is_managed_group(group_settings):
         return False
     return (getattr(group_settings, 'id', None) == DELETED_GROUP_ID or is_group(group_settings, CALLS) or
             is_group(group_settings, TEL) or is_group(group_settings, CONFERENCE))
+
+
+def blocked_group():
+    """The Blocked group of the addressbook (kind blocked, or its name or reserved id), or None."""
+    for group in addressbook.AddressbookManager().get_groups():
+        if is_group(group, BLOCKED):
+            return group
+    return None
+
+
+def is_blocked_contact(contact):
+    """Whether an addressbook contact (its settings) is in the Blocked group."""
+    group = blocked_group()
+    return group is not None and getattr(contact, 'id', None) in {member.id for member in group.contacts}
+
+
+def blocked_contact_menu(menu, parent, contacts):
+    """What a blocked contact offers, wherever it is shown: Unblock and Delete."""
+    menu.addAction(translate('contact_list', 'Unblock'), lambda: unblock_contacts(blocked_group(), contacts))
+    menu.addAction(translate('contact_list', 'Delete'), lambda: confirm_soft_delete(parent, contacts))
+
+
+def confirm_soft_delete(parent, contacts):
+    names = [contact.name or contact.id for contact in contacts]
+    question = (translate('contact_list', "Move '%s' to the Deleted group?") % names[0] if len(contacts) == 1 else
+                translate('contact_list', 'Move %d contacts to the Deleted group?') % len(contacts))
+    text = question + '\n\n' + translate('contact_list', 'Their messages are hidden, not deleted, and can be restored from the Deleted group. Delete them permanently from there to remove them for good.')
+    if QMessageBox.question(parent, translate('contact_list', 'Delete Contact'), text) == QMessageBox.StandardButton.Yes:
+        ContactTrash.soft_delete(contacts)
+
+
+def unblock_contacts(group, contacts):
+    """Take contacts out of the Blocked group: they can call again (as on macOS and mobile, the
+    block is the membership, replicated to the other devices)."""
+    members = {member.id for member in group.contacts}
+    with addressbook_origin.reason('unblock'), addressbook.AddressbookManager.transaction():
+        for contact in contacts:
+            if contact.id in members:
+                group.contacts.remove(contact)
+                ActivityLog().info(f'[contacts] Unblocked {contact.name or contact.id}')
+        group.save()
 
 
 def is_deleted_contact(contact):
@@ -5370,6 +5411,16 @@ class ContactListView(QListView):
             menu.addAction(self.actions.add_contact)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
+        elif (blocked_group() is not None and getattr(selected_items[0], 'group', None) is not None
+              and getattr(selected_items[0].group.settings, 'id', None) != DELETED_GROUP_ID
+              and all(isinstance(item, Contact) and item.type == 'addressbook' and is_blocked_contact(item.settings) for item in selected_items)):
+            # blocked, in Blocked or any other group: unblocked or deleted, nothing else (no calls or messages to them)
+            group = blocked_group()
+            contacts = list({item.settings.id: item.settings for item in selected_items}.values())
+            menu.addAction(translate('contact_list', 'Unblock'), lambda: unblock_contacts(group, contacts))
+            menu.addAction(self.actions.delete_selection if len(selected_items) > 1 else self.actions.delete_item)
+            self.actions.delete_selection.setEnabled(True)
+            self.actions.delete_item.setEnabled(True)
         elif len(selected_items) > 1 and all(isinstance(item, Contact) and getattr(item.group.settings, 'id', None) == DELETED_GROUP_ID for item in selected_items):
             # deleted contacts: restored or deleted for good, nothing else
             menu.addAction(self.actions.restore_contact)
@@ -6004,6 +6055,8 @@ class ContactSearchListView(QListView):
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
         elif isinstance(selected_items[0], Contact) and selected_items[0].type == 'addressbook' and is_deleted_contact(selected_items[0].settings):
             deleted_contact_menu(menu, self, [selected_items[0].settings])
+        elif isinstance(selected_items[0], Contact) and selected_items[0].type == 'addressbook' and is_blocked_contact(selected_items[0].settings):
+            blocked_contact_menu(menu, self, [selected_items[0].settings])
         else:
             contact = selected_items[0]
             menu.addAction(self.actions.start_audio_call)
@@ -6368,6 +6421,10 @@ class ContactDetailView(QListView):
         menu.clear()
         if is_deleted_contact(model.contact):
             deleted_contact_menu(menu, self, [model.contact])
+            menu.exec(event.globalPos())
+            return
+        if is_blocked_contact(model.contact):
+            blocked_contact_menu(menu, self, [model.contact])
             menu.exec(event.globalPos())
             return
         menu.addAction(self.actions.send_sms)
