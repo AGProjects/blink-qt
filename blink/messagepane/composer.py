@@ -22,7 +22,7 @@ stop/cancel; then a preview with its waveform to play, discard or send
 import os
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
-from PyQt6.QtGui import QTextOption
+from PyQt6.QtGui import QIcon, QTextOption
 from PyQt6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QMenu, QPlainTextEdit, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 from blink.resources import Resources, themed_icon
@@ -167,9 +167,8 @@ class Composer(QWidget):
         self.attach_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
         row.addWidget(self.attach_button, 0, Qt.AlignmentFlag.AlignBottom)
         self.edit = ComposerEdit(self)
-        row.addWidget(self.edit, 1)
         self.send_button = QToolButton(self)
-        self.send_button.setText(translate('message_pane', 'Send'))
+        self.send_button.setAutoRaise(True)     # a paper plane (apply_theme), greyed while there is nothing to send
         self.send_button.setToolTip(translate('message_pane', 'Send (Enter); Shift+Enter starts a new line'))
         self.send_button.setEnabled(False)
         self.mic_button = QToolButton(self)
@@ -178,7 +177,8 @@ class Composer(QWidget):
         self.mic_button.clicked.connect(self._start_recording)
         from blink.messagepane.recorder import recording_available
         self.mic_button.setVisible(recording_available())
-        row.addWidget(self.mic_button, 0, Qt.AlignmentFlag.AlignBottom)
+        row.addWidget(self.mic_button, 0, Qt.AlignmentFlag.AlignBottom)     # on the left, next to the clip
+        row.addWidget(self.edit, 1)
         row.addWidget(self.send_button, 0, Qt.AlignmentFlag.AlignBottom)
 
         self._composing_timer = QTimer(self)
@@ -197,10 +197,19 @@ class Composer(QWidget):
     def apply_theme(self):
         size = self.edit.fontMetrics().height() + 4
         self.attach_button.setIcon(themed_icon(Resources.get('icons/paperclip.svg'), '#bdbdbd'))
-        self.attach_button.setIconSize(QSize(size, size))
+        clip = round(size * 0.75)       # a lighter glyph than the plane and the microphone beside it
+        self.attach_button.setIconSize(QSize(clip, clip))
         if hasattr(self, 'mic_button'):
             self.mic_button.setIcon(themed_icon(Resources.get('icons/microphone.svg'), '#bdbdbd'))
             self.mic_button.setIconSize(QSize(size, size))
+        plane = QIcon(Resources.get('icons/paper-plane.svg'))       # blue in either theme; Qt greys it when disabled
+        for button in (getattr(self, 'send_button', None), getattr(self, 'note_send_button', None)):
+            if button is not None:
+                button.setIcon(plane)
+                button.setIconSize(QSize(size, size))
+        if hasattr(self, 'send_button'):
+            # the smaller clip in a button as big as the others, so it sits on the same line as them
+            self.attach_button.setFixedSize(self.send_button.sizeHint())
 
     # Voice notes
 
@@ -242,8 +251,10 @@ class Composer(QWidget):
         self.preview_clock = QLabel(self.preview_row)
         row.addWidget(self.preview_clock)
         send = QToolButton(self.preview_row)
-        send.setText(translate('message_pane', 'Send'))
+        send.setAutoRaise(True)
+        send.setToolTip(translate('message_pane', 'Send the voice note'))
         send.clicked.connect(self._send_note)
+        self.note_send_button = send
         row.addWidget(send)
         self.preview_row.hide()
         outer.addWidget(self.preview_row)

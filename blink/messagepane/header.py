@@ -215,6 +215,12 @@ class ConversationHeader(QWidget):
         for text, step, tip in (('A−', -1, translate('message_pane', 'Smaller text')), ('A+', 1, translate('message_pane', 'Larger text'))):
             button = self._tool_button(tip)
             button.setText(text)
+            font = button.font()
+            if font.pointSizeF() > 0:
+                font.setPointSizeF(font.pointSizeF() * 1.3)
+            else:
+                font.setPixelSize(round(font.pixelSize() * 1.3))
+            button.setFont(font)
             button.clicked.connect(lambda checked=False, step=step: self.fontStep.emit(step))
             self.font_buttons.append(button)
         # ■ stops the clip playing anywhere in the application (one at a time; leaving a conversation does not stop it)
