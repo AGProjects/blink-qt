@@ -87,13 +87,10 @@ def is_messages_group(group_settings):
 
 
 def start_contact_conversation(contact, contact_uri):
-    """What double-click / Enter on a contact does: open the conversation in the message pane for
-    a contact in the Messages group or whose preferred media is messages, otherwise start a session
-    with its preferred media."""
-    if is_messages_group(getattr(contact.group, 'settings', None)) or contact.preferred_media == 'messages':
-        QApplication.instance().main_window.show_conversation_in_pane(contact, contact_uri)
-    else:
-        SessionManager().create_session(contact, contact_uri, contact.preferred_media.stream_descriptions, connect=contact.preferred_media.autoconnect)
+    """What double-click / Enter on a contact does: open its conversation in the message pane,
+    whatever the contact. Calls, video and the rest are started from their own buttons and menus
+    (a contact's preferred media is no longer used here, nor offered in the editor)."""
+    QApplication.instance().main_window.show_conversation_in_pane(contact, contact_uri)
 
 
 def is_fileable_key(key):
@@ -7034,6 +7031,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setItemData(2, translate('contact_editor', 'video'))
         self.preferred_media.setItemData(3, translate('contact_editor', 'chat'))
         self.preferred_media.setItemData(4, translate('contact_editor', 'audio+chat'))
+        self.preferred_media.hide()     # double-click always opens the conversation: nothing to prefer
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
 
     def open_for_add(self, sip_address='', target_group=None):
@@ -7192,7 +7190,6 @@ class ContactEditorDialog(base_class, ui_class):
 
         contact.name = self.name_editor.text()
         contact.organization = self.organization_editor.text().strip()     # shared with the other clients (ag-projects:sipsimple)
-        contact.preferred_media = self.preferred_media.itemData(self.preferred_media.currentIndex())
         if self.presence.isChecked():
             contact.presence.policy = 'allow'
             contact.presence.subscribe = True
