@@ -1359,9 +1359,6 @@ padding: 2px;</string>
    <property name="text">
     <string>&amp;Mute microphone</string>
    </property>
-   <property name="shortcut">
-    <string>Ctrl+I</string>
-   </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>
    </property>
@@ -1434,7 +1431,7 @@ padding: 2px;</string>
     <string>&amp;Chat sessions (MSRP)</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+M</string>
+    <string>Ctrl+S</string>
    </property>
    <property name="shortcutContext">
     <enum>Qt::ApplicationShortcut</enum>

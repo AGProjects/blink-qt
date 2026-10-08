@@ -336,11 +336,20 @@ class MainWindow(base_class, ui_class):
 
         self.message_pane_action = QAction(translate('main_window', 'Messages Pane'), self)
         self.message_pane_action.setCheckable(True)
-        self.message_pane_action.setShortcut('Ctrl+4')
+        self.message_pane_action.setShortcut('Ctrl+M')
         first_action = self.window_menu.actions()[0] if self.window_menu.actions() else None
         self.window_menu.insertAction(first_action, self.message_pane_action)
         self.window_menu.insertSeparator(first_action)
         self.addAction(self.message_pane_action)     # the shortcut works with the menu bar hidden too
+
+        # the info panel of a call, under it in the audio panel; from any window (the video window too)
+        self.call_info_action = QAction(translate('main_window', 'Call Info'), self)
+        self.call_info_action.setShortcut('Ctrl+I')
+        self.call_info_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.call_info_action.triggered.connect(lambda checked=False: self.toggle_call_info())
+        self.window_menu.insertAction(first_action, self.call_info_action)
+        self.addAction(self.call_info_action)
+        self.call_info_action.setVisible(False)     # shown while there are calls (_SH_AudioSessionModelChangedStructure)
 
     contacts_column_minimum_width = 274
 
@@ -705,6 +714,35 @@ class MainWindow(base_class, ui_class):
         self.set_message_pane_visible(True)
         self.message_pane.show_conversation(contact, contact_uri, key)
         self._bring_to_front()
+
+    def _call_info_item(self):
+        """The call Ctrl+I is about: the video window's in front, else the selected call, else the active one, else the first."""
+        window = QApplication.activeWindow()
+        blink_session = getattr(window, 'blink_session', None)
+        if blink_session is not None and blink_session.items.audio is not None:
+            return blink_session.items.audio
+        selected = self.session_list.selectionModel().selectedIndexes()
+        if selected:
+            return selected[0].data(Qt.ItemDataRole.UserRole)
+        active = SessionManager().active_session
+        if active is not None and active.items.audio is not None:
+            return active.items.audio
+        return self.session_model.sessions[0] if self.session_model.sessions else None
+
+    def toggle_call_info(self, item=None):
+        """Show the info panel under a call in the audio panel, or hide it if it is already in view."""
+        item = item if item is not None else self._call_info_item()
+        if item is None:
+            return
+        on_screen = self.isVisible() and not self.isMinimized() and self.main_view.currentWidget() is self.sessions_panel
+        session_list = self.session_list
+        self.switch_view_button.view = SwitchViewButton.SessionView
+        self.main_view.setCurrentWidget(self.sessions_panel)
+        if on_screen and session_list.info_session is item:
+            session_list.hide_session_info()
+            return
+        self._bring_to_front()
+        session_list.show_session_info(item)
 
     def _bring_to_front(self):
         if self.isMinimized():
@@ -1282,6 +1320,7 @@ class MainWindow(base_class, ui_class):
         active_sessions = self.session_model.active_sessions
         self.switch_view_button.active_calls = len(active_sessions)     # the red "Return to the call" button, no banner
         self.switch_view_button.setVisible(bool(self.session_model.sessions))
+        self.call_info_action.setVisible(bool(self.session_model.sessions))     # only while there are calls
         self.hangup_all_button.setEnabled(any(active_sessions))
         selected_indexes = self.session_list.selectionModel().selectedIndexes()
         active_session = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else Null

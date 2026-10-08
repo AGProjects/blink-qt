@@ -1018,6 +1018,8 @@ class VideoWindow(QWidget):
         sequence = main_window.message_pane_action.shortcut() if main_window is not None else QKeySequence('Ctrl+M')
         self.message_pane_shortcut = QShortcut(sequence, self)
         self.message_pane_shortcut.activated.connect(self._SH_ChatButtonClicked)
+        self.full_screen_shortcut = QShortcut(QKeySequence('Ctrl+F'), self)
+        self.full_screen_shortcut.activated.connect(self.toggle_full_screen)
 
         for widget in (self.video_view, self.my_video_view, self.call_bar, self.toast, *self.call_bar.segments):
             widget.installEventFilter(self)
