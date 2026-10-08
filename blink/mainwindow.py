@@ -837,10 +837,15 @@ class MainWindow(base_class, ui_class):
         blink_settings.save()
 
     def _SH_AccountStateClicked(self, checked):
-        filename = QFileDialog.getOpenFileName(self, translate('main_window', 'Select Icon'), self.last_icon_directory, "Images (*.png *.tiff *.jpg *.xmp *.svg)")[0]
-        if filename:
-            self.last_icon_directory = os.path.dirname(filename)
-            filename = filename if os.path.realpath(filename) != os.path.realpath(self.default_icon_path) else None
+        # the camera to take one's picture (as on macOS), or a file; cropped to a square (blink.avatar)
+        from blink.avatar import choose_picture
+        choice, self.last_icon_directory = choose_picture(self, self.last_icon_directory)
+        if choice is not None:
+            action, filename = choice
+            if action == 'set':
+                filename = filename if os.path.realpath(filename) != os.path.realpath(self.default_icon_path) else None
+            else:
+                filename = None
             blink_settings = BlinkSettings()
             icon_manager = IconManager()
             if filename is not None:
