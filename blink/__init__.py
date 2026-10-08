@@ -140,7 +140,7 @@ class Blink(QApplication, metaclass=QSingleton):
     __activity_notifications__ = ('SIPAccountManagerWillStart', 'SIPAccountDidActivate', 'SIPAccountDidDeactivate',
                                   'SIPAccountRegistrationDidSucceed', 'SIPAccountRegistrationDidFail', 'SIPAccountRegistrationDidEnd',
                                   'SIPAccountRegistrationGotAnswer',
-                                  'TLSTransportHasChanged', 'XCAPManagerDidDiscoverServerCapabilities', 'XCAPManagerClientError',
+                                  'TLSTransportHasChanged', 'SIPEngineTransportGotCertificateError', 'XCAPManagerDidDiscoverServerCapabilities', 'XCAPManagerClientError',
                                   'SystemIPAddressDidChange',
                                   'SIPSessionNewOutgoing', 'SIPSessionNewIncoming', 'SIPSessionDidStart', 'SIPSessionDidEnd', 'SIPSessionDidFail')
 
@@ -149,6 +149,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self._log_versions()
         self.registrar_addresses = {}
         self._tls_diagnosed = {}
+        self._certificate_errors_logged = {}  # (server, reason) -> monotonic time of the last logged certificate error
         self._registrar_lookups = {}     # DNSLookup -> account, for logging where a failed registration was sent
         self._registrar_logged = {}      # account id -> (monotonic time, routes) of the last logged lookup
         self.contact_addresses = {}
@@ -750,6 +751,28 @@ class Blink(QApplication, metaclass=QSingleton):
         ActivityLog().info('TLS transport verify server: %s' % data.verify_server)
         ActivityLog().info('TLS transport certificate: %s' % data.certificate)
         ActivityLog().info('TLS transport authorities: %s' % data.ca_file)
+
+    certificate_error_interval = 600  # seconds between identical certificate error lines for one server
+
+    def _NH_SIPEngineTransportGotCertificateError(self, notification):
+        # PJSIP refused a TLS server certificate: log the exact reasons, per server tried,
+        # also when a later route (e.g. TCP) registers fine and no failure is reported
+        data = notification.data
+        reason = getattr(data, 'reason', None) or 'unknown verification error'
+        server = getattr(data, 'remote_ip', None) or getattr(data, 'remote_address', None)
+        key = (server, reason)
+        now = time.monotonic()
+        if now - self._certificate_errors_logged.get(key, -self.certificate_error_interval) < self.certificate_error_interval:
+            return
+        self._certificate_errors_logged[key] = now
+        ActivityLog().warning('TLS certificate of %s refused (server name %s): %s (verify status 0x%x)' % (server, getattr(data, 'remote_hostname', None), reason, getattr(data, 'verify_status', 0) or 0))
+        certificate = getattr(data, 'certificate', None)
+        if certificate:
+            ActivityLog().warning('TLS certificate of %s: subject %s, issuer %s, valid %s - %s, names %s' % (server,
+                                  certificate.get('subject_info') or certificate.get('subject'),
+                                  certificate.get('issuer_info') or certificate.get('issuer'),
+                                  certificate.get('not_before'), certificate.get('not_after'),
+                                  ', '.join(certificate.get('alternative_names') or []) or 'none'))
 
     def _NH_XCAPManagerDidDiscoverServerCapabilities(self, notification):
         manager = notification.sender
