@@ -177,6 +177,7 @@ class MainWindow(base_class, ui_class):
         self.video_call_button.clicked.connect(self._SH_VideoCallButtonClicked)
         self.chat_session_button.clicked.connect(self._SH_ChatSessionButtonClicked)
         self.back_to_contacts_button.clicked.connect(self.search_box.clear)  # this can be set in designer -Dan
+        self.back_to_contacts_button.hide()     # the search box's clear button (X) does the same
         self.conference_button.makeConference.connect(self._SH_MakeConference)
         self.conference_button.breakConference.connect(self._SH_BreakConference)
 
@@ -1010,6 +1011,49 @@ class MainWindow(base_class, ui_class):
             return
         active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
         self.search_view.setCurrentWidget(active_widget)
+        self._update_add_search_contact_button()
+
+    def _searched_addresses(self, text):
+        """The addresses the search text stands for: itself when it has a domain, else the text
+        at the domain of every enabled SIP account (3333 -> 3333@sylk.link)."""
+        text = text.strip().lower()
+        if text.startswith(('sip:', 'sips:')):
+            text = text.split(':', 1)[1]
+        if not text:
+            return set()
+        if '@' in text:
+            return {text}
+        domains = {str(account.id.domain).lower() for account in AccountManager().iter_accounts() if account is not BonjourAccount() and account.enabled}
+        return {f'{text}@{domain}' for domain in domains}
+
+    def _update_add_search_contact_button(self):
+        """No Add Contact while the searched address is already a contact in the results."""
+        wanted = self._searched_addresses(self.search_box.text())
+        found = False
+        if wanted:
+            model = self.contact_search_model
+            for row in range(model.rowCount()):
+                contact = model.index(row, 0).data(Qt.ItemDataRole.UserRole)
+                for contact_uri in getattr(contact, 'uris', None) or ():
+                    address = str(getattr(contact_uri, 'uri', contact_uri) or '').lower()
+                    if address.startswith(('sip:', 'sips:')):
+                        address = address.split(':', 1)[1]
+                    if address in wanted:
+                        found = True
+                        break
+                if found:
+                    break
+        self.add_search_contact_button.setVisible(not found)
+        # the row the button sits in takes no room without it (its spacers and margins would)
+        shown = not found
+        from PyQt6.QtWidgets import QSizePolicy
+        layout = self.search_topbox_layout      # uic does not keep spacers as attributes
+        for spacer in (layout.itemAt(index).spacerItem() for index in range(layout.count())):
+            if spacer is not None:
+                spacer.changeSize(40 if shown else 0, 20 if shown else 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.search_topbuttons_layout.setContentsMargins(0, 3 if shown else 0, 0, 3 if shown else 0)
+        self.search_layout.setSpacing(2 if shown else 0)
+        self.search_topbox_layout.invalidate()
 
     def _SH_ContactModelRemovedItems(self, items):
         if not self.search_box.text():
@@ -1019,6 +1063,7 @@ class MainWindow(base_class, ui_class):
         else:
             active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
             self.search_view.setCurrentWidget(active_widget)
+            self._update_add_search_contact_button()
 
     def _SH_DisplayNameEditingFinished(self):
         self.display_name.clearFocus()
@@ -1083,6 +1128,7 @@ class MainWindow(base_class, ui_class):
             self.search_view.setCurrentWidget(self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel)
             selected_items = self.search_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) <= 1)
+            self._update_add_search_contact_button()
         else:
             self.contacts_view.setCurrentWidget(self.contact_list_panel)
             selected_items = self.contact_list.selectionModel().selectedIndexes()
