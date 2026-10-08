@@ -2737,7 +2737,7 @@
        </layout>
       </widget>
       <widget class="QWidget" name="chat_page">
-       <layout class="QGridLayout" name="chat_layout" rowstretch="1,0" rowminimumheight="0,150">
+       <layout class="QGridLayout" name="chat_layout" rowstretch="0,0,1">
         <property name="leftMargin">
          <number>0</number>
         </property>
@@ -2750,136 +2750,26 @@
         <property name="bottomMargin">
          <number>0</number>
         </property>
-        <item row="0" column="0" colspan="2">
-         <widget class="QGroupBox" name="messages_group_box">
+        <item row="0" column="0">
+         <widget class="QGroupBox" name="message_sounds_group_box">
           <property name="title">
            <string>Messages</string>
           </property>
-          <layout class="QGridLayout" name="messages_layout">
-           <item row="1" column="1">
-            <widget class="QComboBox" name="style_button">
-             <item>
-              <property name="text">
-               <string>Smooth Operator</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Stockholm</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-           <item row="1" column="3">
-            <spacer name="messages_spacer">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeType">
-              <enum>QSizePolicy::Expanding</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item row="2" column="1">
-            <widget class="QComboBox" name="style_variant_button">
-             <property name="maxVisibleItems">
-              <number>20</number>
-             </property>
-             <item>
-              <property name="text">
-               <string>Blue - Grey</string>
-              </property>
-             </item>
-            </widget>
-           </item>
-           <item row="1" column="6">
-            <widget class="QSpinBox" name="style_font_size">
-             <property name="correctionMode">
-              <enum>QAbstractSpinBox::CorrectToNearestValue</enum>
-             </property>
-             <property name="suffix">
-              <string> px</string>
-             </property>
-             <property name="minimum">
-              <number>9</number>
-             </property>
-             <property name="maximum">
-              <number>20</number>
-             </property>
-             <property name="value">
-              <number>11</number>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="5">
-            <widget class="QFontComboBox" name="style_font_button"/>
-           </item>
-           <item row="1" column="0">
-            <widget class="QLabel" name="style_label">
+          <layout class="QVBoxLayout" name="message_sounds_group_box_layout">
+           <item>
+            <widget class="QCheckBox" name="chat_message_alert_button">
              <property name="text">
-              <string>Style:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              <string>Play a sound when a message is received</string>
              </property>
             </widget>
            </item>
-           <item row="0" column="0" colspan="8">
-            <widget class="ChatWebView" name="style_view">
-             <property name="url">
-              <url>
-               <string>about:blank</string>
-              </url>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="7">
-            <widget class="QPushButton" name="style_default_font_button">
-             <property name="text">
-              <string>Default</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="4">
-            <widget class="QLabel" name="style_font_label">
-             <property name="text">
-              <string>Font:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="3" colspan="5">
-            <widget class="QLabel" name="style_note_label">
-             <property name="enabled">
-              <bool>false</bool>
+           <item>
+            <widget class="QCheckBox" name="message_read_sound_button">
+             <property name="toolTip">
+              <string>When the conversation is open and the other party reads your message</string>
              </property>
              <property name="text">
-              <string>Style changes take effect for new sessions</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="2">
-            <widget class="QCheckBox" name="style_show_icons_button">
-             <property name="text">
-              <string>Show user icons</string>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="0">
-            <widget class="QLabel" name="style_variant_label">
-             <property name="text">
-              <string>Variant:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              <string>Play a sound when a message was read</string>
              </property>
             </widget>
            </item>
@@ -2907,13 +2797,6 @@
             </widget>
            </item>
            <item>
-            <widget class="QCheckBox" name="chat_message_alert_button">
-             <property name="text">
-              <string>Play a sound when a message is received</string>
-             </property>
-            </widget>
-           </item>
-           <item>
             <spacer name="chat_sessions_spacer">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -2929,41 +2812,18 @@
           </layout>
          </widget>
         </item>
-        <item row="1" column="1">
-         <widget class="QGroupBox" name="chat_window_group_box">
-          <property name="title">
-           <string>Messages Window</string>
+        <item row="2" column="0">
+         <spacer name="chat_page_spacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
           </property>
-          <layout class="QVBoxLayout" name="chat_window_group_box_layout">
-           <item>
-            <widget class="QCheckBox" name="session_info_style_button">
-             <property name="text">
-              <string>Use alternate style for the session information panel</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QCheckBox" name="traffic_units_button">
-             <property name="text">
-              <string>Show traffic in bytes per second</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="chat_window_spacer">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-          </layout>
-         </widget>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
         </item>
        </layout>
       </widget>
@@ -3795,7 +3655,7 @@
               </property>
              </widget>
             </item>
-            <item row="10" column="0">
+            <item row="13" column="0">
              <spacer name="verticalSpacer_5">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -3930,6 +3790,36 @@
               </property>
               <property name="text">
                <string>Show Messages group</string>
+              </property>
+             </widget>
+            </item>
+            <item row="10" column="0">
+             <widget class="QLabel" name="session_info_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
+              <property name="text">
+               <string>Session information</string>
+              </property>
+             </widget>
+            </item>
+            <item row="11" column="0">
+             <widget class="Line" name="session_info_line">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="12" column="0">
+             <widget class="QCheckBox" name="session_info_style_button">
+              <property name="text">
+               <string>Use alternate style for the session information panel</string>
               </property>
              </widget>
             </item>
@@ -4080,11 +3970,6 @@
    <header>blink.widgets.lineedit</header>
   </customwidget>
   <customwidget>
-   <class>ChatWebView</class>
-   <extends>QWebView</extends>
-   <header>blink.chatwindow</header>
-  </customwidget>
-  <customwidget>
    <class>SIPPortEditor</class>
    <extends>QSpinBox</extends>
    <header>blink.preferences</header>
@@ -4153,17 +4038,10 @@
   <tabstop>video_codecs_list</tabstop>
   <tabstop>h264_profile_button</tabstop>
   <tabstop>video_codec_bitrate_button</tabstop>
-  <tabstop>style_button</tabstop>
-  <tabstop>style_variant_button</tabstop>
-  <tabstop>style_show_icons_button</tabstop>
-  <tabstop>style_default_font_button</tabstop>
-  <tabstop>style_font_button</tabstop>
-  <tabstop>style_font_size</tabstop>
   <tabstop>auto_accept_chat_button</tabstop>
   <tabstop>sms_replication_button</tabstop>
   <tabstop>chat_message_alert_button</tabstop>
   <tabstop>session_info_style_button</tabstop>
-  <tabstop>traffic_units_button</tabstop>
   <tabstop>screen_sharing_scale_button</tabstop>
   <tabstop>screen_sharing_fullscreen_button</tabstop>
   <tabstop>screen_sharing_viewonly_button</tabstop>

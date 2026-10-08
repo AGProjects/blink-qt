@@ -2,17 +2,15 @@
 import os
 import re
 import urllib.parse
-import sys
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QEvent, QRegularExpression, QUrl
-from PyQt6.QtGui import QFont, QRegularExpressionValidator, QValidator, QActionGroup
+from PyQt6.QtCore import Qt, QEvent, QRegularExpression
+from PyQt6.QtGui import QRegularExpressionValidator, QValidator, QActionGroup
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
-from functools import partial
 from gnutls.crypto import X509Certificate, X509PrivateKey
 from gnutls.errors import GNUTLSError
 from zope.interface import implementer
@@ -25,8 +23,6 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.accounts import AddAccountDialog
-from blink.chatwindow import ChatMessageStyle, ChatStyleError, ChatMessage, ChatEvent, ChatSender, ChatJSInterface
-from blink.configuration.datatypes import FileURL
 from blink.configuration.settings import H264_LEVELS, BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
@@ -361,23 +357,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_codec_bitrate_button.activated[int].connect(self._SH_VideoCodecBitrateButtonActivated)
 
         # Chat
-        self.style_view.sizeChanged.connect(self._SH_StyleViewSizeChanged)
-        self.style_view.page().contentsSizeChanged.connect(self._SH_StyleViewFrameContentsSizeChanged)
-
-        self.style_button.activated[int].connect(self._SH_StyleButtonActivated)
-        self.style_variant_button.activated[int].connect(self._SH_StyleVariantButtonActivated)
-        self.style_show_icons_button.clicked.connect(self._SH_StyleShowIconsButtonClicked)
-
-        self.style_font_button.currentIndexChanged[int].connect(self._SH_StyleFontButtonCurrentIndexChanged)
-        self.style_font_size.valueChanged[int].connect(self._SH_StyleFontSizeValueChanged)
-        self.style_default_font_button.clicked.connect(self._SH_StyleDefaultFontButtonClicked)
-
         self.auto_accept_chat_button.clicked.connect(self._SH_AutoAcceptChatButtonClicked)
         self.chat_message_alert_button.clicked.connect(self._SH_ChatMessageAlertButtonClicked)
+        self.message_read_sound_button.clicked.connect(self._SH_MessageReadSoundButtonClicked)
         self.sms_replication_button.clicked.connect(self._SH_SMSReplicationButtonClicked)
 
         self.session_info_style_button.clicked.connect(self._SH_SessionInfoStyleButtonClicked)
-        self.traffic_units_button.clicked.connect(self._SH_TrafficUnitsButtonClicked)
 
         # Screen sharing
         self.screen_sharing_scale_button.clicked.connect(self._SH_ScreenSharingScaleButtonClicked)
@@ -469,21 +454,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # H.264 is not configurable: baseline at the level of the resolution (Blink._pin_h264_settings)
         self.h264_profile_label.hide()
         self.h264_profile_button.hide()
-
-        # Chat
-        self.style_view.template = open(Resources.get('chat/template.html')).read()
-
-        self.style_button.clear()
-        self.style_variant_button.clear()
-
-        styles_path = Resources.get('chat/styles')
-        for style_name in os.listdir(styles_path):
-            try:
-                style = ChatMessageStyle(style_name)
-            except ChatStyleError:
-                pass
-            else:
-                self.style_button.addItem(style_name, style)
 
         self.section_group = QActionGroup(self)
         self.section_group.setExclusive(True)
@@ -782,38 +752,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_codec_bitrate_button.setCurrentIndex(self.video_codec_bitrate_button.findData(settings.video.max_bitrate))
 
         # Chat
-        style_index = self.style_button.findText(blink_settings.chat_window.style)
-        if style_index == -1:
-            style_index = 0
-            blink_settings.chat_window.style = self.style_button.itemText(style_index)
-            blink_settings.chat_window.style_variant = None
-            blink_settings.save()
-        style = self.style_button.itemData(style_index)
-        self.style_button.setCurrentIndex(style_index)
-        self.style_variant_button.clear()
-        for variant in style.variants:
-            self.style_variant_button.addItem(variant)
-        variant_index = self.style_variant_button.findText(blink_settings.chat_window.style_variant or style.default_variant)
-        if variant_index == -1:
-            variant_index = self.style_variant_button.findText(style.default_variant)
-            blink_settings.chat_window.style_variant = None
-            blink_settings.save()
-        self.style_variant_button.setCurrentIndex(variant_index)
-        self.style_show_icons_button.setChecked(blink_settings.chat_window.show_user_icons)
-        self.update_chat_preview()
-
-        with blocked_qt_signals(self.style_font_button):
-            self.style_font_button.setCurrentFont(QFont(blink_settings.chat_window.font or style.font_family))
-        with blocked_qt_signals(self.style_font_size):
-            self.style_font_size.setValue(blink_settings.chat_window.font_size or style.font_size)
-        self.style_default_font_button.setEnabled(blink_settings.chat_window.font is not None or blink_settings.chat_window.font_size is not None)
-
         self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
         self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
+        self.message_read_sound_button.setChecked(settings.sounds.play_message_read_sound)
         self.sms_replication_button.setChecked(settings.chat.sms_replication)
 
         self.session_info_style_button.setChecked(blink_settings.chat_window.session_info.alternate_style)
-        self.traffic_units_button.setChecked(blink_settings.chat_window.session_info.bytes_per_second)
 
         # Screen sharing settings
         self.screen_sharing_scale_button.setChecked(blink_settings.screen_sharing.scale)
@@ -1024,47 +968,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.history_label.hide()
             self.history_line.hide()
 
-    def update_chat_preview(self):
-        blink_settings = BlinkSettings()
-
-        style = self.style_button.itemData(self.style_button.currentIndex())
-        style_variant = self.style_variant_button.itemText(self.style_variant_button.currentIndex())
-        font_family = blink_settings.chat_window.font or style.font_family
-        font_size = blink_settings.chat_window.font_size or style.font_size
-        user_icons = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
-
-        self.style_view.setHtml(self.style_view.template.format(base_url=FileURL(style.path) + '/', style_url=style_variant + '.css', font_family=font_family, font_size=font_size), baseUrl=QUrl.fromLocalFile(os.path.abspath(sys.argv[0])))
-        self.chat_js = ChatJSInterface(self.style_view.page())
-        self.style_view.last_message = None
-
-        def add_message(message):
-            if message.is_related_to(self.style_view.last_message):
-                message.consecutive = True
-
-                html_message = message.to_html(style, user_icons=user_icons)
-                self.chat_js.replace_element('#insert', html_message)
-            else:
-                html_message = message.to_html(style, user_icons=user_icons)
-                self.chat_js.append_message_to_chat(html_message)
-            self.style_view.last_message = message
-
-        ruby = ChatSender("Ruby", 'ruby@example.com', Resources.get('icons/avatar-ruby.png'))
-        nate = ChatSender("Nate", 'nate@example.net', Resources.get('icons/avatar-nate.png'))
-
-        messages = [ChatMessage("Andrew stepped into the room cautiously. The air was stale as if the place has not been visited in years and he had an acute feeling of being watched. "
-                                "Was this the place he was looking for, the place holding the answers he looked for so long? He was hopeful but felt uneasy about it.", ruby, 'incoming'),
-                    ChatMessage("Hey Ruby. Is this from the new book you're working on? Looks like it will be another interesting story to read :)", nate, 'outgoing'),
-                    ChatMessage("Yeah. But I'm kind of lacking inspiration right now and the book needs to be finished in a month :(", ruby, 'incoming'),
-                    ChatMessage("I think you put too much pressure on yourself. What about we get out for a bit? Watch a movie, chat about everyday events for a bit...", nate, 'outgoing'),
-                    ChatMessage("It could help you take your mind off of things and relax. We can meet at the usual spot in an hour if you want.", nate, 'outgoing'),
-                    ChatMessage("You may be right. Maybe that's what I need indeed. See you there.", ruby, 'incoming'),
-                    ChatEvent("Ruby has left the conversation")]
-
-        for message in messages:
-            add_message(message)
-        self._align_style_preview(True)
-        del self.style_view.last_message
-
     def show(self):
         selection_model = self.account_list.selectionModel()
         if not selection_model.selectedIndexes():
@@ -1128,21 +1031,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         national = self.pstn_national_example_original_label.text()
         replace_leading_zero = self.replace_leading_zero_editor.text().strip() or None
         self.pstn_national_example_transformed_label.setText(prefix + pstn_apply_leading_zero_rule(national, replace_leading_zero, None if idd_prefix == '+' else idd_prefix))
-
-    def _process_height(self, height, scroll=False):
-        widget_height = self.style_view.size().height()
-        content_height = height
-        if widget_height > content_height:
-            self.chat_js.set_style_property_element('#chat', 'position', 'relative')
-            self.chat_js.set_style_property_element('#chat', 'top', '%dpx' % (widget_height - content_height))
-        else:
-            self.chat_js.set_style_property_element('#chat', 'position', 'static')
-            self.chat_js.set_style_property_element('#chat', 'top', None)
-        if scroll:
-            self.chat_js.scroll_to_bottom()
-
-    def _align_style_preview(self, scroll=False):
-        self.chat_js.get_height_element('#chat', partial(self._process_height, scroll=scroll))
 
     # Signal handlers
     #
@@ -1733,60 +1621,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.save()
 
     # Chat and SMS signal handlers
-    def _SH_StyleViewSizeChanged(self):
-        self._align_style_preview(scroll=True)
-
-    def _SH_StyleViewFrameContentsSizeChanged(self, size):
-        self._align_style_preview(scroll=True)
-
-    def _SH_StyleButtonActivated(self, index):
-        style = self.style_button.itemData(index)
-        settings = BlinkSettings()
-        if style.name != settings.chat_window.style:
-            self.style_variant_button.clear()
-            for variant in style.variants:
-                self.style_variant_button.addItem(variant)
-            self.style_variant_button.setCurrentIndex(self.style_variant_button.findText(style.default_variant))
-            settings.chat_window.style = style.name
-            settings.chat_window.style_variant = None
-            settings.save()
-
-    def _SH_StyleVariantButtonActivated(self, index):
-        style = self.style_button.itemData(self.style_button.currentIndex())
-        style_variant = self.style_variant_button.itemText(index)
-        settings = BlinkSettings()
-        current_variant = settings.chat_window.style_variant or style.default_variant
-        if style_variant != current_variant:
-            settings.chat_window.style_variant = style_variant
-            settings.save()
-
-    def _SH_StyleShowIconsButtonClicked(self, checked):
-        settings = BlinkSettings()
-        settings.chat_window.show_user_icons = checked
-        settings.save()
-
-    def _SH_StyleFontButtonCurrentIndexChanged(self, index):
-        font = self.style_font_button.itemText(index)
-        settings = BlinkSettings()
-        settings.chat_window.font = font
-        settings.save()
-
-    def _SH_StyleFontSizeValueChanged(self, size):
-        settings = BlinkSettings()
-        settings.chat_window.font_size = size
-        settings.save()
-
-    def _SH_StyleDefaultFontButtonClicked(self, checked):
-        settings = BlinkSettings()
-        settings.chat_window.font = DefaultValue
-        settings.chat_window.font_size = DefaultValue
-        settings.save()
-        style = self.style_button.itemData(self.style_button.currentIndex())
-        with blocked_qt_signals(self.style_font_button):
-            self.style_font_button.setCurrentFont(QFont(style.font_family))
-        with blocked_qt_signals(self.style_font_size):
-            self.style_font_size.setValue(style.font_size)
-
     def _SH_AutoAcceptChatButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.chat.auto_accept = checked
@@ -1797,6 +1631,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.sounds.play_message_alerts = checked
         settings.save()
 
+    def _SH_MessageReadSoundButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.sounds.play_message_read_sound = checked
+        settings.save()
+
     def _SH_SMSReplicationButtonClicked(self, checked):
         settings = SIPSimpleSettings()
         settings.chat.sms_replication = checked
@@ -1805,11 +1644,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_SessionInfoStyleButtonClicked(self, checked):
         settings = BlinkSettings()
         settings.chat_window.session_info.alternate_style = checked
-        settings.save()
-
-    def _SH_TrafficUnitsButtonClicked(self, checked):
-        settings = BlinkSettings()
-        settings.chat_window.session_info.bytes_per_second = checked
         settings.save()
 
     # Screen sharing signal handlers
@@ -2021,14 +1855,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
-        blink_settings = BlinkSettings()
-        if notification.sender is blink_settings:
-            if {'chat_window.style', 'chat_window.style_variant', 'chat_window.show_user_icons'}.intersection(notification.data.modified):
-                self.update_chat_preview()
-            if {'chat_window.font', 'chat_window.font_size'}.intersection(notification.data.modified):
-                self.update_chat_preview()
-                self.style_default_font_button.setEnabled(blink_settings.chat_window.font is not None or blink_settings.chat_window.font_size is not None)
-        elif notification.sender is settings:
+        if notification.sender is settings:
             if 'audio.alert_device' in notification.data.modified:
                 self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
             if 'audio.input_device' in notification.data.modified:
@@ -2041,6 +1868,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.auto_accept_chat_button.setChecked(settings.chat.auto_accept)
             if 'sounds.play_message_alerts' in notification.data.modified:
                 self.chat_message_alert_button.setChecked(settings.sounds.play_message_alerts)
+            if 'sounds.play_message_read_sound' in notification.data.modified:
+                self.message_read_sound_button.setChecked(settings.sounds.play_message_read_sound)
             if 'sip.auto_answer_interval' in notification.data.modified:
                 self.auto_answer_interval.setValue(settings.sip.auto_answer_interval)
             if 'video.device' in notification.data.modified:
