@@ -342,7 +342,8 @@ class LocationStore(QObject):
         self._by_session = {}       # session id: message id of its bubble
         self._stale = {}            # message id: the previous reading, drawn while it is read again
         self._coords = {}           # tick message id: coordinates (db thread), decrypted once
-        self._decrypted = {}        # armoured text: plaintext (db thread)
+        self._decrypted = None      # digest of the armoured text: plaintext (db thread, this run)
+        self._decrypt_counts = [0, 0]   # this share: decrypted now, found decrypted
         NotificationCenter().add_observer(self, name='BlinkMessageHistoryLocationDidStore')
 
     def get(self, item):
@@ -369,6 +370,8 @@ class LocationStore(QObject):
             rows = []
         origin = None
         track, ended, expires, destination, last_time = [], False, None, None, None
+        started = time.monotonic()
+        self._decrypt_counts = [0, 0]
         for row in rows:
             action = row.related_action
             if action in TEARDOWN_ACTIONS:
@@ -389,6 +392,9 @@ class LocationStore(QObject):
                 last_time = row.timestamp.replace(tzinfo=timezone.utc)
                 if coords.get('destination'):
                     destination = coords['destination']
+        decrypted, remembered = self._decrypt_counts
+        if decrypted or remembered:
+            log.info(f'Location share {session_id}: {len(rows)} messages read in {time.monotonic() - started:.2f} s, {decrypted} decrypted now, {remembered} already decrypted')
         if origin is None:
             call_in_gui_thread(self._loaded, message_id, False)
             return
@@ -411,20 +417,82 @@ class LocationStore(QObject):
         def decrypt(text):
             return self._decrypt(row.account_id or account_id, text)
 
+        opened = {}         # armoured text: plaintext, what this row needed decrypted
+
+        def decrypt(text):
+            plaintext = self._decrypt(row.account_id or account_id, text)
+            if plaintext:
+                opened[text] = plaintext
+            return plaintext
+
         try:
             payload = location_payload(row.content, row_metadata(row.metadata, row.related_action, row.related_msg_id), decrypt=decrypt, content_type=row.content_type)
         except Exception as e:
             log.debug(f'Location message {row.message_id} cannot be read: {e!r}')
             return None
+        if opened and payload:
+            self._store_decrypted(row, opened)
         if payload and payload.get('coords'):
             self._coords[row.message_id] = payload['coords']
         elif payload and known is not None:
             payload['coords'] = known
         return payload
 
+    # Decrypted once, stored decrypted: like a message, a location row gets its plaintext in place
+    # of the ciphertext the first time it is read (_store_decrypted), so the next start reads the
+    # coordinates straight from history. A live share is many encrypted ticks; decrypting them all
+    # again at every start is what made the maps take so long to come back.
+
+    @staticmethod
+    def _store_decrypted(row, opened):
+        """Put the plaintext in the row: the whole body when it was the armour (a v2 tick, the
+        legacy metadata format), else the envelope's value (a v1 tick). In the db thread."""
+        import json
+        content = row.content.decode('utf-8', 'replace') if isinstance(row.content, (bytes, bytearray)) else str(row.content or '')
+        stripped = content.strip()
+        if stripped in opened:
+            new_content = opened[stripped]
+        else:
+            try:
+                envelope = json.loads(content)
+            except (TypeError, ValueError):
+                return
+            value = envelope.get('value') if isinstance(envelope, dict) else None
+            if not isinstance(value, str) or value.strip() not in opened:
+                return
+            envelope['value'] = opened[value.strip()]
+            new_content = json.dumps(envelope)
+        try:
+            row.content = new_content
+            row.decrypted = '1'
+        except Exception as e:
+            log.warning(f'Cannot store the decrypted location {row.message_id}: {e!r}')
+
+    def _load_decrypted(self):
+        """The plaintexts of this run. The side file an earlier version kept is read once, to spare
+        decrypting again what it holds, and removed: rows now keep their plaintext themselves."""
+        if self._decrypted is not None:
+            return
+        import json
+        from blink.resources import ApplicationData
+        path = ApplicationData.get('location_cache.json')
+        try:
+            with open(path) as cache_file:
+                self._decrypted = dict(json.load(cache_file))
+        except (OSError, ValueError, TypeError):
+            self._decrypted = {}
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
     def _decrypt(self, account_id, text):
-        cached = self._decrypted.get(text)
+        import hashlib
+        self._load_decrypted()
+        digest = hashlib.sha256(text.encode('utf-8', 'replace') if isinstance(text, str) else bytes(text)).hexdigest()
+        cached = self._decrypted.get(digest)
         if cached is not None:
+            self._decrypt_counts[1] += 1
             return cached
         from blink.history import ConversationPreviews
         key = ConversationPreviews()._private_key(account_id)
@@ -440,7 +508,8 @@ class LocationStore(QObject):
             plaintext = bytes(plaintext).decode('utf-8', 'replace')
         if len(self._decrypted) > 5000:
             self._decrypted.clear()
-        self._decrypted[text] = plaintext
+        self._decrypted[digest] = plaintext
+        self._decrypt_counts[0] += 1
         return plaintext
 
     def _loaded(self, message_id, share):
