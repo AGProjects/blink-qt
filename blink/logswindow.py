@@ -3,7 +3,7 @@ import threading
 from collections import deque
 
 from PyQt6 import uic
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from application.python import Null
 from application.notification import IObserver, NotificationCenter
@@ -26,6 +26,13 @@ class LogsWindow(base_class, ui_class):
     activity_buffer_limit = 4000
 
     activity_queued = QtCore.pyqtSignal()
+
+    # SIP tab: categories in the order of the sip_category combo box, and colors
+    sip_categories = (None, 'sessions', 'subscriptions', 'register', 'messages')
+    sip_entry_limit = 5000  # SIP messages kept for refiltering
+    sip_received_color = '#2f7de1'
+    sip_sending_color = '#e8890c'
+    sip_error_color = '#e53935'
 
     def __init__(self, parent=None):
         super(LogsWindow, self).__init__(parent)
@@ -65,6 +72,34 @@ class LogsWindow(base_class, ui_class):
         self._filter_timer.setInterval(200)
         self._filter_timer.timeout.connect(self._apply_activity_filter)
         self.activity_filter.textChanged.connect(lambda text: self._filter_timer.start())
+
+        # SIP messages, filtered by category and text like the activity lines
+        self._sip_entries = deque(maxlen=self.sip_entry_limit)
+        self._sip_filter_text = ''
+        self._sip_category = None
+        self._sip_filter_timer = QtCore.QTimer(self)
+        self._sip_filter_timer.setSingleShot(True)
+        self._sip_filter_timer.setInterval(200)
+        self._sip_filter_timer.timeout.connect(self._apply_sip_filter)
+        self.sip_filter.textChanged.connect(lambda text: self._sip_filter_timer.start())
+        self.sip_logs_view.setMaximumBlockCount(200000)
+        self._sip_normal_format = QtGui.QTextCharFormat()
+        self._sip_bold_format = QtGui.QTextCharFormat()
+        self._sip_bold_format.setFontWeight(QtGui.QFont.Weight.Bold)
+        self._sip_error_format = QtGui.QTextCharFormat(self._sip_bold_format)
+        self._sip_error_format.setForeground(QtGui.QColor(self.sip_error_color))
+        self._sip_received_format = QtGui.QTextCharFormat()
+        self._sip_received_format.setForeground(QtGui.QColor(self.sip_received_color))
+        self._sip_sending_format = QtGui.QTextCharFormat()
+        self._sip_sending_format.setForeground(QtGui.QColor(self.sip_sending_color))
+        try:
+            index = int(QtCore.QSettings().value('logs_window/sip_category', 0))
+        except (TypeError, ValueError):
+            index = 0
+        if 0 <= index < len(self.sip_categories):
+            self.sip_category.setCurrentIndex(index)
+            self._sip_category = self.sip_categories[index]
+        self.sip_category.currentIndexChanged.connect(self._SH_SipCategoryChanged)
 
     def updateCheckedButton(self):
         settings = SIPSimpleSettings()
@@ -158,9 +193,64 @@ class LogsWindow(base_class, ui_class):
         setattr(settings.logs, 'trace_%s' % current_tab, checked)
         settings.save()
             
+    def _SH_SipCategoryChanged(self, index):
+        self._sip_category = self.sip_categories[index] if 0 <= index < len(self.sip_categories) else None
+        QtCore.QSettings().setValue('logs_window/sip_category', index)
+        self._apply_sip_filter()
+
+    def _sip_matches(self, entry):
+        if self._sip_category is not None:
+            # with a category chosen, only the SIP messages of that category (no DNS lines)
+            categories = getattr(entry, 'categories', None)
+            if not categories or self._sip_category not in categories:
+                return False
+        return not self._sip_filter_text or self._sip_filter_text in entry.message.lower()
+
+    def _apply_sip_filter(self):
+        self._sip_filter_text = self.sip_filter.text().strip().lower()
+        view = self.sip_logs_view
+        view.setUpdatesEnabled(False)
+        try:
+            view.clear()
+            for entry in self._sip_entries:
+                if self._sip_matches(entry):
+                    self._append_sip_entry(entry, scroll=False)
+        finally:
+            view.setUpdatesEnabled(True)
+        view.verticalScrollBar().setValue(view.verticalScrollBar().maximum())
+
+    def _append_sip_entry(self, entry, scroll=True):
+        view = self.sip_logs_view
+        scrollbar = view.verticalScrollBar()
+        at_bottom = scrollbar.value() >= scrollbar.maximum() - 4
+        cursor = QtGui.QTextCursor(view.document())
+        cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
+        if not view.document().isEmpty():
+            cursor.insertBlock()
+        direction = getattr(entry, 'direction', None)
+        if direction is None:
+            # DNS lookups and other lines without SIP message details
+            cursor.insertText(entry.message.rstrip('\n'), self._sip_normal_format)
+        else:
+            cursor.insertText('%s: ' % entry.timestamp, self._sip_normal_format)
+            cursor.insertText('%s:' % direction, self._sip_received_format if direction == 'RECEIVED' else self._sip_sending_format)
+            cursor.insertText(' %s\n%s\n' % (entry.header, entry.route), self._sip_normal_format)
+            cursor.insertText(entry.first_line, self._sip_error_format if entry.error else self._sip_bold_format)
+            if entry.rest:
+                cursor.insertText('\n' + entry.rest, self._sip_normal_format)
+            cursor.insertText('\n--', self._sip_normal_format)
+        if scroll and at_bottom:
+            scrollbar.setValue(scrollbar.maximum())
+
     def _NH_UILogMessage(self, notification):
         section = notification.data.section
         message = notification.data.message
+        if section == 'sip':
+            entry = notification.data
+            self._sip_entries.append(entry)
+            if self._sip_matches(entry):
+                self._append_sip_entry(entry)
+            return
         try:
             view = getattr(self, '%s_logs_view' % section)
         except AttributeError:

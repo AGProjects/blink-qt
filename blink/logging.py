@@ -245,6 +245,41 @@ class LogFile(object):
         file.close()
 
 
+# SIP methods by the category they are shown under in the logs window
+sip_method_categories = {
+    'PUBLISH': ('subscriptions',),
+    'NOTIFY': ('subscriptions',),
+    'SUBSCRIBE': ('subscriptions',),
+    'REGISTER': ('sessions', 'register'),
+    'INVITE': ('sessions',),
+    'BYE': ('sessions',),
+    'CANCEL': ('sessions',),
+    'ACK': ('sessions',),
+    'PRACK': ('sessions',),
+    'REFER': ('sessions',),
+    'UPDATE': ('sessions',),
+    'INFO': ('sessions',),
+    'OPTIONS': ('sessions',),
+    'MESSAGE': ('messages',),
+}
+
+
+def sip_message_method(data):
+    """The method of a SIP request, or for a response the method from its CSeq, and the response code (None for requests)"""
+    first_line, _, rest = data.lstrip().partition('\n')
+    if first_line.startswith('SIP/2.0'):
+        parts = first_line.split()
+        code = parts[1] if len(parts) > 1 else None
+        for line in rest.split('\n'):
+            name, _, value = line.partition(':')
+            if name.strip().lower() in ('cseq',):
+                fields = value.split()
+                return (fields[-1].upper() if fields else None), code
+        return None, code
+    parts = first_line.split()
+    return (parts[0].upper() if parts else None), None
+
+
 @implementer(IObserver)
 class LogManager(object, metaclass=Singleton):
 
@@ -361,7 +396,12 @@ class LogManager(object, metaclass=Singleton):
         except Exception:
             pass
 
-        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip'))
+        first_line, _, rest = data.strip().partition('\n')
+        method, code = sip_message_method(data)
+        NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='sip',
+                                               direction=direction, timestamp=notification.datetime, header=buf[0].partition(': ')[2], route=buf[1],
+                                               first_line=first_line.strip(), rest=rest.rstrip(), method=method,
+                                               categories=sip_method_categories.get(method), error=code is not None and code[:1] in '456'))
 
     def _LH_SIPEngineLog(self, notification):
         settings = SIPSimpleSettings()
