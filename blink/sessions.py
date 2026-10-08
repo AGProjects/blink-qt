@@ -7106,6 +7106,7 @@ class SessionManager(object, metaclass=Singleton):
         self.send_file_directory = Path('~').normalized
         self.active_session = None
         self.must_cancel_downloads = set()
+        self.stopping = False                   # quitting: no more downloads
 
         self.inbound_ringtone = Null
         self.outbound_ringtone = Null
@@ -7129,6 +7130,13 @@ class SessionManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkFileTransferWillRetry')
         notification_center.add_observer(self, name='BlinkHTTPTransferMustStop')
         notification_center.add_observer(self, name='BlinkSessionListSelectionChanged')
+        notification_center.add_observer(self, name='SIPApplicationWillEnd')
+
+    def _NH_SIPApplicationWillEnd(self, notification):
+        # downloads still queued on the file-io thread are dropped and the one running stops:
+        # its partial file stays (.download) and is resumed at the next start. Blink.run sets
+        # this too, when the user interface closes: this handler runs in the GUI thread
+        self.stopping = True
 
     def create_session(self, contact, contact_uri, streams, account=None, connect=True, sibling=None, remote_instance_id=None):
         if account is None:
@@ -7233,6 +7241,8 @@ class SessionManager(object, metaclass=Singleton):
         """Download a file received over HTTP. A failure retrying cannot fix (any 4xx) is kept in
         the transfer's folder (.failure.json) and answered from there, across restarts, unless
         the user asks again (force)."""
+        if self.stopping:
+            return
         notification_center = NotificationCenter()
         # file.name is where the file is kept: file_transfers/<account>/<peer>/<id>/<name> (blink.configuration.datatypes.sylk_file_path)
         full_filepath = file.name if os.path.isabs(file.name) else os.path.join(ApplicationData.get(f'downloads/{file.id}'), file.name)
@@ -7306,6 +7316,8 @@ class SessionManager(object, metaclass=Singleton):
                     if file.id in self.must_cancel_downloads:
                         message_log.info(f'Download {file.id} stopped by user')
                         break
+                    if self.stopping:
+                        break
 
                     current_bytes = current_bytes + len(chunk)
                     notification_center.post_notification('BlinkHTTPTransferProgress', sender=file, data=NotificationData(bytes=current_bytes, total_bytes=file.size))
@@ -7316,6 +7328,10 @@ class SessionManager(object, metaclass=Singleton):
                     r.close()
                     self.must_cancel_downloads.discard(file.id)
                     notification_center.post_notification('BlinkHTTPTransferFailed', sender=file, data=NotificationData(reason='User cancelled'))
+                    return
+                if self.stopping:
+                    r.close()
+                    ActivityLog().info(f'[transfer] Download of {os.path.basename(full_filepath)} stopped at {current_bytes} bytes: Blink is quitting, it resumes at the next start')
                     return
 
             os.rename(tmp_path, full_filepath)

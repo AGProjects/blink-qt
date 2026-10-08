@@ -257,6 +257,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self.sip_application.start(FileStorage(ApplicationData.directory))
         self.exec()
         self.quitting = True
+        self.session_manager.stopping = True    # no more downloads: the event loop that would tell it is gone
         activity = ActivityLog()
         activity.info('User interface closed, stopping the SIP application')
         self.update_manager.shutdown()
