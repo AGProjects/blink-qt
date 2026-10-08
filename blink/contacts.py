@@ -5379,9 +5379,6 @@ class ContactListView(QListView):
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
-            menu.addSeparator()
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
         elif isinstance(selected_items[0], Group) and getattr(selected_items[0].settings, 'id', None) == DELETED_GROUP_ID:
             # the trash: everything in it restored, or deleted for good
             members = list(selected_items[0].settings.contacts)
@@ -5392,9 +5389,6 @@ class ContactListView(QListView):
         elif isinstance(selected_items[0], Group):
             menu.addAction(self.actions.edit_item)
             menu.addAction(self.actions.delete_item)
-            menu.addSeparator()
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.edit_item.setEnabled(selected_items[0].editable)
             self.actions.delete_item.setEnabled(selected_items[0].deletable)
@@ -5513,10 +5507,7 @@ class ContactListView(QListView):
                 self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
                 self.actions.delete_item.setEnabled(contact.deletable)
 
-            menu.addSeparator()
-            menu.addAction(self.actions.add_group)
-            menu.addAction(self.actions.add_contact)
-
+            # adding a contact or a group is the person button's (bottom left), not a contact's or a group's
             self.actions.edit_item.setEnabled(contact.editable)
         menu.exec(event.globalPos())
 
