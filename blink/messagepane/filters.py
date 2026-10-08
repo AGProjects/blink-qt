@@ -3,7 +3,8 @@
 All, then one chip per kind of message the conversation has (Pictures, Videos,
 Audio, Files, Locations, Calls, Texts, Links: texts with a link), from history
 (MessageHistory.present_categories, in the db thread). Shown when there are at
-least two kinds, so a conversation of texts only has no bar. Choosing a chip
+least two kinds, so a conversation of texts only has no bar, and only while the
+search is open (set_active: clicking the search field opens it, its X closes it). Choosing a chip
 shows that kind only (ConversationModel.set_category), paged from history like
 the whole conversation; All shows everything again. The choice is the model's,
 so going back to a conversation finds it as it was left.
@@ -37,6 +38,8 @@ class FilterBar(QWidget):
         self.key = None
         self.model = None
         self.present = set()
+        self.active = False         # the search is open
+        self._has_choices = False
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(10, 2, 8, 4)
         self._layout.setSpacing(6)
@@ -123,7 +126,17 @@ class FilterBar(QWidget):
         self._layout.addStretch(1)
         for widget in self._extras:
             self._layout.addWidget(widget)
-        self.setVisible(len(shown) >= 2 or current is not None)
+        self._has_choices = len(shown) >= 2 or current is not None
+        self.setVisible(self._has_choices and self.active)
+
+    def set_active(self, active):
+        """Shown only while the search is open."""
+        self.active = active
+        self.setVisible(self._has_choices and active)
+
+    def sync(self):
+        """Show the model's category as the chosen chip again (after it was changed elsewhere)."""
+        self._rebuild()
 
     def _SH_Clicked(self, number):
         button = self._group.button(number)

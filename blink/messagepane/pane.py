@@ -80,6 +80,7 @@ class MessagePane(QWidget):
         from blink.messagepane.filters import FilterBar
         self.filters = FilterBar(self)
         layout.addWidget(self.filters)
+        self.strip.searchActiveChanged.connect(self._SH_SearchActiveChanged)
         self.stack = QStackedWidget(self)
         layout.addWidget(self.stack, 1)
 
@@ -644,6 +645,17 @@ class MessagePane(QWidget):
         self.columns_box.hide()
         self.download_button.hide()
         self.select_button.hide()
+
+    def _SH_SearchActiveChanged(self, active):
+        """The category chips come with the search; closing it shows the whole conversation again."""
+        self.filters.set_active(active)
+        if active:
+            return
+        model = self.models.get(self.view_key) if self.view_key is not None else None
+        if model is not None and model.category is not None:
+            model.set_category(None)
+            self.filters.sync()
+            self._update_mode()
 
     def _SH_GridToggled(self, checked):
         QSettings().setValue('message_pane/grid', checked)

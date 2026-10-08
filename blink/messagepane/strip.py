@@ -4,22 +4,58 @@ On the left, what is loaded ("36 messages, 6 Oct 08:07 – 7 Oct 09:12") and a
 note: loading older messages, the beginning of the conversation, or, only once
 the user has scrolled up, that scrolling further up loads older messages. On
 the right the search field: typing searches the whole conversation in history
-(the transcript shows the hits, highlighted); clearing it (or Escape) shows
-the conversation again.
+(the transcript shows the hits, highlighted).
+
+Clicking the field opens the search: an X appears at its right and the
+category chips show (searchActiveChanged). They stay, with or without text,
+until the X is pressed (or Escape in an empty field), which clears the search
+and closes it again.
 """
 
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QPalette
-from PyQt6.QtWidgets import QHBoxLayout, QLineEdit, QSizePolicy, QToolButton, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 
 from blink.util import translate
 from blink.widgets.color import follow_theme, secondary_text_color
 from blink.widgets.labels import ElidedLabel
+from blink.widgets.lineedit import SearchBox
 
 
 __all__ = ['TranscriptStrip', 'range_text']
+
+
+class MessageSearchBox(SearchBox):
+    """The main window's search box (round, the X inside it), whose X stays while the search is
+    open, with or without text, and closes the search rather than only clearing the text."""
+
+    closeRequested = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.pinned = False
+        self.clear_button.clicked.disconnect()
+        self.clear_button.clicked.connect(self.closeRequested)
+        self.clear_button.setToolTip(translate('message_pane', 'Close the search'))
+
+    def set_pinned(self, pinned):
+        self.pinned = pinned
+        self.clear_button.setVisible(pinned or bool(self.text()))
+
+    def _SH_TextChanged(self, text):
+        self.clear_button.setVisible(self.pinned or bool(text))
+
+    def keyPressEvent(self, event):
+        # Escape clears the text; in an empty box it closes the search
+        if event.key() == Qt.Key.Key_Escape:
+            if self.text():
+                self.clear()
+            else:
+                self.closeRequested.emit()
+            return
+        super(SearchBox, self).keyPressEvent(event)
 
 
 def _moment(when, now):
@@ -40,12 +76,15 @@ def range_text(items, now=None):
 
 
 class TranscriptStrip(QWidget):
+    searchActiveChanged = pyqtSignal(bool)
+
     search_delay = 300      # ms after the last key press
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.model = None
         self.view = None
+        self.search_active = False
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 3, 8, 3)
         layout.setSpacing(8)
@@ -53,10 +92,11 @@ class TranscriptStrip(QWidget):
         self.info_label.setTextFormat(Qt.TextFormat.PlainText)
         self.info_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout.addWidget(self.info_label, 1)
-        self.search_field = QLineEdit(self)
-        self.search_field.setPlaceholderText(translate('message_pane', 'Search messages'))
-        self.search_field.setClearButtonEnabled(True)
+        self.search_field = MessageSearchBox(self)
+        self.search_field.inactiveText = translate('message_pane', 'Search messages')
         self.search_field.setFixedWidth(190)
+        self.search_field.installEventFilter(self)
+        self.search_field.closeRequested.connect(self.close_search)
         layout.addWidget(self.search_field)
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
@@ -78,11 +118,28 @@ class TranscriptStrip(QWidget):
             self.info_label.setFont(font)
             self._font_set = True
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self.search_field.text():
-            self.search_field.clear()
+    def eventFilter(self, watched, event):
+        if watched is self.search_field and event.type() in (QEvent.Type.FocusIn, QEvent.Type.MouseButtonPress):
+            self.set_search_active(True)
+        return False
+
+    def set_search_active(self, active):
+        if active == self.search_active:
             return
-        super().keyPressEvent(event)
+        self.search_active = active
+        self.search_field.set_pinned(active)
+        self.searchActiveChanged.emit(active)
+
+    def close_search(self):
+        """The X: no search text, no category, and the chips go away."""
+        self._search_timer.stop()
+        self.search_field.blockSignals(True)
+        self.search_field.clear()
+        self.search_field.blockSignals(False)
+        if self.model is not None and self.model.search_text:
+            self.model.search('')
+        self.search_field.clearFocus()
+        self.set_search_active(False)
 
     def set_conversation(self, model, view):
         if self.model is not None:
@@ -98,6 +155,8 @@ class TranscriptStrip(QWidget):
         self.search_field.setText(model.search_text)
         self.search_field.blockSignals(False)
         self._search_timer.stop()
+        # a conversation left with a search or a category chosen comes back with the search open
+        self.set_search_active(bool(model.search_text or model.category))
         self.update_text()
 
     @staticmethod
