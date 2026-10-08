@@ -495,6 +495,9 @@ class VideoToast(QWidget):
         parent = self.parent()
         bar = getattr(parent, 'call_bar', None)
         bottom = bar.y() if bar is not None else parent.height() - CALL_BAR_BOTTOM
+        status = getattr(parent, 'status_label', None)
+        if status is not None and status.isVisibleTo(parent):
+            bottom = status.y()         # above the status, which sits on the bar
         self.setGeometry((parent.width() - width) // 2, bottom - TOAST_GAP - TOAST_HEIGHT, width, TOAST_HEIGHT)
 
     def _SH_ActionClicked(self):
@@ -513,7 +516,7 @@ class VideoToast(QWidget):
 
 
 class StatusLabel(QLabel):
-    """The pill in the middle of the picture saying what the call is doing (Connecting..., On hold)."""
+    """The pill just above the call bar saying what the call is doing (Connecting..., On hold)."""
 
     def __init__(self, parent):
         super(StatusLabel, self).__init__(parent)
@@ -521,9 +524,9 @@ class StatusLabel(QLabel):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         font = self.font()
-        font.setPointSizeF(font.pointSizeF() * 1.25)
+        font.setPointSizeF(max(font.pointSizeF() * 0.92, 7))
         self.setFont(font)
-        self.setStyleSheet('QLabel { color: white; padding: 8px 18px; }')
+        self.setStyleSheet('QLabel { color: rgba(255, 255, 255, 235); padding: 5px 14px; }')
         self.hide()
 
     def set_status(self, text):
@@ -533,9 +536,14 @@ class StatusLabel(QLabel):
         self.setText(text)
         self.adjustSize()
         parent = self.parent()
-        self.move((parent.width() - self.width()) // 2, (parent.height() - self.height()) // 2)
+        bar = getattr(parent, 'call_bar', None)
+        bottom = bar.y() if bar is not None else parent.height() - CALL_BAR_BOTTOM
+        self.move((parent.width() - self.width()) // 2, bottom - TOAST_GAP - self.height())
         self.show()
         self.raise_()
+        toast = getattr(parent, 'toast', None)
+        if toast is not None and toast.isVisibleTo(parent):
+            toast.tile()        # the note goes above the status
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1112,10 +1120,20 @@ class VideoWindow(QWidget):
         too_small = self.width() < self.call_bar.minimum_window_width()
         self.call_bar.setVisible(not too_small)
         self.my_video_view.layout_in_parent()
-        if self.toast.isVisible():
-            self.toast.tile()
-        if self.status_label.isVisible():
+        self._place_overlays()
+
+    def showEvent(self, event):
+        super(VideoWindow, self).showEvent(event)
+        self.call_bar.tile()
+        self._place_overlays()
+
+    def _place_overlays(self):
+        # isVisibleTo: set before the window was first shown (Connecting...), the label is not
+        # yet visible and was placed against the bar's geometry of that moment
+        if self.status_label.isVisibleTo(self):
             self.status_label.set_status(self.status_label.text())
+        if self.toast.isVisibleTo(self):
+            self.toast.tile()
 
     # chrome
 
