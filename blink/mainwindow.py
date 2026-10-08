@@ -65,6 +65,8 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
         self.launcher_badge = LauncherBadge()       # the unread count on the dock icon
+        from blink.notifications import MessageNotifier
+        self.message_notifier = MessageNotifier(self)   # desktop notifications of incoming messages
         # an incoming message changes the unread counts: recounted from history, coalesced
         self._unread_timer = QTimer(self)
         self._unread_timer.setSingleShot(True)
