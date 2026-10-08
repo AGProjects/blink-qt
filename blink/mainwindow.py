@@ -626,7 +626,12 @@ class MainWindow(base_class, ui_class):
         session_manager = SessionManager()
         if session_manager.last_dialed_uri is not None:
             contact, contact_uri = URIUtils.find_contact(session_manager.last_dialed_uri)
-            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')])  # TODO: remember used media types and redial with them. -Saul
+            account = session_manager.last_dialed_account
+            if account is not None and not getattr(account, 'enabled', True):
+                account = None
+            # the same media as the last call: audio and video stay audio and video
+            streams = [StreamDescription(stream_type) for stream_type in session_manager.last_dialed_streams]
+            session_manager.create_session(contact, contact_uri, streams, account=account)
 
     def _AH_SIPServerSettings(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account

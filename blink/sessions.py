@@ -6992,6 +6992,8 @@ class SessionManager(object, metaclass=Singleton):
         self.file_transfers = []
         self.incoming_requests = RequestList()
         self.last_dialed_uri = None
+        self.last_dialed_streams = ['audio']   # the media of the last call made, which Redial uses again
+        self.last_dialed_account = None
         self.send_file_directory = Path('~').normalized
         self.active_session = None
         self.must_cancel_downloads = set()
@@ -7035,6 +7037,11 @@ class SessionManager(object, metaclass=Singleton):
 
         session.init_outgoing(account, contact, contact_uri, streams, sibling=sibling, reinitialize=reinitialize, remote_instance_id=remote_instance_id)
         self.last_dialed_uri = session.uri
+        self.last_dialed_account = account
+        # Redial makes the same kind of call; screen sharing needs a role and messages are not a call
+        redial_types = [stream.type for stream in streams if stream.type in ('audio', 'video', 'chat')]
+        if redial_types:
+            self.last_dialed_streams = redial_types
         if connect:
             session.connect()
 
