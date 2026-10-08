@@ -341,8 +341,7 @@ class ContactTrash(object):
                 ContactRepair().file_into_kind_groups()
         except Exception as e:
             ActivityLog().warning(f'[trash] Filing restored contacts into Tel and Conference failed: {e!r}')
-        if BlinkSettings().interface.show_messages_group:
-            history.get_all_contacts()
+        history.get_all_contacts()
 
     # conversation key: when its contact was deleted for good. Its history is erased in the db
     # thread a moment later; until then a list of conversations read before the erasing still
@@ -748,8 +747,6 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryAllContactsDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkJournalDidApply')
-        # not sender=BlinkSettings(): the configuration is not started yet when the contact model is made
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -764,10 +761,6 @@ class MessagesGroupFiler(object, metaclass=Singleton):
     def _NH_XCAPManagerDidReloadData(self, notification):
         if not self.ready:
             call_later(self.settle_delay, self._become_ready, 'the addressbook has loaded')
-
-    def _NH_CFGSettingsObjectDidChange(self, notification):
-        if isinstance(notification.sender, BlinkSettings) and 'interface.show_messages_group' in notification.data.modified and notification.sender.interface.show_messages_group:
-            self._request_conversations()
 
     def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
         for display_name, uri in notification.data.contacts:
@@ -792,12 +785,12 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         self._flush()
 
     def _request_conversations(self):
-        if self.ready and BlinkSettings().interface.show_messages_group:
+        if self.ready:
             from blink.history import HistoryManager
             HistoryManager().message_history.get_all_contacts()
 
     def _flush(self):
-        if not self.ready or not self.pending or not BlinkSettings().interface.show_messages_group:
+        if not self.ready or not self.pending:
             return
         keys, self.pending = self.pending, {}
         try:

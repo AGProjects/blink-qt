@@ -138,7 +138,6 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
 
 
 class SessionInfoSettings(SettingsGroup):
-    alternate_style = Setting(type=bool, default=False)
     bytes_per_second = Setting(type=bool, default=False)
     graph_time_scale = Setting(type=GraphTimeScale, default=3)
 
@@ -169,7 +168,6 @@ class BlinkPresenceSettings(SettingsGroup):
 class BlinkInterfaceSettings(SettingsGroup):
     show_history_name_and_uri = Setting(type=bool, default=False)
     language = Setting(type=str, default='default')
-    show_messages_group = Setting(type=bool, default=True)
 
 
 class BlinkSettings(SettingsObject):

@@ -362,7 +362,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_read_sound_button.clicked.connect(self._SH_MessageReadSoundButtonClicked)
         self.sms_replication_button.clicked.connect(self._SH_SMSReplicationButtonClicked)
 
-        self.session_info_style_button.clicked.connect(self._SH_SessionInfoStyleButtonClicked)
 
         # Screen sharing
         self.screen_sharing_scale_button.clicked.connect(self._SH_ScreenSharingScaleButtonClicked)
@@ -405,7 +404,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Interface
         self.history_name_and_uri_button.clicked.connect(self._SH_HistoryNameAndUriButtonClicked)
         self.language_button.activated[int].connect(self._SH_LanguageButtonActivated)
-        self.show_messages_group_button.clicked.connect(self._SH_ShowMessagesGroupButtonClicked)
 
         # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
@@ -757,7 +755,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_read_sound_button.setChecked(settings.sounds.play_message_read_sound)
         self.sms_replication_button.setChecked(settings.chat.sms_replication)
 
-        self.session_info_style_button.setChecked(blink_settings.chat_window.session_info.alternate_style)
 
         # Screen sharing settings
         self.screen_sharing_scale_button.setChecked(blink_settings.screen_sharing.scale)
@@ -803,7 +800,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.tls_verify_server_button.setChecked(settings.tls.verify_server)
 
         self.history_name_and_uri_button.setChecked(blink_settings.interface.show_history_name_and_uri)
-        self.show_messages_group_button.setChecked(blink_settings.interface.show_messages_group)
 
         language_index = self.language_button.findText(Language.mapping[blink_settings.interface.language])
         if language_index == -1:
@@ -1641,12 +1637,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.chat.sms_replication = checked
         settings.save()
 
-    def _SH_SessionInfoStyleButtonClicked(self, checked):
-        settings = BlinkSettings()
-        settings.chat_window.session_info.alternate_style = checked
-        settings.save()
-
-    # Screen sharing signal handlers
     def _SH_ScreenshotsDirectoryBrowseButtonClicked(self, checked):
         # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
         settings = BlinkSettings()
@@ -1823,11 +1813,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
             blink = QApplication.instance()
             blink.restart()
-
-    def _SH_ShowMessagesGroupButtonClicked(self, checked):
-        settings = BlinkSettings()
-        settings.interface.show_messages_group = checked
-        settings.save()
 
     @run_in_gui_thread
     def handle_notification(self, notification):

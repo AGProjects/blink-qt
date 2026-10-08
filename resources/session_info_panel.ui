@@ -39,7 +39,7 @@
      </property>
      <property name="styleSheet">
       <string notr="true">#info_panel_container_widget &gt; [role="title"] {
-	background-color: rbga(0, 0, 0, 10);
+	background-color: rgba(0, 0, 0, 10);
 	border-top-left-radius: 3px;
 	border-bottom-left-radius: 3px;
 	border: 1px solid rgba(0, 0, 0, 50);
@@ -48,29 +48,11 @@
 }
 
 #info_panel_container_widget &gt; [role="value"] {
-	background-color: rbga(0, 0, 0, 10);
+	background-color: rgba(0, 0, 0, 10);
 	border-top-right-radius: 3px;
 	border-bottom-right-radius: 3px;
 	border: 1px solid rgba(0, 0, 0, 50);
 	border-left: 0px;
-	padding-right: 2px;
-}
-
-#info_panel_container_widget &gt; [role="alt-title"] {
-	background-color: transparent;
-	border-left: 1px solid transparent;
-	border-top: 1px solid transparent;
-	border-right: 0px;
-	border-bottom: 1px solid rgba(0, 0, 0, 50);
-	padding-right: 7px;
-}
-
-#info_panel_container_widget &gt; [role="alt-value"] {
-	background-color: transparent;
-	border-left: 0px;
-	border-top: 1px solid transparent;
-	border-right: 1px solid transparent;
-	border-bottom: 1px solid rgba(0, 0, 0, 50);
 	padding-right: 2px;
 }
 </string>

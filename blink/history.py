@@ -151,8 +151,7 @@ class HistoryManager(object, metaclass=Singleton):
         self._remove_account_keys(account)
         # the db thread runs these after the removal above
         self.message_history.get_unread_messages()
-        if BlinkSettings().interface.show_messages_group:
-            self.message_history.get_all_contacts()
+        self.message_history.get_all_contacts()
 
     @run_in_thread('file-io')
     def _remove_account_keys(self, account):
@@ -277,17 +276,13 @@ class HistoryManager(object, metaclass=Singleton):
         account_id = str(notification.sender.id) if isinstance(notification.sender, (Account, BonjourAccount)) else None
         self.message_history.tombstone_message(data.message_id, when=data.timestamp, account_id=account_id,
                                                remote_uri=data.remote_uri, source=data.source)
-        settings = BlinkSettings()
-        if settings.interface.show_messages_group:
-            self.message_history.get_all_contacts()
+        self.message_history.get_all_contacts()
 
     def _NH_BlinkGotHistoryConversationRemove(self, notification):
         # removed on another device: hidden up to the removal time, not erased
         data = notification.data
         self.message_history.tombstone_conversation(str(data.contact), before_time=data.timestamp, account_id=str(notification.sender.id))
-        settings = BlinkSettings()
-        if settings.interface.show_messages_group:
-            self.message_history.get_all_contacts()
+        self.message_history.get_all_contacts()
 
     def _NH_BlinkGotHistoryMessageUpdate(self, notification):
         self.message_history.update_message(notification)
@@ -326,9 +321,7 @@ class HistoryManager(object, metaclass=Singleton):
         else:
             # removed on another device while the conversation is open: hidden up to the removal time
             self.message_history.tombstone_conversation(contact, before_time=data.timestamp, account_id=str(notification.sender.account.id), session=notification.sender)
-        settings = BlinkSettings()
-        if settings.interface.show_messages_group:
-            self.message_history.get_all_contacts()
+        self.message_history.get_all_contacts()
 
     def _NH_BlinkJournalDidApply(self, notification):
         # after a journal run: unread counts and the Messages group come from history,
@@ -338,8 +331,7 @@ class HistoryManager(object, metaclass=Singleton):
             self.message_history.settle_first_sync_read(str(notification.sender.id), marker=getattr(notification.data, 'first_sync_marker', None))
         self.message_history.get_unread_messages()
         self.message_history.log_unread(str(notification.sender.id))
-        if BlinkSettings().interface.show_messages_group:
-            self.message_history.get_all_contacts()
+        self.message_history.get_all_contacts()
         self.message_history.journal_db_check(str(notification.sender.id), getattr(notification.data, 'stats_path', None))
 
     def _NH_BlinkSessionConfirmReadMessages(self, notification):
@@ -1578,8 +1570,7 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().info(f'[db] Removed {count} messages of the conversation with {key}' + (f' ({reason})' if reason else ''))
         if total:
             self.get_unread_messages()
-            if BlinkSettings().interface.show_messages_group:
-                self.get_all_contacts()
+            self.get_all_contacts()
 
     @run_in_thread('db')
     def move_conversation(self, old_key, new_key, account_id=None):

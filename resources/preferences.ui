@@ -3640,22 +3640,6 @@
              </widget>
             </item>
             <item row="7" column="0">
-             <widget class="QLabel" name="label_9">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">margin-top: 20px;</string>
-              </property>
-              <property name="text">
-               <string>Contacts</string>
-              </property>
-             </widget>
-            </item>
-            <item row="13" column="0">
              <spacer name="verticalSpacer_5">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -3667,13 +3651,6 @@
                </size>
               </property>
              </spacer>
-            </item>
-            <item row="8" column="0">
-             <widget class="Line" name="line_16">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
             </item>
             <item row="0" column="0">
              <widget class="QLabel" name="label_6">
@@ -3782,46 +3759,6 @@
                </spacer>
               </item>
              </layout>
-            </item>
-            <item row="9" column="0">
-             <widget class="QCheckBox" name="show_messages_group_button">
-              <property name="toolTip">
-               <string>Show virtual messages group containing all contacts with messages</string>
-              </property>
-              <property name="text">
-               <string>Show Messages group</string>
-              </property>
-             </widget>
-            </item>
-            <item row="10" column="0">
-             <widget class="QLabel" name="session_info_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">margin-top: 20px;</string>
-              </property>
-              <property name="text">
-               <string>Session information</string>
-              </property>
-             </widget>
-            </item>
-            <item row="11" column="0">
-             <widget class="Line" name="session_info_line">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="12" column="0">
-             <widget class="QCheckBox" name="session_info_style_button">
-              <property name="text">
-               <string>Use alternate style for the session information panel</string>
-              </property>
-             </widget>
             </item>
            </layout>
           </widget>
@@ -4041,7 +3978,6 @@
   <tabstop>auto_accept_chat_button</tabstop>
   <tabstop>sms_replication_button</tabstop>
   <tabstop>chat_message_alert_button</tabstop>
-  <tabstop>session_info_style_button</tabstop>
   <tabstop>screen_sharing_scale_button</tabstop>
   <tabstop>screen_sharing_fullscreen_button</tabstop>
   <tabstop>screen_sharing_viewonly_button</tabstop>

@@ -71,7 +71,7 @@ class SessionInfoPanel(base_class, ui_class):
         self.audio_encryption_label.stream_type = 'audio'
         self.video_encryption_label.stream_type = 'video'
 
-        self._apply_settings(style=True, scale=True)
+        self._apply_settings(scale=True)
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=BlinkSettings())
@@ -105,17 +105,8 @@ class SessionInfoPanel(base_class, ui_class):
 
     # settings
     #
-    def _apply_settings(self, style=False, scale=False):
+    def _apply_settings(self, scale=False):
         blink_settings = BlinkSettings()
-        if style:
-            alternate = blink_settings.chat_window.session_info.alternate_style
-            title_role, value_role = ('alt-title', 'alt-value') if alternate else ('title', 'value')
-            for name, attr in vars(self).items():
-                if name.endswith('_title_label') and attr.property('role') is not None:
-                    attr.setProperty('role', title_role)
-                elif (name.endswith('_value_label') or name.endswith('_value_widget')) and attr.property('role') is not None:
-                    attr.setProperty('role', value_role)
-            self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
         if scale:
             for graph in (self.latency_graph, self.packet_loss_graph, self.traffic_graph):
                 graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
@@ -303,8 +294,7 @@ class SessionInfoPanel(base_class, ui_class):
         modified = notification.data.modified
         if 'chat_window.session_info.bytes_per_second' in modified:
             self.traffic_graph.update()
-        self._apply_settings(style='chat_window.session_info.alternate_style' in modified,
-                             scale='chat_window.session_info.graph_time_scale' in modified)
+        self._apply_settings(scale='chat_window.session_info.graph_time_scale' in modified)
 
     def _NH_BlinkSessionInfoUpdated(self, notification):
         self.update_info(elements=notification.data.elements)

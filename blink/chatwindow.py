@@ -2412,17 +2412,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
 
         blink_settings = BlinkSettings()
-        if blink_settings.chat_window.session_info.alternate_style:
-            title_role = 'alt-title'
-            value_role = 'alt-value'
-        else:
-            title_role = 'title'
-            value_role = 'value'
-        for label in (attr for name, attr in vars(self).items() if name.endswith('_title_label') and attr.property('role') is not None):
-            label.setProperty('role', title_role)
-        for label in (attr for name, attr in vars(self).items() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
-            label.setProperty('role', value_role)
-        self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
         self.latency_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
         self.packet_loss_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
         self.traffic_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
@@ -2442,18 +2431,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if 'audio.muted' in notification.data.modified:
                 self.mute_button.setChecked(settings.audio.muted)
         elif notification.sender is blink_settings:
-            if 'chat_window.session_info.alternate_style' in notification.data.modified:
-                if blink_settings.chat_window.session_info.alternate_style:
-                    title_role = 'alt-title'
-                    value_role = 'alt-value'
-                else:
-                    title_role = 'title'
-                    value_role = 'value'
-                for label in (attr for name, attr in vars(self).items() if name.endswith('_title_label') and attr.property('role') is not None):
-                    label.setProperty('role', title_role)
-                for label in (attr for name, attr in vars(self).items() if name.endswith('_value_label') or name.endswith('_value_widget') and attr.property('role') is not None):
-                    label.setProperty('role', value_role)
-                self.info_panel_container_widget.setStyleSheet(self.info_panel_container_widget.styleSheet())
             if 'chat_window.session_info.bytes_per_second' in notification.data.modified:
                 self.traffic_graph.update()
             if 'chat_window.session_info.graph_time_scale' in notification.data.modified:
