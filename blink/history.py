@@ -1311,6 +1311,7 @@ class MessageHistory(object, metaclass=Singleton):
             return
         if marker:
             unlink(marker)
+        NotificationCenter().post_notification('BlinkJournalFirstSyncDidFinish', data=NotificationData(account_id=str(account_id)))
         JournalLog()(account_id, 'settle first_sync', incoming_read=count, rule=f'older than the newest outgoing or {days} days', finished='yes')
         ActivityLog().info(f'[db] First sync of {account_id}: {count} older incoming messages marked read')
 

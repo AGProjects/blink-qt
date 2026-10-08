@@ -194,6 +194,7 @@ class ConversationHeader(QWidget):
         self.lock_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.lock_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
         self.calendar_button = self._tool_button(translate('message_pane', 'Jump to a date'))
+        self.calendar_button.setIconSize(QSize(16, 16))     # the clock's outline fills its box: drawn smaller than the other glyphs
         self.calendar_menu = QMenu(self.calendar_button)
         self.calendar_menu.aboutToShow.connect(self._fill_calendar_menu)
         self.calendar_button.setMenu(self.calendar_menu)

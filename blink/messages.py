@@ -509,8 +509,11 @@ class OutgoingMessage(object):
             pass
             # TODO
 
+    # sent without a conversation (no session): straight to the account's proxy
+    __sessionless_content_types__ = ('text/pgp-private-key', 'application/sylk-api-token', 'application/sylk-api-pgp-key-lookup')
+
     def send(self):
-        if self.content_type.lower() in ('text/pgp-private-key', 'application/sylk-api-token'):
+        if self.content_type.lower() in self.__sessionless_content_types__:
             self._lookup()
             return
 
@@ -540,7 +543,7 @@ class OutgoingMessage(object):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
             routes = notification.data.result
-            if self.content_type.lower() in ['text/pgp-private-key', 'application/sylk-api-token']:
+            if self.content_type.lower() in self.__sessionless_content_types__:
                 self._send(routes)
                 return
 
@@ -758,6 +761,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkServerHistoryWasFetched')
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
         notification_center.add_observer(self, name='BlinkMessageHistoryConversationDidRemove')
+        notification_center.add_observer(self, name='BlinkJournalFirstSyncDidFinish')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         KeyEscrowManager().start()
 
@@ -1220,6 +1224,8 @@ class MessageManager(object, metaclass=Singleton):
              failed=totals.get('failed') or None, quarantined=len(stats.quarantined) or None)
         jlog(account.id, 'sync end', downloaded=sum(page['entries'] for page in stats.pages), applied=done_entries,
              took=f'{stats.download_seconds + stats.apply_seconds:.1f}s', stats=os.path.basename(stats_path) if stats_path else None)
+        if not stats.first_sync:
+            self._fetch_public_keys_once(account)       # an account whose first sync was finished before this existed
         # one notification for the whole run: unread counts and the Messages group are refreshed from
         # history, then the database is counted against this run
         NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=stats_path,
@@ -2068,6 +2074,71 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         self._handle_incoming_message(message, blink_session, account)
+
+    def _NH_BlinkJournalFirstSyncDidFinish(self, notification):
+        account_id = notification.data.account_id
+        try:
+            account = AccountManager().get_account(account_id)
+        except KeyError:
+            return
+        self._fetch_public_keys_once(account)
+
+    # The public keys of all the contacts, once per account after its first sync
+
+    public_keys_marker = 'public-keys.done'
+    public_key_lookup_interval = 300        # ms between two lookups, not to flood the proxy
+
+    @run_in_gui_thread
+    def _fetch_public_keys_once(self, account):
+        """Ask the server for the public key of every addressbook contact this device has
+        none of (a sylk-api-pgp-key-lookup each; the server answers with the key as a
+        text/pgp-public-key message, saved as any other). Once per account, after its first
+        sync: journal/<account>/public-keys.done. Contacts added later get their key as
+        before, with the first message."""
+        if account is BonjourAccount() or not account.enabled or not account.sms.enable_pgp:
+            return
+        directory = self._journal_directory(account)
+        done = os.path.join(directory, self.public_keys_marker)
+        if os.path.exists(done) or os.path.exists(os.path.join(directory, FIRST_SYNC_MARKER)):
+            return
+        account_manager = AccountManager()
+        addresses = set()
+        for contact in AddressbookManager().get_contacts():
+            try:
+                uris = list(contact.uris)
+            except (AttributeError, TypeError):
+                continue
+            for contact_uri in uris:
+                address = str(getattr(contact_uri, 'uri', '') or '').strip()
+                for scheme in ('sips:', 'sip:'):
+                    if address.lower().startswith(scheme):
+                        address = address[len(scheme):]
+                address = address.split(';', 1)[0].split('?', 1)[0]
+                user, at, domain = address.partition('@')
+                if not at or not user or not domain or account_manager.has_account(address):
+                    continue
+                addresses.add(f'{user}@{domain.lower()}')
+        keys_directory = SIPSimpleSettings().chat.keys_directory.normalized
+        missing = sorted(address for address in addresses if not os.path.exists(os.path.join(keys_directory, address.replace('/', '_') + '.pubkey')))
+        try:
+            with open(done, 'w') as marker_file:
+                marker_file.write(f'{ISOTimestamp.now()} {len(missing)} of {len(addresses)} asked for\n')
+        except OSError as e:
+            ActivityLog().warning(f'[pgp] Cannot write {done}: {e}')
+            return
+        ActivityLog().info(f'[pgp] Asking the server for the public keys of {len(missing)} contacts of {account.id} ({len(addresses) - len(missing)} of {len(addresses)} already known)')
+        JournalLog()(account.id, 'public keys', asked=len(missing), known=len(addresses) - len(missing))
+        from PyQt6.QtCore import QTimer
+        for number, address in enumerate(missing):
+            QTimer.singleShot(number * self.public_key_lookup_interval, lambda address=address: self._lookup_public_key(account, address))
+
+    def _lookup_public_key(self, account, address):
+        if not account.enabled:
+            return
+        from types import SimpleNamespace
+        target = SimpleNamespace(uri=SimpleNamespace(uri=address))     # no session: OutgoingMessage only needs the address
+        log.info(f'Public key lookup for {address} from {account.id}')
+        OutgoingMessage(account, target, 'Public key request', 'application/sylk-api-pgp-key-lookup').send()
 
     def _NH_BlinkServerHistoryWasFetched(self, notification):
         account = notification.sender
