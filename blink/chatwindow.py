@@ -1946,8 +1946,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     elif stream_types != {'video'}:
                         menu.addAction(self.control_button.actions.remove_video)
                     if 'screen-sharing' not in stream_types:
-                        menu.addAction(self.control_button.actions.request_screen)
-                        menu.addAction(self.control_button.actions.share_my_screen)
+                        if not blink_session.remote_focus:  # no screen sharing with a conference
+                            menu.addAction(self.control_button.actions.request_screen)
+                            menu.addAction(self.control_button.actions.share_my_screen)
                     elif stream_types != {'screen-sharing'}:
                         menu.addAction(self.control_button.actions.end_screen_sharing)
                     if 'chat' not in stream_types:

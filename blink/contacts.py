@@ -233,6 +233,17 @@ def xcap_is_expected():
         return True
 
 
+def is_conference_contact(contact):
+    """Whether a contact is a conference room (an address on a conference domain): no screen sharing with it."""
+    account = AccountManager().default_account
+    addresses = []
+    for uri in getattr(contact, 'uris', None) or ():
+        addresses.append(str(getattr(uri, 'uri', uri)))
+    if getattr(contact, 'uri', None) is not None:
+        addresses.append(str(getattr(contact.uri, 'uri', contact.uri)))
+    return any(is_conference_uri(address, account) for address in addresses)
+
+
 class ContactTrash(object):
     """Sylk Mobile's and Blink for macOS's two-stage contact delete.
 
@@ -5455,6 +5466,7 @@ class ContactListView(QListView):
             can_call = account_manager.default_account is not None and contact.uri is not None
             can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
 
+            conference = is_conference_contact(contact)
             # a Bonjour neighbour is reached at the one address its transport ranking picks (contact.uri)
             many_uris = len(contact.uris) > 1 and contact.type != 'bonjour'
             if many_uris and can_call:
@@ -5487,6 +5499,7 @@ class ContactListView(QListView):
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Request Screen'))
+                call_submenu.setEnabled(not conference)
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -5494,6 +5507,7 @@ class ContactListView(QListView):
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Share My Screen'))
+                call_submenu.setEnabled(not conference)
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -5521,8 +5535,8 @@ class ContactListView(QListView):
                 self.actions.start_chat_session.setEnabled(can_call)
                 self.actions.send_sms.setEnabled(can_call)
                 self.actions.send_files.setEnabled(can_call)
-                self.actions.request_screen.setEnabled(can_call)
-                self.actions.share_my_screen.setEnabled(can_call)
+                self.actions.request_screen.setEnabled(can_call and not conference)
+                self.actions.share_my_screen.setEnabled(can_call and not conference)
 
             if many_uris and can_transfer:
                 call_submenu = menu.addMenu(translate('contact_list', 'Transfer Call'))
@@ -6086,8 +6100,9 @@ class ContactSearchListView(QListView):
             self.actions.start_chat_session.setEnabled(can_call)
             self.actions.send_sms.setEnabled(can_call)
             self.actions.send_files.setEnabled(can_call)
-            self.actions.request_screen.setEnabled(can_call)
-            self.actions.share_my_screen.setEnabled(can_call)
+            conference = is_conference_contact(contact)
+            self.actions.request_screen.setEnabled(can_call and not conference)
+            self.actions.share_my_screen.setEnabled(can_call and not conference)
             self.actions.transfer_call.setEnabled(can_transfer)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
@@ -6448,8 +6463,9 @@ class ContactDetailView(QListView):
         self.actions.start_chat_session.setEnabled(can_call)
         self.actions.send_sms.setEnabled(can_call)
         self.actions.send_files.setEnabled(can_call)
-        self.actions.request_screen.setEnabled(can_call)
-        self.actions.share_my_screen.setEnabled(can_call)
+        conference = is_conference_contact(model.contact)
+        self.actions.request_screen.setEnabled(can_call and not conference)
+        self.actions.share_my_screen.setEnabled(can_call and not conference)
         self.actions.transfer_call.setEnabled(can_transfer)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
         self.actions.delete_contact.setEnabled(model.contact_detail.deletable)

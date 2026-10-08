@@ -1136,8 +1136,6 @@ padding: 2px;</string>
      <addaction name="export_pgp_key_action"/>
      <addaction name="generate_pgp_key"/>
      <addaction name="separator"/>
-     <addaction name="received_messages_sound_action"/>
-     <addaction name="separator"/>
     </widget>
     <addaction name="about_action"/>
     <addaction name="check_for_updates_action"/>
