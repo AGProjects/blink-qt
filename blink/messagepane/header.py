@@ -367,7 +367,10 @@ class ConversationHeader(QWidget):
     def _update_location_button(self):
         from sipsimple.account import BonjourAccount
         account = self.account
-        self.location_button.setVisible(account is not None and account is not BonjourAccount() and bool(getattr(account.sms, 'history_synchronization_url', None)))
+        # a location goes encrypted only: without the other party's public key there is no button
+        has_peer_key = self.key is not None and self._encryption_state()[1] is not None
+        self.location_button.setVisible(account is not None and account is not BonjourAccount() and bool(getattr(account.sms, 'history_synchronization_url', None))
+                                        and has_peer_key)
 
     def _fill_location_menu(self):
         from blink.messagepane.position import positioning_available
@@ -409,6 +412,7 @@ class ConversationHeader(QWidget):
     def update_lock(self):
         if self.contact is None or not hasattr(self, 'lock_button'):
             return
+        self._update_location_button()      # a public key received (or removed) shows (or hides) it
         own_ready, peer_path = self._encryption_state()
         if own_ready and peer_path:
             self.lock_button.setIcon(QIcon(Resources.get('icons/lock-green-18.svg')))
