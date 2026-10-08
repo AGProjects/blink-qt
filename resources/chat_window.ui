@@ -2024,16 +2024,6 @@ QToolButton:pressed {
          </widget>
         </item>
         <item>
-         <widget class="ChatAccountSelector" name="identity">
-          <property name="toolTip">
-           <string>Select the SIP account used for this chat</string>
-          </property>
-          <property name="frame">
-           <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item>
          <widget class="QWidget" name="toolbar_widget" native="true">
           <property name="styleSheet">
            <string notr="true">QWidget#widget1 {
@@ -2387,11 +2377,6 @@ QToolButton:hover {
    <class>FileListView</class>
    <extends>QListView</extends>
    <header>blink.sessions</header>
-  </customwidget>
-  <customwidget>
-   <class>ChatAccountSelector</class>
-   <extends>QComboBox</extends>
-   <header>blink.accounts</header>
   </customwidget>
  </customwidgets>
  <tabstops>

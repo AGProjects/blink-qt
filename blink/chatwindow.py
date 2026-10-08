@@ -1500,11 +1500,8 @@ class ChatWidget(base_class, ui_class):
         self.composing_timer.stop()
         self.chat_input.reset_locks()
 
-        session = notification.sender.items.chat
-        if session is None:
-           return
-
-        session.chat_widget.add_message(ChatStatus(translate('chat_window', notification.data.reason)))
+        # no "Call ended" here: calls are the main window's and the message pane's; the end of
+        # the chat itself is said by the chat stream (Chat stream ended, Disconnected)
 
     def _NH_BlinkSessionWasDeleted(self, notification):
         self.setParent(None)
@@ -1546,9 +1543,10 @@ class NoSessionsLabel(QLabel):
         super(NoSessionsLabel, self).__init__(chat_window.session_panel)
         self.chat_window = chat_window
         font = self.font()
-        font.setPointSize(20)
+        font.setPointSizeF(font.pointSizeF() * 1.1)
         self.setFont(font)
-        self.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.setContentsMargins(0, 12, 0, 0)
         self.apply_theme()
         follow_theme(self)
         self.setText(translate('chat_window', "No Sessions"))
@@ -1636,8 +1634,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.zrtp_widget.nameChanged.connect(self._SH_ZRTPWidgetNameChanged)
         self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
 
-        self.identity.activated[int].connect(self._SH_IdentityChanged)
-        self.identity.currentIndexChanged[int].connect(self._SH_IdentityCurrentIndexChanged)
 
         geometry = QSettings().value("chat_window/geometry")
         if geometry:
@@ -1692,9 +1688,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkMessageHistoryMustReload')
 
-        self.account_model = AccountModel(self)
-        self.enabled_account_model = ActiveAccountModel(self.account_model, self)
-        self.identity.setModel(self.enabled_account_model)
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
 
@@ -3039,12 +3032,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if not content:
                     timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
                     continue
-            elif message.content_type.lower() in (CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE):
-                content = call_event_content(message)
-                if content is None:
-                    continue
             else:
-                continue
+                continue        # calls among them: the MSRP window shows chat only, calls are in the message pane
 
             # message.sender = SIPURI.parse(f'sip:{message.remote_uri}')
             if message.direction == 'outgoing':
@@ -3136,32 +3125,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             message_manager.create_message_session(contact, display_name, selected=False)
 
     def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
-        message = notification.data.message
-        contact, contact_uri = URIUtils.find_contact(message.remote_uri, display_name=message.display_name)
-
-        try:
-            blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is contact.settings)
-        except StopIteration:
-            return
-
-        account_manager = AccountManager()
-
-        if not blink_session.items.chat.chat_widget.history_loaded:
-            return
-
-        account = account_manager.get_account(message.account_id) if account_manager.has_account(message.account_id) else None
-
-        if account is None or not account.enabled:
-            return
-
-        if message.content_type.lower() in (CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE):
-            content = call_event_content(message)
-            if content is None:
-                return
-
-            timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
-            chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)
-            blink_session.items.chat.chat_widget.add_message(chat_message)
+        """A call record is not shown here: the MSRP window shows chat only, calls are in the message pane."""
 
     def _NH_BlinkConversationWillRemove(self, notification):
         session = notification.sender.items.chat
@@ -3411,21 +3375,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.selected_session.blink_session.sip_session.cancel_proposal()
         else:
             self.selected_session.end()
-
-    def _SH_IdentityChanged(self, index):
-        account = self.identity.itemData(index).account
-        try:
-            self.selected_session.blink_session.account = account
-            NotificationCenter().post_notification('PGPKeysShouldReload', sender=self.selected_session.blink_session)
-        except (AttributeError, KeyError):
-            pass
-
-    def _SH_IdentityCurrentIndexChanged(self, index):
-        if index != -1:
-            try:
-                self._update_session_info_panel(elements='session')
-            except (AttributeError, KeyError):
-                pass
 
     def _SH_SessionModelSessionAdded(self, session):
         model = self.session_model
