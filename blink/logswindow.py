@@ -1,5 +1,7 @@
 import threading
 
+from collections import deque
+
 from PyQt6 import uic
 from PyQt6 import QtCore, QtWidgets
 
@@ -27,12 +29,14 @@ class LogsWindow(base_class, ui_class):
 
     def __init__(self, parent=None):
         super(LogsWindow, self).__init__(parent)
-        geometry = QtCore.QSettings().value("logs_window/geometry")
-        if geometry:
-            self.restoreGeometry(geometry)
 
         with Resources.directory:
             self.setupUi()
+
+        # after setupUi, which sets the default size from the .ui file
+        geometry = QtCore.QSettings().value("logs_window/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
@@ -52,6 +56,15 @@ class LogsWindow(base_class, ui_class):
         self._activity_timer.setInterval(self.activity_flush_interval)
         self._activity_timer.timeout.connect(self._flush_activity)
         self.activity_queued.connect(self._schedule_activity_flush)  # queued when emitted from other threads
+
+        # every activity line shown so far, so the filter can be changed or cleared
+        self._activity_all = deque(maxlen=self.activity_logs_view.maximumBlockCount() or 50000)
+        self._activity_filter_text = ''
+        self._filter_timer = QtCore.QTimer(self)
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.setInterval(200)
+        self._filter_timer.timeout.connect(self._apply_activity_filter)
+        self.activity_filter.textChanged.connect(lambda text: self._filter_timer.start())
 
     def updateCheckedButton(self):
         settings = SIPSimpleSettings()
@@ -111,7 +124,24 @@ class LogsWindow(base_class, ui_class):
         if dropped:
             lines.append('... %d lines not shown here, see %s' % (dropped, ActivityLog().filename))
         if lines:
-            self.activity_logs_view.appendPlainText('\n'.join(lines))
+            self._activity_all.extend(lines)
+            if self._activity_filter_text:
+                lines = [line for line in lines if self._activity_matches(line)]
+            if lines:
+                self.activity_logs_view.appendPlainText('\n'.join(lines))
+
+    def _activity_matches(self, line):
+        return self._activity_filter_text in line.lower()
+
+    def _apply_activity_filter(self):
+        self._activity_filter_text = self.activity_filter.text().strip().lower()
+        if self._activity_filter_text:
+            lines = [line for line in self._activity_all if self._activity_matches(line)]
+        else:
+            lines = self._activity_all
+        view = self.activity_logs_view
+        view.setPlainText('\n'.join(lines))
+        view.verticalScrollBar().setValue(view.verticalScrollBar().maximum())
 
     @run_in_gui_thread
     def handle_notification(self, notification):

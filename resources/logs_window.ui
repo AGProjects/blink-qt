@@ -12,47 +12,32 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>800</width>
-    <height>630</height>
-   </size>
-  </property>
-  <property name="maximumSize">
-   <size>
-    <width>800</width>
-    <height>630</height>
+    <width>400</width>
+    <height>300</height>
    </size>
   </property>
   <property name="windowTitle">
    <string>Blink Logs</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
-   </property>
+   <layout class="QVBoxLayout" name="central_layout">
+    <property name="spacing">
+     <number>4</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>4</number>
+    </property>
+    <item>
    <widget class="QTabWidget" name="logsTabWidget">
-    <property name="geometry">
-     <rect>
-      <x>0</x>
-      <y>0</y>
-      <width>800</width>
-      <height>550</height>
-     </rect>
-    </property>
-    <property name="sizePolicy">
-     <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-      <horstretch>0</horstretch>
-      <verstretch>0</verstretch>
-     </sizepolicy>
-    </property>
-    <property name="minimumSize">
-     <size>
-      <width>0</width>
-      <height>0</height>
-     </size>
-    </property>
     <property name="currentIndex">
      <number>0</number>
     </property>
@@ -63,202 +48,291 @@
      <attribute name="title">
       <string>Activity</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="activity_logs_view">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>795</width>
-        <height>520</height>
-       </rect>
+     <layout class="QVBoxLayout" name="activity_layout">
+      <property name="spacing">
+       <number>0</number>
       </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-      <property name="undoRedoEnabled">
-       <bool>false</bool>
+      <property name="topMargin">
+       <number>0</number>
       </property>
-      <property name="lineWrapMode">
-       <enum>QPlainTextEdit::NoWrap</enum>
+      <property name="rightMargin">
+       <number>0</number>
       </property>
-      <property name="readOnly">
-       <bool>true</bool>
+      <property name="bottomMargin">
+       <number>0</number>
       </property>
-      <property name="maximumBlockCount">
-       <number>50000</number>
-      </property>
-      <property name="plainText">
-       <string notr="true"/>
-      </property>
-     </widget>
+      <item>
+       <layout class="QHBoxLayout" name="activity_filter_layout">
+        <property name="topMargin">
+         <number>4</number>
+        </property>
+        <property name="rightMargin">
+         <number>4</number>
+        </property>
+        <property name="bottomMargin">
+         <number>4</number>
+        </property>
+        <item>
+         <spacer name="activity_filter_spacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="activity_filter">
+          <property name="minimumSize">
+           <size>
+            <width>250</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="placeholderText">
+           <string>Filter</string>
+          </property>
+          <property name="clearButtonEnabled">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QPlainTextEdit" name="activity_logs_view">
+           <property name="undoRedoEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="lineWrapMode">
+            <enum>QPlainTextEdit::NoWrap</enum>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="maximumBlockCount">
+            <number>50000</number>
+           </property>
+           <property name="plainText">
+            <string notr="true"/>
+           </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
     <widget class="QWidget" name="sip">
      <attribute name="title">
       <string>SIP Protocol</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="sip_logs_view">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>795</width>
-        <height>520</height>
-       </rect>
+     <layout class="QVBoxLayout" name="sip_layout">
+      <property name="spacing">
+       <number>0</number>
       </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-      <property name="undoRedoEnabled">
-       <bool>false</bool>
+      <property name="topMargin">
+       <number>0</number>
       </property>
-      <property name="readOnly">
-       <bool>true</bool>
+      <property name="rightMargin">
+       <number>0</number>
       </property>
-      <property name="plainText">
-       <string notr="true"/>
+      <property name="bottomMargin">
+       <number>0</number>
       </property>
-     </widget>
+      <item>
+       <widget class="QPlainTextEdit" name="sip_logs_view">
+           <property name="undoRedoEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="plainText">
+            <string notr="true"/>
+           </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
     <widget class="QWidget" name="rtp">
      <attribute name="title">
       <string>RTP Media</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="rtp_logs_view">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>795</width>
-        <height>520</height>
-       </rect>
+     <layout class="QVBoxLayout" name="rtp_layout">
+      <property name="spacing">
+       <number>0</number>
       </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-      <property name="undoRedoEnabled">
-       <bool>false</bool>
+      <property name="topMargin">
+       <number>0</number>
       </property>
-      <property name="readOnly">
-       <bool>true</bool>
+      <property name="rightMargin">
+       <number>0</number>
       </property>
-      <property name="plainText">
-       <string notr="true"/>
+      <property name="bottomMargin">
+       <number>0</number>
       </property>
-     </widget>
+      <item>
+       <widget class="QPlainTextEdit" name="rtp_logs_view">
+           <property name="undoRedoEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="plainText">
+            <string notr="true"/>
+           </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
     <widget class="QWidget" name="msrp">
      <attribute name="title">
       <string>MSRP Protocol</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="msrp_logs_view">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>795</width>
-        <height>520</height>
-       </rect>
+     <layout class="QVBoxLayout" name="msrp_layout">
+      <property name="spacing">
+       <number>0</number>
       </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-      <property name="undoRedoEnabled">
-       <bool>false</bool>
+      <property name="topMargin">
+       <number>0</number>
       </property>
-      <property name="readOnly">
-       <bool>true</bool>
+      <property name="rightMargin">
+       <number>0</number>
       </property>
-      <property name="plainText">
-       <string notr="true"/>
+      <property name="bottomMargin">
+       <number>0</number>
       </property>
-     </widget>
+      <item>
+       <widget class="QPlainTextEdit" name="msrp_logs_view">
+           <property name="undoRedoEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="plainText">
+            <string notr="true"/>
+           </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
     <widget class="QWidget" name="xcap">
      <attribute name="title">
       <string>XCAP Protocol</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="xcap_logs_view">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>795</width>
-        <height>520</height>
-       </rect>
+     <layout class="QVBoxLayout" name="xcap_layout">
+      <property name="spacing">
+       <number>0</number>
       </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-      <property name="undoRedoEnabled">
-       <bool>false</bool>
+      <property name="topMargin">
+       <number>0</number>
       </property>
-      <property name="readOnly">
-       <bool>true</bool>
+      <property name="rightMargin">
+       <number>0</number>
       </property>
-      <property name="plainText">
-       <string notr="true"/>
+      <property name="bottomMargin">
+       <number>0</number>
       </property>
-     </widget>
+      <item>
+       <widget class="QPlainTextEdit" name="xcap_logs_view">
+           <property name="undoRedoEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="plainText">
+            <string notr="true"/>
+           </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
     <widget class="QWidget" name="messaging">
      <attribute name="title">
       <string>Messaging</string>
      </attribute>
-     <widget class="QPlainTextEdit" name="messaging_logs_view">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>795</width>
-        <height>520</height>
-       </rect>
+     <layout class="QVBoxLayout" name="messaging_layout">
+      <property name="spacing">
+       <number>0</number>
       </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
+      <property name="leftMargin">
+       <number>0</number>
       </property>
-      <property name="undoRedoEnabled">
-       <bool>false</bool>
+      <property name="topMargin">
+       <number>0</number>
       </property>
-      <property name="readOnly">
-       <bool>true</bool>
+      <property name="rightMargin">
+       <number>0</number>
       </property>
-      <property name="plainText">
-       <string notr="true"/>
+      <property name="bottomMargin">
+       <number>0</number>
       </property>
-     </widget>
+      <item>
+       <widget class="QPlainTextEdit" name="messaging_logs_view">
+           <property name="undoRedoEnabled">
+            <bool>false</bool>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="plainText">
+            <string notr="true"/>
+           </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </widget>
-   <widget class="QCheckBox" name="log_enabled_button">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>550</y>
-      <width>86</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Enabled</string>
-    </property>
-   </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="button_layout">
+      <property name="leftMargin">
+       <number>10</number>
+      </property>
+
+      <item>
+       <widget class="QCheckBox" name="log_enabled_button">
+        <property name="text">
+         <string>Enabled</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="button_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+   </layout>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QMenuBar" name="menubar">
