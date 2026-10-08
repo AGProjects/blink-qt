@@ -827,8 +827,14 @@ class BlinkSession(BlinkSessionBase):
         self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
     def add_stream(self, stream_description):
-        if stream_description.type == 'messages' and stream_description.type not in self.fake_streams:
-            self.fake_streams.extend([stream_description.create_stream()])
+        if stream_description.type == 'messages':
+            # not a SIP stream: SIP messages need no connected session (the call may be ringing,
+            # on hold or ended), so the conversation is only attached to the session
+            if self.fake_streams.get('messages') is None:
+                self.fake_streams.extend([stream_description.create_stream()])
+                self._delete_when_done = False
+                NotificationCenter().post_notification('BlinkSessionWillAddStream', sender=self, data=NotificationData(stream=stream_description))
+            return
         self.add_streams([stream_description])
 
     def add_streams(self, stream_descriptions):
