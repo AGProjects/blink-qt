@@ -44,8 +44,7 @@ TILE_SIZE = 256
 DEFAULT_ZOOM = 15
 MAX_ZOOM = 18
 MIN_ZOOM = 2
-TILE_HOST = '%s.tile.openstreetmap.de'
-SUBDOMAINS = ('a', 'b', 'c')
+TILE_HOST = 'tile.openstreetmap.de'       # one host: a/b/c sharding is obsolete and only splits connections
 
 
 def user_agent():
@@ -100,9 +99,12 @@ class TileCache(QObject):
         self._queue = []
         self._pending = set()
         self._failed = {}           # key: time.monotonic() it failed
-        self._running = 0
+        self._running = {}          # reply: (key, time.monotonic() it was asked)
         self._network = None
         self._directory = None
+        self._watchdog = None
+        self._retry_timer = None
+        self._fetched = 0
 
     def directory(self):
         if self._directory is None:
@@ -140,36 +142,74 @@ class TileCache(QObject):
             self._memory.popitem(last=False)
 
     def _next(self):
+        from PyQt6.QtCore import QTimer
         from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
         if self._network is None:
             self._network = QNetworkAccessManager(self)
-        while self._queue and self._running < self.concurrent:
+            # a reply that never finishes would hold its slot for ever and, once all
+            # slots are held, no tile is asked for again; transferTimeout does not
+            # catch every stall (HTTP/2 streams), so abort them here
+            self._watchdog = QTimer(self)
+            self._watchdog.setInterval(5000)
+            self._watchdog.timeout.connect(self._SH_Watchdog)
+        while self._queue and len(self._running) < self.concurrent:
             key = self._queue.pop()             # the newest wanted first: what is on screen now
             zoom, x, y = key
-            host = TILE_HOST % SUBDOMAINS[(x + y) % len(SUBDOMAINS)]
-            request = QNetworkRequest(QUrl(f'https://{host}/{zoom}/{x}/{y}.png'))
+            request = QNetworkRequest(QUrl(f'https://{TILE_HOST}/{zoom}/{x}/{y}.png'))
             request.setRawHeader(b'User-Agent', user_agent().encode())
-            request.setTransferTimeout(self.timeout * 1000)      # a stalled request must not hold a slot for ever
+            request.setAttribute(QNetworkRequest.Attribute.Http2AllowedAttribute, False)
+            request.setTransferTimeout(self.timeout * 1000)
             reply = self._network.get(request)
-            self._running += 1
+            self._running[reply] = (key, time.monotonic())
             reply.finished.connect(lambda reply=reply, key=key: self._finished(reply, key))
+        if self._running and not self._watchdog.isActive():
+            self._watchdog.start()
+
+    def _SH_Watchdog(self):
+        now = time.monotonic()
+        for reply, (key, started) in list(self._running.items()):
+            if now - started > self.timeout + 5:
+                log.debug(f'Map tile {key} stalled for {now - started:.0f} s, aborted')
+                reply.abort()                   # emits finished with OperationCanceledError
+        if not self._running:
+            self._watchdog.stop()
+
+    def _schedule_retry(self):
+        # failed tiles are only asked for again when something repaints; make sure something does
+        from PyQt6.QtCore import QTimer
+        if self._retry_timer is None:
+            self._retry_timer = QTimer(self)
+            self._retry_timer.setSingleShot(True)
+            self._retry_timer.timeout.connect(self.tileReady.emit)
+        if not self._retry_timer.isActive():
+            self._retry_timer.start((self.retry_after + 1) * 1000)
 
     def _finished(self, reply, key):
-        from PyQt6.QtNetwork import QNetworkReply
-        self._running -= 1
+        from PyQt6.QtNetwork import QNetworkReply, QNetworkRequest
+        if self._running.pop(reply, None) is None:
+            return                              # already accounted for
         self._pending.discard(key)
         try:
+            status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
             if reply.error() != QNetworkReply.NetworkError.NoError:
                 if not self._failed:
-                    ActivityLog().warning(f'[location] Map tiles cannot be fetched from {TILE_HOST % "*"}: {reply.errorString()} (asked again in {self.retry_after} s)')
-                log.debug(f'Map tile {key} not fetched: {reply.errorString()}')
+                    ActivityLog().warning(f'[location] Map tiles cannot be fetched from {TILE_HOST}: {reply.errorString()} (HTTP {status}, asked again in {self.retry_after} s)')
+                log.debug(f'Map tile {key} not fetched: {reply.errorString()} (HTTP {status})')
                 self._failed[key] = time.monotonic()
+                self._schedule_retry()
                 return
             data = bytes(reply.readAll())
             pixmap = QPixmap()
             if not pixmap.loadFromData(data):
+                content_type = reply.header(QNetworkRequest.KnownHeaders.ContentTypeHeader)
+                if not self._failed:
+                    ActivityLog().warning(f'[location] Map tile {key} from {TILE_HOST} is not an image (HTTP {status}, {content_type}, {len(data)} bytes)')
                 self._failed[key] = time.monotonic()
+                self._schedule_retry()
                 return
+            if self._fetched == 0:
+                log.debug(f'Map tiles are fetched from {TILE_HOST}')
+            self._fetched += 1
             path = self._path(*key)
             try:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
