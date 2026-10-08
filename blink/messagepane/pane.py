@@ -13,6 +13,8 @@ the window is active (and not minimised). Becoming read marks its incoming
 messages read in history, clears its badge, sends the displayed notifications
 the sender asked for and tells this account's other devices; while it is not
 being read nothing is marked, and messages arriving stay unread.
+When the other party reads one of our messages while its conversation is
+open here, a sound is played (sounds.play_message_read_sound).
 
 At the bottom the composer (blink.messagepane.composer): Enter sends the text
 on the conversation's account, typing tells the peer, unsent text is kept per
@@ -27,11 +29,16 @@ from application.notification import IObserver, NotificationCenter, Notification
 from application.python import Null
 from zope.interface import implementer
 
+import time
+
 from PyQt6.QtCore import Qt, QSettings, QTimer
 from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 
 from sipsimple.account import AccountManager, BonjourAccount
+from sipsimple.application import SIPApplication
+from sipsimple.audio import WavePlayer
+from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
@@ -41,6 +48,7 @@ from blink.messagepane.header import ConversationHeader
 from blink.messagepane.model import ConversationModel
 from blink.messagepane.strip import TranscriptStrip
 from blink.messagepane.view import TranscriptView
+from blink.resources import Resources
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.color import follow_theme, secondary_text_color
 
@@ -152,6 +160,8 @@ class MessagePane(QWidget):
         notification_center.add_observer(self, name='PGPKeysShouldReload')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
+        notification_center.add_observer(self, name='BlinkGotDispositionNotification')
+        self._last_read_sound = 0.0
 
     def apply_theme(self):
         palette = self.empty_label.palette()
@@ -370,6 +380,30 @@ class MessagePane(QWidget):
         if self.view_key is not None and str(notification.data.remote_uri) in self.view_key:
             self._calendar_timer.start()
             self.filters.refresh_later()
+
+    read_sound_interval = 30.0  # seconds: at most one read sound in this time
+
+    def _NH_BlinkGotDispositionNotification(self, notification):
+        # the other party read one of our messages in the conversation shown here
+        if getattr(notification.data, 'status', None) != 'displayed' or self.view_key is None:
+            return
+        model = self.models.get(self.view_key)
+        item = model.ids.get(str(notification.data.id)) if model is not None else None
+        if item is None or item.direction != 'outgoing' or item.state == 'displayed':
+            return      # not in this conversation, not ours, or already read (a repeated receipt)
+        window = self.window()
+        if not self.isVisible() or window.isMinimized() or self.stack.currentWidget() is not self.transcript:
+            return
+        settings = SIPSimpleSettings()
+        if not settings.sounds.play_message_read_sound or settings.audio.silent:
+            return
+        now = time.monotonic()
+        if now - self._last_read_sound < self.read_sound_interval:
+            return
+        self._last_read_sound = now
+        player = WavePlayer(SIPApplication.alert_audio_bridge.mixer, Resources.get('sounds/message_sent.wav'), volume=20)
+        SIPApplication.alert_audio_bridge.add(player)
+        player.start()
 
     def _NH_PGPKeysShouldReload(self, notification):
         self.header.update_lock()

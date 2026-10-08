@@ -100,6 +100,7 @@ class SoundSettings(SettingsGroup):
     inbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/inbound_ringtone.wav')), nillable=True)
     outbound_ringtone = Setting(type=SoundFile, default=SoundFile(Resources.get('sounds/outbound_ringtone.wav')), nillable=True)
     play_message_alerts = Setting(type=bool, default=True)
+    play_message_read_sound = Setting(type=bool, default=True)   # when the open conversation's peer reads a message
 
 
 # The system CA bundle is kept current by the distribution; the bundled one is
