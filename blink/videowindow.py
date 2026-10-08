@@ -25,7 +25,7 @@ from itertools import count
 from math import ceil, floor
 
 from PyQt6.QtCore import Qt, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QActionGroup, QColor, QDesktopServices, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QRegion
+from PyQt6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QShortcut, QDesktopServices, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QRegion
 from PyQt6.QtWidgets import QAbstractButton, QApplication, QGraphicsOpacityEffect, QLabel, QMenu, QPushButton, QWidget
 
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy
@@ -564,6 +564,8 @@ class TrackedVideoSurface(VideoSurface):
         self.frame_size = None
 
     def _set_tracked_producer(self, producer):
+        if producer is not None and producer is VideoSurface.producer.fget(self):
+            return              # already attached: detaching and attaching again would cycle the camera
         self.frame_count = 0
         self.frame_size = None
         VideoSurface.producer.fset(self, producer)
@@ -819,6 +821,95 @@ class RemoteVideoView(TrackedVideoSurface):
             self.doubleClicked.emit()
 
 
+# The video docked in the main window
+
+DOCKED_MIN_HEIGHT = 120
+DOCKED_MAX_HEIGHT = 360
+
+
+class DockedVideoPanel(QWidget):
+    """The call's video under its tile in the audio sessions list, while the video window is
+    hidden for the message pane. The remote picture fills it, the camera is a thumbnail in a
+    corner; a double click or the button in the corner opens the video window again."""
+
+    undockRequested = pyqtSignal()
+
+    def __init__(self, parent):
+        super(DockedVideoPanel, self).__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet('DockedVideoPanel { background-color: #101010; }')
+        self.video_view = TrackedVideoSurface(self)
+        self.video_view.interactive = False
+        self.my_video_view = LocalVideoView(self)
+        self.my_video_view.hide()
+        self.undock_button = QPushButton(self)
+        self.undock_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.undock_button.setToolTip(translate('video_window', 'Open the video window'))
+        self.undock_button.setFixedSize(28, 24)
+        self.undock_button.setStyleSheet('QPushButton { background-color: rgba(0, 0, 0, 115); border: 1px solid rgba(255, 255, 255, 40); border-radius: 6px; }'
+                                         'QPushButton:hover { background-color: rgba(0, 0, 0, 170); }')
+        self.undock_button.clicked.connect(self.undockRequested)
+        self.my_video_view.firstFrame.connect(lambda width, height: self.my_video_view.layout_in_parent())
+
+    def height_for_width(self, width):
+        producer = self.video_view.producer
+        try:
+            frame_width, frame_height = producer.framesize
+            aspect = frame_width / frame_height if frame_width >= 16 and frame_height >= 16 else 16 / 9
+        except (AttributeError, TypeError, ValueError, ZeroDivisionError):
+            aspect = 16 / 9
+        return int(max(DOCKED_MIN_HEIGHT, min(DOCKED_MAX_HEIGHT, width / aspect)))
+
+    def set_producers(self, remote, local):
+        self.video_view.producer = remote
+        self.my_video_view.producer = local
+        self.my_video_view.set_placeholder(translate('video_window', 'Starting camera...'))
+        self.my_video_view.setVisible(local is not None)
+        self.my_video_view.raise_()
+        self.undock_button.raise_()
+        self.my_video_view.layout_in_parent()
+
+    def release_remote(self):
+        self.video_view.producer = None
+        self.video_view._image = None
+
+    def set_camera(self, producer):
+        self.my_video_view.producer = producer
+        self.my_video_view.layout_in_parent()
+
+    def release(self):
+        for view in (self.video_view, self.my_video_view):
+            try:
+                view.producer = None
+            except Exception:
+                pass
+            view._image = None
+
+    def resizeEvent(self, event):
+        super(DockedVideoPanel, self).resizeEvent(event)
+        self.video_view.setGeometry(self.rect())
+        self.undock_button.move(MY_VIDEO_MARGIN, MY_VIDEO_MARGIN)
+        self.my_video_view.layout_in_parent()
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.undockRequested.emit()
+
+    def showEvent(self, event):
+        super(DockedVideoPanel, self).showEvent(event)
+        self.undock_button.setIcon(self._undock_icon())
+
+    @staticmethod
+    def _undock_icon():
+        from PyQt6.QtGui import QIcon, QPixmap
+        pixmap = QPixmap(24, 18)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        draw_icon(painter, 'fullscreen', QRectF(0, 0, 24, 18), QColor(Qt.GlobalColor.white))
+        painter.end()
+        return QIcon(pixmap)
+
+
 # Screenshots
 
 class VideoScreenshot(object):
@@ -882,6 +973,7 @@ class VideoWindow(QWidget):
         self.always_on_top = False
         self.ending = False
         self.received_video = False
+        self.docked = False               # hidden, its video shown under the call in the main window
         self._remote_producer = None
 
         self.video_view = RemoteVideoView(self)
@@ -901,7 +993,7 @@ class VideoWindow(QWidget):
         self.camera_button = bar.add_segment('camera', translate('video_window', 'Camera'))
         self.camera_button.setToolTip(translate('video_window', 'Video and camera'))
         self.chat_button = bar.add_segment('chat', translate('video_window', 'Chat'))
-        self.chat_button.setToolTip(translate('video_window', 'Open the MSRP session'))
+        self.chat_button.setToolTip(translate('video_window', 'Show the conversation; the video moves under the call in the main window'))
         self.screenshot_button = bar.add_segment('screenshot', translate('video_window', 'Screenshot'))
         self.record_button = bar.add_segment('record', translate('video_window', 'Record'))
         self.record_button.setToolTip(translate('video_window', 'Start recording'))
@@ -920,6 +1012,12 @@ class VideoWindow(QWidget):
         self.fullscreen_button.clicked.connect(self.toggle_full_screen)
         self.info_button.clicked.connect(self._SH_InfoButtonClicked)
         self.hangup_button.clicked.connect(self._SH_HangupButtonClicked)
+
+        # the Messages Pane shortcut of the main window (Ctrl+M) works here too, as the Chat button
+        main_window = getattr(QApplication.instance(), 'main_window', None)
+        sequence = main_window.message_pane_action.shortcut() if main_window is not None else QKeySequence('Ctrl+M')
+        self.message_pane_shortcut = QShortcut(sequence, self)
+        self.message_pane_shortcut.activated.connect(self._SH_ChatButtonClicked)
 
         for widget in (self.video_view, self.my_video_view, self.call_bar, self.toast, *self.call_bar.segments):
             widget.installEventFilter(self)
@@ -1197,7 +1295,7 @@ class VideoWindow(QWidget):
         self.mute_button.setVisible(has_audio)
         self.record_button.setVisible(has_audio)
         self.record_button.setEnabled(connected)
-        self.chat_button.setEnabled(connected or 'chat' in session.streams)
+        self.chat_button.setEnabled(session.items.audio is not None)
         self.screenshot_button.setEnabled(self.main_view_has_picture)
         self.info_button.setVisible(session.items.audio is not None)
         self.info_button.setEnabled(session.items.audio is not None)
@@ -1227,44 +1325,111 @@ class VideoWindow(QWidget):
         self.update_record_button()
 
     def _SH_ChatButtonClicked(self):
-        """Open this call in the MSRP sessions window, adding a chat stream if it has none."""
-        from blink.sessions import StreamDescription
-        session = self.blink_session
-        if 'chat' not in session.streams:
-            if session.state != 'connected':
-                return
-            try:
-                session.add_stream(StreamDescription('chat'))
-            except RuntimeError:
-                return
-        if self.isFullScreen():
-            self.toggle_full_screen()
-        NotificationCenter().post_notification('BlinkSessionIsSelected', sender=session)
+        """The conversation in the main window's message pane, the video under the call.
 
-    def _SH_InfoButtonClicked(self):
+        Not an MSRP chat: that is only started from a contact's menu."""
         session = self.blink_session
-        item = session.items.audio
-        if item is None:
-            return
-        from blink.widgets.buttons import SwitchViewButton
         main_window = QApplication.instance().main_window
+        if session is None or session.items.audio is None:
+            return
+        # how the window was, to be put back the same when the video comes out of the drawer
+        self._undocked_state = dict(full_screen=self.isFullScreen(), maximized=self.isMaximized(), geometry=None)
         if self.isFullScreen():
-            self.toggle_full_screen()
-        on_screen = main_window.isVisible() and not main_window.isMinimized() and main_window.main_view.currentWidget() is main_window.sessions_panel
-        session_list = main_window.session_list
-        # the info is under the call in the audio panel: go there, and only hide it if it was already in view
+            self.showNormal()
+        self._undocked_state['geometry'] = self.saveGeometry()
+        if not self.dock():
+            return
+        main_window.show_conversation_in_pane(session.contact, session.contact_uri)
+
+    _undocked_state = None
+    _watching_message_pane = False
+
+    def _SH_MessagePaneToggled(self, visible):
+        if not visible:
+            self.undock()
+
+    def _stop_watching_message_pane(self):
+        if self._watching_message_pane:
+            self._watching_message_pane = False
+            try:
+                QApplication.instance().main_window.message_pane_action.toggled.disconnect(self._SH_MessagePaneToggled)
+            except (TypeError, RuntimeError, AttributeError):
+                pass
+
+    def _main_session_list(self):
+        main_window = QApplication.instance().main_window
+        return main_window, main_window.session_list
+
+    def dock(self):
+        """Hide the window and show the video under the call's tile in the audio sessions list."""
+        session = self.blink_session
+        item = session.items.audio if session is not None else None
+        if item is None:
+            return False
+        from blink.widgets.buttons import SwitchViewButton
+        main_window, session_list = self._main_session_list()
         main_window.switch_view_button.view = SwitchViewButton.SessionView
         main_window.main_view.setCurrentWidget(main_window.sessions_panel)
-        if main_window.isMinimized():
-            main_window.showNormal()
+        self.docked = True
+        self.idle_timer.stop()
+        remote = self._remote_producer if self.connected else None
+        # The remote picture takes one renderer only: the window gives it up first. The camera
+        # takes several, and the drawer gets it before the window lets it go (see show_connected_layout).
+        for view in (self.video_view, self.my_video_view):
+            if remote is not None and view.producer is remote:
+                view.producer = None
+        session_list.show_video(item, remote, self.local_producer, self.undock)
+        self._release_video()
+        if not self._watching_message_pane:
+            # the video was put in the drawer for the message pane: closing the pane gives it back
+            main_window.message_pane_action.toggled.connect(self._SH_MessagePaneToggled)
+            self._watching_message_pane = True
+        self.hide()
+        self.log('Video moved under the call in the main window')
+        return True
+
+    def undock(self):
+        """Back to the video window."""
+        if not self.docked:
+            return
+        self.docked = False
+        self._stop_watching_message_pane()
+        main_window, session_list = self._main_session_list()
+        item = self.blink_session.items.audio if self.blink_session is not None else None
+        if self.blink_session is not None and not self.ending:
+            # the drawer gives up the remote picture (one renderer only), then the window takes
+            # both before the drawer lets the camera go (see show_connected_layout)
+            session_list.release_remote_video()
+            self.log('Video moved back to the video window')
+            if self.connected:
+                self._attach_producers()
+            else:
+                self.video_view.producer = self.local_producer
+        if item is not None:
+            session_list.hide_video(item)
+        if self.blink_session is None or self.ending:
+            return
+        state, self._undocked_state = self._undocked_state or {}, None
+        if state.get('geometry') is not None:
+            self.restoreGeometry(state['geometry'])
+        if state.get('full_screen'):
+            self.showFullScreen()
+        elif state.get('maximized'):
+            self.showMaximized()
         else:
-            main_window.show()
-        main_window.raise_()
-        main_window.activateWindow()
-        if on_screen and session_list.info_session is item:
-            session_list.hide_session_info()
-        else:
-            session_list.show_session_info(item)
+            self.show()
+        self._update_fullscreen_button()      # always on top is a window flag: it survived the hide
+        self.raise_()
+        self.activateWindow()
+        self.show_controls()
+
+    def _SH_InfoButtonClicked(self):
+        item = self.blink_session.items.audio
+        if item is None:
+            return
+        if self.isFullScreen():
+            self.toggle_full_screen()
+        QApplication.instance().main_window.toggle_call_info(item)
 
     def _SH_HangupButtonClicked(self):
         if self.isFullScreen():
@@ -1420,8 +1585,12 @@ class VideoWindow(QWidget):
         self.connected = True
         if not first_time:
             return
+        # The camera moves to the thumbnail before it leaves the main view: with no renderer
+        # left on it the SDK stops it, and starting it again soon after makes libv4l2 fail
+        # with "error setting pixformat: Device or resource busy".
+        self.my_video_view.mirror = True
+        self.my_video_view.producer = self.local_producer
         self.video_view.producer = None
-        self.my_video_view.producer = None
         if not self.received_video:
             self.status_label.set_status(translate('video_window', 'Waiting for remote video...'))
         QTimer.singleShot(250, self._attach_producers)
@@ -1430,6 +1599,9 @@ class VideoWindow(QWidget):
         if self.blink_session is None or not self.connected:
             return
         remote, local = self._remote_producer, self.local_producer
+        if self.docked:
+            self._main_session_list()[1].show_video(self.blink_session.items.audio, remote, local, self.undock)
+            return
         main, thumb = (local, remote) if self.swapped else (remote, local)
         self.video_view.mirror = self.swapped
         self.my_video_view.mirror = not self.swapped
@@ -1558,6 +1730,15 @@ class VideoWindow(QWidget):
     def _teardown(self):
         if self.blink_session is None:
             return
+        self._stop_watching_message_pane()
+        if self.docked:
+            self.docked = False
+            item = self.blink_session.items.audio
+            if item is not None:     # gone with the call: the list has already removed its video
+                try:
+                    self._main_session_list()[1].hide_video(item)
+                except Exception:
+                    pass
         self.idle_timer.stop()
         self.recording_timer.stop()
         self.close_timer.stop()
@@ -1672,6 +1853,9 @@ class VideoWindow(QWidget):
     def _NH_VideoDeviceDidChangeCamera(self, notification):
         new_camera = notification.data.new_camera
         self.log('Camera changed: %s' % describe_producer(new_camera))
+        if self.docked:
+            self._main_session_list()[1].video_camera_changed(new_camera)
+            return
         if not self.connected:
             self.video_view.producer = new_camera
         elif self.swapped:
@@ -1723,7 +1907,7 @@ class VideoWindowManager(object):
         if window is not None and not window.ending:
             if connected_stream is not None:
                 window.show_connected_layout(connected_stream)
-            if not window.isVisible():
+            if not window.isVisible() and not window.docked:
                 window.show()
             return
         window = VideoWindow(blink_session)

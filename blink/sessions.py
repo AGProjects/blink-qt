@@ -2436,14 +2436,20 @@ class AudioSessionDelegate(QStyledItemDelegate):
             # of the size that the widget ever had, so it will never shrink it.
             session.widget.resize(size)
         session_list = self.parent()
-        if session is getattr(session_list, 'info_session', None):
+        if session is getattr(session_list, 'info_session', None) or session is getattr(session_list, 'video_session', None):
             session_list.place_info_panel()
 
     def sizeHint(self, option, index):
+        # under the tile: the call's video (when docked from the video window), then its info
         session_list = self.parent()
         session = index.data(Qt.ItemDataRole.UserRole)
+        extra = 0
+        if session is not None and session is getattr(session_list, 'video_session', None):
+            extra += session_list.video_panel_height
         if session is not None and session is getattr(session_list, 'info_session', None):
-            return QSize(self.size_hint.width(), self.size_hint.height() + session_list.info_panel_height)
+            extra += session_list.info_panel_height
+        if extra:
+            return QSize(self.size_hint.width(), self.size_hint.height() + extra)
         return self.size_hint
 
     def _SH_HoldButtonClicked(self, checked):
@@ -2886,6 +2892,10 @@ class AudioSessionListView(QListView):
         self.actions.session_info = QAction(translate('audio_session', "Show session info"), self, triggered=self._AH_ShowSessionInfo)
         self.info_panel = None    # created on first use, then moved under the session it shows
         self.info_session = None  # the AudioSessionItem whose info is shown (only one at a time)
+        self.video_panel = None   # the video of a call whose video window is hidden for the message pane
+        self.video_session = None # the AudioSessionItem it belongs to (only one at a time)
+        self._video_undock = None
+        self._video_panel_width = None
         self._menu_item = None    # the session the context menu was built for
         self.dragged_session = None
         self.ignore_selection_changes = False
@@ -2977,12 +2987,103 @@ class AudioSessionListView(QListView):
         if session in model.sessions:
             self.itemDelegate().sizeHintChanged.emit(model.index(model.sessions.index(session)))
 
+    # docked video
+    #
+    @property
+    def video_panel_height(self):
+        if self.video_panel is None:
+            return 0
+        return self.video_panel.height_for_width(self.viewport().width())
+
+    def show_video(self, session, remote, local, undock):
+        """Show a call's video under its tile (the video window is hidden); undock is called to
+        give it back to the window. Another call's docked video goes back to its window first."""
+        model = self.model()
+        if session is None or session not in model.sessions:
+            return
+        previous = self.video_session
+        if previous is not None and previous is not session and self._video_undock is not None:
+            self._video_undock()
+        if self.video_panel is None:
+            from blink.videowindow import DockedVideoPanel
+            self.video_panel = DockedVideoPanel(self.viewport())
+            self.video_panel.undockRequested.connect(self._SH_VideoUndockRequested)
+            self.video_panel.video_view.firstFrame.connect(self._SH_VideoPanelFirstFrame)
+            self.video_panel.hide()
+        self.video_session = session
+        self._video_undock = undock
+        self.video_panel.set_producers(remote, local)
+        self.itemDelegate().sizeHintChanged.emit(model.index(model.sessions.index(session)))
+        self.video_panel.show()
+        self.video_panel.raise_()
+        if self.info_panel is not None:
+            self.info_panel.raise_()
+        self.place_info_panel()
+        QTimer.singleShot(0, lambda: self._ensure_video_visible(session))
+
+    def hide_video(self, session=None):
+        if self.video_session is None or (session is not None and session is not self.video_session):
+            return
+        session = self.video_session
+        self.video_session = None
+        self._video_undock = None
+        self.video_panel.release()
+        self.video_panel.hide()
+        model = self.model()
+        if session in model.sessions:
+            self.itemDelegate().sizeHintChanged.emit(model.index(model.sessions.index(session)))
+
+    def release_remote_video(self):
+        """Let go of the remote picture (it takes one renderer only) so the video window can take it."""
+        if self.video_panel is not None:
+            self.video_panel.release_remote()
+
+    def video_camera_changed(self, producer):
+        if self.video_panel is not None and self.video_session is not None:
+            self.video_panel.set_camera(producer)
+
+    def _SH_VideoPanelFirstFrame(self, width, height):
+        # the picture's real shape is known now: the row takes its height
+        model = self.model()
+        if self.video_session is not None and self.video_session in model.sessions:
+            self.itemDelegate().sizeHintChanged.emit(model.index(model.sessions.index(self.video_session)))
+
+    def _SH_VideoUndockRequested(self):
+        if self._video_undock is not None:
+            self._video_undock()
+
+    def _ensure_video_visible(self, session):
+        if session is not self.video_session:
+            return
+        model = self.model()
+        self.scrollTo(model.index(model.sessions.index(session)), self.ScrollHint.EnsureVisible)
+        self.place_info_panel()
+
+    def resizeEvent(self, event):
+        super(AudioSessionListView, self).resizeEvent(event)
+        # the docked video keeps the picture's shape: a new width is a new row height
+        if self.video_session is not None and self.viewport().width() != self._video_panel_width:
+            self._video_panel_width = self.viewport().width()
+            model = self.model()
+            if self.video_session in model.sessions:
+                self.itemDelegate().sizeHintChanged.emit(model.index(model.sessions.index(self.video_session)))
+
     def place_info_panel(self):
+        """Put the docked video and the info panel under their tiles: tile, video, info."""
+        model = self.model()
+        tile = AudioSessionDelegate.size_hint.height()
+        video_height = 0
+        if self.video_panel is not None and self.video_session is not None and self.video_session in model.sessions:
+            rect = self.visualRect(model.index(model.sessions.index(self.video_session)))
+            if rect.isValid():
+                video_height = self.video_panel_height
+                geometry = QRect(rect.left(), rect.top() + tile, rect.width(), video_height)
+                if self.video_panel.geometry() != geometry:
+                    self.video_panel.setGeometry(geometry)
         panel = self.info_panel
         session = self.info_session
         if panel is None or session is None:
             return
-        model = self.model()
         try:
             row = model.sessions.index(session)
         except ValueError:
@@ -2990,7 +3091,7 @@ class AudioSessionListView(QListView):
         rect = self.visualRect(model.index(row))
         if not rect.isValid():
             return
-        top = rect.top() + AudioSessionDelegate.size_hint.height()
+        top = rect.top() + tile + (video_height if session is self.video_session else 0)
         geometry = QRect(rect.left(), top, rect.width(), max(rect.bottom() - top + 1, 0))
         if panel.geometry() != geometry:
             panel.setGeometry(geometry)
@@ -3005,6 +3106,8 @@ class AudioSessionListView(QListView):
     def _SH_ModelSessionAboutToBeRemoved(self, session):
         if session is self.info_session:
             self.hide_session_info()
+        if session is self.video_session:
+            self.hide_video()
         if session is self._menu_item:
             self._menu_item = None
 

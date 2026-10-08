@@ -263,19 +263,31 @@ class SwitchViewButton(QPushButton):
     button_text = {ContactView: QT_TRANSLATE_NOOP('switch_view_button', 'Back to Calls'), SessionView: QT_TRANSLATE_NOOP('switch_view_button', 'Back to Contacts')}
     button_dnd_text = {ContactView: QT_TRANSLATE_NOOP('switch_view_button', 'Drag here to add to a conference'), SessionView: QT_TRANSLATE_NOOP('switch_view_button', 'Drag here to go back to contacts')}
 
-    # In the contact view while calls are up, the button is the way back to them: red, and says so.
-    active_calls_style_sheet = """
-                          QPushButton {
-                              background-color: #c0002f;
-                              border: 1px solid #800020;
-                              border-radius: 4px;
-                              color: white;
-                              font-weight: bold;
-                              padding: 2px 8px;
-                          }
-                          QPushButton:hover { background-color: #d8103f; }
-                          QPushButton:pressed { background-color: #a0002a; }
-                       """
+    # In the contact view while calls are up, the button is the way back to them: a soft red
+    # that stands out from the window without alarming, and says so. One set per theme.
+    _active_calls_colors = {
+        False: dict(background='#f8dfe3', hover='#f3d0d6', pressed='#ebbfc7', border='#e3a3ae', text='#9b1c32'),
+        True: dict(background='#4a262c', hover='#572d34', pressed='#3d1f24', border='#7a3d47', text='#f2c4cc'),
+    }
+
+    @property
+    def active_calls_style_sheet(self):
+        from blink.widgets.color import is_dark_theme
+        colors = self._active_calls_colors[is_dark_theme()]
+        return f"""
+                  QPushButton {{
+                      background-color: {colors['background']};
+                      border: 1px solid {colors['border']};
+                      border-radius: 4px;
+                      color: {colors['text']};
+                      padding: 2px 8px;
+                  }}
+                  QPushButton:hover {{ background-color: {colors['hover']}; }}
+                  QPushButton:pressed {{ background-color: {colors['pressed']}; }}
+               """
+
+    def apply_theme(self):
+        self._update_appearance()
 
     dnd_style_sheet1 = """
                           QPushButton {
