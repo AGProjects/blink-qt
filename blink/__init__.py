@@ -63,7 +63,7 @@ from blink.configuration.account import AccountExtension, BonjourAccountExtensio
 from blink import addressbook_origin
 from blink.configuration.addressbook import ContactExtension, ContactURIExtension, GroupExtension, SharedSettingsMigration
 from blink.message_envelopes import this_device_id
-from blink.configuration.settings import SIPSimpleSettingsExtension
+from blink.configuration.settings import H264_LEVELS, BlinkSettings, SIPSimpleSettingsExtension
 from blink.logging import ActivityLog, LogManager
 from blink.mainwindow import MainWindow
 from blink.presence import PresenceManager
@@ -135,7 +135,7 @@ class IPAddressMonitor(object):
 @implementer(IObserver)
 class Blink(QApplication, metaclass=QSingleton):
 
-    # Notifications logged to the Activity log, matching what Blink for macOS logs
+    # Notifications logged to the Activity log
     __activity_notifications__ = ('SIPAccountManagerWillStart', 'SIPAccountDidActivate', 'SIPAccountDidDeactivate',
                                   'SIPAccountRegistrationDidSucceed', 'SIPAccountRegistrationDidFail', 'SIPAccountRegistrationDidEnd',
                                   'SIPAccountRegistrationGotAnswer',
@@ -444,8 +444,52 @@ class Blink(QApplication, metaclass=QSingleton):
         self.log_manager.start()
         self.presence_manager.start()
 
+    VIDEO_SETTINGS_VERSION = 2
+
+    def _migrate_video_settings(self):
+        """Once, put the video settings to the defaults in configuration.settings."""
+        blink_settings = BlinkSettings()
+        if blink_settings.video_settings_version >= self.VIDEO_SETTINGS_VERSION:
+            return
+        settings = SIPSimpleSettings()
+        video = settings.video
+        changes = []
+        for name, group, value in (('resolution', video, '640x480'), ('framerate', video, 24), ('max_bitrate', video, 0.8)):
+            attribute = name.rsplit('.', 1)[-1]
+            if str(getattr(group, attribute)) != str(value):
+                changes.append('%s %s -> %s' % (name, getattr(group, attribute), value))
+                setattr(group, attribute, value)
+        if changes:
+            settings.save()
+            ActivityLog().info('Video settings updated: %s' % ', '.join(changes))
+        blink_settings.video_settings_version = self.VIDEO_SETTINGS_VERSION
+        blink_settings.save()
+
+    @staticmethod
+    def _pin_h264_settings():
+        """H.264 is not configurable: Constrained Baseline, which is all WebRTC peers
+        (libwebrtc, Sylk Mobile, browsers) decode, at the level of the resolution."""
+        settings = SIPSimpleSettings()
+        h264 = settings.video.h264
+        level = H264_LEVELS.get(str(settings.video.resolution), '3.1')
+        changes = []
+        if h264.profile != 'baseline':
+            changes.append('profile %s -> baseline' % h264.profile)
+            h264.profile = 'baseline'
+        if h264.level != level:
+            changes.append('level %s -> %s' % (h264.level, level))
+            h264.level = level
+        if changes:
+            settings.save()
+            ActivityLog().info('H.264 settings: %s' % ', '.join(changes))
+
     @run_in_gui_thread
     def _NH_SIPApplicationDidStart(self, notification):
+        try:
+            self._migrate_video_settings()
+            self._pin_h264_settings()
+        except Exception as e:
+            ActivityLog().error('Cannot update the video settings: %s' % e)
         self.ip_address_monitor.start()
         self.main_window.show()
         accounts = AccountManager().get_accounts()

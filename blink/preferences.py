@@ -20,14 +20,14 @@ from zope.interface import implementer
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration import DefaultValue
-from sipsimple.configuration.datatypes import H264Profile, MSRPRelayAddress, Path, PortRange, SIPProxyAddress, STUNServerAddress, STUNServerAddressList
+from sipsimple.configuration.datatypes import MSRPRelayAddress, Path, PortRange, SIPProxyAddress, STUNServerAddress, STUNServerAddressList
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.accounts import AddAccountDialog
 from blink.chatwindow import ChatMessageStyle, ChatStyleError, ChatMessage, ChatEvent, ChatSender, ChatJSInterface
 from blink.configuration.datatypes import FileURL
-from blink.configuration.settings import BlinkSettings
+from blink.configuration.settings import H264_LEVELS, BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
 from blink.pstn_normalize import pstn_apply_leading_zero_rule
@@ -359,7 +359,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_codecs_list.itemChanged.connect(self._SH_VideoCodecsListItemChanged)
         self.video_codecs_list.model().rowsMoved.connect(self._SH_VideoCodecsListModelRowsMoved)
         self.video_codec_bitrate_button.activated[int].connect(self._SH_VideoCodecBitrateButtonActivated)
-        self.h264_profile_button.activated[int].connect(self._SH_H264ProfileButtonActivated)
 
         # Chat
         self.style_view.sizeChanged.connect(self._SH_StyleViewSizeChanged)
@@ -457,20 +456,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_resolution_button.clear()
         self.video_resolution_button.addItem('HD 720p', '1280x720')
         self.video_resolution_button.addItem('VGA', '640x480')
-        self.h264_level_map = {'1280x720': '3.1', '640x480': '3.0'}
 
         self.video_framerate_button.clear()
-        for rate in range(10, 31, 5):
+        for rate in (10, 15, 20, 24, 25, 30):
             self.video_framerate_button.addItem('%d fps' % rate, rate)
 
         self.video_codec_bitrate_button.clear()
         self.video_codec_bitrate_button.addItem(translate('preferences_window', 'automatic'), None)
-        for bitrate in (1.0, 2.0, 4.0):
+        for bitrate in (0.8, 1.0, 2.0, 4.0):
             self.video_codec_bitrate_button.addItem('%g Mbps' % bitrate, bitrate)
 
-        self.h264_profile_button.clear()
-        for profile in H264Profile.valid_values:
-            self.h264_profile_button.addItem(profile, profile)
+        # H.264 is not configurable: baseline at the level of the resolution (Blink._pin_h264_settings)
+        self.h264_profile_label.hide()
+        self.h264_profile_button.hide()
 
         # Chat
         self.style_view.template = open(Resources.get('chat/template.html')).read()
@@ -781,7 +779,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             for codec in settings.rtp.video_codec_order:
                 codec_list_item(codec, self.video_codecs_list, codec in settings.rtp.video_codec_list, 'video')
 
-        self.h264_profile_button.setCurrentIndex(self.h264_profile_button.findData(str(settings.video.h264.profile)))
         self.video_codec_bitrate_button.setCurrentIndex(self.video_codec_bitrate_button.findData(settings.video.max_bitrate))
 
         # Chat
@@ -1706,7 +1703,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         resolution = self.video_resolution_button.itemData(index)
         settings = SIPSimpleSettings()
         settings.video.resolution = resolution
-        settings.video.h264.level = self.h264_level_map[resolution]
+        settings.video.h264.level = H264_LEVELS.get(resolution, '3.1')
         settings.save()
 
     def _SH_VideoFramerateButtonActivated(self, index):
@@ -1733,12 +1730,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         bitrate = self.video_codec_bitrate_button.itemData(index)
         settings = SIPSimpleSettings()
         settings.video.max_bitrate = bitrate
-        settings.save()
-
-    def _SH_H264ProfileButtonActivated(self, index):
-        profile = self.h264_profile_button.itemData(index)
-        settings = SIPSimpleSettings()
-        settings.video.h264.profile = profile
         settings.save()
 
     # Chat and SMS signal handlers

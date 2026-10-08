@@ -1,15 +1,15 @@
 
 """Blink settings extensions."""
 
-__all__ = ['BlinkSettings', 'SIPSimpleSettingsExtension']
+__all__ = ['BlinkSettings', 'SIPSimpleSettingsExtension', 'H264_LEVELS']
 
 import os
 import platform
 import sys
 
 from sipsimple.configuration import Setting, SettingsGroup, SettingsObject, SettingsObjectExtension
-from sipsimple.configuration.datatypes import AudioCodecList, NonNegativeInteger, PositiveInteger, Path, SampleRate, VideoCodecList
-from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, LogsSettings, RTPSettings, SIPSettings, TLSSettings
+from sipsimple.configuration.datatypes import AudioCodecList, H264Profile, NonNegativeInteger, PositiveInteger, Path, SampleRate, VideoCodecList, VideoResolution
+from sipsimple.configuration.settings import AudioSettings, ChatSettings, EchoCancellerSettings, H264Settings, LogsSettings, RTPSettings, SIPSettings, TLSSettings, VideoSettings
 
 from blink import __version__
 from blink.configuration.datatypes import ApplicationDataPath, GraphTimeScale, HTTPURL, IconDescriptor, SoundFile, PresenceState, PresenceStateList
@@ -19,7 +19,7 @@ try:
     from blink.configuration._codecs import RTPSettingsExtension
 except ImportError:
     class RTPSettingsExtension(RTPSettings):
-        # the order and enabled list Blink for macOS uses (blink_audio_codecs); G729 is in the core since SDK 5.x
+        # G729 is in the core since SDK 5.x
         audio_codec_order = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'G729', 'PCMU', 'PCMA')))
         audio_codec_list = Setting(type=AudioCodecList, default=AudioCodecList(('opus', 'G722', 'G729', 'PCMU', 'PCMA')))
         video_codec_order = Setting(type=VideoCodecList, default=VideoCodecList(('H264', 'VP8', 'VP9')))
@@ -41,6 +41,26 @@ class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'))
     sample_rate = Setting(type=SampleRate, default=32000)
     echo_canceller = EchoCancellerSettingsExtension
+
+
+# Video: VGA, constrained baseline H.264 at level 3.0 (the level for 640x480, so the SDP
+# offers what is sent; baseline is what WebRTC peers decode) and 0.8 Mbps, which a normal
+# 4G or weak WiFi uplink sustains.
+
+# The H.264 level for each resolution, so the SDP offers what is sent
+H264_LEVELS = {'320x240': '2.0', '640x360': '3.0', '640x480': '3.0', '960x540': '3.1', '1280x720': '3.1', '1920x1080': '4.0'}
+
+
+class H264SettingsExtension(H264Settings):
+    profile = Setting(type=H264Profile, default='baseline')
+    level = Setting(type=str, default='3.0')      # follows the resolution, see H264_LEVELS
+
+
+class VideoSettingsExtension(VideoSettings):
+    resolution = Setting(type=VideoResolution, default=VideoResolution('640x480'))
+    framerate = Setting(type=int, default=24)
+    max_bitrate = Setting(type=float, default=0.8, nillable=True)   # Mbps; None is automatic
+    h264 = H264SettingsExtension
 
 
 class SIPSettingsExtension(SIPSettings):
@@ -111,6 +131,7 @@ class SIPSimpleSettingsExtension(SettingsObjectExtension):
     sounds = SoundSettings
     tls = TLSSettingsExtension
     sip = SIPSettingsExtension
+    video = VideoSettingsExtension
 
     user_agent = Setting(type=str, default='Blink %s (%s)' % (__version__, platform.system() if sys.platform != 'darwin' else 'MacOSX Qt'))
 
@@ -158,6 +179,7 @@ class BlinkSettings(SettingsObject):
     screen_sharing = BlinkScreenSharingSettings
     interface = BlinkInterfaceSettings
 
+    video_settings_version = Setting(type=int, default=0)   # see Blink._migrate_video_settings
     screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
     transfers_directory = Setting(type=Path, default=Path('~/Downloads'))
 
