@@ -58,6 +58,7 @@ from blink.contact_repair import merge_plan, repair_plan, server_conference_uri
 from blink.group_kinds import BLOCKED, CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_plan, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
+from blink.screensharing.support import can_share_my_screen, can_view_screens
 from blink.resources import ApplicationData, Resources, IconManager, themed_icon
 from blink.avatars import avatar_icon, circular_icon
 from blink.sessions import SessionManager, StreamDescription
@@ -5525,7 +5526,7 @@ class ContactListView(QListView):
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Request Screen'))
-                call_submenu.setEnabled(not conference)
+                call_submenu.setEnabled(not conference and can_view_screens())
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -5533,7 +5534,7 @@ class ContactListView(QListView):
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Share My Screen'))
-                call_submenu.setEnabled(not conference)
+                call_submenu.setEnabled(not conference and can_share_my_screen())
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -5561,8 +5562,8 @@ class ContactListView(QListView):
                 self.actions.start_chat_session.setEnabled(can_call)
                 self.actions.send_sms.setEnabled(can_call)
                 self.actions.send_files.setEnabled(can_call)
-                self.actions.request_screen.setEnabled(can_call and not conference)
-                self.actions.share_my_screen.setEnabled(can_call and not conference)
+                self.actions.request_screen.setEnabled(can_call and not conference and can_view_screens())
+                self.actions.share_my_screen.setEnabled(can_call and not conference and can_share_my_screen())
 
             if many_uris and can_transfer:
                 call_submenu = menu.addMenu(translate('contact_list', 'Transfer Call'))
@@ -6127,8 +6128,8 @@ class ContactSearchListView(QListView):
             self.actions.send_sms.setEnabled(can_call)
             self.actions.send_files.setEnabled(can_call)
             conference = is_conference_contact(contact)
-            self.actions.request_screen.setEnabled(can_call and not conference)
-            self.actions.share_my_screen.setEnabled(can_call and not conference)
+            self.actions.request_screen.setEnabled(can_call and not conference and can_view_screens())
+            self.actions.share_my_screen.setEnabled(can_call and not conference and can_share_my_screen())
             self.actions.transfer_call.setEnabled(can_transfer)
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
@@ -6490,8 +6491,8 @@ class ContactDetailView(QListView):
         self.actions.send_sms.setEnabled(can_call)
         self.actions.send_files.setEnabled(can_call)
         conference = is_conference_contact(model.contact)
-        self.actions.request_screen.setEnabled(can_call and not conference)
-        self.actions.share_my_screen.setEnabled(can_call and not conference)
+        self.actions.request_screen.setEnabled(can_call and not conference and can_view_screens())
+        self.actions.share_my_screen.setEnabled(can_call and not conference and can_share_my_screen())
         self.actions.transfer_call.setEnabled(can_transfer)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
         self.actions.delete_contact.setEnabled(model.contact_detail.deletable)

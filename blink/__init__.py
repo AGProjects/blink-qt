@@ -69,6 +69,7 @@ from blink.logging import ActivityLog, LogManager
 from blink.mainwindow import MainWindow
 from blink.presence import PresenceManager
 from blink.resources import ApplicationData, Resources
+from blink.screensharing.support import log_screen_sharing_support
 from blink.server_call_history import ServerCallHistory
 from blink.sessions import SessionManager
 from blink.update import UpdateManager
@@ -191,6 +192,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self._log_theme('Theme at start')
         if WAYLAND_FRAME_WORKAROUND:
             ActivityLog().info('[ui] GNOME on Wayland: running through XWayland so the window frame follows light/dark (set QT_QPA_PLATFORM=wayland to override)')
+        log_screen_sharing_support()
 
         self.main_window = MainWindow()
         self.chat_window = ChatWindow()

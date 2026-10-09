@@ -56,6 +56,7 @@ from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
+from blink.screensharing.support import can_share_my_screen, can_view_screens
 from blink.sessioninfo import SessionInfoPanel
 from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
@@ -2988,6 +2989,8 @@ class AudioSessionListView(QListView):
             if 'screen-sharing' not in stream_types:
                 menu.addAction(self.actions.request_screen)
                 menu.addAction(self.actions.share_my_screen)
+                self.actions.request_screen.setEnabled(can_view_screens())
+                self.actions.share_my_screen.setEnabled(can_share_my_screen())
             elif stream_types != {'screen-sharing'}:
                 menu.addAction(self.actions.end_screen_sharing)
             menu.addAction(self.actions.send_files)
@@ -4340,6 +4343,18 @@ class ChatSessionListView(QListView):
 
 # Screen sharing
 #
+
+def screen_sharing_stream_supported(stream):
+    """An incoming screen sharing stream either asks to see my screen (I am the
+    server, passive handler) or offers the remote screen (I am the viewer)."""
+    if stream.handler.type == 'passive':
+        supported = can_share_my_screen()
+    else:
+        supported = can_view_screens()
+    if not supported:
+        ActivityLog().info('[screen sharing] Declined a request to %s: not available on this system' % ('share my screen' if stream.handler.type == 'passive' else 'view a remote screen'))
+    return supported
+
 
 class VNCServerProcess(QProcess):
     __running__ = set()
@@ -7497,12 +7512,17 @@ class SessionManager(object, metaclass=Singleton):
         sip_session = blink_session.sip_session
         proposed_streams = blink_session.streams.proposed
 
-        if not proposed_streams or proposed_streams.types == {'file-transfer'}:
+        screensharing_stream = proposed_streams.get('screen-sharing')
+        if screensharing_stream is not None and not screen_sharing_stream_supported(screensharing_stream):
+            screensharing_stream = None
+        proposed_types = proposed_streams.types - ({'screen-sharing'} if screensharing_stream is None else set())
+
+        if not proposed_types or proposed_types == {'file-transfer'}:
             sip_session.reject_proposal(488)
             return
 
-        if proposed_streams.types == {'chat'}:
-            blink_session.accept_proposal(list(proposed_streams))
+        if proposed_types == {'chat'}:
+            blink_session.accept_proposal([stream for stream in proposed_streams if stream.type == 'chat'])
             return
 
         sip_session.send_ring_indication()
@@ -7513,7 +7533,6 @@ class SessionManager(object, metaclass=Singleton):
         audio_stream = proposed_streams.get('audio')
         video_stream = proposed_streams.get('video')
         chat_stream = proposed_streams.get('chat')
-        screensharing_stream = proposed_streams.get('screen-sharing')
 
         dialog = IncomingDialog()  # Build the dialog without a parent in order to be displayed on the current workspace on Linux.
         incoming_request = IncomingRequest(dialog, sip_session, contact, contact_uri, proposal=True, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
@@ -7587,7 +7606,7 @@ class SessionManager(object, metaclass=Singleton):
         audio_streams = stream_map['audio']
         video_streams = stream_map['video']
         chat_streams = stream_map['chat']
-        screensharing_streams = stream_map['screen-sharing']
+        screensharing_streams = [stream for stream in stream_map['screen-sharing'] if screen_sharing_stream_supported(stream)]
         filetransfer_streams = [stream for stream in stream_map['file-transfer'] if stream.direction == 'recvonly']    # Only accept receiving files
 
         if not audio_streams and not video_streams and not chat_streams and not screensharing_streams and not filetransfer_streams:

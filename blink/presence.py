@@ -31,6 +31,7 @@ from sipsimple.util import ISOTimestamp
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.resources import IconManager, Resources
+from blink.screensharing.support import can_share_my_screen, can_view_screens
 from blink.util import run_in_gui_thread
 
 del cipid  # this only needs to be imported to register its namespace and extensions
@@ -96,8 +97,8 @@ class BlinkPresenceState(object):
             service.capabilities.text = False
             service.capabilities.message = True
             service.capabilities.file_transfer = True
-            service.capabilities.screen_sharing_server = True
-            service.capabilities.screen_sharing_client = True
+            service.capabilities.screen_sharing_server = can_share_my_screen()
+            service.capabilities.screen_sharing_client = can_view_screens()
             service.display_name = self.account.display_name or None
             service.icon = "%s#blink-icon%s" % (self.account.xcap.icon.url, self.account.xcap.icon.etag) if self.account.xcap.icon is not None else None
             service.device_info = pidf.DeviceInfo(instance_id, description=hostname, user_agent=settings.user_agent)

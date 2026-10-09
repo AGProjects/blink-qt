@@ -26,6 +26,7 @@ from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSe
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
+from blink.screensharing.support import can_share_my_screen, can_view_screens
 from blink.launcher import LauncherBadge
 from blink.logging import ActivityLog
 from blink.messagepane import MessagePane
@@ -284,8 +285,12 @@ class MainWindow(base_class, ui_class):
         self.alert_devices_group = QActionGroup(self)
         self.video_devices_group = QActionGroup(self)
 
-        self.screen_sharing_button.addAction(QAction(translate('main_window', 'Request screen'), self.screen_sharing_button, triggered=self._AH_RequestScreenActionTriggered))
-        self.screen_sharing_button.addAction(QAction(translate('main_window', 'Share my screen'), self.screen_sharing_button, triggered=self._AH_ShareMyScreenActionTriggered))
+        self.request_screen_action = QAction(translate('main_window', 'Request screen'), self.screen_sharing_button, triggered=self._AH_RequestScreenActionTriggered)
+        self.share_my_screen_action = QAction(translate('main_window', 'Share my screen'), self.screen_sharing_button, triggered=self._AH_ShareMyScreenActionTriggered)
+        self.request_screen_action.setEnabled(can_view_screens())
+        self.share_my_screen_action.setEnabled(can_share_my_screen())
+        self.screen_sharing_button.addAction(self.request_screen_action)
+        self.screen_sharing_button.addAction(self.share_my_screen_action)
 
         # adjust search box height depending on theme as the value set in designer isn't suited for all themes
         search_box = self.search_box
@@ -461,7 +466,7 @@ class MainWindow(base_class, ui_class):
         self.audio_call_button.setEnabled(enabled)
         self.video_call_button.setEnabled(enabled)
         self.chat_session_button.setEnabled(enabled)
-        self.screen_sharing_button.setEnabled(enabled)
+        self.screen_sharing_button.setEnabled(enabled and (can_view_screens() or can_share_my_screen()))
 
     def load_audio_devices(self):
         settings = SIPSimpleSettings()
