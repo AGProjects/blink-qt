@@ -11,23 +11,38 @@ Install the runtime dependencies:
 
  * libavahi-compat-libdnssd1
  * python3-application
- * python-enum34
  * python3-eventlib
  * python3-googleapi
+ * python3-google-auth-oauthlib
  * python3-lxml
- * python3-oauth2client
+ * python3-lxml-html-clean (lxml 5.0 and later; older lxml includes it)
  * python3-pgpy
  * python3-pyqt6
+ * python3-pyqt6.qtmultimedia
  * python3-pyqt6.qtsvg
  * qt6-svg-plugins (Debian 13/trixie and later; on older releases the plugin is part of libqt6svg6)
  * python3-pyqt6.qtwebchannel
  * python3-pyqt6.qtwebengine
+ * pyqt6-dev-tools
+ * python3-gi
+ * gir1.2-gstreamer-1.0
+ * gstreamer1.0-plugins-base
+ * gstreamer1.0-plugins-good
+ * gstreamer1.0-libav
+ * python3-otr
  * python3-requests
  * python3-sipsimple
- * python3-twisted
  * python3-sqlobject
+ * python3-twisted
  * python3-zope.interface
  * x11vnc
+
+Optional:
+
+ * gstreamer1.0-plugins-ugly
+ * python3-pyqt6.qtpdf (PDF previews in messages)
+ * python3-pyqt6.qtpositioning, libqt6positioning6-plugins, geoclue-2.0 (location sharing)
+ * fonts-noto-color-emoji
 
 
 Download and install python3-sipsimple and its dependencies:
@@ -47,12 +62,14 @@ Creating Debian Packages
 Install the building dependencies:
 
   * debhelper
+  * dh-python
+  * python3-setuptools
   * python3-all-dev
   * python3-all-dbg
-  * python3-qt5
-  * python3-support
+  * cython3 (or cython3-legacy)
   * build-essential
   * devscripts
+  * equivs (for mk-build-deps, used by makedeb.sh)
   * libvncserver-dev
 
 Create a clean distribution file:
