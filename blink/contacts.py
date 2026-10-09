@@ -2523,7 +2523,9 @@ class GoogleAuthorizationView(QWebEngineView):
 
     @run_in_gui_thread
     def open(self, url):
-        self.load(QUrl.fromEncoded(url.encode()))
+        url = QUrl.fromEncoded(url.encode())
+        self.email = dict(parse_qsl(url.query())).get('login_hint') or self.email
+        self.load(url)
         self.show()
 
     def closeEvent(self, event):
@@ -2532,7 +2534,11 @@ class GoogleAuthorizationView(QWebEngineView):
         self.rejected.emit()
 
     def _SH_SelectionChanged(self):
-        self.email = self.page().mainFrame().findFirstElement('input#Email').evaluateJavaScript('this.value') or self.email  # the input changes to None during submit
+        self.page().runJavaScript("(document.querySelector('input[type=email], input#identifierId, input#Email') || {}).value || ''", self._SH_EmailValue)
+
+    def _SH_EmailValue(self, value):
+        if value:  # the input empties during submit
+            self.email = value
 
     # TODO: Check if this is still needed -- Tijmen
     def _SH_TitleChanged(self, title):
