@@ -28,6 +28,9 @@ _package.__path__ = []
 sys.modules['blink'] = _package
 _load('blink.pstn_normalize', 'pstn_normalize.py')
 uris = _load('blink.uris', 'uris.py')
+# SIPURI.parse needs a running sipsimple engine; with python3-sipsimple installed
+# (as on a build host) every address would fail to parse, so test the fallback
+uris.SIPURI = None
 for _name, _module in _saved.items():
     if _module is None:
         sys.modules.pop(_name, None)
