@@ -4,6 +4,12 @@ screen), else with a screenshot tool found on the system.
 
     PortalScreenshot.take(done) calls done(path) with the saved picture, or done(None)
     when the user cancelled or nothing could take it.
+
+GNOME Shell's screenshot UI also puts the picture on the clipboard, and on some
+versions the portal then answers with an error (response 2) and no file even though
+the picture was taken. So the clipboard is watched while the screenshot is taken: a
+picture that lands there is used when the portal gave none, and either way the
+clipboard is put back as it was (or emptied), so the screenshot does not linger there.
 """
 
 import os
@@ -11,7 +17,8 @@ import shutil
 import tempfile
 import uuid
 
-from PyQt6.QtCore import QObject, QProcess, QUrl, pyqtSlot
+from PyQt6.QtCore import QMimeData, QObject, QProcess, QTimer, QUrl, pyqtSlot
+from PyQt6.QtGui import QGuiApplication
 try:
     from PyQt6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage, QDBusObjectPath, QDBusVariant
 except ImportError:
@@ -39,6 +46,8 @@ class PortalScreenshot(QObject):
 
     _busy = None        # one screenshot at a time
 
+    clipboard_settle = 400  # ms to let the clipboard owner's change reach us after the portal answers
+
     @classmethod
     def take(cls, done):
         if cls._busy is not None:
@@ -51,9 +60,18 @@ class PortalScreenshot(QObject):
         self.done = done
         self.request_path = None
         self.process = None
+        self.saved_clipboard = None
+        self.clipboard_changed = False
 
-    def _finish(self, path):
+    def _finish(self, path, cancelled=False):
+        QTimer.singleShot(self.clipboard_settle, lambda: self._complete(path, cancelled))
+
+    def _complete(self, path, cancelled):
         PortalScreenshot._busy = None
+        try:
+            path = self._take_back_clipboard(path, cancelled)
+        except Exception as e:
+            ActivityLog().warning(f'[ui] Cannot restore the clipboard after the screenshot: {e!r}')
         if path:
             ActivityLog().info(f'[ui] Screenshot taken: {path}')
         try:
@@ -62,8 +80,54 @@ class PortalScreenshot(QObject):
             self.deleteLater()
 
     def _start(self):
+        clipboard = QGuiApplication.clipboard()
+        self.saved_clipboard = self._copy_mime(clipboard.mimeData())
+        clipboard.dataChanged.connect(self._clipboard_changed)
         if not self._start_portal():
             self._start_tool()
+
+    # The clipboard
+
+    def _clipboard_changed(self):
+        self.clipboard_changed = True
+
+    @staticmethod
+    def _copy_mime(source):
+        if source is None:
+            return None
+        copy = QMimeData()
+        if source.hasUrls():
+            copy.setUrls(source.urls())
+        if source.hasHtml():
+            copy.setHtml(source.html())
+        if source.hasText():
+            copy.setText(source.text())
+        if source.hasImage():
+            copy.setImageData(source.imageData())
+        return copy if copy.formats() else None
+
+    def _take_back_clipboard(self, path, cancelled):
+        """The picture the screenshot put on the clipboard, when there is no file, and the clipboard as it was."""
+        clipboard = QGuiApplication.clipboard()
+        clipboard.dataChanged.disconnect(self._clipboard_changed)
+        if not self.clipboard_changed:
+            return path
+        image = clipboard.image()
+        if image.isNull():
+            return path
+        if path is None and not cancelled:
+            candidate = os.path.join(tempfile.gettempdir(), f'blink-screenshot-{uuid.uuid4().hex[:8]}.png')
+            if image.save(candidate, 'PNG'):
+                ActivityLog().info('[ui] The screenshot was taken from the clipboard')
+                path = candidate
+            else:
+                ActivityLog().warning(f'[ui] Cannot write the screenshot from the clipboard to {candidate}')
+        if self.saved_clipboard is not None:
+            clipboard.setMimeData(self.saved_clipboard)
+            self.saved_clipboard = None
+        else:
+            clipboard.clear()
+        return path
 
     # The portal
 
@@ -106,7 +170,7 @@ class PortalScreenshot(QObject):
             uri = uri.variant()
         if code != 0 or not uri:
             ActivityLog().info('[ui] Screenshot cancelled' if code == 1 else f'[ui] The screenshot portal gave no picture (response {code})')
-            self._finish(None)
+            self._finish(None, cancelled=code == 1)
             return
         self._finish(QUrl(str(uri)).toLocalFile() or None)
 
