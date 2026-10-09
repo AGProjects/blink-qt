@@ -4379,7 +4379,7 @@ class VNCServerProcess(QProcess):
         self.__running__.remove(self)
 
     def _SH_ReadyReadStandardOutput(self):
-        server_output = str(self.readAllStandardOutput())
+        server_output = bytes(self.readAllStandardOutput()).decode(errors='replace')
         if self.server_port is None:
             match = re.search(r'^PORT\s*=\s*(?P<port>\d+)\s*$', server_output, re.IGNORECASE | re.MULTILINE)
             if match:
