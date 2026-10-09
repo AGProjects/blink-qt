@@ -178,7 +178,8 @@ def is_pure_emoji(text):
             continue
         if cp < 0x80:
             return False
-        if unicodedata.category(ch) == 'So' or 0x1F000 <= cp <= 0x1FAFF:
+        # the geometric shapes ◻ ◼ ◽ ◾ are emoji too (Extended_Pictographic, as mobile tests) but math symbols to unicodedata
+        if unicodedata.category(ch) == 'So' or 0x1F000 <= cp <= 0x1FAFF or 0x25FB <= cp <= 0x25FE:
             seen = True
             continue
         return False

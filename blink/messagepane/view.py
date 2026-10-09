@@ -5,7 +5,8 @@ load_older); the rows inserted above are compensated for, so what was on
 screen stays where it was. At the bottom, new messages keep it at the bottom.
 Messages are drawn by BubbleDelegate; a click on a link opens it. A right
 click, or the actions button a bubble shows under the mouse, opens its menu:
-copy text or link, open or save the file, and delete (asking first; on one's
+quick reactions on top (reactionRequested), copy text or link, open or save the
+file, and delete (asking first; on one's
 own message also for the other party), handed to the pane (actionRequested). Behind them the linen texture of Sylk Mobile and
 Blink for macOS (dark or light with the theme), tiled from the viewport so the
 weave stays still while the transcript scrolls.
@@ -32,6 +33,7 @@ class TranscriptView(QListView):
     actionRequested = pyqtSignal(str, object)      # ('delete', 'reply', 'edit', 'caption', 'info' or 'open', MessageItem)
     quoteClicked = pyqtSignal(object)              # the reply dict of a clicked quote
     audioAction = pyqtSignal(object, str, float)   # MessageItem, 'play' or 'seek', fraction (seek)
+    reactionRequested = pyqtSignal(object, str)    # MessageItem, emoji
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -245,6 +247,16 @@ class TranscriptView(QListView):
     def _show_menu(self, index, position, global_position):
         item = index.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
+        from blink.messagepane.reactions import EmojiPicker, reactable, reaction_action
+        if reactable(item):
+            def pick_more(position):
+                self._picker = EmojiPicker(self)       # kept, so nothing collects it while it is up
+                self._picker.chosen.connect(lambda emoji: self._react(item, emoji, 'emoji picker'))
+                self._picker.popup(position)
+            # the picker opens once the menu has gone, so the two popups do not fight over the mouse
+            menu.addAction(reaction_action(menu, lambda emoji: self._react(item, emoji, 'message menu'),
+                                           lambda position: QTimer.singleShot(0, lambda: pick_more(position))))
+            menu.addSeparator()
         anchor = self._link_at(position)
         if anchor:
             menu.addAction(translate('message_pane', 'Copy Link'), lambda: QGuiApplication.clipboard().setText(anchor))
@@ -285,6 +297,9 @@ class TranscriptView(QListView):
         delete = menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
         delete.setEnabled(bubble_kind(item) != 'note' or item.category is not None)
         menu.exec(global_position)
+
+    def _react(self, item, emoji, where):
+        self.reactionRequested.emit(item, emoji)
 
     def _save_as(self, path):
         import os

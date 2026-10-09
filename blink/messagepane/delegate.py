@@ -213,6 +213,8 @@ class BubbleDelegate(QStyledItemDelegate):
             if kind == 'text':
                 content = item.content if isinstance(item.content, str) else (item.content or b'').decode('utf-8', 'replace')
                 document.setHtml(sanitize_html(content) if item.content_type == 'text/html' else linkify(content))
+                from blink.messagepane.reactions import color_emoji
+                color_emoji(document)
             elif kind == 'encrypted':
                 document.setPlainText('🔒 ' + _('Encrypted message'))
             else:

@@ -45,7 +45,8 @@ Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          x11vnc
 Recommends: python3-pyqt6.qtpositioning,
             libqt6positioning6-plugins,
-            geoclue-2.0
+            geoclue-2.0,
+            fonts-noto-color-emoji
 Description: Fully featured, easy to use SIP client with a Qt based UI
  Blink is a fully featured SIP client written in Python 3 and built on top of
  SIP SIMPLE client SDK with a Qt 5 based user interface. Blink provides real

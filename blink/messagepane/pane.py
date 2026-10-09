@@ -21,6 +21,8 @@ on the conversation's account, typing tells the peer, unsent text is kept per
 conversation, files dropped anywhere on the conversation (or pasted) are sent.
 A file sent over HTTP is a bubble here while it uploads (blink.messagepane.uploads);
 the File Transfers window is for MSRP transfers only.
+A reaction picked in a message's menu is sent as a reply whose body is the
+emoji (blink.messagepane.reactions), leaving the composer alone.
 A−/A+ in the strip set the text size of the transcript and the composer,
 kept across restarts.
 """
@@ -103,6 +105,7 @@ class MessagePane(QWidget):
         self.transcript.actionRequested.connect(self._SH_ActionRequested)
         self.transcript.quoteClicked.connect(self._SH_QuoteClicked)
         self.transcript.audioAction.connect(self._SH_AudioAction)
+        self.transcript.reactionRequested.connect(self._SH_ReactionRequested)
         from blink.messagepane.uploads import Uploads
         Uploads.instance()          # files sent over HTTP are shown here, from the first one
         from blink.messagepane.fetch import AutoFetcher
@@ -566,11 +569,7 @@ class MessagePane(QWidget):
                 self._remove_message(editing['id'], editing['account_id'], for_both=True, why='edited')
                 ActivityLog().info(f'[Message with {self.key}] Message {editing["id"]} edited: sent again as {message_id} at its original time')
             if reply is not None:
-                # the link first, so the peer has it in hand when the reply arrives (as mobile and Blink for macOS do)
-                from blink.message_envelopes import METADATA_CONTENT_TYPE, reply_envelope
-                metadata_id = str(uuid.uuid4())
-                envelope = reply_envelope(message_id, reply['id'], metadata_id, str(self.uri.uri), ISOTimestamp.now())
-                MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
+                self._send_reply_link(account, session, message_id, reply['id'])
                 ActivityLog().info(f'[Message with {self.key}] Replying to message {reply["id"]} with {message_id}')
             MessageManager().send_message(account, session.contact, text, 'text/plain', timestamp=timestamp, id=message_id)
         except Exception as e:
@@ -578,6 +577,42 @@ class MessagePane(QWidget):
             self.composer.set_text(text)      # nothing lost
             return
         self.unsent.pop(self.key, None)
+        self._show_sent()
+
+    def _send_reply_link(self, account, session, message_id, original_id):
+        """The reply companion of message_id, sent first so the peer has it in hand when the reply
+        arrives (as mobile and Blink for macOS do)."""
+        import uuid
+        from blink.messages import MessageManager
+        from blink.message_envelopes import METADATA_CONTENT_TYPE, reply_envelope
+        metadata_id = str(uuid.uuid4())
+        envelope = reply_envelope(message_id, original_id, metadata_id, str(self.uri.uri), ISOTimestamp.now())
+        MessageManager().send_message(account, session.contact, envelope, METADATA_CONTENT_TYPE, id=metadata_id)
+
+    def _SH_ReactionRequested(self, item, emoji):
+        """A reaction is a reply whose body is the emoji, as on Sylk Mobile (blink.messagepane.reactions).
+        What is in the composer (text, a reply or an edit being written) is left as it is."""
+        if self.key is None or item is None or not emoji:
+            return
+        if not self._confirm_account():
+            ActivityLog().info(f'[Message with {self.key}] Reaction not sent: no account chosen')
+            return
+        import uuid
+        from blink.messages import MessageManager
+        try:
+            session = self._message_session()
+            account = self.header.account or session.account
+            message_id = str(uuid.uuid4())
+            self._send_reply_link(account, session, message_id, item.id)
+            MessageManager().send_message(account, session.contact, emoji, 'text/plain', id=message_id)
+        except Exception as e:
+            ActivityLog().error(f'[Message with {self.key}] Sending a reaction to message {item.id} failed: {e!r}')
+            return
+        ActivityLog().info(f'[Message with {self.key}] Reacted to message {item.id} with {emoji} as {message_id}')
+        self._show_sent()
+
+    def _show_sent(self):
+        """Back to the newest messages, where what was just sent goes."""
         model = self.models.get(self.view_key)
         if model is not None and (model.has_newer or model.search_text):
             model.search_text = ''
@@ -746,6 +781,10 @@ class MessagePane(QWidget):
         font = QApplication.font()
         if font.pointSizeF() > 0:
             font.setPointSizeF(max(font.pointSizeF() + self._font_delta(), 6))
+        # colour emoji fonts after the text font: Qt's own fallback does not always reach them
+        # (Qt 6.4 on XWayland draws an empty box), and a reaction is an emoji alone in its bubble
+        from blink.messagepane.reactions import EMOJI_FAMILIES
+        font.setFamilies([font.family()] + [family for family in EMOJI_FAMILIES if family != font.family()])
         self.transcript.setFont(font)
         self.composer.edit.setFont(font)
 
