@@ -29,7 +29,7 @@ if WAYLAND_FRAME_WORKAROUND:
     os.environ['QT_QPA_PLATFORM'] = 'xcb'
 
 from PyQt6.QtCore import Qt, QEvent, QLocale, QTimer, QTranslator, QLoggingCategory, QSocketNotifier
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMessageBox, QProxyStyle
 from PyQt6.QtGui import QIcon, QPalette
 
 from application import log
@@ -180,6 +180,8 @@ class Blink(QApplication, metaclass=QSingleton):
         self.setApplicationName("Blink")
         self.setApplicationVersion(__version__)
         self.setWindowIcon(QIcon(Resources.get('icons/blink.png')))
+        from blink.widgets.style import BlinkStyle
+        self.setStyle(BlinkStyle(self.style().name()))     # rounded push buttons over the platform's style
         try:
             self.styleHints().colorSchemeChanged.connect(lambda scheme: QTimer.singleShot(100, self._match_color_scheme))
         except AttributeError:
@@ -384,7 +386,7 @@ class Blink(QApplication, metaclass=QSingleton):
         portal = PortalColorScheme.instance()
         portal_text = (portal.value or 'no preference') if portal.available else 'not available'
         ActivityLog().info(f"[ui] {what}: system scheme {color_scheme() or 'unknown'} (desktop portal: {portal_text}), palette {'dark' if is_dark_theme() else 'light'} (window {window}"
-                           f"{', set by Blink' if self._own_palette else ''}), platform {self.platformName()}, style {self.style().name()}, "
+                           f"{', set by Blink' if self._own_palette else ''}), platform {self.platformName()}, style {self.style().baseStyle().name() if isinstance(self.style(), QProxyStyle) else self.style().name()}, "
                            f"platform theme {os.environ.get('QT_QPA_PLATFORMTHEME') or '-'}, desktop {os.environ.get('XDG_CURRENT_DESKTOP') or '-'}")
 
     def _match_color_scheme(self):
