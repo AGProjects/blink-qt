@@ -1,7 +1,13 @@
 blink (7.0.0) unstable; urgency=medium
 
-  * Refactored message UI to use native widgets
+  * Refactored messages UI to use native widgets
   * Refactored video calls window
+  * Implement entire SylkServer messaging API
+  * Added web based file transfers
+  * Added location sharing
+  * Added video calls recording
+  * Fixes from TLS validation
+  * Added detailed protocol logging
   * Bug fixes
 
  -- Adrian Georgescu <ag@ag-projects.com>  Thu, 08 Oct 2026 21:38:01 -0300
