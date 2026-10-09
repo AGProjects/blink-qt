@@ -5,6 +5,7 @@ Maintainer: Adrian Georgescu <ag@ag-projects.com>
 Uploaders: Tijmen de Mes <tijmen@ag-projects.com>
 Build-Depends: debhelper (>= 12),
                dh-python,
+               python3-setuptools,
                python3-all-dev,
                python3-all-dbg,
                cython3 | cython3-legacy,
@@ -24,7 +25,6 @@ Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python3-pgpy,
          python3-pyqt6,
          python3-pyqt6.qtmultimedia,
-         python3-pyqt6.qtpdf,
          python3-gi,
          gir1.2-gstreamer-1.0,
          gstreamer1.0-plugins-base,
@@ -39,17 +39,17 @@ Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python3-requests,
          python3-sipsimple (>=5.3.2),
          python3-sqlobject,
-         python3-standard-imghdr (>= 0) | python3 (<< 3.13),
          python3-twisted,
          python3-zope.interface,
          x11vnc
 Recommends: gstreamer1.0-plugins-ugly,
+            python3-pyqt6.qtpdf,
             python3-pyqt6.qtpositioning,
             libqt6positioning6-plugins,
             geoclue-2.0,
             fonts-noto-color-emoji
 Description: Fully featured, easy to use SIP client with a Qt based UI
  Blink is a fully featured SIP client written in Python 3 and built on top of
- SIP SIMPLE client SDK with a Qt 5 based user interface. Blink provides real
+ SIP SIMPLE client SDK with a Qt 6 based user interface. Blink provides real
  time applications based on SIP and related protocols for Audio, Video,
  Instant Messaging, MSRP Chat and File Transfers, Desktop Sharing and Presence.
