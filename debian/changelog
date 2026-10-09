@@ -1,13 +1,13 @@
 blink (7.0.0) unstable; urgency=medium
 
-  * Refactored messages UI to use native widgets
+  * Refactored messages UI to use QT native widgets
+  * Added persistent LAN messaging with Bonjour/Avahi peers
+  * Implemented SylkServer messaging API (file transfers and location sharing)
   * Refactored video calls window
-  * Implement entire SylkServer messaging API
-  * Added web based file transfers
-  * Added location sharing
   * Added video calls recording
-  * Fixes from TLS validation
-  * Added detailed protocol logging
+  * Fixes and logging for TLS certificate validations
+  * Added detailed SIP protocol logging
+  * Improve Logs window
   * Usability improvements
   * Bug fixes
 
