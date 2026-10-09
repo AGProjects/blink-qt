@@ -536,6 +536,7 @@ class BlinkSession(BlinkSessionBase):
         self.remote_hold = False
         self.recording = False
         self._pending_recording = None  # the call recording in progress, filed in the conversation when it stops
+        self.video_recorder = None      # the VideoCallRecorder of a video call, while it records and finishes
 
         self.transfer_state = None
         self.transfer_direction = None
@@ -932,6 +933,35 @@ class BlinkSession(BlinkSessionBase):
                                                display_name=self.contact.name if self.contact is not None else '',
                                                timestamp=started.replace(tzinfo=None))
                 ActivityLog().info(f'[call] Recording the call with {key} to {path}')
+
+    @property
+    def recording_path(self):
+        """The WAV the call recording in progress is written to, or None."""
+        return self._pending_recording['path'] if self._pending_recording is not None else None
+
+    @property
+    def video_recording(self):
+        return self.video_recorder is not None and self.video_recorder.recording
+
+    def start_video_recording(self):
+        """Record the remote picture with the call audio (see blink.videorecorder). Returns None, or
+        why it could not start."""
+        if self.state != 'connected' or 'video' not in self.streams:
+            return 'the video call is not connected'
+        if self.video_recording:
+            return None
+        from blink.videorecorder import VideoCallRecorder
+        recorder = VideoCallRecorder(self)
+        reason = recorder.start()
+        if reason is None:
+            self.video_recorder = recorder
+        else:
+            ActivityLog().warning(f'[video] Cannot record the video call: {reason}')
+        return reason
+
+    def stop_video_recording(self):
+        if self.video_recorder is not None:
+            self.video_recorder.stop()
 
     def _finish_recording(self, delay):
         """File the recording that stopped (once the recorder has closed the file)."""

@@ -1289,7 +1289,7 @@ class VideoWindow(QWidget):
 
     def update_record_button(self):
         session = self.blink_session
-        recording = session is not None and session.recording
+        recording = session is not None and (session.recording or session.video_recording)
         if recording:
             if not self.recording_timer.isActive():
                 self.recording_blink = 0
@@ -1337,9 +1337,18 @@ class VideoWindow(QWidget):
             self.blink_session.hold()
 
     def _SH_RecordButtonClicked(self):
+        """Records the remote picture with the call audio; only the audio when the video cannot be
+        recorded. Stops whichever recording is running."""
         session = self.blink_session
-        if session.recording:
+        if session.video_recording:
+            session.stop_video_recording()
+        elif session.recording:
             session.stop_recording()
+        elif self.connected and 'video' in session.streams:
+            reason = session.start_video_recording()
+            if reason is not None:
+                session.start_recording()
+                self.toast.show_message(translate('video_window', 'Recording audio only: cannot record video ({})').format(reason))
         else:
             session.start_recording()
         self.update_record_button()

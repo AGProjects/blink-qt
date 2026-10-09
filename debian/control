@@ -43,7 +43,8 @@ Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python3-twisted,
          python3-zope.interface,
          x11vnc
-Recommends: python3-pyqt6.qtpositioning,
+Recommends: gstreamer1.0-plugins-ugly,
+            python3-pyqt6.qtpositioning,
             libqt6positioning6-plugins,
             geoclue-2.0,
             fonts-noto-color-emoji

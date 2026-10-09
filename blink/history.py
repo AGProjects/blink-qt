@@ -1998,6 +1998,13 @@ class MessageHistory(object, metaclass=Singleton):
 
     @classmethod
     @run_in_thread('db')
+    def add_call_video_recording(cls, path, transfer_id, key, account, uri, display_name, timestamp):
+        """A video call this device recorded (the remote picture with the call audio), as a movie of
+        the conversation with the other party. Like an audio call recording it stays on this device."""
+        cls._add_own_file(path, transfer_id, key, account, uri, display_name, timestamp, 'video/mp4', {'call_recording': True}, 'Video call recording')
+
+    @classmethod
+    @run_in_thread('db')
     def add_call_screenshot(cls, path, transfer_id, key, account, uri, display_name, timestamp):
         """A screenshot of a video call, as a picture of the conversation with the other party.
         The file is already where local_file looks; when it was also uploaded to our own devices

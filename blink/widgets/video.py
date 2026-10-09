@@ -8,8 +8,9 @@ from PyQt6.QtCore import QMetaObject, QPoint, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (QColor, QCursor, QIcon, QImage, QPainter, QPixmap,
                          QTransform)
 from PyQt6.QtWidgets import QWidget
-from sipsimple.core import FrameBufferVideoRenderer
+from sipsimple.core import FrameBufferVideoRenderer, VideoCamera
 
+from blink import video_frames
 from blink.resources import Resources
 
 __all__ = ['VideoSurface']
@@ -64,6 +65,12 @@ class VideoSurface(QWidget):
             self._clock = None
         self._interaction = InteractionState()
         self._image = None
+        # A remote picture is read through the renderer video_frames shares with the call
+        # recorder (one consumer per remote stream); the camera takes any number of renderers,
+        # so a view of it keeps its own.
+        self._producer = None
+        self._subscription = None
+        self._renderer = None
 
     @staticmethod
     def _build_cursor(icon_path, hot_x, hot_y, fallback):
@@ -77,19 +84,27 @@ class VideoSurface(QWidget):
             return QCursor(fallback)
         return QCursor(pixmap, hotX=hot_x, hotY=hot_y)
 
-    def __getattr__(self, name):
-        if name == '_renderer':
-            return self.__dict__.setdefault(name, FrameBufferVideoRenderer(self._handle_frame))
-        raise AttributeError("'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
-
     def _get_producer(self):
-        return self._renderer.producer
+        return self._producer
 
     def _set_producer(self, producer):
         if self._clock is not None:
             self._clock.stop()
-        self._renderer.producer = producer
-        if self._clock is not None and producer is not None:
+        if self._subscription is not None:
+            self._subscription.release()
+            self._subscription = None
+        if producer is not None and not isinstance(producer, VideoCamera):
+            if self._renderer is not None and self._renderer.producer is not None:
+                self._renderer.producer = None
+            self._subscription = video_frames.subscribe(producer, self._handle_frame)
+            self._producer = producer if self._subscription is not None else None
+        else:
+            if producer is not None and self._renderer is None:
+                self._renderer = FrameBufferVideoRenderer(self._handle_frame)
+            if self._renderer is not None:
+                self._renderer.producer = producer
+            self._producer = producer
+        if self._clock is not None and self._producer is not None:
             self._clock.start()
 
     producer = property(_get_producer, _set_producer)
@@ -97,7 +112,7 @@ class VideoSurface(QWidget):
 
     @property
     def aspect(self):
-        producer = self._renderer.producer
+        producer = self._producer
         return truediv(*producer.framesize) if producer is not None else 16/9
 
     def width_for_height(self, height):
@@ -112,8 +127,13 @@ class VideoSurface(QWidget):
     def stop(self):
         if self._clock is not None:
             self._clock.stop()
-        self._renderer.close()
-        del self._renderer
+        if self._subscription is not None:
+            self._subscription.release()
+            self._subscription = None
+        if self._renderer is not None:
+            self._renderer.close()
+            self._renderer = None
+        self._producer = None
 
     def convert_argb_to_bgra(self, data: bytes, width: int, height: int) -> bytes:
         expected_size = width * height * 4
