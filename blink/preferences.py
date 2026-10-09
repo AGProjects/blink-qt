@@ -403,6 +403,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         # Interface
         self.history_name_and_uri_button.clicked.connect(self._SH_HistoryNameAndUriButtonClicked)
+        self.mangle_contacts_button.clicked.connect(self._SH_MangleContactsButtonClicked)
         self.language_button.activated[int].connect(self._SH_LanguageButtonActivated)
 
         # Setup initial state (show the accounts page right after start)
@@ -800,6 +801,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.tls_verify_server_button.setChecked(settings.tls.verify_server)
 
         self.history_name_and_uri_button.setChecked(blink_settings.interface.show_history_name_and_uri)
+        self.mangle_contacts_button.setChecked(blink_settings.interface.mangle_contacts)
 
         language_index = self.language_button.findText(Language.mapping[blink_settings.interface.language])
         if language_index == -1:
@@ -807,6 +809,30 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             blink_settings.interface.language = self.language_button.itemData(language_index).language_code
             blink_settings.save()
         self.language_button.setCurrentIndex(language_index)
+
+    def _show_mangled(self, editor, value, kind, account):
+        """Put an account's value in its editor, invented while contacts are mangled (blink.contact_mangler)
+        so the panel can be photographed. What was shown is remembered with the real value: an editor
+        left as it was shown gives the real value back (_edited_text), so the invention is never saved."""
+        from blink.contact_mangler import mangled_name, mangled_text, mangled_username, mangling_enabled
+        value = value or ''
+        shown = value
+        if value and mangling_enabled():
+            if kind == 'name':
+                shown = mangled_name(value, uri=str(account.id))
+            elif kind == 'username':
+                shown = mangled_username(value)
+            else:
+                shown = mangled_text(value)
+        shown = str(shown)
+        self.__dict__.setdefault('_mangled_fields', {})[editor] = (shown, value)
+        editor.setText(shown)
+
+    def _edited_text(self, editor):
+        """The editor's text, or the real value when the editor still holds the invented one."""
+        text = editor.text()
+        shown, real = self.__dict__.get('_mangled_fields', {}).get(editor, (None, None))
+        return real if shown is not None and text == shown else text
 
     def load_account_settings(self, account):
         """Load the account settings from configuration into the UI controls"""
@@ -823,7 +849,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.account_enabled_mwi_button.setEnabled(account is not bonjour_account)
         self.account_enabled_mwi_button.setChecked(account.message_summary.enabled if account is not bonjour_account else False)
 
-        self.display_name_editor.setText(account.display_name or '')
+        self._show_mangled(self.display_name_editor, account.display_name, 'name', account)
 
         if account is not bonjour_account:
             self.password_editor.setText(account.auth.password)
@@ -890,7 +916,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             with blocked_qt_signals(self.outbound_proxy_port):
                 self.outbound_proxy_port.setValue(outbound_proxy.port)
             self.outbound_proxy_transport_button.setCurrentIndex(self.outbound_proxy_transport_button.findText(outbound_proxy.transport.upper()))
-            self.auth_username_editor.setText(account.auth.username or '')
+            self._show_mangled(self.auth_username_editor, account.auth.username, 'username', account)
 
             self.always_use_my_msrp_relay_button.setChecked(account.nat_traversal.use_msrp_relay_for_outbound)
             msrp_relay = account.nat_traversal.msrp_relay or UnspecifiedMSRPRelay
@@ -900,7 +926,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.msrp_relay_transport_button.setCurrentIndex(self.msrp_relay_transport_button.findText(msrp_relay.transport.upper()))
 
             self.enable_xcap_button.setChecked(account.xcap.enabled)
-            self.voicemail_uri_editor.setText(account.message_summary.voicemail_uri or '')
+            self._show_mangled(self.voicemail_uri_editor, account.message_summary.voicemail_uri, 'text', account)
             if not account.xcap.enabled:
                 self.xcap_root_editor.setEnabled(False)
             self.xcap_root_editor.setText(account.xcap.xcap_root or '')
@@ -949,7 +975,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.message_replication_button.setChecked(account.sms.enable_message_replication)
             self.message_synchronization_button.setChecked(account.sms.enable_history_synchronization)
             self.history_url_editor.setEnabled(account.sms.enable_history_synchronization)
-            self.history_url_editor.setText(account.sms.history_synchronization_url)
+            self._show_mangled(self.history_url_editor, account.sms.history_synchronization_url, 'text', account)
             self.last_id_editor.setEnabled(account.sms.enable_history_synchronization)
             self.last_id_editor.setText(account.sms.history_synchronization_id)
         else:
@@ -1135,7 +1161,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def _SH_DisplayNameEditorEditingFinished(self):
         account = self.selected_account
-        display_name = self.display_name_editor.text() or None
+        display_name = self._edited_text(self.display_name_editor) or None
         if account.display_name != display_name:
             account.display_name = display_name
             account.save()
@@ -1261,7 +1287,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def _SH_AuthUsernameEditorEditingFinished(self):
         account = self.selected_account
-        auth_username = self.auth_username_editor.text() or None
+        auth_username = self._edited_text(self.auth_username_editor) or None
         if account.auth.username != auth_username:
             account.auth.username = auth_username
             account.save()
@@ -1332,7 +1358,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def _SH_VoicemailURIEditorEditingFinished(self):
         account = self.selected_account
-        voicemail_uri = self.voicemail_uri_editor.text() or None
+        voicemail_uri = self._edited_text(self.voicemail_uri_editor) or None
         if account.message_summary.voicemail_uri != voicemail_uri:
             account.message_summary.voicemail_uri = voicemail_uri
             account.save()
@@ -1490,7 +1516,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def _SH_HistoryUrlEditorEditingFinshed(self):
         account = self.selected_account
-        history_url = self.history_url_editor.text() or None
+        history_url = self._edited_text(self.history_url_editor) or None
         if account.sms.history_synchronization_url != history_url:
             account.sms.history_synchronization_url = history_url
             account.save()
@@ -1800,6 +1826,15 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.interface.show_history_name_and_uri = checked
         settings.save()
 
+    def _SH_MangleContactsButtonClicked(self, checked):
+        from blink.contact_mangler import invalidate
+        settings = BlinkSettings()
+        settings.interface.mangle_contacts = checked
+        settings.save()
+        invalidate()
+        if self.selected_account is not None:
+            self.load_account_settings(self.selected_account)     # the account fields, shown again
+
     def _SH_LanguageButtonActivated(self, index):
         data = self.language_button.itemData(index)
         settings = BlinkSettings()
@@ -1873,7 +1908,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if 'presence.enabled' in notification.data.modified:
                 self.account_enabled_presence_button.setChecked(account.presence.enabled)
             if 'display_name' in notification.data.modified:
-                self.display_name_editor.setText(account.display_name or '')
+                self._show_mangled(self.display_name_editor, account.display_name, 'name', account)
             if 'rtp.audio_codec_list' in notification.data.modified:
                 self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_list is not None)
             if 'rtp.video_codec_list' in notification.data.modified:
@@ -1884,7 +1919,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                     account.sms.enable_history_synchronization = False
                     account.save()
                 else:
-                    self.history_url_editor.setText(account.sms.history_synchronization_url)
+                    self._show_mangled(self.history_url_editor, account.sms.history_synchronization_url, 'text', account)
             if 'sms.history_synchronization_token' in notification.data.modified:
                 if account.sms.history_synchronization_token:
                     self.last_id_editor.setText(account.sms.history_synchronization_id)

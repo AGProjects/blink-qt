@@ -45,6 +45,7 @@ from PyQt6.QtCore import Qt, QLocale, QPointF, QRectF, QSize, QSizeF
 from PyQt6.QtGui import QAbstractTextDocumentLayout, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPalette, QTextCharFormat, QTextCursor, QTextDocument, QTextOption
 from PyQt6.QtWidgets import QStyle, QStyledItemDelegate
 
+from blink.contact_mangler import mangled_name
 from blink.messagepane.format import bubble_kind, day_label, delivery_mark, linkify, plain_summary, sanitize_html
 from blink.widgets.color import is_dark_theme, secondary_text_color
 
@@ -175,7 +176,7 @@ class BubbleDelegate(QStyledItemDelegate):
                 layout.kind = kind = 'audio'
             else:
                 layout.kind = kind = 'pdf' if image_path and image_path.lower().endswith('.pdf') and pdf_available() else 'file'
-        layout.name_text = (item.display_name or '') if run_start and not item.outgoing and kind != 'note' else ''
+        layout.name_text = mangled_name(item.display_name or '', uri=item.uri or item.remote_uri or None) if run_start and not item.outgoing and kind != 'note' else ''
         small = self._small_font(font)
         document = QTextDocument()
         document.setDocumentMargin(0)

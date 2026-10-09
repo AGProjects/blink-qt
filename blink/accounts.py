@@ -120,7 +120,11 @@ class AccountModel(QAbstractListModel):
             return None
         account_info = self.accounts[index.row()]
         if role == Qt.ItemDataRole.DisplayRole:
-            return account_info.name
+            if account_info.account is BonjourAccount():
+                return account_info.name
+            # an invented address while contacts are mangled (blink.contact_mangler); AccountInfo.name stays real
+            from blink.contact_mangler import mangled_account_label
+            return mangled_account_label(account_info.name)
         elif role == Qt.ItemDataRole.DecorationRole:
             return account_info.icon
         elif role == Qt.ItemDataRole.UserRole:

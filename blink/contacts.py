@@ -3636,6 +3636,27 @@ class ContactURI(object):
 ui_class, base_class = uic.loadUiType(Resources.get('contact.ui'))
 
 
+_mangled_pixmaps = {}
+
+
+def mangled_row(contact, name, info):
+    """A contact row as it is drawn while contacts are mangled (blink.contact_mangler): invented
+    name and address, and the invented person's initials instead of a photograph, which names
+    somebody as surely as their address does. Display only: nothing here goes back to the contact."""
+    from blink.contact_mangler import mangled_name, mangled_text, mangled_uri
+    uri = getattr(contact, 'uri', None)
+    uri = str(getattr(uri, 'uri', None) or uri or '') or None
+    real_name = getattr(contact, 'name', None) or None
+    name = mangled_name(name, uri=uri) if name else mangled_uri(uri or '')
+    info = mangled_text(info, uri=uri, name=real_name) if info else info
+    avatar_name = mangled_name(real_name, uri=uri) if real_name else mangled_uri(uri or '')
+    pixmap = _mangled_pixmaps.get(avatar_name)
+    if pixmap is None:
+        size = contact.pixmap.width() or 32
+        pixmap = _mangled_pixmaps.setdefault(avatar_name, avatar_icon(avatar_name).pixmap(size) if avatar_name else contact.pixmap)
+    return name, info, pixmap
+
+
 class ContactWidget(base_class, ui_class):
     def __init__(self, parent=None):
         super(ContactWidget, self).__init__(parent)
@@ -3670,13 +3691,19 @@ class ContactWidget(base_class, ui_class):
             painter.end()
 
     def init_from_contact(self, contact):
-        self.name_label.setText(getattr(contact, 'display_name', contact.name))
+        from blink.contact_mangler import mangling_enabled
+        name = getattr(contact, 'display_name', contact.name)
+        info = contact.info
+        pixmap = contact.pixmap
+        if mangling_enabled():
+            name, info, pixmap = mangled_row(contact, name, info)
+        self.name_label.setText(name)
         self.info_label.setTextFormat(Qt.TextFormat.PlainText)     # may quote a message
         time_text = format_row_time(getattr(contact, 'row_time', None))
         self.time_label.setText(time_text)
         self.time_label.setVisible(bool(time_text))
-        self.info_label.setText(contact.info)
-        self.icon_label.setPixmap(contact.pixmap)
+        self.info_label.setText(info)
+        self.icon_label.setPixmap(pixmap)
         self.state_label.state = contact.state
         try:
             self.unread_label.setText(str(contact.unread_messages))

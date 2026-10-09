@@ -424,8 +424,20 @@ class MainWindow(base_class, ui_class):
             self.contact_list.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def set_user_icon(self, icon):
+        from blink.contact_mangler import mangling_enabled
         self._user_icon = icon
-        self.account_state.setIcon(icon or self.default_icon)
+        # no own photograph while contacts are mangled: it names me as surely as my address does
+        self.account_state.setIcon(self.default_icon if mangling_enabled() else (icon or self.default_icon))
+
+    def _show_display_name(self, account):
+        """The account's display name in the editor at the top, invented while contacts are mangled;
+        what was shown is remembered so that it is never saved back as the real name."""
+        from blink.contact_mangler import mangled_name, mangling_enabled
+        name = account.display_name or ''
+        if name and mangling_enabled():
+            name = mangled_name(name, uri=str(account.id))
+        self._shown_display_name = name
+        self.display_name.setText(name)
 
     def apply_theme(self):
         self.default_icon = themed_icon(self.default_icon_path)
@@ -1107,7 +1119,10 @@ class MainWindow(base_class, ui_class):
         self.display_name.clearFocus()
         index = self.identity.currentIndex()
         if index != -1:
+            from blink.contact_mangler import mangling_enabled
             name = self.display_name.text()
+            if mangling_enabled() and name == getattr(self, '_shown_display_name', None):
+                return      # the invented name, untouched: not an edit
             account = self.identity.itemData(index).account
             account.display_name = name if name else None
             account.save()
@@ -1128,7 +1143,7 @@ class MainWindow(base_class, ui_class):
     def _SH_IdentityCurrentIndexChanged(self, index):
         if index != -1:
             account = self.identity.itemData(index).account
-            self.display_name.setText(account.display_name or '')
+            self._show_display_name(account)
             self.display_name.setEnabled(True)
             self.activity_note.setEnabled(True)
             self.account_state.setEnabled(True)
@@ -1490,6 +1505,17 @@ class MainWindow(base_class, ui_class):
                 self.account_state.setState(state, blink_settings.presence.current_state.note)
             if 'presence.icon' in notification.data.modified:
                 self.set_user_icon(icon_manager.get('avatar'))
+            if 'interface.mangle_contacts' in notification.data.modified:
+                from blink.contact_mangler import invalidate
+                invalidate()
+                model = self.account_model
+                if model.rowCount():
+                    model.dataChanged.emit(model.index(0, 0), model.index(model.rowCount() - 1, 0))
+                self.identity.update()
+                self.set_user_icon(getattr(self, '_user_icon', None))
+                index = self.identity.currentIndex()
+                if index != -1:
+                    self._show_display_name(self.identity.itemData(index).account)
             if 'presence.offline_note' in notification.data.modified:
                 # TODO: set offline note -Saul
                 pass
@@ -1500,7 +1526,7 @@ class MainWindow(base_class, ui_class):
                 action = next(action for action in self.accounts_menu.actions() if action.data() is account)
                 action.setChecked(account.enabled)
             if 'display_name' in notification.data.modified and account is account_manager.default_account:
-                self.display_name.setText(account.display_name or '')
+                self._show_display_name(account)
             if {'enabled', 'message_summary.enabled', 'message_summary.voicemail_uri'}.intersection(notification.data.modified):
                 action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
                 action.setVisible(False if account is BonjourAccount() else account.enabled)

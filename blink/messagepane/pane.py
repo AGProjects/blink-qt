@@ -44,6 +44,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
+from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.messagepane.composer import Composer
 from blink.messagepane.header import ConversationHeader
@@ -164,6 +165,7 @@ class MessagePane(QWidget):
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
+        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')     # BlinkSettings cannot be made yet: the configuration is not started
         self._last_read_sound = 0.0
 
     def apply_theme(self):
@@ -373,6 +375,19 @@ class MessagePane(QWidget):
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        if not isinstance(notification.sender, BlinkSettings) or 'interface.mangle_contacts' not in notification.data.modified:
+            return
+        # the header and the bubbles are drawn again with (or without) the invented identities,
+        # and every list repaints, the contact rows among them
+        from blink.contact_mangler import invalidate, refresh_views
+        invalidate()
+        if self.contact is not None and self.uri is not None:
+            self.header.set_conversation(self.contact, self.uri, self.key, self.header.account)
+        self.transcript.bubble_delegate.clear_cache()
+        self.transcript.scheduleDelayedItemsLayout()
+        refresh_views()
 
     def _NH_BlinkConversationPreviewsDidChange(self, notification):
         keys = notification.data.keys

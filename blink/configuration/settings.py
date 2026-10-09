@@ -168,6 +168,7 @@ class BlinkPresenceSettings(SettingsGroup):
 class BlinkInterfaceSettings(SettingsGroup):
     show_history_name_and_uri = Setting(type=bool, default=False)
     language = Setting(type=str, default='default')
+    mangle_contacts = Setting(type=bool, default=False)     # invented names and addresses on screen, see blink.contact_mangler
 
 
 class BlinkSettings(SettingsObject):

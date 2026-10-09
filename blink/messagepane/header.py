@@ -24,6 +24,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 
 from blink.logging import ActivityLog
 from blink.avatars import avatar_color, avatar_initials, circular_icon
+from blink.contact_mangler import mangled_account_label, mangled_name, mangled_uri, mangling_enabled
 from blink.resources import IconManager, Resources, themed_icon
 from blink.util import translate
 from blink.widgets.color import follow_theme, secondary_text_color
@@ -269,11 +270,18 @@ class ConversationHeader(QWidget):
         self.day_counts = {}
         self.calendar_button.setEnabled(False)
         name = getattr(contact, 'name', '') or str(uri.uri)
-        self.name_label.setText(name)
-        self.name_label.setToolTip(name)
         # the same initials and colour as the contact list (blink.avatars), so the person looks the same in both
         avatar_name = getattr(contact, 'avatar_name', None) or name
-        self.avatar.set_contact(contact_photo(contact), avatar_initials(avatar_name), avatar_color(avatar_name))
+        photo = contact_photo(contact)
+        if mangling_enabled():
+            # display only (blink.contact_mangler): invented name, no photograph
+            real = str(uri.uri)
+            name = mangled_name(name, uri=real)
+            avatar_name = mangled_name(avatar_name, uri=real)
+            photo = None
+        self.name_label.setText(name)
+        self.name_label.setToolTip(name)
+        self.avatar.set_contact(photo, avatar_initials(avatar_name), avatar_color(avatar_name))
         self.update_info()
         self.update_lock()
         self._update_location_button()
@@ -334,7 +342,7 @@ class ConversationHeader(QWidget):
         menu.clear()
         current = str(self.uri.uri) if self.uri is not None else ''
         for uri in self._addresses():
-            label = str(uri.uri) + (f'   ({uri.type})' if getattr(uri, 'type', None) else '')
+            label = str(mangled_uri(str(uri.uri))) + (f'   ({uri.type})' if getattr(uri, 'type', None) else '')
             action = menu.addAction(label, lambda uri=uri: self.addressChosen.emit(uri))
             action.setCheckable(True)
             action.setChecked(str(uri.uri) == current)
@@ -350,7 +358,7 @@ class ConversationHeader(QWidget):
         shown = self.contact is not None and account is not None and account is not BonjourAccount() and len(self.sending_accounts()) > 1
         self.account_button.setVisible(shown)
         if shown:
-            text = translate('message_pane', 'From %s') % account.id
+            text = translate('message_pane', 'From %s') % mangled_account_label(str(account.id))
             metrics = self.account_button.fontMetrics()
             self.account_button.setText(metrics.elidedText(text, Qt.TextElideMode.ElideMiddle, 220))
 
@@ -358,7 +366,7 @@ class ConversationHeader(QWidget):
         menu = self.account_menu
         menu.clear()
         for account in self.sending_accounts():
-            action = menu.addAction(str(account.id), lambda account=account: self.accountChosen.emit(account))
+            action = menu.addAction(mangled_account_label(str(account.id)), lambda account=account: self.accountChosen.emit(account))
             action.setCheckable(True)
             action.setChecked(account is self.account)
 
@@ -395,7 +403,7 @@ class ConversationHeader(QWidget):
         if ConversationTyping().is_typing([self.key]):
             self.info_label.setText(translate('message_pane', 'is typing…'))
         else:
-            self.info_label.setText(str(self.uri.uri))
+            self.info_label.setText(mangled_uri(str(self.uri.uri)))
 
     # Encryption
 
