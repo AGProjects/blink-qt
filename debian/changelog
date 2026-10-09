@@ -8,6 +8,7 @@ blink (7.0.0) unstable; urgency=medium
   * Added video calls recording
   * Fixes from TLS validation
   * Added detailed protocol logging
+  * Usability improvements
   * Bug fixes
 
  -- Adrian Georgescu <ag@ag-projects.com>  Thu, 08 Oct 2026 21:38:01 -0300
