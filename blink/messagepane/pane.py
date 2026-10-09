@@ -118,7 +118,7 @@ class MessagePane(QWidget):
         self.grid.actionRequested.connect(self._SH_ActionRequested)
         self.grid.deleteRequested.connect(self._delete_messages)
         self.grid.forwardRequested.connect(self._forward)
-        self._forward_after_download = {}       # message id: (item, conversation key), sent once its file is here
+        self._forward_after_download = {}       # message id: (item, conversation keys), sent once its file is here
         self.grid.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
         self._make_grid_controls()
         self.composer = Composer(self)
@@ -918,19 +918,20 @@ class MessagePane(QWidget):
         if not items:
             return
         dialog = ForwardDialog(len(items), exclude=self.key, parent=self)
-        if dialog.exec() != ForwardDialog.DialogCode.Accepted or not dialog.key:
+        if dialog.exec() != ForwardDialog.DialogCode.Accepted or not dialog.keys:
             return
-        target = dialog.key
-        ActivityLog().info(f'[Message with {self.key}] Forwarding {len(items)} messages to {target}')
+        targets = dialog.keys
+        ActivityLog().info(f'[Message with {self.key}] Forwarding {len(items)} messages to {", ".join(targets)}')
         ready = []
         for item in items:
             if item.category != 'text' and not local_file(item):
-                self._forward_after_download[item.id] = (item, target)
+                self._forward_after_download[item.id] = (item, targets)
                 self.fetcher.fetch(item, force=True)
-                ActivityLog().info(f'[Message with {target}] Message {item.id} is forwarded once its file is downloaded')
+                ActivityLog().info(f'[Message with {self.key}] Message {item.id} is forwarded to {", ".join(targets)} once its file is downloaded')
             else:
                 ready.append(item)
-        self._forward_to(target, ready)
+        for target in targets:
+            self._forward_to(target, ready)
         self.grid.set_selecting(False)
 
     def _forward_to(self, target, items):
@@ -1049,13 +1050,14 @@ class MessagePane(QWidget):
         self.grid.forget(message_id)
         if message_id in self._forward_after_download:
             from blink.messagepane.files import local_file
-            item, target = self._forward_after_download[message_id]
+            item, targets = self._forward_after_download[message_id]
             if local_file(item):
                 del self._forward_after_download[message_id]
-                self._forward_to(target, [item])
+                for target in targets:
+                    self._forward_to(target, [item])
             elif self.fetcher.progress(message_id) is None:
                 del self._forward_after_download[message_id]
-                ActivityLog().warning(f'[Message with {target}] Message {message_id} not forwarded: its file could not be downloaded')
+                ActivityLog().warning(f'[Message with {self.key}] Message {message_id} not forwarded to {", ".join(targets)}: its file could not be downloaded')
         model = self.models.get(self.view_key)
         row = model.row_of(message_id) if model is not None else None
         if row is not None:
