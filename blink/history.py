@@ -1047,7 +1047,8 @@ class MessageHistory(object, metaclass=Singleton):
         db = Message._connection
         identifier = db.sqlrepr(str(message_id))
         rows = cls._set_deleted(f'message_id = {identifier} or related_msg_id = {identifier}', True, when)
-        sidecars = cls._set_deleted(f"content_type = 'application/sylk-message-metadata' and content like {db.sqlrepr('%%"messageId":"%s"%%' % message_id)}", True, when)
+        pattern = db.sqlrepr('%%"messageId":"%s"%%' % message_id)
+        sidecars = cls._set_deleted(f"content_type = 'application/sylk-message-metadata' and content like {pattern}", True, when)
         return rows, sidecars
 
     @classmethod
