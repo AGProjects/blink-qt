@@ -1791,6 +1791,7 @@ class AudioSessionWidget(base_class, ui_class):
         self.stream_info_label.session_type = session.type
         self.stream_info_label.codec_info = session.codec_info
         self.duration_label.value = session.duration
+        self.duration_label.setVisible(session.media_connected)  # hidden until the call is connected
         self.latency_label.value = session.latency
         self.packet_loss_label.value = session.packet_loss
         self.status_label.value = session.status
@@ -2066,6 +2067,9 @@ class AudioSessionItem(object):
         self.latency = 0
         self.packet_loss = 0
         self.pending_removal = False
+        self.media_connected = session.state == 'connected/*' and 'audio' in session.streams
+        if not self.media_connected:
+            self.status = Status(translate('sessions', 'Initializing...'))  # never leave the status empty before the call connects
 
         self.zrtp_widget = ZRTPWidget()
         self.zrtp_widget.setWindowFlags(Qt.WindowType.Popup)
@@ -2177,6 +2181,19 @@ class AudioSessionItem(object):
 
     codec_info = property(_get_codec_info, _set_codec_info)
     del _get_codec_info, _set_codec_info
+
+    def _get_media_connected(self):
+        return self.__dict__['media_connected']
+
+    def _set_media_connected(self, value):
+        value = bool(value)
+        if self.__dict__.get('media_connected', None) == value:
+            return
+        self.__dict__['media_connected'] = value
+        self.widget.duration_label.setVisible(value)
+
+    media_connected = property(_get_media_connected, _set_media_connected)
+    del _get_media_connected, _set_media_connected
 
     def _get_srtp(self):
         return self.__dict__['srtp']
@@ -2311,19 +2328,25 @@ class AudioSessionItem(object):
         stage = notification.data.stage
         if stage == 'initializing':
             self.status = Status(translate('sessions', 'Initializing...'))
-        elif stage == 'connecting/dns_lookup':
+        elif stage in ('dns_lookup', 'connecting/dns_lookup'):
             self.status = Status(translate('sessions', 'Looking up destination...'))
-        elif stage == 'connecting' and self.blink_session.routes:
-            self.tls = self.blink_session.transport == 'tls'
-            uri = self.blink_session.routes[0].uri
-            destination = '%s:%s' % (self.blink_session.transport, uri.host.decode())
-            self.status = Status(translate('sessions', 'Trying %s') % destination)
+        elif stage == 'connecting':
+            if self.blink_session.direction == 'outgoing' and self.blink_session.routes:
+                self.tls = self.blink_session.transport == 'tls'
+                uri = self.blink_session.routes[0].uri
+                destination = '%s:%s' % (self.blink_session.transport, uri.host.decode())
+                self.status = Status(translate('sessions', 'Trying %s') % destination)
+            else:
+                self.status = Status(translate('sessions', 'Connecting...'))
         elif stage == 'ringing':
             self.status = Status(translate('sessions', 'Ringing...'))
+        elif stage == 'early_media':
+            self.status = Status(translate('sessions', 'Early media...'))
         elif stage == 'starting':
             self.status = Status(translate('sessions', 'Starting media...'))
-        else:
+        elif self.media_connected:
             self.status = None
+        # unknown stage before connecting: keep the previous status so the label is never blank
 
     def _NH_BlinkSessionInfoUpdated(self, notification):
         if 'media' in notification.data.elements:
@@ -2357,6 +2380,7 @@ class AudioSessionItem(object):
         session = notification.sender
         self.tls = session.transport == 'tls'
         if 'audio' in session.streams:
+            self.media_connected = True
             self.widget.mute_button.setEnabled(True)
             self.widget.hold_button.setEnabled(True)
             self.widget.record_button.setEnabled(True)
@@ -2372,6 +2396,7 @@ class AudioSessionItem(object):
 
     def _NH_BlinkSessionDidAddStream(self, notification):
         if notification.data.stream.type == 'audio':
+            self.media_connected = True
             self.widget.mute_button.setEnabled(True)
             self.widget.hold_button.setEnabled(True)
             self.widget.record_button.setEnabled(True)
