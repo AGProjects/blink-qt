@@ -1,3 +1,11 @@
+blink (7.0.0) unstable; urgency=medium
+
+  * Refactored message UI to use native widgets
+  * Refactored video calls window
+  * Bug fixes
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Thu, 08 Oct 2026 21:38:01 -0300
+
 blink (6.0.8) unstable; urgency=medium
 
   * Fix svg dependency
