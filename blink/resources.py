@@ -2,7 +2,6 @@
 """Provide access to Blink's resources"""
 
 import __main__
-import imghdr
 import os
 import platform
 import sys
@@ -163,10 +162,10 @@ class IconManager(object, metaclass=Singleton):
             image_size = pixmap.size()
             if image_size.width() > self.max_size or image_size.height() > self.max_size:
                 pixmap = pixmap.scaled(self.max_size, self.max_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            if imghdr.what(None, data) != 'png' or pixmap.size() != image_size:
+            if not data.startswith(b'\x89PNG\r\n\x1a\n') or pixmap.size() != image_size:
                 buffer = QBuffer()
                 pixmap.save(buffer, 'png')
-                data = str(buffer.data())
+                data = bytes(buffer.data())
             with open(filename, 'wb') as f:
                 data = data if isinstance(data, bytes) else data.encode()
                 f.write(data)
