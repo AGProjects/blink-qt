@@ -926,6 +926,36 @@ class MessageManager(object, metaclass=Singleton):
         makedirs(path)
         return path
 
+    journal_cursor_file = 'cursor'      # journal/<account>/cursor: the last fetched id, kept outside the configuration
+
+    def _save_journal_cursor(self, account, cursor):
+        path = os.path.join(self._journal_directory(account), self.journal_cursor_file)
+        try:
+            with open(path + '.tmp', 'w') as file:
+                file.write(str(cursor))
+            os.replace(path + '.tmp', path)
+        except OSError as e:
+            log.warning(f'Cannot write the journal cursor of {account.id}: {e}')
+
+    def _restore_journal_cursor(self, account):
+        """The cursor lives in the account's settings, in the configuration file; a configuration
+        lost or made again (an account added anew, a profile deleted) would mean downloading the
+        whole journal into a database that has it. Its copy in journal/<account>/cursor brings it back."""
+        path = os.path.join(self._journal_directory(account), self.journal_cursor_file)
+        if account.sms.history_synchronization_id:
+            if not os.path.exists(path):
+                self._save_journal_cursor(account, account.sms.history_synchronization_id)     # the copy, for accounts synced before it existed
+            return
+        try:
+            with open(path) as file:
+                cursor = file.read().strip()
+        except OSError:
+            return
+        if cursor:
+            account.sms.history_synchronization_id = cursor
+            account.save()
+            ActivityLog().info(f'[journal] Journal cursor of {account.id} restored from {path}: {cursor}')
+
     journal_first_sync_marker = FIRST_SYNC_MARKER
     journal_progress_interval = 0.25        # seconds between progress updates while a page is read
 
@@ -1005,6 +1035,7 @@ class MessageManager(object, metaclass=Singleton):
         if not account.sms.history_synchronization_url:
             return
 
+        self._restore_journal_cursor(account)
         directory = self._journal_directory(account)
         headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
         settings = SIPSimpleSettings()
@@ -1102,6 +1133,7 @@ class MessageManager(object, metaclass=Singleton):
                 break
             account.sms.history_synchronization_id = last_id
             account.save()
+            self._save_journal_cursor(account, last_id)
         else:
             stopped = f'max {self.journal_max_pages} pages'
             activity.warning(f'[journal] Stopped the download of {account.id} at {self.journal_max_pages} pages, the rest follows on the next sync')
