@@ -448,8 +448,8 @@ QToolButton:pressed {
          </property>
          <property name="icon">
           <iconset>
-           <normaloff>icons/info16.svg</normaloff>
-           <normalon>icons/info16.svg</normalon>icons/info16.svg</iconset>
+           <normaloff>icons/info12.svg</normaloff>
+           <normalon>icons/info12.svg</normalon>icons/info12.svg</iconset>
          </property>
          <property name="iconSize">
           <size>
