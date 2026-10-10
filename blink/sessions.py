@@ -7179,6 +7179,18 @@ class ConferenceDialog(base_class, ui_class):
         invite_layout.addLayout(invite_buttons)
         self.grid_layout.addLayout(invite_layout, 2, 1)
         self.grid_layout.setRowStretch(2, 1)
+        # under the buttons: what conferencing needs
+        self.requirements_label = QLabel(translate('conference_dialog', 'Conferencing requires a server running MSRP switch RFC 7701. '
+                                                   'You can deploy a free server from <a href="https://sylkserver.com">sylkserver.com</a>'), self)
+        self.requirements_label.setWordWrap(True)
+        self.requirements_label.setTextFormat(Qt.TextFormat.RichText)
+        self.requirements_label.setOpenExternalLinks(True)
+        self.requirements_label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
+        font = self.requirements_label.font()
+        if font.pointSizeF() > 0:
+            font.setPointSizeF(font.pointSizeF() * 0.9)
+        self.requirements_label.setFont(font)
+        self.grid_layout.addWidget(self.requirements_label, 4, 0, 1, 2)
         self.invite_add_button.clicked.connect(self._SH_InviteAddButtonClicked)
         self.invite_remove_button.clicked.connect(self._SH_InviteRemoveButtonClicked)
         self.invite_list.itemSelectionChanged.connect(lambda: self.invite_remove_button.setEnabled(bool(self.invite_list.selectedItems())))

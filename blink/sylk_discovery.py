@@ -13,8 +13,10 @@ per domain, <data>/sylkserver/<domain>/configuration.json, and loaded at start,
 so the settings are known before the network is, and kept when a later lookup or
 download fails.
 
-For now the settings are only shown in the activity log: in full the first
-time, then what changed. SylkServerConfigurationDidChange is posted with them
+The settings are shown in the activity log: in full the first time, then what
+changed. conference.sipBridge, the domain's SIP conference bridge, becomes the
+Conference server of the domain's accounts (overwriting what the user set), as
+mobile dials and recognises rooms on it. SylkServerConfigurationDidChange is posted with them
 (sender the discovery, data domain and configuration) for what will use them.
 """
 
@@ -196,7 +198,35 @@ class SylkServerDiscovery(object, metaclass=Singleton):
         account = notification.sender
         if account is BonjourAccount():
             return
+        self._apply(account, self.configuration(account.id.domain))
         self.discover(account.id.domain)
+
+    def _apply_to_domain(self, domain, configuration):
+        for account in AccountManager().get_accounts():
+            if account is not BonjourAccount() and account.id.domain == domain:
+                self._apply(account, configuration)
+
+    @staticmethod
+    def _apply(account, configuration):
+        """What of the domain's settings goes into the account: conference.sipBridge as its
+        Conference server, overwriting the user's (the server knows its bridge)."""
+        if not configuration:
+            return
+        conference = configuration.get('conference')
+        bridge = conference.get('sipBridge') if isinstance(conference, dict) else None
+        if not isinstance(bridge, str) or not bridge.strip():
+            return
+        bridge = bridge.strip().lower()
+        current = str(account.server.conference_server or '').lower()
+        if current == bridge:
+            return
+        try:
+            account.server.conference_server = bridge
+            account.save()
+        except Exception as e:
+            ActivityLog().warning(f'[sylkserver] Cannot set the conference server of {account.id} to {bridge}: {e}')
+            return
+        ActivityLog().info(f"[sylkserver] Conference server of {account.id} set to {bridge} (conference.sipBridge of {account.id.domain}, was {current or 'not set'})")
 
     def _NH_SIPApplicationWillEnd(self, notification):
         if self._timer is not None:
@@ -285,6 +315,7 @@ class SylkServerDiscovery(object, metaclass=Singleton):
             self.configurations[domain] = entry
         self._log_changes(domain, url, previous, configuration)
         self._save(domain, entry)
+        call_in_gui_thread(self._apply_to_domain, domain, configuration)
         if previous != configuration:
             call_in_gui_thread(NotificationCenter().post_notification, 'SylkServerConfigurationDidChange', sender=self,
                                data=NotificationData(domain=domain, configuration=configuration, configuration_url=url))

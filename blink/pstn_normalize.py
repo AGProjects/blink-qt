@@ -398,7 +398,7 @@ def is_conference_uri(uri, account=None):
     if any(domain.startswith(prefix) for prefix in _CONFERENCE_DOMAIN_PREFIXES):
         return True
     try:
-        server = str(getattr(account.conference, 'server_address', '') or '').strip().lower()
+        server = str(getattr(account.server, 'conference_server', '') or '').strip().lower()
         if server and domain == server:
             return True
     except Exception:
