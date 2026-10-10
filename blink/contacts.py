@@ -168,6 +168,46 @@ def confirm_soft_delete(parent, contacts):
         ContactTrash.soft_delete(contacts)
 
 
+def blockable_contacts(items):
+    """The addressbook contacts (settings) among contact list items that Block applies to:
+    not deleted, not blocked already; [] when any item is something else."""
+    contacts = {}
+    for item in items:
+        settings = getattr(item, 'settings', None)
+        if getattr(item, 'type', None) != 'addressbook' or not isinstance(settings, addressbook.Contact):
+            return []
+        if is_deleted_contact(settings) or is_blocked_contact(settings):
+            return []
+        contacts[settings.id] = settings
+    return list(contacts.values())
+
+
+def add_block_action(menu, contacts):
+    if contacts:
+        text = translate('contact_list', 'Block') if len(contacts) == 1 else translate('contact_list', 'Block %d Contacts') % len(contacts)
+        menu.addAction(text, lambda: block_contacts(contacts))
+
+
+def block_contacts(contacts):
+    """Put contacts in the Blocked group (made, as on macOS, if there is none): they cannot call or
+    write any more, on every device (the block is the membership). They stay in their other groups,
+    shown as blocked, so Unblock gives them back as they were."""
+    with addressbook_origin.reason('block'), addressbook.AddressbookManager.transaction():
+        group = blocked_group()
+        if group is None:
+            group = addressbook.Group(BLOCKED.reserved_ids[0])
+            group.name = BLOCKED.name
+            group.kind = BLOCKED.kind
+            group.position = None
+            ActivityLog().info(f"[contacts] Created group '{group.name}' (id={group.id}) with kind={BLOCKED.kind}")
+        members = {member.id for member in group.contacts}
+        for contact in contacts:
+            if contact.id not in members:
+                group.contacts.add(contact)
+                ActivityLog().info(f'[contacts] Blocked {contact.name or contact.id}')
+        group.save()
+
+
 def unblock_contacts(group, contacts):
     """Take contacts out of the Blocked group: they can call again (as on macOS and mobile, the
     block is the membership, replicated to the other devices)."""
@@ -5464,6 +5504,7 @@ class ContactListView(QListView):
             menu.addAction(self.actions.restore_contact)
             menu.addAction(self.actions.delete_permanently)
         elif len(selected_items) > 1:
+            add_block_action(menu, blockable_contacts(selected_items))
             menu.addAction(self.actions.delete_selection)
             self.actions.undo_last_delete.setText(undo_delete_text)
             self.actions.delete_selection.setEnabled(any(item.deletable for item in selected_items))
@@ -5581,6 +5622,7 @@ class ContactListView(QListView):
                 if isinstance(contact.settings, MessageContact):
                     menu.addAction(self.actions.add_item)
                 menu.addAction(self.actions.edit_item)
+                add_block_action(menu, blockable_contacts([contact]))
                 menu.addAction(self.actions.delete_item)
                 self.actions.delete_item.setEnabled(contact.deletable)
                 menu.addSeparator()
@@ -5594,6 +5636,7 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.edit_item)
                 if contact.type == 'addressbook' and not contact.group.virtual and not is_managed_group(contact.group.settings):
                     menu.addAction(self.actions.remove_from_group)
+                add_block_action(menu, blockable_contacts([contact]))
                 menu.addAction(self.actions.delete_item)
                 self.actions.undo_last_delete.setText(undo_delete_text)
                 self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
@@ -6116,6 +6159,7 @@ class ContactSearchListView(QListView):
                     if isinstance(contact.settings, MessageContact):
                         menu.addAction(self.actions.add_item)
                 menu.addAction(self.actions.edit_item)
+                add_block_action(menu, blockable_contacts([contact]))
                 menu.addAction(self.actions.delete_item)
             self.actions.undo_last_delete.setText(undo_delete_text)
             account_manager = AccountManager()
@@ -6482,6 +6526,8 @@ class ContactDetailView(QListView):
             menu.addAction(self.actions.make_uri_default)
             self.actions.make_uri_default.setEnabled(selected_item.uri is not model.contact.uris.default)
         menu.addAction(self.actions.edit_contact)
+        if isinstance(model.contact, addressbook.Contact) and not is_deleted_contact(model.contact):
+            add_block_action(menu, [model.contact])
         menu.addAction(self.actions.delete_contact)
         can_call = account_manager.default_account is not None and contact_has_uris
         can_transfer = contact_has_uris and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
