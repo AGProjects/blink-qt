@@ -304,7 +304,35 @@
            <attribute name="title">
             <string>Server</string>
            </attribute>
-           <layout class="QGridLayout" name="server_settings_tab_layout">
+           <layout class="QVBoxLayout" name="server_settings_tab_outer_layout">
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QScrollArea" name="server_settings_scroll_area">
+              <property name="styleSheet">
+               <string notr="true">QScrollArea, QWidget#qt_scrollarea_viewport, QWidget#server_settings_contents { background: transparent; }</string>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::NoFrame</enum>
+              </property>
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <property name="widgetResizable">
+               <bool>true</bool>
+              </property>
+              <widget class="QWidget" name="server_settings_contents">
+               <layout class="QGridLayout" name="server_settings_tab_layout">
             <property name="leftMargin">
              <number>10</number>
             </property>
@@ -631,6 +659,10 @@
               <property name="text">
                <string>Enable XCAP storage</string>
               </property>
+             </widget>
+            </item>
+           </layout>
+              </widget>
              </widget>
             </item>
            </layout>

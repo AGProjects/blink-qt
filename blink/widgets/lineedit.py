@@ -1,9 +1,9 @@
 
 import re
 
-from PyQt6.QtCore import Qt, QEvent, QLineF, QRect, QRectF, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QEvent, pyqtSignal
 from PyQt6.QtGui import QIcon, QPainter, QPalette, QPixmap
-from PyQt6.QtWidgets import QAbstractButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
+from PyQt6.QtWidgets import QAbstractButton, QToolButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
 
 from blink.resources import Resources
 from blink.util import translate
@@ -146,6 +146,7 @@ class ValidatingLineEdit(LineEdit):
         frame_width = self.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth, option, self)
         self.setMinimumHeight(self.invalid_entry_label.minimumHeight() + 2 + 2*frame_width)
         self.textChanged.connect(self._SH_TextChanged)
+        self.editingFinished.connect(self._SH_EditingFinished)
         self.text_correct = True
         self.text_allowed = True
         self.exceptions = set()
@@ -168,8 +169,14 @@ class ValidatingLineEdit(LineEdit):
     def _SH_TextChanged(self, text):
         self._validate()
 
+    def _SH_EditingFinished(self):
+        if self.strip_spaces and self.text() != self.text().strip():
+            self.setText(self.text().strip())
+
+    strip_spaces = False        # spaces typed around the text are not part of it (they are dropped when editing ends)
+
     def _validate(self):
-        text = self.text()
+        text = self.text().strip() if self.strip_spaces else self.text()
         text_correct = self.regexp.search(text) is not None
         text_allowed = text not in self.exceptions
         if self.text_correct != text_correct or self.text_allowed != text_allowed:
@@ -187,26 +194,51 @@ class ValidatingLineEdit(LineEdit):
         self._validate()
 
 
+def add_password_reveal(line_edit):
+    """An eye inside a password field: pressed, it shows what was typed; again, hides it."""
+    shown_icon, hidden_icon = QIcon(Resources.get('icons/eye-off.svg')), QIcon(Resources.get('icons/eye.svg'))
+
+    def update(shown):
+        line_edit.setEchoMode(QLineEdit.EchoMode.Normal if shown else QLineEdit.EchoMode.Password)
+        button.setIcon(shown_icon if shown else hidden_icon)
+        button.setToolTip(translate('line_edit', 'Hide password') if shown else translate('line_edit', 'Show password'))
+
+    if hasattr(line_edit, 'addTailWidget'):         # blink's LineEdit: a button in its tail
+        button = QToolButton(line_edit)
+        button.setCheckable(True)
+        button.setAutoRaise(True)
+        button.setCursor(Qt.CursorShape.ArrowCursor)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setFixedSize(18, 16)
+        button.setStyleSheet('QToolButton { border: none; padding: 0px; }')
+        button.toggled.connect(update)
+        line_edit.addTailWidget(button)
+    else:                                           # a plain QLineEdit: an action at its end
+        button = line_edit.addAction(hidden_icon, QLineEdit.ActionPosition.TrailingPosition)
+        button.setCheckable(True)
+        button.toggled.connect(update)
+    update(False)
+    return button
+
+
 class SearchIcon(QWidget):
     def __init__(self, parent=None, size=16):
         super(SearchIcon, self).__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setVisible(True)
         self.setMinimumSize(size+2, size+2)
-        self.size = size
-        # drawn from the SVG at the screen's pixel density: a 16px pixmap scaled up is blurry on HiDPI
-        self.svg_icon = QIcon(Resources.get("icons/search.svg"))
-        self.icon = None if self.svg_icon.isNull() else self.svg_icon
+        pixmap = QPixmap()
+        if pixmap.load(Resources.get("icons/search.svg")):
+            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        else:
+            self.icon = None
 
     def paintEvent(self, event):
-        if self.icon is None:
-            return
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        pixmap = self.svg_icon.pixmap(QSize(self.size, self.size), self.devicePixelRatioF())
-        x = int((self.width() - self.size) / 2)
-        y = int((self.height() - self.size) / 2)
-        painter.drawPixmap(QRect(x, y, self.size, self.size), pixmap)
+        if self.icon is not None:
+            x = int((self.width() - self.icon.width()) / 2)
+            y = int((self.height() - self.icon.height()) / 2)
+            painter.drawPixmap(x, y, self.icon)
 
 
 class ClearButton(QAbstractButton):
@@ -217,37 +249,27 @@ class ClearButton(QAbstractButton):
         self.setToolTip("Clear")
         self.setVisible(False)
         self.setMinimumSize(size+2, size+2)
-        self.size = size
-        # drawn from the SVG at the screen's pixel density: a 16px pixmap scaled up is blurry on HiDPI
-        svg_icon = QIcon(Resources.get("icons/delete.svg"))
-        self.icon = None if svg_icon.isNull() else svg_icon
-        self._pixmaps = {}      # (device pixel ratio, pressed): pixmap
-
-    def _pixmap(self, pressed):
-        ratio = self.devicePixelRatioF()
-        key = (ratio, pressed)
-        if key not in self._pixmaps:
-            pixmap = self.icon.pixmap(QSize(self.size, self.size), ratio)
-            if pressed:
-                # darker while pressed: the icon multiplied with itself (an image: a QPainter on
-                # a QPixmap does not do CompositionMode_Multiply -Dan)
-                image = pixmap.toImage()
-                painter = QPainter(image)
-                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                pixmap = QPixmap.fromImage(image)
-                pixmap.setDevicePixelRatio(ratio)
-            self._pixmaps[key] = pixmap
-        return self._pixmaps[key]
+        pixmap = QPixmap()
+        if pixmap.load(Resources.get("icons/delete.svg")):
+            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            # Use QImage because QPainter using a QPixmap does not support CompositionMode_Multiply -Dan
+            image = self.icon.toImage()
+            painter = QPainter(image)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
+            painter.drawPixmap(0, 0, self.icon)
+            painter.end()
+            self.icon_pressed = QPixmap(image)
+        else:
+            self.icon = self.icon_pressed = None
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        if self.icon is not None:
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-            x = int((self.width() - self.size) / 2)
-            y = int((self.height() - self.size) / 2)
-            painter.drawPixmap(QRect(x, y, self.size, self.size), self._pixmap(self.isDown()))
+        icon = self.icon_pressed if self.isDown() else self.icon
+        if icon is not None:
+            x = int((self.width() - icon.width()) / 2)
+            y = int((self.height() - icon.height()) / 2)
+            painter.drawPixmap(x, y, icon)
         else:
             width = self.width()
             height = self.height()
@@ -264,12 +286,12 @@ class ClearButton(QAbstractButton):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setBrush(bg_color)
             painter.setPen(bg_color)
-            painter.drawEllipse(QRectF(padding, padding, radius, radius))
+            painter.drawEllipse(padding, padding, radius, radius)
 
             padding = padding * 2
             painter.setPen(fg_color)
-            painter.drawLine(QLineF(padding, padding, width-padding, height-padding))
-            painter.drawLine(QLineF(padding, height-padding, width-padding, padding))
+            painter.drawLine(padding, padding, width-padding, height-padding)
+            painter.drawLine(padding, height-padding, width-padding, padding)
 
 
 class SearchBox(LineEdit):

@@ -276,6 +276,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.display_name_editor.editingFinished.connect(self._SH_DisplayNameEditorEditingFinished)
         self.account_label_editor.editingFinished.connect(self._SH_AccountLabelEditorEditingFinished)
         self.password_editor.editingFinished.connect(self._SH_PasswordEditorEditingFinished)
+        from blink.widgets.lineedit import add_password_reveal
+        add_password_reveal(self.password_editor)
 
         # Account media settings
         self.account_audio_codecs_list.itemChanged.connect(self._SH_AccountAudioCodecsListItemChanged)

@@ -362,6 +362,11 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         self.add_account_button.setChecked(True)
         self.panel_view.setCurrentWidget(self.add_account_panel)
         self.new_password_editor.textChanged.connect(self._SH_PasswordTextChanged)
+        from blink.widgets.lineedit import add_password_reveal
+        for editor in (self.display_name_editor, self.name_editor, self.username_editor, self.sip_address_editor, self.email_address_editor):
+            editor.strip_spaces = True      # spaces typed (or pasted) around the text are dropped
+        for editor in (self.password_editor, self.new_password_editor, self.verify_password_editor):
+            add_password_reveal(editor)
         self.button_group.idClicked.connect(self._SH_PanelChangeRequest)
         self.accept_button.clicked.connect(self._SH_AcceptButtonClicked)
         self.display_name_editor.statusChanged.connect(self._SH_ValidityStatusChanged)
@@ -387,22 +392,22 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
 
     def _get_display_name(self):
         if self.panel_view.currentWidget() is self.add_account_panel:
-            return self.display_name_editor.text()
+            return self.display_name_editor.text().strip()
         else:
-            return self.name_editor.text()
+            return self.name_editor.text().strip()
 
     def _set_display_name(self, value):
         self.display_name_editor.setText(value)
         self.name_editor.setText(value)
 
     def _get_username(self):
-        return self.username_editor.text()
+        return self.username_editor.text().strip()
 
     def _set_username(self, value):
         self.username_editor.setText(value)
 
     def _get_sip_address(self):
-        return self.sip_address_editor.text()
+        return self.sip_address_editor.text().strip()
 
     def _set_sip_address(self, value):
         self.sip_address_editor.setText(value)
@@ -424,7 +429,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         self.verify_password_editor.setText(value)
 
     def _get_email_address(self):
-        return self.email_address_editor.text()
+        return self.email_address_editor.text().strip()
 
     def _set_email_address(self, value):
         self.email_address_editor.setText(value)
