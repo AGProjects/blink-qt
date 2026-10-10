@@ -28,7 +28,7 @@ __all__ = ['current_profile', 'profile_names', 'request_switch', 'request_delete
 
 
 DEFAULT_NAME = 'Default'
-PROFILE_FILES = ('config', 'calls_history')         # what a profile is made of, in the data directory
+PROFILE_FILES = ('config', 'calls_history', 'test_numbers.json')     # what a profile is made of, in the data directory
 SHARED_SECTIONS_DROPPED = ('Accounts', 'Addressbook')   # what a new profile does not take from the current one
 
 

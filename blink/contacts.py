@@ -685,6 +685,8 @@ class ContactRepair(object, metaclass=Singleton):
     - duplicate addresses within a contact (dup-uri)
     - every phone number filed in Tel and every conference room in Conference
       (file-into-kind-group)
+    - the test numbers the accounts' SylkServer publishes (testNumbers) in Test,
+      as Sylk Mobile does (test-numbers); again whenever that configuration changes
     Nothing is created or deleted but groups and duplicate addresses; a real
     name is never touched. Each action is logged with its reason and stamped
     with it (modified_reason). Sylk Mobile does the same from its side.
@@ -703,6 +705,7 @@ class ContactRepair(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='XCAPManagerDidReloadData')
+        notification_center.add_observer(self, name='SylkServerConfigurationDidChange')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -712,6 +715,14 @@ class ContactRepair(object, metaclass=Singleton):
     def _NH_SIPApplicationDidStart(self, notification):
         if not xcap_is_expected():
             call_later(5, self.run)
+
+    def _NH_SylkServerConfigurationDidChange(self, notification):
+        if self.done:       # else run() files them, once the addressbook has loaded
+            try:
+                with AddressbookNotifier().quiet():
+                    self.file_test_numbers()
+            except Exception as e:
+                ActivityLog().exception(f'[addressbook] Filing the test numbers failed: {e!r}')
 
     def _NH_XCAPManagerDidReloadData(self, notification):
         if not self.done:
@@ -729,10 +740,97 @@ class ContactRepair(object, metaclass=Singleton):
                 repaired = self.repair_contacts()
                 filed = self.file_into_kind_groups()
                 merged = self.merge_messages_duplicates()
+                self.file_test_numbers()
         except Exception as e:
             activity.exception(f'[addressbook] Repairing the addressbook failed: {e!r}')
             return
         activity.info(f'[addressbook] Repair done: {repaired} contacts repaired, {filed} contacts filed into Tel or Conference, {merged} duplicates merged')
+
+    test_numbers_file = 'test_numbers.json'     # numbers already added, per profile (blink.profiles)
+
+    def _added_test_numbers(self):
+        try:
+            with open(ApplicationData.get(self.test_numbers_file), encoding='utf-8') as file:
+                return set(json.load(file))
+        except (OSError, ValueError, TypeError):
+            return set()
+
+    def _save_added_test_numbers(self, numbers):
+        path = ApplicationData.get(self.test_numbers_file)
+        try:
+            with open(path + '.tmp', 'w', encoding='utf-8') as file:
+                json.dump(sorted(numbers), file)
+            os.replace(path + '.tmp', path)
+        except OSError as e:
+            ActivityLog().warning(f'[addressbook] Cannot write {path}: {e}')
+
+    def file_test_numbers(self):
+        """The test numbers of the enabled accounts' SylkServer (configuration testNumbers:
+        [{name, uri, unsupported_media}]) as contacts in the Test group, as Sylk Mobile does
+        (createTestNumbers): a missing one is created with the server's name, an existing one
+        (same address) is put in Test and named if it has no name. Once per number: what the
+        user then deletes, moves or renames stays so (test_numbers.json, one per profile);
+        nothing is removed when the server drops a number."""
+        from blink.sylk_discovery import SylkServerDiscovery
+        activity = ActivityLog()
+        discovery = SylkServerDiscovery()
+        entries = {}
+        for account in AccountManager().get_accounts():
+            if account is BonjourAccount() or not account.enabled:
+                continue
+            numbers = (discovery.configuration(account.id.domain) or {}).get('testNumbers')
+            for entry in numbers if isinstance(numbers, list) else ():
+                uri = str(entry.get('uri') or '').strip() if isinstance(entry, dict) else ''
+                if uri:
+                    entries.setdefault(canonical_uri(uri) or uri, (re.sub('^sips?:', '', uri), str(entry.get('name') or '').strip()))
+        added = self._added_test_numbers()
+        entries = {key: value for key, value in entries.items() if key not in added}
+        if not entries:
+            return 0
+        manager = addressbook.AddressbookManager()
+        existing = list(manager.get_contacts())
+        set_aside = {member.id for member in getattr(ContactTrash.deleted_group(), 'contacts', ())}
+        blocked = blocked_group()
+        set_aside |= {member.id for member in blocked.contacts} if blocked is not None else set()
+        created, filed, named = [], [], []
+        with addressbook_origin.reason('test-numbers'), addressbook.AddressbookManager.transaction():
+            try:
+                group = manager.get_group('test')
+            except KeyError:
+                group = addressbook.Group(id='test')
+                group.name = 'Test'
+                group.position = None
+            members = {member.id for member in group.contacts}
+            for key, (uri, name) in sorted(entries.items()):
+                contact = MessagesGroupFiler._find_by_canonical(uri, existing)
+                if contact is not None and contact.id in set_aside:
+                    continue
+                if contact is None:
+                    contact = addressbook.Contact()
+                    contact.name = name or uri
+                    contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
+                    contact.preferred_media = 'audio'
+                    contact.save()
+                    existing.append(contact)
+                    created.append(f'{contact.name} <{uri}>')
+                elif not contact.name and name:
+                    contact.name = name
+                    contact.save()
+                    named.append(f'{name} <{uri}>')
+                if contact.id not in members:
+                    group.contacts.add(contact)
+                    members.add(contact.id)
+                    filed.append(contact.name or uri)
+            if created or filed:
+                group.save()
+        self._save_added_test_numbers(added | set(entries))
+        if created:
+            activity.info(f"[addressbook] Test numbers: created {', '.join(created)}")
+        if filed:
+            activity.info(f"[addressbook] Test numbers: filed into Test {', '.join(filed)}")
+        if named:
+            activity.info(f"[addressbook] Test numbers: named {', '.join(named)}")
+        return len(created) + len(filed)
 
     def repair_contacts(self):
         activity = ActivityLog()
@@ -4838,11 +4936,8 @@ class ContactModel(QAbstractListModel):
         self.state = 'starting'
         blink = Blink()
         if blink.first_run:
-            test_group = addressbook.Group(id='test')
-            test_group.name = 'Test'
-            test_group.contacts = [self._create_contact(**entry) for entry in self.test_contacts]
-            changed_items = list(test_group.contacts) + [test_group]
-            self._atomic_update(save=changed_items)
+            # the Test contacts come from the account's SylkServer (testNumbers, ContactRepair.file_test_numbers)
+            pass
         else:
             addressbook_manager = addressbook.AddressbookManager()
 
