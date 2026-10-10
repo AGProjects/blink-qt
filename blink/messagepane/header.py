@@ -2,11 +2,11 @@
 
 Avatar (the contact's photo, else initials on a colour of their own), name,
 info line (is typing..., else the address the conversation is on), the lock
-with what is known about encryption (A− and A+ before it make the text of the
-transcript and the composer smaller or larger, as one segmented control), the calendar (years, months and days
-with how many messages each has; choosing a day jumps there; the pane shows it in the
-strip, left of the search field) and the audio and
-video call buttons (one segmented control).
+with what is known about encryption (a badge on the avatar's bottom left corner),
+A− and A+ (the text of the transcript and the composer smaller or larger, one
+segmented control), the calendar (years, months and days with how many messages
+each has; choosing a day jumps there; the pane shows it in the strip, left of the
+search field) and the audio and video call buttons (one segmented control).
 Calls start from the conversation's account: the one its newest message was
 on, else the default one (a Bonjour neighbour: the Bonjour account).
 """
@@ -191,12 +191,21 @@ class ConversationHeader(QWidget):
         self.account_button.hide()
         row.addWidget(self.account_button)
 
-        self.lock_button = self._tool_button()
+        # the lock as a badge on the avatar's bottom left corner
+        badge = 18
+        # (a child of the header, not of the avatar, so it can stick out past the avatar's edge)
+        self.lock_button = QToolButton(self)
+        self.lock_button.setAutoRaise(True)
+        self.lock_button.setFixedSize(badge, badge)
+        self.lock_button.setIconSize(QSize(12, 12))
+        self.lock_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.lock_menu = QMenu(self.lock_button)
         self.lock_menu.aboutToShow.connect(self._fill_lock_menu)
         self.lock_button.setMenu(self.lock_menu)
         self.lock_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.lock_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
+        self.lock_button.setStyleSheet('QToolButton { background: palette(button); border: 1px solid palette(mid); border-radius: %dpx; padding: 0px; }'
+                                       ' QToolButton:hover { background: palette(light); }'
+                                       ' QToolButton::menu-indicator { image: none; }' % (badge // 2))
         self.calendar_button = self._tool_button(translate('message_pane', 'Jump to a date'))
         self.calendar_button.setIconSize(QSize(16, 16))     # the clock's outline fills its box: drawn smaller than the other glyphs
         self.calendar_button.setFixedSize(26, 26)          # shown in the strip, left of the search field (MessagePane)
@@ -252,8 +261,7 @@ class ConversationHeader(QWidget):
         call_group.addWidget(self.video_button)
         row.addWidget(self.stop_audio_button)
         row.addLayout(font_group)
-        for button in (self.lock_button, self.location_button):
-            row.addWidget(button)
+        row.addWidget(self.location_button)
         row.addLayout(call_group)
 
         self.apply_theme()
@@ -263,6 +271,21 @@ class ConversationHeader(QWidget):
     def jumped():
         """Whether the transcript was moved to a past day (set by the pane): the calendar then offers Back to Now."""
         return False
+
+    lock_offset = 5         # how far the lock badge sticks out past the avatar's bottom left corner
+
+    def _place_lock(self):
+        avatar = self.avatar.geometry()
+        self.lock_button.move(avatar.left() - self.lock_offset, avatar.bottom() + 1 - self.lock_button.height() + self.lock_offset)
+        self.lock_button.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._place_lock()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._place_lock()
 
     def _tool_button(self, tooltip=None):
         button = QToolButton(self)
