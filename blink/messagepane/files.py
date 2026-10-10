@@ -79,6 +79,34 @@ def failure_reason(item):
     return None
 
 
+def can_download_again(item, path):
+    """Whether the file here can be replaced by the server's: it is in Blink's own storage (never a
+    file of the user's), and the message has a URL that has not expired."""
+    from datetime import datetime, timezone
+    from blink.message_envelopes import file_transfer_envelope
+    if not path:
+        return False
+    real = os.path.realpath(path)
+    roots = [os.path.realpath(ApplicationData.get(name)) for name in ('file_transfers', 'downloads')]
+    if not any(real.startswith(root + os.sep) for root in roots):
+        return False
+    meta = file_transfer_envelope(item.content) if item.content else None
+    if not meta or not meta.get('url'):
+        return False
+    until = meta.get('until')
+    if until:
+        try:
+            from dateutil.parser import parse
+            expires = parse(str(until))
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if expires < datetime.now(timezone.utc):
+                return False
+        except (ValueError, OverflowError, TypeError):
+            pass
+    return True
+
+
 def local_file(item):
     """The path of the message's file, or None when it is not a file or not downloaded."""
     if item.category not in ('image', 'audio', 'video', 'other'):

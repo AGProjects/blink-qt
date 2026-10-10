@@ -832,6 +832,13 @@ class MessagePane(QWidget):
             Uploads.instance().discard(item.id)
         elif action == 'delete':
             self._delete_message(item)
+        elif action == 'download_again':
+            self._download_again(item)
+        elif action == 'download':
+            from blink.messagepane.files import local_file
+            if not local_file(item) and self.fetcher.progress(item.id) is None:
+                ActivityLog().info(f'[Message with {self.key}] Downloading the file of message {item.id}, asked for')
+                self.fetcher.fetch(item, force=True)
         elif action == 'open':
             from blink.messagepane.files import local_file
             from PyQt6.QtCore import QUrl
@@ -981,6 +988,33 @@ class MessagePane(QWidget):
             ActivityLog().warning(f'[Message with {self.key}] {text}')
 
     # Forward (blink.messagepane.forward)
+
+    def _download_again(self, item):
+        """Replace the copy here with the server's (after a question): the file here is removed
+        (only from its own folder in Blink's storage) and fetched again."""
+        import os
+        from PyQt6.QtWidgets import QMessageBox
+        from blink.messagepane.files import can_download_again, file_info, local_file
+        path = local_file(item)
+        if not path or not can_download_again(item, path) or self.fetcher.progress(item.id) is not None:
+            return
+        name = (file_info(item) or {}).get('name') or os.path.basename(path)
+        answer = QMessageBox.question(self, translate('message_pane', 'Download Again'),
+                                      translate('message_pane', 'Download %s again? The copy here is replaced by the one on the server.') % name)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        for stale in (path, path + '.asc'):
+            try:
+                os.unlink(stale)
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                ActivityLog().error(f'[Message with {self.key}] Cannot remove {stale} to download it again: {e}')
+                return
+        self.transcript.bubble_delegate.forget(item.id)
+        self.fetcher.requested.discard(item.id)
+        ActivityLog().info(f'[Message with {self.key}] Downloading the file of message {item.id} again, asked for')
+        self.fetcher.fetch(item, force=True)
 
     def _forward(self, items):
         from blink.messagepane.files import local_file

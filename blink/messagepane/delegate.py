@@ -931,6 +931,8 @@ class BubbleDelegate(QStyledItemDelegate):
             self._paint_divider(painter, rect, layout.day_text, small, secondary)
         if self._cancellable(item):
             self._paint_cancel_button(painter, self.cancel_rect(layout, item, bubble))
+        elif self.downloadable(item):
+            self._paint_download_button(painter, self.cancel_rect(layout, item, bubble), secondary)
         context = QAbstractTextDocumentLayout.PaintContext()
         if layout.kind == 'note':
             context.palette = self._text_palette(palette, secondary)
@@ -1057,6 +1059,43 @@ class BubbleDelegate(QStyledItemDelegate):
         size = self.actions_size
         left = bubble.left() - 6 - size if item.outgoing else bubble.right() + 6
         return QRectF(left, bubble.top() + 2 + size + 6, size, size)
+
+    def downloadable(self, item):
+        """A file not here and not being downloaded: it has a Download button (and Download in its menu)."""
+        if item is None or item.upload is not None or item.category not in ('image', 'audio', 'video', 'other'):
+            return False
+        from blink.messagepane.files import file_info
+        if file_info(item) is None or self.file_path(item):
+            return False
+        return self.progress_of is None or self.progress_of(item.id) is None
+
+    def download_at(self, index, rect, position):
+        """Whether a point of the view is on the Download button of this row."""
+        item = self._item(index)
+        if not self.downloadable(item):
+            return False
+        layout = self.layout(index, rect.width(), self.parent().font())
+        return self.cancel_rect(layout, item, self.bubble_rect(layout, item, QRectF(rect))).contains(QPointF(position))
+
+    def _paint_download_button(self, painter, rect, colour):
+        """A down arrow onto a line, in a circle."""
+        painter.save()
+        background = QColor(0, 0, 0, 40) if not is_dark_theme() else QColor(255, 255, 255, 40)
+        path = QPainterPath()
+        path.addEllipse(rect)
+        painter.fillPath(path, background)
+        pen = QPen(colour)
+        pen.setWidthF(1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        x, w, top, h = rect.center().x(), rect.width(), rect.top(), rect.height()
+        arrow_top, arrow_tip = top + h * 0.26, top + h * 0.62
+        painter.drawLine(QPointF(x, arrow_top), QPointF(x, arrow_tip))
+        painter.drawLine(QPointF(x - w * 0.16, arrow_tip - h * 0.16), QPointF(x, arrow_tip))
+        painter.drawLine(QPointF(x + w * 0.16, arrow_tip - h * 0.16), QPointF(x, arrow_tip))
+        painter.drawLine(QPointF(x - w * 0.2, top + h * 0.74), QPointF(x + w * 0.2, top + h * 0.74))
+        painter.restore()
 
     def cancel_at(self, index, rect, position):
         """Whether a point of the view is on the Cancel button of an upload in this row."""

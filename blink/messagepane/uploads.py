@@ -81,8 +81,12 @@ class Uploads(QObject):
             upload.transfer.end()
         self._remove_copy(upload)
         ActivityLog().info(f'[Message with {upload.key}] Upload of {upload.name} ({transfer_id}) ' + ('cancelled' if upload.state == 'uploading' else 'removed'))
-        from blink.history import MessageHistory
-        MessageHistory().update(transfer_id, 'deleted')     # the local copy goes with it
+        # the local copy goes with it, as a deleted message (not only marked so): the conversation's
+        # time is that of its newest live message, so it falls back to what it was before the upload
+        # and the contact moves back to its place in the list
+        from blink.history import ConversationPreviews, MessageHistory
+        MessageHistory().tombstone_message(transfer_id, account_id=upload.account_id, remote_uri=upload.key, source='upload cancelled')
+        ConversationPreviews().invalidate([upload.key])     # read after the removal (the same db thread)
         self.changed.emit(upload.key, transfer_id)
 
     @staticmethod

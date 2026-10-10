@@ -191,10 +191,14 @@ class TranscriptView(QListView):
         index = self.indexAt(position)
         on_quote = index.isValid() and self.bubble_delegate.quote_at(index, self.visualRect(index), position) is not None
         on_cancel = index.isValid() and self.bubble_delegate.cancel_at(index, self.visualRect(index), position)
+        on_download = not on_cancel and index.isValid() and self.bubble_delegate.download_at(index, self.visualRect(index), position)
         if on_cancel:
             self.viewport().setToolTip(translate('message_pane', 'Cancel sending'))
+        elif on_download:
+            self.viewport().setToolTip(translate('message_pane', 'Download'))
         elif self.viewport().toolTip():
             self.viewport().setToolTip('')
+        on_cancel = on_cancel or on_download
         if on_cancel or self._link_at(position) or self._on_actions_button(position) or on_quote or self._on_clickable_bubble(index, position):
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         else:
@@ -215,6 +219,9 @@ class TranscriptView(QListView):
             index = self.indexAt(position)
             if index.isValid() and self.bubble_delegate.cancel_at(index, self.visualRect(index), position):
                 self.actionRequested.emit('discard_upload', index.data(Qt.ItemDataRole.UserRole))     # the Cancel button of an upload
+                return
+            if index.isValid() and self.bubble_delegate.download_at(index, self.visualRect(index), position):
+                self.actionRequested.emit('download', index.data(Qt.ItemDataRole.UserRole))          # the Download button of a file not here
                 return
             if self._on_actions_button(position):
                 index = self.indexAt(position)
@@ -257,7 +264,8 @@ class TranscriptView(QListView):
         item = index.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
         from blink.messagepane.reactions import EmojiPicker, reactable, reaction_action
-        if reactable(item):
+        not_here = item.category in ('image', 'audio', 'video', 'other') and item.upload is None and not local_file(item)
+        if reactable(item) and not not_here:        # a file not downloaded yet takes no reaction
             def pick_more(position):
                 self._picker = EmojiPicker(self)       # kept, so nothing collects it while it is up
                 self._picker.chosen.connect(lambda emoji: self._react(item, emoji, 'emoji picker'))
@@ -277,10 +285,16 @@ class TranscriptView(QListView):
             summary = plain_summary(item)
             menu.addAction(translate('message_pane', 'Copy Text'), lambda: QGuiApplication.clipboard().setText(summary))
         path = local_file(item)
+        if not path and self.bubble_delegate.downloadable(item):
+            menu.addSeparator()
+            menu.addAction(translate('message_pane', 'Download'), lambda: self.actionRequested.emit('download', item))
         if path:
             menu.addSeparator()
             menu.addAction(translate('message_pane', 'Open'), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
             menu.addAction(translate('message_pane', 'Save As…'), lambda: self._save_as(path))
+            from blink.messagepane.files import can_download_again
+            if item.upload is None and can_download_again(item, path):
+                menu.addAction(translate('message_pane', 'Download Again…'), lambda: self.actionRequested.emit('download_again', item))
         if item.upload is not None:
             # being sent: not a message yet
             menu.addSeparator()
