@@ -8,6 +8,8 @@ blink (7.0.0) unstable; urgency=medium
   * Fixes and logging for TLS certificate validations
   * Added detailed SIP protocol logging
   * Improve Logs window
+  * Refactor preferences panel
+  * Added profiles to switch between multiple accounts/addressbooks sets
   * Usability improvements
   * Bug fixes
 
