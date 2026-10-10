@@ -33,6 +33,10 @@ from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, transl
 __all__ = ['PreferencesWindow', 'AccountListView', 'SIPPortEditor']
 
 
+# Settings for developers (Interface > Screenshots: Mangle contacts), hidden unless True
+SHOW_DEVELOPER_SETTINGS = False
+
+
 class LanguageError(Exception): pass
 
 
@@ -390,8 +394,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.media_ports.valueChanged[int].connect(self._SH_MediaPortsValueChanged)
 
         # Files and directories
-        self.screenshots_directory_browse_button.clicked.connect(self._SH_ScreenshotsDirectoryBrowseButtonClicked)
-        self.transfers_directory_browse_button.clicked.connect(self._SH_TransfersDirectoryBrowseButtonClicked)
 
         # TLS settings
         self.tls_ca_file_editor.locationCleared.connect(self._SH_TLSCAFileEditorLocationCleared)
@@ -415,6 +417,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def setupUi(self):
         super(PreferencesWindow, self).setupUi(self)
+
+        if not SHOW_DEVELOPER_SETTINGS:
+            for widget in (self.screenshots_label, self.line_screenshots, self.mangle_contacts_button):
+                widget.hide()
 
         # Accounts
         self.key_negotiation_button.clear()
@@ -797,8 +803,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         with blocked_qt_signals(self.auto_answer_interval):
             self.auto_answer_interval.setValue(settings.sip.auto_answer_interval)
 
-        self.screenshots_directory_editor.setText(blink_settings.screenshots_directory or '')
-        self.transfers_directory_editor.setText(blink_settings.transfers_directory or '')
         self.tls_ca_file_editor.setText(settings.tls.ca_list or '')
         self.tls_cert_file_editor.setText(settings.tls.certificate or '')
         self.tls_verify_server_button.setChecked(settings.tls.verify_server)
@@ -1717,17 +1721,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.chat.sms_replication = checked
         settings.save()
 
-    def _SH_ScreenshotsDirectoryBrowseButtonClicked(self, checked):
-        # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
-        settings = BlinkSettings()
-        directory = QFileDialog.getExistingDirectory(self, translate('preferences_window', 'Select Screenshots Directory'), settings.screenshots_directory.normalized) or None
-        if directory is not None:
-            directory = os.path.normpath(directory)
-            if directory != settings.screenshots_directory:
-                self.screenshots_directory_editor.setText(directory)
-                settings.screenshots_directory = directory
-                settings.save()
-
     def _SH_ScreenSharingScaleButtonClicked(self, checked):
         settings = BlinkSettings()
         settings.screen_sharing.scale = checked
@@ -1742,18 +1735,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings = BlinkSettings()
         settings.screen_sharing.open_viewonly = checked
         settings.save()
-
-    # File transfer signal handlers
-    def _SH_TransfersDirectoryBrowseButtonClicked(self, checked):
-        # TODO: open the file selection dialog in non-modal mode. Same for the one for TLS CA list and the IconSelector from contacts. -Dan
-        settings = BlinkSettings()
-        directory = QFileDialog.getExistingDirectory(self, translate('preferences_window', 'Select Transfers Directory'), settings.transfers_directory.normalized) or None
-        if directory is not None:
-            directory = os.path.normpath(directory)
-            if directory != settings.transfers_directory:
-                self.transfers_directory_editor.setText(directory)
-                settings.transfers_directory = directory
-                settings.save()
 
     # File logging signal handlers
     def _SH_TraceSIPButtonClicked(self, checked):
