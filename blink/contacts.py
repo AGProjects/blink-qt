@@ -4968,31 +4968,30 @@ class ContactModel(QAbstractListModel):
         index = self.index(self.items.index(contact))
         self.dataChanged.emit(index, index)
 
+    def _move_bonjour_group_first(self):
+        """With Bonjour the default account its group goes to the top (remembering where it was).
+        Not before it is in the list: a profile with only Bonjour gets here before the group is added."""
+        groups = self.items[GroupList]
+        bonjour_group = self.bonjour_group
+        if bonjour_group not in groups:
+            return
+        try:
+            bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group) + 1])
+        except IndexError:
+            bonjour_group.relocation_info = RelocationInfo(successor=None)
+        if bonjour_group is not groups[0]:
+            self.moveGroup(bonjour_group, successor=groups[0])
+        bonjour_group.expand()
+
     def _NH_SIPAccountManagerDidStart(self, notification):
         if notification.sender.default_account is BonjourAccount():
-            groups = self.items[GroupList]
-            bonjour_group = self.bonjour_group
-            try:
-                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group) + 1])
-            except IndexError:
-                bonjour_group.relocation_info = RelocationInfo(successor=None)
-            if bonjour_group is not groups[0]:
-                self.moveGroup(bonjour_group, successor=groups[0])
-            bonjour_group.expand()
+            self._move_bonjour_group_first()
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         account = notification.data.account
         old_account = notification.data.old_account
         if account is BonjourAccount():
-            groups = self.items[GroupList]
-            bonjour_group = self.bonjour_group
-            try:
-                bonjour_group.relocation_info = RelocationInfo(successor=groups[groups.index(bonjour_group) + 1])
-            except IndexError:
-                bonjour_group.relocation_info = RelocationInfo(successor=None)
-            if bonjour_group is not groups[0]:
-                self.moveGroup(bonjour_group, successor=groups[0])
-            bonjour_group.expand()
+            self._move_bonjour_group_first()
         elif old_account is BonjourAccount() and old_account.enabled:
             bonjour_group = self.bonjour_group
             if bonjour_group.relocation_info is not None:
