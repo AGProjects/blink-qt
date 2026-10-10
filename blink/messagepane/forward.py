@@ -8,6 +8,9 @@ transfer of the file here, with its caption (a label companion) when it has
 one, so the other party gets it as if it was sent to them; a file not here yet
 is downloaded first and sent when it is in place. Locations, calls and what
 cannot be read (an encrypted text without the key) are not forwarded.
+
+The same selector chooses whom to invite to a conference (Join Conference):
+title, prompt and button text are given to it.
 """
 
 from PyQt6.QtCore import QRect, QSize, Qt
@@ -18,7 +21,7 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QDialog, QDialogBu
 from blink.util import translate
 
 
-__all__ = ['ForwardDialog', 'forwardable', 'recent_conversations']
+__all__ = ['ConversationRowDelegate', 'ForwardDialog', 'NameRole', 'forwardable', 'recent_conversations']
 
 
 FILE_CATEGORIES = ('image', 'video', 'audio', 'other')
@@ -130,15 +133,19 @@ class ConversationRowDelegate(QStyledItemDelegate):
 
 
 class ForwardDialog(QDialog):
-    def __init__(self, count, exclude=None, parent=None):
+    def __init__(self, count, exclude=None, parent=None, title=None, prompt=None, action=None, action_many=None, selected=()):
         super().__init__(parent)
-        self.setWindowTitle(translate('forward', 'Forward'))
+        self.setWindowTitle(title or translate('forward', 'Forward'))
+        self.action = action or translate('forward', 'Forward')
+        self.action_many = action_many or translate('forward', 'Forward to %d')
         self.key = None             # the first of keys
         self.keys = []              # the conversations chosen: one or more
+        self.names = {}             # key: name, of those chosen
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 12)
-        label = QLabel((translate('forward', 'Forward 1 message to:') if count == 1 else translate('forward', 'Forward %d messages to:') % count)
-                       + ' ' + translate('forward', '(click to choose one or more)'), self)
+        if prompt is None:
+            prompt = translate('forward', 'Forward 1 message to:') if count == 1 else translate('forward', 'Forward %d messages to:') % count
+        label = QLabel(prompt + ' ' + translate('forward', '(click to choose one or more)'), self)
         layout.addWidget(label)
         self.search = QLineEdit(self)
         self.search.setPlaceholderText(translate('forward', 'Name or address'))
@@ -155,11 +162,13 @@ class ForwardDialog(QDialog):
             row.setData(Qt.ItemDataRole.UserRole, key)
             row.setData(NameRole, name)
             self.list.addItem(row)
+            if key in selected:
+                row.setSelected(True)
         self.list.itemSelectionChanged.connect(self._update_button)
         self.list.itemDoubleClicked.connect(self._SH_DoubleClicked)
         layout.addWidget(self.list, 1)
         buttons = QDialogButtonBox(self)
-        self.forward_button = buttons.addButton(translate('forward', 'Forward'), QDialogButtonBox.ButtonRole.AcceptRole)
+        self.forward_button = buttons.addButton(self.action, QDialogButtonBox.ButtonRole.AcceptRole)
         buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._choose)
         buttons.rejected.connect(self.reject)
@@ -181,7 +190,7 @@ class ForwardDialog(QDialog):
     def _update_button(self):
         count = len(self.list.selectedItems())
         self.forward_button.setEnabled(count > 0)
-        self.forward_button.setText(translate('forward', 'Forward') if count < 2 else translate('forward', 'Forward to %d') % count)
+        self.forward_button.setText(self.action if count < 2 else self.action_many % count)
 
     def _SH_DoubleClicked(self, row):
         row.setSelected(True)       # the double click toggled it twice: it is meant
@@ -192,5 +201,6 @@ class ForwardDialog(QDialog):
         if not rows:
             return
         self.keys = [row.data(Qt.ItemDataRole.UserRole) for row in rows]
+        self.names = {row.data(Qt.ItemDataRole.UserRole): row.data(NameRole) or '' for row in rows}
         self.key = self.keys[0]
         self.accept()

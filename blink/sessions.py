@@ -7056,11 +7056,136 @@ class IncomingCallTransferRequest(QObject):
 ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
 
 
+from PyQt6.QtWidgets import QListWidget as _QListWidget
+
+
+class ConferenceInviteList(_QListWidget):
+    """The people to invite: contacts (or one address of a contact) dropped from the contact list."""
+
+    inviteesDropped = pyqtSignal(object)      # [(key, name)]
+
+    mime_types = ('application/x-blink-contact-list', 'application/x-blink-contact-uri-list', 'text/uri-list')
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(False)
+        self.setDragDropMode(_QListWidget.DragDropMode.DropOnly)
+
+    def _accepts(self, mime_data):
+        return any(mime_data.hasFormat(mime_type) for mime_type in self.mime_types)
+
+    def dragEnterEvent(self, event):
+        if self._accepts(event.mimeData()):
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._accepts(event.mimeData()):
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        invitees = self.decode(event.mimeData())
+        if invitees:
+            event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
+            self.inviteesDropped.emit(invitees)
+        else:
+            event.ignore()
+
+    @staticmethod
+    def _key(uri):
+        uri = getattr(uri, 'uri', uri)
+        return re.sub('^sips?:', '', str(uri or '')).strip()
+
+    @classmethod
+    def decode(cls, mime_data):
+        invitees = []
+        try:
+            if mime_data.hasFormat('application/x-blink-contact-uri-list'):
+                contact, contact_uris = pickle.loads(bytes(mime_data.data('application/x-blink-contact-uri-list')))
+                name = getattr(contact, 'name', '') or ''
+                invitees.extend((cls._key(contact_uri.uri), name) for contact_uri in contact_uris)
+            elif mime_data.hasFormat('application/x-blink-contact-list'):
+                for contact in pickle.loads(bytes(mime_data.data('application/x-blink-contact-list'))):
+                    if getattr(contact, 'type', None) == 'bonjour':
+                        continue
+                    invitees.append((cls._key(contact.uri), getattr(contact, 'name', '') or ''))
+            elif mime_data.hasUrls():
+                invitees.extend((cls._key(url.toString()), '') for url in mime_data.urls() if url.scheme() in ('sip', 'sips'))
+        except Exception as e:
+            ActivityLog().warning(f'[conference] Cannot read the dropped contacts: {e}')
+            return []
+        return [(key, name if name != key else '') for key, name in invitees if key]
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.count() == 0:
+            painter = QPainter(self.viewport())
+            painter.setPen(self.palette().color(QPalette.ColorRole.PlaceholderText))
+            painter.drawText(self.viewport().rect().adjusted(8, 8, -8, -8), Qt.AlignmentFlag.AlignCenter.value | Qt.TextFlag.TextWordWrap.value,
+                             translate('conference_dialog', 'Drop contacts here or click Add...'))
+            painter.end()
+
+
 class ConferenceDialog(base_class, ui_class):
+    """Join Conference: a room (digits only, 4 to 12 of them; a new random one is in the
+    field when the dialog opens), audio and/or chat, and, as on macOS, the people to
+    invite: chosen with the Forward selector or dragged from the contact list, invited
+    (REFER to the conference) once the session to the room is connected."""
+
+    room_re = r'\d{4,12}'
+
     def __init__(self, parent=None):
         super(ConferenceDialog, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        from PyQt6.QtCore import QRegularExpression
+        from PyQt6.QtGui import QRegularExpressionValidator
+        from PyQt6.QtWidgets import QHBoxLayout, QListWidget, QPushButton, QVBoxLayout
+        from blink.messagepane.forward import ConversationRowDelegate
+        self.room_button.setValidator(QRegularExpressionValidator(QRegularExpression(self.room_re), self.room_button))
+        self.room_button.lineEdit().setPlaceholderText(translate('conference_dialog', '4 to 12 digits'))
+        # the people to invite, where the spacer was
+        spacer = self.grid_layout.itemAtPosition(2, 0)     # uic does not keep spacers as attributes
+        if spacer is not None and spacer.spacerItem() is not None:
+            self.grid_layout.removeItem(spacer)
+        self.invite_label = QLabel(translate('conference_dialog', 'Invite:'), self)
+        self.invite_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        self.grid_layout.addWidget(self.invite_label, 2, 0)
+        invite_layout = QVBoxLayout()
+        invite_layout.setSpacing(4)
+        self.invite_list = ConferenceInviteList(self)
+        self.invite_list.inviteesDropped.connect(self._add_invitees)
+        self.invite_list.setMinimumHeight(120)
+        self.invite_list.setAlternatingRowColors(True)
+        self.invite_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.invite_list.setItemDelegate(ConversationRowDelegate(self.invite_list))
+        invite_layout.addWidget(self.invite_list, 1)
+        invite_buttons = QHBoxLayout()
+        self.invite_add_button = QPushButton(translate('conference_dialog', 'Add...'), self)
+        self.invite_add_button.setAutoDefault(False)
+        self.invite_remove_button = QPushButton(translate('conference_dialog', 'Remove'), self)
+        self.invite_remove_button.setAutoDefault(False)
+        self.invite_remove_button.setEnabled(False)
+        invite_buttons.addWidget(self.invite_add_button)
+        invite_buttons.addWidget(self.invite_remove_button)
+        invite_buttons.addStretch(1)
+        invite_layout.addLayout(invite_buttons)
+        self.grid_layout.addLayout(invite_layout, 2, 1)
+        self.grid_layout.setRowStretch(2, 1)
+        self.invite_add_button.clicked.connect(self._SH_InviteAddButtonClicked)
+        self.invite_remove_button.clicked.connect(self._SH_InviteRemoveButtonClicked)
+        self.invite_list.itemSelectionChanged.connect(lambda: self.invite_remove_button.setEnabled(bool(self.invite_list.selectedItems())))
+        self._inviters = set()
+        # room for everything: the .ui minimum (330x150) was for the room and media rows only
+        self.setMinimumSize(self.minimumSizeHint().expandedTo(QSize(400, 360)))
+
         self.audio_button.clicked.connect(self._SH_MediaButtonClicked)
         self.chat_button.clicked.connect(self._SH_MediaButtonClicked)
         self.room_button.editTextChanged.connect(self._SH_RoomButtonEditTextChanged)
@@ -7069,11 +7194,56 @@ class ConferenceDialog(base_class, ui_class):
         if geometry:
             self.restoreGeometry(geometry)
 
+    @staticmethod
+    def random_room():
+        return random.choice('123456789') + ''.join(random.choice('0123456789') for x in range(6))
+
+    def _update_accept_button(self):
+        media = any(button.isChecked() for button in (self.audio_button, self.chat_button))
+        self.accept_button.setEnabled(media and self.room_button.lineEdit().hasAcceptableInput())
+
     def _SH_MediaButtonClicked(self, checked):
-        self.accept_button.setEnabled(any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+        self._update_accept_button()
 
     def _SH_RoomButtonEditTextChanged(self, text):
-        self.accept_button.setEnabled(any(button.isChecked() for button in (self.audio_button, self.chat_button)))
+        self._update_accept_button()
+
+    def _invitees(self):
+        return [self.invite_list.item(number).data(Qt.ItemDataRole.UserRole) for number in range(self.invite_list.count())]
+
+    def _SH_InviteAddButtonClicked(self):
+        from blink.messagepane.forward import ForwardDialog
+        chosen = self._invitees()
+        dialog = ForwardDialog(0, parent=self, title=translate('conference_dialog', 'Invite to Conference'),
+                               prompt=translate('conference_dialog', 'Invite to the conference:'),
+                               action=translate('conference_dialog', 'Invite'), action_many=translate('conference_dialog', 'Invite %d'), selected=chosen)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.invite_list.clear()
+        self._add_invitees([(key, dialog.names.get(key, '')) for key in dialog.keys])
+
+    def _add_invitees(self, invitees):
+        from PyQt6.QtWidgets import QListWidgetItem
+        from blink.messagepane.forward import NameRole
+        present = set(self._invitees())
+        for key, name in invitees:
+            if key in present:
+                continue
+            present.add(key)
+            row = QListWidgetItem(f'{name}\n{key}' if name else key)
+            row.setData(Qt.ItemDataRole.UserRole, key)
+            row.setData(NameRole, name)
+            self.invite_list.addItem(row)
+
+    def _SH_InviteRemoveButtonClicked(self):
+        for row in self.invite_list.selectedItems():
+            self.invite_list.takeItem(self.invite_list.row(row))
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.invite_list.hasFocus():
+            self._SH_InviteRemoveButtonClicked()
+            return
+        super(ConferenceDialog, self).keyPressEvent(event)
 
     def closeEvent(self, event):
         QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
@@ -7083,40 +7253,105 @@ class ConferenceDialog(base_class, ui_class):
         geometry = QSettings().value("conference_dialog/geometry")
         if geometry:
             self.restoreGeometry(geometry)
+        self.resize(self.size().expandedTo(self.minimumSize()))      # a geometry saved when the dialog was smaller
 
+        # rooms used before that are not digits (from before the rule) are left out
+        for number in reversed(range(self.room_button.count())):
+            if not re.fullmatch(self.room_re, self.room_button.itemText(number)):
+                self.room_button.removeItem(number)
         self.room_button.setCurrentIndex(-1)
+        self.room_button.setEditText(self.random_room())
+        self.room_button.lineEdit().selectAll()
+        self.invite_list.clear()
         self.audio_button.setChecked(True)
         self.chat_button.setChecked(True)
-        self.accept_button.setEnabled(True)
+        self._update_accept_button()
         self.raise_()
         super(ConferenceDialog, self).show()
+        self.room_button.setFocus()
 
     def join_conference(self):
         QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
         from blink.contacts import URIUtils
 
-        current_text = self.room_button.currentText()
+        current_text = self.room_button.currentText().strip()
+        if not re.fullmatch(self.room_re, current_text):
+            return
         if self.room_button.findText(current_text) == -1:
             if self.room_button.count() == self.room_button.maxCount():
                 self.room_button.removeItem(self.room_button.count()-1)
             self.room_button.insertItem(0, current_text)
 
-        if not current_text:
-            current_text = random.choice('123456789') + ''.join(random.choice('0123456789') for x in range(6))
         account_manager = AccountManager()
         session_manager = SessionManager()
         account = account_manager.default_account
         if account is not BonjourAccount():
-            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.%s' % account.id.domain) if '@' not in current_text else current_text
+            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.%s' % account.id.domain)
         else:
-            conference_uri = '%s@%s' % (current_text, 'conference.sip2sip.info') if '@' not in current_text else current_text
+            conference_uri = '%s@%s' % (current_text, 'conference.sip2sip.info')
         contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')
         streams = []
         if self.audio_button.isChecked():
             streams.append(StreamDescription('audio'))
         if self.chat_button.isChecked():
             streams.append(StreamDescription('chat'))
-        session_manager.create_session(contact, contact_uri, streams, account=account)
+        invitees = self._invitees()
+        ActivityLog().info(f'[conference] Join {conference_uri}' + (f', inviting {", ".join(invitees)}' if invitees else ''))
+        session = session_manager.create_session(contact, contact_uri, streams, account=account)
+        if invitees and session is not None:
+            inviter = ConferenceInviter(session, account, invitees, self._inviters)
+            self._inviters.add(inviter)
+
+
+@implementer(IObserver)
+class ConferenceInviter(object):
+    """Invites the people chosen in Join Conference once the session to the room is connected."""
+
+    def __init__(self, session, account, keys, owner):
+        self.session = session
+        self.account = account
+        self.keys = keys
+        self.owner = owner
+        notification_center = NotificationCenter()
+        notification_center.add_observer(self, sender=session, name='BlinkSessionDidConnect')
+        notification_center.add_observer(self, sender=session, name='BlinkSessionDidEnd')
+
+    def _done(self):
+        notification_center = NotificationCenter()
+        notification_center.remove_observer(self, sender=self.session, name='BlinkSessionDidConnect')
+        notification_center.remove_observer(self, sender=self.session, name='BlinkSessionDidEnd')
+        self.owner.discard(self)
+
+    @run_in_gui_thread
+    def handle_notification(self, notification):
+        handler = getattr(self, '_NH_%s' % notification.name, Null)
+        handler(notification)
+
+    def _NH_BlinkSessionDidConnect(self, notification):
+        from blink.contacts import URIUtils
+        self._done()
+        domain = self.account.id.domain if self.account is not BonjourAccount() else None
+        for key in self.keys:
+            uri = re.sub('^sips?:', '', str(key))
+            if '@' not in uri:
+                if domain is None:
+                    continue
+                uri = '%s@%s' % (uri, domain)
+            try:
+                SIPURI.parse('sip:%s' % uri)
+            except SIPCoreError:
+                ActivityLog().warning(f'[conference] Cannot invite {uri}: invalid address')
+                continue
+            try:
+                contact, contact_uri = URIUtils.find_contact(uri)
+                self.session.server_conference.add_participant(contact, contact_uri)
+            except Exception as e:
+                ActivityLog().warning(f'[conference] Cannot invite {uri}: {e}')
+                continue
+            ActivityLog().info(f'[conference] Invited {uri} to {self.session.uri}')
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self._done()
 
 
 del ui_class, base_class
