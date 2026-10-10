@@ -5,8 +5,16 @@ file transfer service; the server sends the file transfer message on, to the
 other party and back to us, and history files it then. Until then the
 conversation shows a bubble of its own for the file (MessageItem.upload): the
 clock mark while uploading, ✓ once uploaded, ⚠ and the reason when it failed
-(a click retries it). The bubble goes when a message of the same transfer
-reaches history (settle). The File Transfers window keeps MSRP transfers only.
+(a click retries it). The bubble goes, once the file is uploaded, when a message
+of the same transfer is in history (settle). The File Transfers window keeps MSRP
+transfers only.
+
+The message is filed in history as soon as the upload starts (a local copy,
+MessageHistory.add_own_upload), as a text is when it is sent: the conversation
+gets its time and moves up in the contact list. Its state follows the upload
+(pending, accepted, failed-local; deleted when the upload is discarded), and the
+server's message, when it comes back, completes it with the URL instead of being
+stored as a new one (MessageManager.note_own_upload).
 """
 
 from datetime import datetime, timezone
@@ -70,11 +78,15 @@ class Uploads(QObject):
         if upload.state == 'uploading':
             upload.transfer.end()
         ActivityLog().info(f'[Message with {upload.key}] Upload of {upload.name} ({transfer_id}) ' + ('cancelled' if upload.state == 'uploading' else 'removed'))
+        from blink.history import MessageHistory
+        MessageHistory().update(transfer_id, 'deleted')     # the local copy goes with it
         self.changed.emit(upload.key, transfer_id)
 
     def settle(self, key, transfer_ids):
-        """Forget the uploads of key whose message is in history (one of transfer_ids); returns their ids."""
-        settled = {upload.id for upload in self.uploads.values() if upload.key == key and upload.id in transfer_ids}
+        """Forget the uploads of key that are uploaded and whose message is in history (one of
+        transfer_ids); returns their ids. One still uploading (or failed) keeps its bubble, though
+        its local copy is in history from the start."""
+        settled = {upload.id for upload in self.uploads.values() if upload.key == key and upload.id in transfer_ids and upload.state == 'uploaded'}
         for transfer_id in settled:
             del self.uploads[transfer_id]
         return settled
@@ -99,12 +111,23 @@ class Uploads(QObject):
             size=transfer.file_selector.size or (os.path.getsize(path) if os.path.exists(path) else None),
             type=transfer.file_selector.type or mimetypes.guess_type(path)[0] or 'application/octet-stream',
             account_id=str(transfer.account.id), timestamp=datetime.now(timezone.utc), state='uploading', reason=None)
+        upload = self.uploads[transfer.id]
+        # the local copy, as for any message sent (confirmed by the server's message later)
+        from blink.history import MessageHistory
+        from blink.messages import MessageManager
+        MessageManager().note_own_upload(transfer.id)
+        contact = getattr(transfer, 'contact', None)
+        MessageHistory().add_own_upload(transfer.id, conversation_key(str(transfer.contact_uri.uri), transfer.account), transfer.account,
+                                        str(transfer.contact_uri.uri), getattr(contact, 'name', '') or '', upload.name, upload.size, upload.type,
+                                        upload.timestamp.replace(tzinfo=None))
         self.changed.emit(key, transfer.id)
 
     def _NH_BlinkFileTransferWillRetry(self, notification):
         upload = self.uploads.get(getattr(notification.sender, 'id', None))
         if upload is not None and upload.transfer is notification.sender:
             upload.state, upload.reason = 'uploading', None
+            from blink.history import MessageHistory
+            MessageHistory().update(upload.id, 'pending')
             self.changed.emit(upload.key, upload.id)
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
@@ -115,4 +138,6 @@ class Uploads(QObject):
             upload.state, upload.reason = 'failed', str(notification.data.reason or 'failed')
         else:
             upload.state, upload.reason = 'uploaded', None
+        from blink.history import MessageHistory
+        MessageHistory().update(upload.id, 'accepted' if upload.state == 'uploaded' else 'failed-local')
         self.changed.emit(upload.key, upload.id)

@@ -546,8 +546,10 @@ class ConversationModel(QAbstractListModel):
         rows inside the fetched range that are no longer there (removed) taken out."""
         if generation != self._generation or self.closed:
             return
-        fresh = {item.id: item for item in found}
         settled = self._settle_uploads(found)
+        sending = {upload.id for upload in _uploads_for(self.keys)}
+        found = [item for item in found if item.id not in sending]     # its local copy: the upload's bubble stands for it
+        fresh = {item.id: item for item in found}
         for position in reversed(range(len(self.items))):
             item = self.items[position]
             if item.upload is not None and item.id not in settled:
@@ -603,6 +605,8 @@ class ConversationModel(QAbstractListModel):
     def _with_uploads(self, found):
         """found (a newest page) and the files being sent whose message is not there."""
         self._settle_uploads(found)
+        sending = {upload.id for upload in _uploads_for(self.keys)}
+        found = [item for item in found if item.id not in sending]     # its local copy: the upload's bubble stands for it
         known = {item.id for item in found}
         uploads = [item for item in (MessageItem.for_upload(upload) for upload in _uploads_for(self.keys) if upload.id not in known) if self._shows(item)]
         return sorted(found + uploads, key=lambda item: item.sort_key) if uploads else found

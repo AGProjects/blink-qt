@@ -735,6 +735,7 @@ class MessageManager(object, metaclass=Singleton):
     def __init__(self):
         self.sessions = []
         self._own_message_ids = OrderedDict()  # ids of messages sent by this device, to recognise their replicated copies
+        self._own_upload_ids = OrderedDict()   # transfer ids of files this device uploads: the server sends their message, back to us too
         self.journal_receipts = {}      # {account id: {message id: state}}, collected in a first sync
         self.seen_message_ids = SeenMessageIds(self.seen_message_ids_size)  # handled live or from the journal, whichever came first
         self._own_conversation_reads = OwnMarkers(ttl=30)  # read markers this device sent, to recognise their echo
@@ -885,6 +886,13 @@ class MessageManager(object, metaclass=Singleton):
     def _retry_token_request(self, account, reason):
         self._token_retry_pending.discard(account.id)
         self._request_history_synchronization_token(account, reason)
+
+    def note_own_upload(self, transfer_id):
+        """A file this device is uploading (blink.messagepane.uploads): its message, which the server
+        sends and replicates back, confirms the local copy already in history."""
+        self._own_upload_ids[transfer_id] = None
+        while len(self._own_upload_ids) > self.own_message_ids_size:
+            self._own_upload_ids.popitem(last=False)
 
     def _send_message(self, outgoing_message):
         self._own_message_ids[outgoing_message.id] = None
@@ -1445,7 +1453,7 @@ class MessageManager(object, metaclass=Singleton):
             NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, account=account))
             file = File(document['filename'], document.get('filesize'), contact, file_hash, message['message_id'], ISOTimestamp(until),
                         document.get('url'), account=account, protocol='sylk')
-            NotificationCenter().post_notification('BlinkSessionDidShareFile', sender=session, data=NotificationData(file=file, direction=message['direction']))
+            NotificationCenter().post_notification('BlinkSessionDidShareFile', sender=session, data=NotificationData(file=file, direction=message['direction'], history=True))
         return 'files'
 
     def _journal_text(self, account, message, content_type, first_sync, contacts):
@@ -1886,6 +1894,8 @@ class MessageManager(object, metaclass=Singleton):
                 return f'{user}@{host}'
             if x_replicated_message is not Null and message_id in self._own_message_ids:
                 peer, what = aor(to_header.uri), 'Own message replicated back by the server, ignored:'
+            elif x_replicated_message is not Null and message_id in self._own_upload_ids:
+                peer, what = aor(to_header.uri), 'Own upload confirmed by the server:'
             elif x_replicated_message is not Null:
                 peer, what = aor(to_header.uri), 'Outgoing (sent from another device)'
             else:
@@ -2187,6 +2197,14 @@ class MessageManager(object, metaclass=Singleton):
                                         last_active=document.last_active.value if document.last_active is not None else None,
                                         sender=sender)
                 notification_center.post_notification('BlinkGotComposingIndication', sender=blink_session, data=data)
+            return
+
+        if x_replicated_message is not Null and message_id in self._own_upload_ids and content_type.lower() in FILE_TRANSFER_CONTENT_TYPES:
+            # the server's message for a file this device uploaded: it completes the local copy
+            # (its URL and expiry), it is not a new message
+            notification_center.post_notification('BlinkGotHistoryMessage', sender=account,
+                                                  data=NotificationData(remote_uri=contact.uri.uri, message=message, state='accepted',
+                                                                        encryption='OpenPGP' if body and '.asc' in body else None))
             return
 
         if content_type.lower() == FTHTTPDocument.content_type:

@@ -2023,6 +2023,72 @@ class MessageHistory(object, metaclass=Singleton):
         (_own_self_transfer)."""
         cls._add_own_file(path, transfer_id, key, account, uri, display_name, timestamp, 'image/png', {}, 'Screenshot')
 
+    @classmethod
+    @run_in_thread('db')
+    def add_own_upload(cls, transfer_id, key, account, uri, display_name, name, size, filetype, timestamp):
+        """A file this device starts sending over HTTP, filed at once as an outgoing message, as a
+        text is when it is sent: the conversation gets its time and moves up in the contact list.
+        The server's message for it, which comes back once the file is uploaded, completes this
+        row (_confirm_own_upload) instead of being stored again."""
+        receiver = str(uri).replace('sip:', '').replace('sips:', '')
+        envelope = {'filename': name, 'filesize': size, 'filetype': filetype, 'transfer_id': transfer_id,
+                    'sender': {'uri': str(account.id)}, 'receiver': {'uri': receiver}}
+        content = json.dumps(envelope)
+        fields = cls._content_fields(FILE_TRANSFER_CONTENT_TYPE, content)
+        try:
+            Message(remote_uri=key,
+                    display_name=display_name or '',
+                    uri=f'sip:{account.id}',
+                    content=content,
+                    content_type=FILE_TRANSFER_CONTENT_TYPE,
+                    message_id=transfer_id,
+                    account_id=str(account.id),
+                    direction='outgoing',
+                    timestamp=timestamp,
+                    decrypted='0',
+                    decryption_error='',
+                    disposition='',
+                    state='pending',
+                    read=1,
+                    **fields)
+        except dberrors.DuplicateEntryError:
+            return      # a retry of the same transfer
+        except Exception as e:
+            ActivityLog().error(f'[db] Storing the local copy of the upload {transfer_id} ({name}) failed: {e!r}')
+            return
+        ActivityLog().info(f'[db] Upload of {name} to {key} stored as message {transfer_id}, to be confirmed by the server')
+        NotificationCenter().post_notification('BlinkMessageHistoryMessageDidStore', sender=account,
+                                               data=NotificationData(remote_uri=key, state='pending', direction='outgoing'))
+
+    @classmethod
+    def _confirm_own_upload(cls, account, remote_uri, message, state, fields):
+        """The server's message for a file this device uploaded, already filed as its local copy
+        (add_own_upload, no URL yet): the copy takes the server's body (URL, expiry, the name
+        it was stored under). True when it was one. In the db thread."""
+        if message.direction != 'outgoing' or str(message.content_type).lower() not in FILE_TRANSFER_CONTENT_TYPES:
+            return False
+        try:
+            rows = list(Message.selectBy(message_id=message.id, account_id=str(account.id), remote_uri=remote_uri))
+        except Exception:
+            return False
+        if not rows:
+            return False
+        row = rows[0]
+        if row.direction != 'outgoing' or row.content_type != FILE_TRANSFER_CONTENT_TYPE or (file_transfer_envelope(row.content) or {}).get('url'):
+            return False        # not a local copy, or already completed
+        row.content = message.content
+        row.content_type = message.content_type
+        if fields.get('category'):
+            row.category = fields['category']
+        if fields.get('encryption_type'):
+            row.encryption_type = fields['encryption_type']
+        if row.state in ('pending', 'failed-local') and state:
+            row.state = state
+        ActivityLog().info(f'[db] Upload {message.id} to {remote_uri} confirmed by the server')
+        NotificationCenter().post_notification('BlinkMessageHistoryMessageDidStore', sender=account,
+                                               data=NotificationData(remote_uri=remote_uri, state=row.state, direction='outgoing'))
+        return True
+
     @staticmethod
     def _own_self_transfer(account, message):
         """Whether message is the server's copy of a file this device uploaded to its own account
@@ -2194,7 +2260,7 @@ class MessageHistory(object, metaclass=Singleton):
                     disposition=str(message.disposition),
                     **optional_fields)
         except dberrors.DuplicateEntryError:
-            pass
+            cls._confirm_own_upload(account, remote_uri, message, state, optional_fields)
         else:
             cls._apply_pending_removal(message.id)
             if message.content_type != METADATA_CONTENT_TYPE:

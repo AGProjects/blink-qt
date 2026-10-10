@@ -91,6 +91,8 @@ class MessageNotifier(object):
     def _NH_BlinkSessionDidShareFile(self, notification):
         if getattr(notification.data, 'direction', None) != 'incoming':
             return
+        if getattr(notification.data, 'history', False):
+            return      # a file of a conversation loaded from history (or the journal): not new
         self._notify(notification.sender, _file_preview(notification.data.file))
 
     def _NH_BlinkMessagePaneDidReadConversation(self, notification):

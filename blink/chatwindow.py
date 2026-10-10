@@ -2599,7 +2599,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if from_history:
                     NotificationCenter().post_notification('BlinkSessionDidShareFile',
                                                            sender=blink_session,
-                                                           data=NotificationData(file=file, direction=message.direction))
+                                                           data=NotificationData(file=file, direction=message.direction, history=True))
                 return '''<a href='%s#%s' style='text-decoration: none !important'><div style="display: flex;">
                             <div>%s</div>
                                 <div style="display: flex; align-items: center;">
@@ -2649,7 +2649,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         self.fetch_after_load.append(queue_item)
                     NotificationCenter().post_notification('BlinkSessionDidShareFile',
                                                            sender=blink_session,
-                                                           data=NotificationData(file=file, direction=message.direction))
+                                                           data=NotificationData(file=file, direction=message.direction, history=True))
                     return content
 
                 if hash and file.protocol == 'msrp':
@@ -2675,7 +2675,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if from_history:
                 NotificationCenter().post_notification('BlinkSessionDidShareFile',
                                                        sender=blink_session,
-                                                       data=NotificationData(file=file, direction=message.direction))
+                                                       data=NotificationData(file=file, direction=message.direction, history=True))
             return content
 
     def _NH_BlinkGotMessage(self, notification):
