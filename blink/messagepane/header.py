@@ -3,9 +3,9 @@
 Avatar (the contact's photo, else initials on a colour of their own), name,
 info line (is typing..., else the address the conversation is on), the lock
 with what is known about encryption (A− and A+ before it make the text of the
-transcript and the composer smaller or larger), the calendar (years, months and days
+transcript and the composer smaller or larger, as one segmented control), the calendar (years, months and days
 with how many messages each has; choosing a day jumps there) and the audio and
-video call buttons.
+video call buttons (one segmented control).
 Calls start from the conversation's account: the one its newest message was
 on, else the default one (a Bonjour neighbour: the Bonjour account).
 """
@@ -29,6 +29,7 @@ from blink.resources import IconManager, Resources, themed_icon
 from blink.util import translate
 from blink.widgets.color import follow_theme, secondary_text_color
 from blink.widgets.labels import ElidedLabel
+from blink.widgets.style import make_segmented
 
 
 __all__ = ['ConversationHeader', 'contact_photo', 'draw_avatar']
@@ -235,8 +236,22 @@ class ConversationHeader(QWidget):
             player = AudioPlayer.instance()
             self.stop_audio_button.clicked.connect(player.stop)
             player.changed.connect(lambda *args: self.stop_audio_button.setVisible(player.message_id is not None))
-        for button in (self.stop_audio_button, *self.font_buttons, self.lock_button, self.calendar_button, self.location_button, self.audio_button, self.video_button):
+        # A− A+ and audio / video each as one segmented control (blink.widgets.style)
+        make_segmented('font', *self.font_buttons)
+        make_segmented('call', self.audio_button, self.video_button)
+        font_group = QHBoxLayout()
+        font_group.setSpacing(0)
+        for button in self.font_buttons:
+            font_group.addWidget(button)
+        call_group = QHBoxLayout()
+        call_group.setSpacing(0)
+        call_group.addWidget(self.audio_button)
+        call_group.addWidget(self.video_button)
+        row.addWidget(self.stop_audio_button)
+        row.addLayout(font_group)
+        for button in (self.lock_button, self.calendar_button, self.location_button):
             row.addWidget(button)
+        row.addLayout(call_group)
 
         self.apply_theme()
         follow_theme(self)
