@@ -540,6 +540,11 @@ class Blink(QApplication, metaclass=QSingleton):
         except Exception as e:
             ActivityLog().error('Cannot update the video settings: %s' % e)
         self.ip_address_monitor.start()
+        try:
+            from blink.desktop_dnd import DesktopDoNotDisturb
+            DesktopDoNotDisturb().start()       # the desktop's Do Not Disturb turns Silent on and off
+        except Exception as e:
+            ActivityLog().error('Cannot follow the desktop Do Not Disturb: %s' % e)
         self.main_window.show()
         accounts = AccountManager().get_accounts()
         if not accounts or (self.first_run and accounts == [BonjourAccount()]):
@@ -554,6 +559,8 @@ class Blink(QApplication, metaclass=QSingleton):
     def _NH_SIPApplicationWillEnd(self, notification):
         ActivityLog().info('Stopping Blink')
         self.ip_address_monitor.stop()
+        from blink.desktop_dnd import DesktopDoNotDisturb
+        DesktopDoNotDisturb().stop()
 
     def _NH_SIPAccountManagerWillStart(self, notification):
         if getattr(notification.data, 'bonjour_available', False):
