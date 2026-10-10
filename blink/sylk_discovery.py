@@ -88,12 +88,35 @@ def _show(value):
 
 
 def _txt_by_resolver(name):
-    import dns.resolver
-    resolver = dns.resolver.Resolver()
-    resolver.lifetime = dns_timeout
-    resolve = getattr(resolver, 'resolve', None) or resolver.query     # dnspython 2 / 1
-    answers = resolve(name, 'TXT')
-    return [b''.join(record.strings).decode('utf-8', 'replace') for record in answers]
+    """The TXT records of name, by the system's name servers.
+
+    sipsimple makes dnspython green (eventlib sockets, sipsimple.lookup), so a query
+    from an ordinary thread fails ("TwistedHub hub can only be instantiated once"):
+    it is made in a green thread, with sipsimple's DNSResolver (the name servers
+    sipsimple uses), and waited for here."""
+    done = threading.Event()
+    outcome = {}
+
+    def query():
+        try:
+            from sipsimple.lookup import DNSResolver
+            resolver = DNSResolver()
+            resolver.timeout = 3
+            resolver.lifetime = dns_timeout
+            answers = resolver.resolve(name, 'TXT')
+            outcome['records'] = [b''.join(record.strings).decode('utf-8', 'replace') for record in answers]
+        except Exception as e:
+            outcome['error'] = e
+        finally:
+            done.set()
+
+    from sipsimple.threading.green import call_in_green_thread
+    call_in_green_thread(query)
+    if not done.wait(dns_timeout + 2):
+        raise TimeoutError(f'no answer in {dns_timeout + 2} seconds')
+    if 'error' in outcome:
+        raise outcome['error']
+    return outcome['records']
 
 
 def _txt_by_https(name):
