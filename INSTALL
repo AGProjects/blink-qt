@@ -20,7 +20,8 @@ Install the runtime dependencies:
  * python3-pyqt6
  * python3-pyqt6.qtmultimedia
  * python3-pyqt6.qtsvg
- * qt6-svg-plugins (Debian 13/trixie and later; on older releases the plugin is part of libqt6svg6)
+ * qt6-svg-plugins (the SVG image plugin; up to Qt 6.6, as in Debian 12/bookworm, it is part of libqt6svg6.
+   Without it Qt cannot read the SVG icons: an installed libqt6svg6 6.7 or later is not enough)
  * python3-pyqt6.qtwebchannel
  * python3-pyqt6.qtwebengine
  * pyqt6-dev-tools
