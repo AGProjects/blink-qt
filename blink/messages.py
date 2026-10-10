@@ -743,7 +743,7 @@ class MessageManager(object, metaclass=Singleton):
         self._incoming_encrypted_message_queue = deque()
         self._sync_queue = deque()
         self._token_requested = {}      # account id -> monotonic time of the last API token request
-        self._token_not_asked = set()   # account ids whose domain does not run SylkServer (logged once)
+        self._token_not_asked = set()   # account ids whose domain does not run SylkServer (asked if it turns out to)
         self._token_retry_pending = set()
         self._syncing = set()           # account ids with a history download in progress
         self.pgp_requests = RequestList()
@@ -863,9 +863,7 @@ class MessageManager(object, metaclass=Singleton):
         if not has_sylkserver(account):
             # the token comes from SylkServer: not asked of a server that is not one (asked
             # when its configuration is found, SylkServerConfigurationDidChange)
-            if account.id not in self._token_not_asked:
-                self._token_not_asked.add(account.id)
-                ActivityLog().info(f'[journal] Not requesting an API token for account {account.id} ({reason}): {account.id.domain} does not run SylkServer')
+            self._token_not_asked.add(account.id)       # silently: most domains do not run SylkServer
             return
         self._token_not_asked.discard(account.id)
         now = time.monotonic()

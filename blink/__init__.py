@@ -536,21 +536,21 @@ class Blink(QApplication, metaclass=QSingleton):
         registrar_changed = self.registrar_addresses.get(account.id) != address
         contact_changed = self.contact_addresses.get(account.id) != contact
         if registrar_changed and contact_changed:
-            ActivityLog().info('Account %s registered contact %s at %s for %d seconds' % (account.id, contact, address, data.expires))
+            ActivityLog().info('[register] Account %s registered contact %s at %s for %d seconds' % (account.id, contact, address, data.expires))
         elif contact_changed:
-            ActivityLog().debug('Account %s changed contact to %s' % (account.id, contact))
+            ActivityLog().debug('[register] Account %s changed contact to %s' % (account.id, contact))
         elif registrar_changed:
-            ActivityLog().debug('Account %s changed registrar to %s' % (account.id, address))
+            ActivityLog().debug('[register] Account %s changed registrar to %s' % (account.id, address))
         self.registrar_addresses[account.id] = address
         self.contact_addresses[account.id] = contact
         if account.contact.public_gruu is not None:
-            ActivityLog().debug('Account %s has public SIP GRUU %s' % (account.id, account.contact.public_gruu))
+            ActivityLog().debug('[register] Account %s has public SIP GRUU %s' % (account.id, account.contact.public_gruu))
 
     def _NH_SIPAccountRegistrationDidFail(self, notification):
         account = notification.sender
         error = notification.data.error
         error = error.decode(errors='replace') if isinstance(error, bytes) else str(error)
-        ActivityLog().warning('Account %s failed to register: %s' % (account.id, error))
+        ActivityLog().warning('[register] Account %s failed to register: %s' % (account.id, error))
         self._log_registrar_routes(account)
         if 'ECERTVERIF' in error or 'certificate' in error.lower():
             self._diagnose_tls(account)
@@ -563,7 +563,7 @@ class Blink(QApplication, metaclass=QSingleton):
         if registrar is None or code is None or 200 <= code < 300:
             return
         reason = data.reason.decode(errors='replace') if isinstance(getattr(data, 'reason', None), bytes) else getattr(data, 'reason', '')
-        ActivityLog().warning('Account %s registrar %s:%s;transport=%s answered %s %s' % (notification.sender.id, registrar.address, registrar.port, registrar.transport, code, reason))
+        ActivityLog().warning('[register] Account %s registrar %s:%s;transport=%s answered %s %s' % (notification.sender.id, registrar.address, registrar.port, registrar.transport, code, reason))
 
     def _log_registrar_routes(self, account):
         """Log where the registration goes: the same lookup the SDK makes (outbound proxy, or the
@@ -593,13 +593,13 @@ class Blink(QApplication, metaclass=QSingleton):
         if last_routes == routes and now - last_time < 600:
             return  # same destinations as the last failure, said once every 10 minutes
         self._registrar_logged[account.id] = (now, routes)
-        ActivityLog().warning('Account %s registers through %s: %s (tried in this order)' % (account.id, source, routes or 'no destinations'))
+        ActivityLog().warning('[register] Account %s registers through %s: %s (tried in this order)' % (account.id, source, routes or 'no destinations'))
 
     def _NH_DNSLookupDidFail(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
         account, source = self._registrar_lookups.pop(notification.sender, (None, None))
         if account is not None:
-            ActivityLog().warning('Account %s cannot find its registrar (%s): %s' % (account.id, source, notification.data.error))
+            ActivityLog().warning('[register] Account %s cannot find its registrar (%s): %s' % (account.id, source, notification.data.error))
 
     tls_diagnosis_interval = 300  # seconds between certificate checks of one account
 
@@ -748,7 +748,7 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
         account = notification.sender
-        ActivityLog().info('Account %s was unregistered' % account.id)
+        ActivityLog().info('[register] Account %s was unregistered' % account.id)
         self.registrar_addresses.pop(account.id, None)
         self.contact_addresses.pop(account.id, None)
 

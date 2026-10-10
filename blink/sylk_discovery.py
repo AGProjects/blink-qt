@@ -13,8 +13,8 @@ per domain, <data>/sylkserver/<domain>/configuration.json, and loaded at start,
 so the settings are known before the network is, and kept when a later lookup or
 download fails.
 
-The settings are shown in the activity log: in full the first time, then what
-changed. What the server says about its infrastructure overwrites what the user
+The activity log says where the settings came from and which keys changed, not
+their values (they are in the cache). What the server says about its infrastructure overwrites what the user
 set on the domain's accounts: conference.sipBridge becomes the Conference server
 (mobile dials and recognises rooms on it), the PSTN rule replacePlus the IDD
 prefix (what replaces the + of a number dialled). SylkServerConfigurationDidChange is posted with them
@@ -48,7 +48,6 @@ old_cache_name = 'sylkserver.json'          # the first version: every domain in
 refresh_interval = 24 * 3600        # seconds
 dns_timeout = 6                     # seconds, as mobile
 download_timeout = 8                # seconds, as mobile
-value_length = 400                  # characters of a value shown in the log
 
 
 def has_sylkserver(account):
@@ -80,11 +79,6 @@ def server_http_url(account):
     if server.endswith('/ws'):
         server = server[:-3]
     return server
-
-
-def _show(value):
-    text = json.dumps(value, sort_keys=True, ensure_ascii=False)
-    return text if len(text) <= value_length else text[:value_length - 1] + '…'
 
 
 def _txt_by_resolver(name):
@@ -213,8 +207,6 @@ class SylkServerDiscovery(object, metaclass=Singleton):
         for domain, entry in sorted(self.configurations.items()):
             configuration = entry['configuration']
             activity.info(f"[sylkserver] Cached configuration of {domain} (from {entry.get('configurationUrl')}, fetched {entry.get('fetched')}): {len(configuration)} keys")
-            for key in sorted(configuration):
-                activity.info(f'[sylkserver]   {key} = {_show(configuration[key])}')
 
     def _save(self, domain, entry):
         if not self._valid_domain(domain):
@@ -382,8 +374,6 @@ class SylkServerDiscovery(object, metaclass=Singleton):
         activity = ActivityLog()
         if previous is None:
             activity.info(f'[sylkserver] Configuration of {domain} (from {url}): {len(configuration)} keys')
-            for key in sorted(configuration):
-                activity.info(f'[sylkserver]   {key} = {_show(configuration[key])}')
             return
         added = sorted(set(configuration) - set(previous))
         removed = sorted(set(previous) - set(configuration))
@@ -391,10 +381,6 @@ class SylkServerDiscovery(object, metaclass=Singleton):
         if not (added or removed or changed):
             activity.info(f'[sylkserver] Configuration of {domain} unchanged ({len(configuration)} keys)')
             return
-        activity.info(f'[sylkserver] Configuration of {domain} changed: {len(added)} added, {len(removed)} removed, {len(changed)} changed')
-        for key in added:
-            activity.info(f'[sylkserver]   added {key} = {_show(configuration[key])}')
-        for key in removed:
-            activity.info(f'[sylkserver]   removed {key} (was {_show(previous[key])})')
-        for key in changed:
-            activity.info(f'[sylkserver]   changed {key}: {_show(previous[key])} -> {_show(configuration[key])}')
+        # the keys only, not their values
+        parts = [f"{what} {', '.join(keys)}" for what, keys in (('added', added), ('removed', removed), ('changed', changed)) if keys]
+        activity.info(f"[sylkserver] Configuration of {domain} changed: {'; '.join(parts)}")
