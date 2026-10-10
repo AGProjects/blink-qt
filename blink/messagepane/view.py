@@ -190,7 +190,12 @@ class TranscriptView(QListView):
                 return
         index = self.indexAt(position)
         on_quote = index.isValid() and self.bubble_delegate.quote_at(index, self.visualRect(index), position) is not None
-        if self._link_at(position) or self._on_actions_button(position) or on_quote or self._on_clickable_bubble(index, position):
+        on_cancel = index.isValid() and self.bubble_delegate.cancel_at(index, self.visualRect(index), position)
+        if on_cancel:
+            self.viewport().setToolTip(translate('message_pane', 'Cancel sending'))
+        elif self.viewport().toolTip():
+            self.viewport().setToolTip('')
+        if on_cancel or self._link_at(position) or self._on_actions_button(position) or on_quote or self._on_clickable_bubble(index, position):
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         else:
             self.viewport().unsetCursor()
@@ -207,6 +212,10 @@ class TranscriptView(QListView):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             position = event.position().toPoint()
+            index = self.indexAt(position)
+            if index.isValid() and self.bubble_delegate.cancel_at(index, self.visualRect(index), position):
+                self.actionRequested.emit('discard_upload', index.data(Qt.ItemDataRole.UserRole))     # the Cancel button of an upload
+                return
             if self._on_actions_button(position):
                 index = self.indexAt(position)
                 rect = self.visualRect(index)

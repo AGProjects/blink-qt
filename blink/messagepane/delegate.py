@@ -42,7 +42,7 @@ import os
 from datetime import date, timedelta
 
 from PyQt6.QtCore import Qt, QLocale, QPointF, QRectF, QSize, QSizeF
-from PyQt6.QtGui import QAbstractTextDocumentLayout, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPalette, QTextCharFormat, QTextCursor, QTextDocument, QTextOption
+from PyQt6.QtGui import QAbstractTextDocumentLayout, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPalette, QTextCharFormat, QTextCursor, QTextDocument, QTextOption, QPen
 from PyQt6.QtWidgets import QStyle, QStyledItemDelegate
 
 from blink.contact_mangler import mangled_name
@@ -144,7 +144,8 @@ class BubbleDelegate(QStyledItemDelegate):
             store = LocationStore.instance()
             location_share = store.shown(item)
             location_version = (store.version(item.id), location_share is None)
-        key = (image_path, video_state, location_version, item.caption, progress, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
+        upload_key = (item.upload.get('stage'), None if item.upload.get('progress') is None else int(item.upload['progress'] * 100)) if item.upload is not None else None
+        key = (image_path, video_state, location_version, item.caption, progress, upload_key, item.id, item.state, item.content_type, len(item.content or ''), width, font.key(), run_start, day_text, search_text,
                (reply['id'], reply['text']) if reply else None)
         layout = self._cache.get(key)
         if layout is not None:
@@ -928,6 +929,8 @@ class BubbleDelegate(QStyledItemDelegate):
         bubble = self.bubble_rect(layout, item, rect)
         if layout.day_text:
             self._paint_divider(painter, rect, layout.day_text, small, secondary)
+        if self._cancellable(item):
+            self._paint_cancel_button(painter, self.cancel_rect(layout, item, bubble))
         context = QAbstractTextDocumentLayout.PaintContext()
         if layout.kind == 'note':
             context.palette = self._text_palette(palette, secondary)
@@ -1044,6 +1047,43 @@ class BubbleDelegate(QStyledItemDelegate):
             return False
         return self.actions_rect(layout, item, self.bubble_rect(layout, item, QRectF(rect))).contains(QPointF(position))
 
+    @staticmethod
+    def _cancellable(item):
+        """A file being encrypted or uploaded: it has a Cancel button, as on mobile."""
+        return item.upload is not None and item.upload['state'] == 'uploading'
+
+    def cancel_rect(self, layout, item, bubble):
+        """The Cancel button of an upload: beside the bubble, under where the actions button shows."""
+        size = self.actions_size
+        left = bubble.left() - 6 - size if item.outgoing else bubble.right() + 6
+        return QRectF(left, bubble.top() + 2 + size + 6, size, size)
+
+    def cancel_at(self, index, rect, position):
+        """Whether a point of the view is on the Cancel button of an upload in this row."""
+        item = self._item(index)
+        if item is None or not self._cancellable(item):
+            return False
+        layout = self.layout(index, rect.width(), self.parent().font())
+        return self.cancel_rect(layout, item, self.bubble_rect(layout, item, QRectF(rect))).contains(QPointF(position))
+
+    def _paint_cancel_button(self, painter, rect):
+        painter.save()
+        red = QColor('#ff7b72') if is_dark_theme() else QColor('#c62828')
+        background = QColor(red)
+        background.setAlpha(40)
+        path = QPainterPath()
+        path.addEllipse(rect)
+        painter.fillPath(path, background)
+        pen = QPen(red)
+        pen.setWidthF(1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        inset = rect.width() * 0.32
+        cross = rect.adjusted(inset, inset, -inset, -inset)
+        painter.drawLine(cross.topLeft(), cross.bottomRight())
+        painter.drawLine(cross.topRight(), cross.bottomLeft())
+        painter.restore()
+
     def _paint_actions_button(self, painter, rect, colour):
         painter.save()
         background = QColor(0, 0, 0, 40) if not is_dark_theme() else QColor(255, 255, 255, 40)
@@ -1075,10 +1115,16 @@ class BubbleDelegate(QStyledItemDelegate):
 
 
 def upload_note(upload):
-    """What a file being sent says under its name: uploading, or why it failed."""
+    """What a file being sent says under its name: encrypting, uploading and how far (as mobile
+    shows it), or why it failed."""
     if upload['state'] == 'failed':
         return '⚠ ' + translate('message_pane', 'Not sent: %s (click to retry)') % (upload['reason'] or translate('message_pane', 'failed'))
-    return translate('message_pane', 'Uploading…')
+    if upload.get('stage') == 'encrypting':
+        return translate('message_pane', 'Encrypting…')
+    progress = upload.get('progress')
+    if progress is None:
+        return translate('message_pane', 'Uploading…')
+    return translate('message_pane', 'Uploading %d%%') % int(progress * 100)
 
 
 def translate(context, text):

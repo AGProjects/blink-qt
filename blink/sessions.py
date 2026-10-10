@@ -4502,6 +4502,34 @@ class FileSizeFormatter(object):
 
 
 @implementer(IObserver)
+
+class _UploadBody(object):
+    """The body of an upload, read by requests as it sends it: reports the progress
+    (BlinkFileTransferProgress, at most once per percent) and stops the POST when the
+    transfer is cancelled."""
+    def __init__(self, data, transfer):
+        self.data, self.transfer = data, transfer
+        self.position = 0
+        self.reported = -1
+
+    def __len__(self):
+        return len(self.data)
+
+    def read(self, size=-1):
+        if getattr(self.transfer, '_upload_cancelled', False):
+            raise IOError('upload cancelled')
+        end = len(self.data) if size is None or size < 0 else min(len(self.data), self.position + size)
+        chunk = self.data[self.position:end]
+        self.position = end
+        total = len(self.data)
+        percent = int(self.position * 100 / total) if total else 100
+        if percent != self.reported:
+            self.reported = percent
+            NotificationCenter().post_notification('BlinkFileTransferProgress', sender=self.transfer,
+                                                   data=NotificationData(stage='uploading', bytes=self.position, total_bytes=total))
+        return chunk
+
+
 class BlinkFileTransfer(BlinkSessionBase):
 
     def __init__(self):
@@ -4644,6 +4672,7 @@ class BlinkFileTransfer(BlinkSessionBase):
 
             if message_stream.can_encrypt:
                 self.state = 'encrypting'
+                notification_center.post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(stage='encrypting', bytes=None, total_bytes=None))
                 notification_center.add_observer(self, name='PGPFileDidEncrypt')
                 message_stream.encrypt_file(filename, self)
 
@@ -4737,20 +4766,32 @@ class BlinkFileTransfer(BlinkSessionBase):
         if not token:
             ActivityLog().warning(f'[transfer] Uploading {name} without an API token: the server will refuse it')
         self.state = 'connected'
-        NotificationCenter().post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(bytes=0, total_bytes=size))
-        self._post_file(url, data, content_type, token, size, name)
+        self._upload_cancelled = False
+        NotificationCenter().post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(stage='uploading', bytes=0, total_bytes=size))
+        self._post_file(url, _UploadBody(data, self), content_type, token, size, name)
 
     @run_in_thread('file-transfer')
-    def _post_file(self, url, data, content_type, token, size, name):
-        headers = {'Content-Type': content_type}
+    def _post_file(self, url, body, content_type, token, size, name):
+        headers = {'Content-Type': content_type, 'Content-Length': str(size)}
         if token:
             headers['Authorization'] = f'Apikey {token}'
         try:
-            response = requests.post(url, data=data, headers=headers, timeout=(15, 600))
-        except requests.RequestException as e:
-            self._upload_finished(None, str(e), size, name)
+            response = requests.post(url, data=body, headers=headers, timeout=(15, 600))
+        except (requests.RequestException, IOError) as e:
+            self._upload_finished(None, 'cancelled' if self._upload_cancelled else str(e), size, name)
         else:
             self._upload_finished(response.status_code, response.reason, size, name)
+
+    @run_in_thread('file-transfer')
+    def _cancel_upload_on_server(self):
+        """Tell the server to drop the part it has (as mobile does: <base>/cancel/<transfer id>)."""
+        url = '%s/cancel/%s' % (str(self.upload_base).rstrip('/'), self.id)
+        try:
+            response = requests.get(url, timeout=(10, 20))
+        except requests.RequestException as e:
+            ActivityLog().info(f'[transfer] Cannot tell the server the upload {self.id} is cancelled: {e}')
+        else:
+            ActivityLog().info(f'[transfer] Upload {self.id} cancelled on the server: {(response.text or "").strip() or response.status_code}')
 
     @run_in_gui_thread
     def _upload_finished(self, status, detail, size, name):
@@ -4774,11 +4815,15 @@ class BlinkFileTransfer(BlinkSessionBase):
         assert self.state is not None
         if self.state in ('ending', 'ended'):
             return
+        uploading = getattr(self, 'route', None) == 'http' and self.state in ('connecting', 'connected')
         self.state = 'ending'
         if self.sip_session is not None:
             self.sip_session.end()
         else:
             assert self.direction == 'outgoing'
+            if uploading:
+                self._upload_cancelled = True       # the body stops being read: the POST is aborted
+                self._cancel_upload_on_server()
             self._terminate(failure_reason='Cancelled')
 
     def _get_state(self):

@@ -5,7 +5,9 @@ file transfer service; the server sends the file transfer message on, to the
 other party and back to us, and history files it then. Until then the
 conversation shows a bubble of its own for the file (MessageItem.upload): the
 clock mark while uploading, ✓ once uploaded, ⚠ and the reason when it failed
-(a click retries it). The bubble goes, once the file is uploaded, when a message
+(a click retries it); while encrypting and uploading it says so, with the percentage
+uploaded, and its Cancel button (or Cancel Sending) cancels it, also on the server,
+removing the copy it was sent from. The bubble goes, once the file is uploaded, when a message
 of the same transfer is in history (settle). The File Transfers window keeps MSRP
 transfers only.
 
@@ -54,7 +56,7 @@ class Uploads(QObject):
         super().__init__()
         self.uploads = {}       # transfer id: upload
         notification_center = NotificationCenter()
-        for name in ('BlinkFileTransferNewOutgoing', 'BlinkFileTransferWillRetry', 'BlinkFileTransferDidEnd'):
+        for name in ('BlinkFileTransferNewOutgoing', 'BlinkFileTransferWillRetry', 'BlinkFileTransferDidEnd', 'BlinkFileTransferProgress'):
             notification_center.add_observer(self, name=name)
 
     def for_key(self, key):
@@ -77,10 +79,23 @@ class Uploads(QObject):
             return
         if upload.state == 'uploading':
             upload.transfer.end()
+        self._remove_copy(upload)
         ActivityLog().info(f'[Message with {upload.key}] Upload of {upload.name} ({transfer_id}) ' + ('cancelled' if upload.state == 'uploading' else 'removed'))
         from blink.history import MessageHistory
         MessageHistory().update(transfer_id, 'deleted')     # the local copy goes with it
         self.changed.emit(upload.key, transfer_id)
+
+    @staticmethod
+    def _remove_copy(upload):
+        """The copy the file was sent from (BlinkFileTransfer._own_copy) goes with the message: only
+        the folder of this transfer in Blink's storage, never a file elsewhere."""
+        import os
+        import shutil
+        from blink.resources import ApplicationData
+        folder = os.path.realpath(os.path.dirname(upload.path or ''))
+        root = os.path.realpath(ApplicationData.get('file_transfers'))
+        if os.path.basename(folder) == upload.id and folder.startswith(root + os.sep) and os.path.isdir(folder):
+            shutil.rmtree(folder, ignore_errors=True)
 
     def settle(self, key, transfer_ids):
         """Forget the uploads of key that are uploaded and whose message is in history (one of
@@ -110,7 +125,8 @@ class Uploads(QObject):
             id=transfer.id, key=key, transfer=transfer, path=path, name=os.path.basename(path),
             size=transfer.file_selector.size or (os.path.getsize(path) if os.path.exists(path) else None),
             type=transfer.file_selector.type or mimetypes.guess_type(path)[0] or 'application/octet-stream',
-            account_id=str(transfer.account.id), timestamp=datetime.now(timezone.utc), state='uploading', reason=None)
+            account_id=str(transfer.account.id), timestamp=datetime.now(timezone.utc), state='uploading', reason=None,
+            stage=None, progress=None)     # stage: encrypting or uploading; progress: the fraction uploaded
         upload = self.uploads[transfer.id]
         # the local copy, as for any message sent (confirmed by the server's message later)
         from blink.history import MessageHistory
@@ -121,6 +137,20 @@ class Uploads(QObject):
                                         str(transfer.contact_uri.uri), getattr(contact, 'name', '') or '', upload.name, upload.size, upload.type,
                                         upload.timestamp.replace(tzinfo=None))
         self.changed.emit(key, transfer.id)
+
+    def _NH_BlinkFileTransferProgress(self, notification):
+        """Encrypting, then the upload's progress, as mobile shows them."""
+        upload = self.uploads.get(getattr(notification.sender, 'id', None))
+        if upload is None or upload.transfer is not notification.sender or upload.state != 'uploading':
+            return
+        data = notification.data
+        stage = getattr(data, 'stage', None) or 'uploading'
+        total = getattr(data, 'total_bytes', None)
+        progress = data.bytes / total if total and getattr(data, 'bytes', None) is not None else None
+        if (stage, None if progress is None else int(progress * 100)) == (upload.stage, None if upload.progress is None else int(upload.progress * 100)):
+            return
+        upload.stage, upload.progress = stage, progress
+        self.changed.emit(upload.key, upload.id)
 
     def _NH_BlinkFileTransferWillRetry(self, notification):
         upload = self.uploads.get(getattr(notification.sender, 'id', None))

@@ -106,7 +106,8 @@ class MessageItem(object):
         item.reply = None
         item.caption = ''
         item.peaks = None
-        item.upload = {'path': upload.path, 'state': upload.state, 'reason': upload.reason}
+        item.upload = {'path': upload.path, 'state': upload.state, 'reason': upload.reason,
+                       'stage': getattr(upload, 'stage', None), 'progress': getattr(upload, 'progress', None)}
         return item
 
     @property
