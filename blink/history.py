@@ -207,6 +207,8 @@ class HistoryManager(object, metaclass=Singleton):
     def _NH_SIPSessionDidFail(self, notification):
         if notification.sender.account is BonjourAccount():
             return
+        if getattr(notification.sender, 'blink_blocked', False):
+            return          # a call from a blocked party, refused: no missed call
         session = notification.sender
         entry = HistoryEntry.from_session(session)
 

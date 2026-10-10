@@ -48,7 +48,7 @@ from sipsimple.account.bonjour import BonjourServiceDescription
 from sipsimple.configuration import ConfigurationManager, DefaultValue, Setting, SettingsState, SettingsObjectMeta, ObjectNotFoundError
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import BaseSIPURI, SIPURI
-from sipsimple.threading import run_in_thread, run_in_twisted_thread
+from sipsimple.threading import call_in_thread, run_in_thread, run_in_twisted_thread
 from sipsimple.threading.green import Command
 
 from blink.configuration.datatypes import IconDescriptor, FileURL
@@ -153,6 +153,33 @@ def is_blocked_contact(contact):
     return group is not None and getattr(contact, 'id', None) in {member.id for member in group.contacts}
 
 
+def is_blocked_address(uri, account=None):
+    """Whether calls and messages from this address are refused: one of the addresses of a
+    contact in the Blocked group, compared as filed (canonical_uri: a number in any spelling
+    is its E.164), or a blocked bare domain (as Sylk Mobile blocks a domain). Never raises:
+    it decides whether a call rings."""
+    try:
+        group = blocked_group()
+        if group is None:
+            return False
+        members = list(group.contacts)
+        if not members:
+            return False
+        address = canonical_uri(uri if isinstance(uri, (str, bytes)) else str(getattr(uri, 'uri', uri)), account)
+        if not address:
+            return False
+        domain = address.partition('@')[2]
+        for contact in members:
+            for contact_uri in contact.uris:
+                blocked = canonical_uri(str(contact_uri.uri), account)
+                if blocked and (blocked == address or ('@' not in blocked and domain and blocked == domain)):
+                    return True
+        return False
+    except Exception as e:
+        ActivityLog().warning(f'[contacts] Cannot tell whether {uri} is blocked: {e!r}')
+        return False
+
+
 def blocked_contact_menu(menu, parent, contacts):
     """What a blocked contact offers, wherever it is shown: Unblock and Delete."""
     menu.addAction(translate('contact_list', 'Unblock'), lambda: unblock_contacts(blocked_group(), contacts))
@@ -189,10 +216,34 @@ def add_block_action(menu, contacts):
 
 
 def block_contacts(contacts):
-    """Put contacts in the Blocked group (made, as on macOS, if there is none): they cannot call or
-    write any more, on every device (the block is the membership). They stay in their other groups,
-    shown as blocked, so Unblock gives them back as they were."""
-    with addressbook_origin.reason('block'), addressbook.AddressbookManager.transaction():
+    """Move contacts to the Blocked group (made, as on macOS, if there is none), out of every
+    other group, as on macOS and mobile: their calls are refused and their messages dropped,
+    on every device (the block is the membership). Their presence policy becomes block too:
+    they no longer see whether one is available, and are not subscribed to. Unblock files them back into Tel and
+    Conference by their addresses and into Messages by their conversations; Calls and the
+    user's own groups do not get them back."""
+    in_one_xcap_update('block', _block_contacts, contacts)
+
+
+def in_one_xcap_update(why, function, *args):
+    """Run function (saves of contacts and groups) so that the server gets its changes in one
+    update. Group.save and Contact.save hand the XCAP operations to the file-io thread, while
+    AddressbookManager.transaction() opens and closes the XCAP transaction through the reactor:
+    from the GUI thread the transaction is closed before the operations arrive, each is sent
+    and reloaded on its own, and a reload between them (the contact saved, its groups not yet)
+    puts the contact back where it was for a few seconds. In the file-io thread the saves
+    run in order between the two ends of the transaction."""
+    def run():
+        try:
+            with addressbook_origin.reason(why), addressbook.AddressbookManager.transaction():
+                function(*args)
+        except Exception as e:
+            ActivityLog().exception(f'[contacts] {why} failed: {e!r}')
+    call_in_thread('file-io', run)
+
+
+def _block_contacts(contacts):
+    if True:
         group = blocked_group()
         if group is None:
             group = addressbook.Group(BLOCKED.reserved_ids[0])
@@ -200,24 +251,61 @@ def block_contacts(contacts):
             group.kind = BLOCKED.kind
             group.position = None
             ActivityLog().info(f"[contacts] Created group '{group.name}' (id={group.id}) with kind={BLOCKED.kind}")
+        other_groups = [other for other in addressbook.AddressbookManager().get_groups() if other.id != group.id]
         members = {member.id for member in group.contacts}
+        changed = set()
         for contact in contacts:
             if contact.id not in members:
                 group.contacts.add(contact)
-                ActivityLog().info(f'[contacts] Blocked {contact.name or contact.id}')
+            left = []
+            for other in other_groups:
+                if contact.id in {member.id for member in other.contacts}:
+                    other.contacts.remove(contact)
+                    changed.add(other.id)
+                    left.append(other.name)
+            if contact.presence.policy != 'block' or contact.presence.subscribe:
+                contact.presence.policy = 'block'
+                contact.presence.subscribe = False
+                contact.save()
+            ActivityLog().info(f'[contacts] Blocked {contact.name or contact.id}' + (f" (out of {', '.join(left)})" if left else '') + ', presence policy block')
         group.save()
+        for other in other_groups:
+            if other.id in changed:
+                other.save()
 
 
 def unblock_contacts(group, contacts):
     """Take contacts out of the Blocked group: they can call again (as on macOS and mobile, the
     block is the membership, replicated to the other devices)."""
+    in_one_xcap_update('unblock', _unblock_contacts, group, contacts)
+
+
+def _unblock_contacts(group, contacts):
     members = {member.id for member in group.contacts}
-    with addressbook_origin.reason('unblock'), addressbook.AddressbookManager.transaction():
+    if True:
         for contact in contacts:
             if contact.id in members:
                 group.contacts.remove(contact)
-                ActivityLog().info(f'[contacts] Unblocked {contact.name or contact.id}')
+                if contact.presence.policy == 'block':
+                    # as the contact editor's presence switch turned on: they see one's availability and one theirs
+                    contact.presence.policy = 'allow'
+                    contact.presence.subscribe = True
+                    contact.save()
+                ActivityLog().info(f'[contacts] Unblocked {contact.name or contact.id}, presence policy allow')
         group.save()
+    # back into Tel and Conference by its addresses, into Messages when it has a conversation
+    # (after the membership change above: a blocked contact is never filed)
+    call_in_gui_thread(_refile_unblocked)
+
+
+def _refile_unblocked():
+    try:
+        with AddressbookNotifier().quiet():
+            ContactRepair().file_into_kind_groups()
+        from blink.history import HistoryManager
+        HistoryManager().message_history.get_all_contacts()
+    except Exception as e:
+        ActivityLog().warning(f'[contacts] Filing unblocked contacts back failed: {e!r}')
 
 
 def is_deleted_contact(contact):
@@ -493,6 +581,8 @@ class CallsGroupFiler(object, metaclass=Singleton):
         party = self._session_party(session)
         if account is None or account is BonjourAccount() or party is None:
             return
+        if getattr(session, 'blink_blocked', False) or is_blocked_address(party, account):
+            return              # a blocked party stays in Blocked only
         try:
             self.file(party, session.remote_identity.display_name, account)
         except Exception as e:
@@ -548,6 +638,9 @@ class CallsGroupFiler(object, metaclass=Singleton):
             return None
         if is_bonjour_address(address):
             activity.info(f'[contacts] Not filing the call with {remote_uri}: a Bonjour neighbour is not written to the addressbook')
+            return None
+        if is_blocked_address(address, account):
+            activity.info(f'[contacts] Not filing the call with {address}: blocked')
             return None
         conference = is_conference_uri(address, account)
         e164 = pstn_e164(address, account)
@@ -729,6 +822,8 @@ class ContactRepair(object, metaclass=Singleton):
         account = AccountManager().default_account
         deleted = ContactTrash.deleted_group()
         in_trash = {member.id for member in deleted.contacts} if deleted is not None else set()
+        blocked = blocked_group()
+        in_trash |= {member.id for member in blocked.contacts} if blocked is not None else set()               # so does a blocked one
         contacts = [contact for contact in manager.get_contacts() if contact.id not in in_trash]      # a deleted contact stays out
 
         def addresses(contact):
@@ -879,6 +974,8 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         manager = addressbook.AddressbookManager()
         existing = list(manager.get_contacts())
         added, created, skipped = [], [], []
+        blocked = blocked_group()
+        blocked_ids = {member.id for member in blocked.contacts} if blocked is not None else set()
         with addressbook_origin.reason('messages'), addressbook.AddressbookManager.transaction():
             try:
                 group = manager.get_group(MESSAGES_GROUP_ID)
@@ -899,8 +996,11 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                 if ContactTrash.is_purging(key):
                     skipped.append(key)         # its contact was just deleted for good: its history is going too
                     continue
+                if is_blocked_address(key):
+                    skipped.append(key)         # a blocked party stays in Blocked only
+                    continue
                 contact = self._contact_for(key, display_name, existing, created)
-                if contact is None:
+                if contact is None or contact.id in blocked_ids:
                     skipped.append(key)
                     continue
                 if contact not in members:

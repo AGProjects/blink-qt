@@ -1783,6 +1783,12 @@ class MessageManager(object, metaclass=Singleton):
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
 
+        if x_replicated_message is Null and account is not BonjourAccount():
+            from blink.contacts import is_blocked_address
+            if is_blocked_address(sender.uri, account):
+                ActivityLog().info(f'[message] Dropped {content_type.lower()} message {message_id} from {sender.uri}: blocked')
+                return
+
         if x_replicated_message is not Null and message_id in self._own_message_ids:
             # the server replicates a message to all devices of the sender, this one included
             log.debug(f'Ignoring replicated copy of message {message_id} sent by this device')

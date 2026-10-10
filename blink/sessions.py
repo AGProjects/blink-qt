@@ -7848,6 +7848,13 @@ class SessionManager(object, metaclass=Singleton):
             session.reject(488)
             return
 
+        from blink.contacts import is_blocked_address
+        if is_blocked_address(session.remote_identity.uri, getattr(session, 'account', None)):
+            session.blink_blocked = True        # not filed in Calls, not in the call history
+            ActivityLog().info(f'[call] Rejected the call from {session.remote_identity.uri}: blocked')
+            session.reject(603)
+            return
+
         contact, contact_uri = URIUtils.find_contact(session.remote_identity.uri, display_name=session.remote_identity.display_name, exact=False)
 
         if filetransfer_streams and not (audio_streams or video_streams or chat_streams or screensharing_streams):
