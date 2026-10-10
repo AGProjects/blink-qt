@@ -14,9 +14,10 @@ so the settings are known before the network is, and kept when a later lookup or
 download fails.
 
 The settings are shown in the activity log: in full the first time, then what
-changed. conference.sipBridge, the domain's SIP conference bridge, becomes the
-Conference server of the domain's accounts (overwriting what the user set), as
-mobile dials and recognises rooms on it. SylkServerConfigurationDidChange is posted with them
+changed. What the server says about its infrastructure overwrites what the user
+set on the domain's accounts: conference.sipBridge becomes the Conference server
+(mobile dials and recognises rooms on it), the PSTN rule replacePlus the IDD
+prefix (what replaces the + of a number dialled). SylkServerConfigurationDidChange is posted with them
 (sender the discovery, data domain and configuration) for what will use them.
 """
 
@@ -38,7 +39,7 @@ from blink.resources import ApplicationData
 from blink.util import call_in_gui_thread, run_in_gui_thread
 
 
-__all__ = ['SylkServerDiscovery', 'has_sylkserver']
+__all__ = ['SylkServerDiscovery', 'has_sylkserver', 'server_http_url']
 
 
 cache_folder = 'sylkserver'                 # <data>/sylkserver/<domain>/configuration.json
@@ -59,6 +60,26 @@ def has_sylkserver(account):
         return bool(SylkServerDiscovery().configuration(account.id.domain))
     except Exception:
         return False
+
+
+def server_http_url(account):
+    """The SylkServer web root of the account's domain, as mobile derives it from wsServer
+    (wss://host/path/ws -> https://host/path); None without a configuration or a wsServer."""
+    if account is None or account is BonjourAccount():
+        return None
+    configuration = SylkServerDiscovery().configuration(account.id.domain) or {}
+    server = configuration.get('wsServer')
+    if not isinstance(server, str) or not server.strip():
+        return None
+    server = server.strip()
+    if server.startswith('wss://'):
+        server = 'https://' + server[len('wss://'):]
+    elif server.startswith('ws://'):
+        server = 'http://' + server[len('ws://'):]
+    server = server.rstrip('/')
+    if server.endswith('/ws'):
+        server = server[:-3]
+    return server
 
 
 def _show(value):
@@ -206,27 +227,41 @@ class SylkServerDiscovery(object, metaclass=Singleton):
             if account is not BonjourAccount() and account.id.domain == domain:
                 self._apply(account, configuration)
 
-    @staticmethod
-    def _apply(account, configuration):
-        """What of the domain's settings goes into the account: conference.sipBridge as its
-        Conference server, overwriting the user's (the server knows its bridge)."""
+    @classmethod
+    def _apply(cls, account, configuration):
+        """What of the domain's settings goes into the account, overwriting the user's (the server
+        knows its infrastructure): conference.sipBridge as its Conference server, and the PSTN
+        rule replacePlus (pstn.rules, as mobile reads it, or a top-level rules) as its IDD prefix."""
         if not configuration:
             return
         conference = configuration.get('conference')
         bridge = conference.get('sipBridge') if isinstance(conference, dict) else None
-        if not isinstance(bridge, str) or not bridge.strip():
-            return
-        bridge = bridge.strip().lower()
-        current = str(account.server.conference_server or '').lower()
-        if current == bridge:
+        if isinstance(bridge, str) and bridge.strip():
+            cls._set(account, 'server.conference_server', bridge.strip().lower(), 'conference.sipBridge', 'Conference server')
+        pstn = configuration.get('pstn')
+        rules = pstn.get('rules') if isinstance(pstn, dict) else None
+        if not isinstance(rules, dict):
+            rules = configuration.get('rules')
+        replace_plus = rules.get('replacePlus') if isinstance(rules, dict) else None
+        if isinstance(replace_plus, (str, int)) and str(replace_plus).strip():
+            value = str(replace_plus).strip()
+            # '+' is the IDD prefix setting's own way of saying "keep the +" (None)
+            cls._set(account, 'pstn.idd_prefix', None if value == '+' else value, 'rules.replacePlus', 'IDD prefix')
+
+    @staticmethod
+    def _set(account, name, value, source, what):
+        group, _, attribute = name.partition('.')
+        settings = getattr(account, group)
+        current = getattr(settings, attribute)
+        if (str(current) if current is not None else None) == value:
             return
         try:
-            account.server.conference_server = bridge
+            setattr(settings, attribute, value)
             account.save()
         except Exception as e:
-            ActivityLog().warning(f'[sylkserver] Cannot set the conference server of {account.id} to {bridge}: {e}')
+            ActivityLog().warning(f'[sylkserver] Cannot set the {what} of {account.id} to {value}: {e}')
             return
-        ActivityLog().info(f"[sylkserver] Conference server of {account.id} set to {bridge} (conference.sipBridge of {account.id.domain}, was {current or 'not set'})")
+        ActivityLog().info(f"[sylkserver] {what} of {account.id} set to {value or 'none'} ({source} of {account.id.domain}, was {current or 'not set'})")
 
     def _NH_SIPApplicationWillEnd(self, notification):
         if self._timer is not None:

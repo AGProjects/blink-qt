@@ -44,7 +44,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
-from blink.file_transfer import base_url_from_transfer, derive_base_url, upload_url
+from blink.file_transfer import FILE_TRANSFER_PATH, base_url_from_transfer, derive_base_url, upload_url
 from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, call_recording_envelope, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
@@ -1611,11 +1611,18 @@ class MessageManager(object, metaclass=Singleton):
     def file_transfer_base_url(self, account):
         """Where this account uploads files, or None if we cannot tell.
 
-        What a received transfer told us (the server's own URL, kept on the account), else
-        what the journal URL implies, else nothing. A derived URL is logged when it changes.
+        The domain's SylkServer (its discovered configuration: wsServer, as mobile), else what a
+        received transfer told us (the server's own URL, kept on the account), else what the
+        journal URL implies, else nothing. The URL is logged when it changes.
         """
         if account is BonjourAccount():
             return None
+        from blink.sylk_discovery import server_http_url
+        server = server_http_url(account)
+        if server:
+            discovered = server + FILE_TRANSFER_PATH
+            self._log_transfer_url(account, discovered, f'[transfer] File transfer URL of {account.id}: {discovered} (from the SylkServer configuration of {account.id.domain})')
+            return discovered
         stored = account.sms.file_transfer_url
         if stored:
             self._log_transfer_url(account, str(stored), f'[transfer] File transfer URL of {account.id}: {stored} (learned from a received transfer)')
