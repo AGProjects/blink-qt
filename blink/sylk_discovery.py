@@ -36,7 +36,7 @@ from blink.resources import ApplicationData
 from blink.util import call_in_gui_thread, run_in_gui_thread
 
 
-__all__ = ['SylkServerDiscovery']
+__all__ = ['SylkServerDiscovery', 'has_sylkserver']
 
 
 cache_folder = 'sylkserver'                 # <data>/sylkserver/<domain>/configuration.json
@@ -46,6 +46,17 @@ refresh_interval = 24 * 3600        # seconds
 dns_timeout = 6                     # seconds, as mobile
 download_timeout = 8                # seconds, as mobile
 value_length = 400                  # characters of a value shown in the log
+
+
+def has_sylkserver(account):
+    """Whether the account's domain runs SylkServer: it publishes a configuration (found now
+    or in an earlier run). Bonjour has none."""
+    if account is None or account is BonjourAccount():
+        return False
+    try:
+        return bool(SylkServerDiscovery().configuration(account.id.domain))
+    except Exception:
+        return False
 
 
 def _show(value):

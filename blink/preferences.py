@@ -963,15 +963,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.replace_leading_zero_editor.setText(account.pstn.replace_leading_zero or '')
             self._update_pstn_example_label()
 
-            # Messages tab
-            self.message_replication_button.show()
-            self.message_synchronization_button.show()
-            self.history_url_editor.show()
-            self.history_url_label.show()
-            self.last_id_editor.show()
-            self.last_id_label.show()
-            self.history_label.show()
-            self.history_line.show()
+            # Messages tab: history and replication only where the domain runs SylkServer
+            self._show_history_section(account)
             self.message_replication_button.setChecked(account.sms.enable_message_replication)
             self.message_synchronization_button.setChecked(account.sms.enable_history_synchronization)
             self.history_url_editor.setEnabled(account.sms.enable_history_synchronization)
@@ -981,14 +974,21 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         else:
             self.account_auto_answer.setText(translate('preferences_window', 'Auto answer from all neighbours'))
 
-            self.message_replication_button.hide()
-            self.message_synchronization_button.hide()
-            self.history_url_editor.hide()
-            self.history_url_label.hide()
-            self.last_id_editor.hide()
-            self.last_id_label.hide()
-            self.history_label.hide()
-            self.history_line.hide()
+            self._show_history_section(account)
+
+    def _show_history_section(self, account):
+        """The Messages tab's History and synchronization section (and replication): SylkServer's,
+        shown only when the account's domain runs it (SylkServerDiscovery)."""
+        from blink.sylk_discovery import has_sylkserver
+        visible = has_sylkserver(account)
+        for widget in (self.message_replication_button, self.message_synchronization_button, self.history_url_editor, self.history_url_label,
+                       self.last_id_editor, self.last_id_label, self.history_label, self.history_line):
+            widget.setVisible(visible)
+
+    def _NH_SylkServerConfigurationDidChange(self, notification):
+        account = self.selected_account
+        if account is not None and account is not BonjourAccount() and account.id.domain == notification.data.domain:
+            self._show_history_section(account)
 
     def show(self):
         selection_model = self.account_list.selectionModel()
@@ -1862,6 +1862,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         notification.center.add_observer(self, name='VideoDeviceDidChangeCamera')
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='SIPRegistrationInfoDidChange')
+        notification.center.add_observer(self, name='SylkServerConfigurationDidChange')
 
     def _NH_AudioDevicesDidChange(self, notification):
         self.load_audio_devices()

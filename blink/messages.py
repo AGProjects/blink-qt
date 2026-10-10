@@ -743,6 +743,7 @@ class MessageManager(object, metaclass=Singleton):
         self._incoming_encrypted_message_queue = deque()
         self._sync_queue = deque()
         self._token_requested = {}      # account id -> monotonic time of the last API token request
+        self._token_not_asked = set()   # account ids whose domain does not run SylkServer (logged once)
         self._token_retry_pending = set()
         self._syncing = set()           # account ids with a history download in progress
         self.pgp_requests = RequestList()
@@ -751,6 +752,7 @@ class MessageManager(object, metaclass=Singleton):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
+        notification_center.add_observer(self, name='SylkServerConfigurationDidChange')
         notification_center.add_observer(self, name='BlinkSessionWasCreated')
         notification_center.add_observer(self, name='BlinkSessionWasLoaded')
         notification_center.add_observer(self, name='BlinkSessionWasDeleted')
@@ -857,6 +859,15 @@ class MessageManager(object, metaclass=Singleton):
         """
         if account is BonjourAccount() or not account.enabled:
             return
+        from blink.sylk_discovery import has_sylkserver
+        if not has_sylkserver(account):
+            # the token comes from SylkServer: not asked of a server that is not one (asked
+            # when its configuration is found, SylkServerConfigurationDidChange)
+            if account.id not in self._token_not_asked:
+                self._token_not_asked.add(account.id)
+                ActivityLog().info(f'[journal] Not requesting an API token for account {account.id} ({reason}): {account.id.domain} does not run SylkServer')
+            return
+        self._token_not_asked.discard(account.id)
         now = time.monotonic()
         elapsed = now - self._token_requested.get(account.id, -self.token_request_interval)
         if elapsed < self.token_request_interval:
@@ -1580,6 +1591,13 @@ class MessageManager(object, metaclass=Singleton):
             self._sync_messages(notification.sender, 'history synchronization enabled')
         elif 'sms.enable_message_replication' in modified and notification.sender.sms.enable_message_replication:
             self._sync_messages(notification.sender, 'replication enabled')
+
+    def _NH_SylkServerConfigurationDidChange(self, notification):
+        # a domain found to run SylkServer: its accounts that wanted a token and did not ask for one
+        for account in AccountManager().get_accounts():
+            if (account is not BonjourAccount() and account.enabled and account.id.domain == notification.data.domain
+                    and account.id in self._token_not_asked and account.sms.enable_history_synchronization and not account.sms.history_synchronization_token):
+                self._request_history_synchronization_token(account, 'SylkServer found')
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
         account = notification.sender
