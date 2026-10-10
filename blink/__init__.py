@@ -196,6 +196,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self.setApplicationName("Blink")
         self.setApplicationVersion(__version__)
         self.setWindowIcon(QIcon(Resources.get('icons/blink.png')))
+        self._check_default_font()
         from blink.widgets.style import BlinkStyle
         self.setStyle(BlinkStyle(self.style().name()))     # rounded push buttons over the platform's style
         try:
@@ -326,6 +327,28 @@ class Blink(QApplication, metaclass=QSingleton):
             ActivityLog().info('Received %s, quitting' % name)
             self.quitting = True
             self.quit()
+
+    def _check_default_font(self):
+        """Some desktops (Raspberry Pi OS among them, with fonts-noto-color-emoji installed and no
+        platform theme) resolve the default sans-serif to the colour emoji font: its digits, colon
+        and space are emoji-wide, so a time reads "0 9 : 2 3" and every widget is too large. The
+        text font then becomes the first real one available; emoji still come from the emoji font
+        by fallback."""
+        from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo
+        font = self.font()
+        family = QFontInfo(font).family()
+        if 'emoji' not in family.lower():
+            return
+        available = set(QFontDatabase.families())
+        for candidate in ('Noto Sans', 'DejaVu Sans', 'Liberation Sans', 'Cantarell', 'Ubuntu', 'FreeSans', 'Arial'):
+            if candidate in available:
+                replacement = QFont(font)
+                replacement.setFamilies([candidate])
+                self.setFont(replacement)
+                ActivityLog().warning(f'[ui] The default font resolved to {family} (an emoji font), using {candidate} instead. '
+                                      f'Check with: fc-match sans-serif')
+                return
+        ActivityLog().warning(f'[ui] The default font resolved to {family} (an emoji font) and no other sans-serif font was found: install fonts-noto-core or fonts-dejavu-core')
 
     def quit(self):
         ActivityLog().info('Quit requested')
