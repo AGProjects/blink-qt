@@ -7273,14 +7273,14 @@ class ConferenceDialog(base_class, ui_class):
                 self.room_button.removeItem(number)
         self.room_button.setCurrentIndex(-1)
         self.room_button.setEditText(self.random_room())
-        self.room_button.lineEdit().selectAll()
         self.invite_list.clear()
         self.audio_button.setChecked(True)
         self.chat_button.setChecked(True)
         self._update_accept_button()
         self.raise_()
         super(ConferenceDialog, self).show()
-        self.room_button.setFocus()
+        # the room is not focused (typing would replace the random one): Join takes the focus
+        (self.accept_button if self.accept_button.isEnabled() else self.invite_list).setFocus()
 
     def join_conference(self):
         QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
