@@ -23,7 +23,32 @@ from blink.logging import MessagingTrace as log
 from blink.util import run_in_gui_thread, UniqueFilenameGenerator
 
 
-__all__ = ['MessageStream']
+__all__ = ['MessageStream', 'create_account_keys']
+
+
+def create_account_keys(account):
+    """A new RSA 4096 PGP keypair for the account, written to the keys directory.
+    Returns (private key, private key file, public key file); the account is not changed."""
+    private_key = PGPKey.new(PubKeyAlgorithm.RSAEncryptOrSign, 4096)
+    uid = PGPUID.new(account.display_name, comment='Blink QT client', email=account.id)
+    private_key.add_uid(uid,
+                        usage={KeyFlags.Sign, KeyFlags.EncryptCommunications, KeyFlags.EncryptStorage},
+                        hashes=[HashAlgorithm.SHA512],
+                        ciphers=[SymmetricKeyAlgorithm.AES256],
+                        compression=[CompressionAlgorithm.Uncompressed])
+
+    settings = SIPSimpleSettings()
+    directory = os.path.join(settings.chat.keys_directory.normalized, 'private')
+    filename = os.path.join(directory, account.id)
+    makedirs(directory)
+
+    with open(f'{filename}.privkey', 'wb') as f:
+        f.write(str(private_key).encode())
+
+    with open(f'{filename}.pubkey', 'wb') as f:
+        f.write(str(private_key.pubkey).encode())
+
+    return private_key, f'{filename}.privkey', f'{filename}.pubkey'
 
 
 @implementer(IMediaStream, IObserver)
@@ -137,27 +162,9 @@ class MessageStream(object, metaclass=MediaStreamType):
     def generate_keys(self):
         session = self.blink_session
         log.info(f'-- Generating key for {session.account.uri}')
-        private_key = PGPKey.new(PubKeyAlgorithm.RSAEncryptOrSign, 4096)
-        uid = PGPUID.new(session.account.display_name, comment='Blink QT client', email=session.account.id)
-        private_key.add_uid(uid,
-                            usage={KeyFlags.Sign, KeyFlags.EncryptCommunications, KeyFlags.EncryptStorage},
-                            hashes=[HashAlgorithm.SHA512],
-                            ciphers=[SymmetricKeyAlgorithm.AES256],
-                            compression=[CompressionAlgorithm.Uncompressed])
-
-        settings = SIPSimpleSettings()
-        directory = os.path.join(settings.chat.keys_directory.normalized, 'private')
-        filename = os.path.join(directory, session.account.id)
-        makedirs(directory)
-
-        with open(f'{filename}.privkey', 'wb') as f:
-            f.write(str(private_key).encode())
-
-        with open(f'{filename}.pubkey', 'wb') as f:
-            f.write(str(private_key.pubkey).encode())
-
-        session.account.sms.private_key = f'{filename}.privkey'
-        session.account.sms.public_key = f'{filename}.pubkey'
+        private_key, private_file, public_file = create_account_keys(session.account)
+        session.account.sms.private_key = private_file
+        session.account.sms.public_key = public_file
         session.account.save()
         self._load_pgp_keys()
 

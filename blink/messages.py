@@ -1590,7 +1590,63 @@ class MessageManager(object, metaclass=Singleton):
         """The generate prompt, held until we know whether the server keeps this account's key:
         generating one while the addressbook may still bring the real one orphans every message
         encrypted to it (KeyEscrowManager.when_answered)."""
-        KeyEscrowManager().when_answered(account, lambda: self._show_generate_dialog(account, scenario, session))
+        KeyEscrowManager().when_answered(account, lambda: self._generate_keys_silently(account, session))
+
+    def _generate_keys_silently(self, account, session=None):
+        """Neither this device nor the server has a key for the account: make one, in the
+        background, without asking (the server keeps it for the other devices)."""
+        if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
+            return      # restored from the escrow meanwhile, or PGP turned off
+        generating = self.__dict__.setdefault('_keys_generating', set())
+        if account.id in generating:
+            return
+        generating.add(account.id)
+        ActivityLog().info(f'[pgp] No PGP key for account {account.id} on this device or on the server, generating one')
+
+        def generate():
+            from blink.streams.message import create_account_keys
+            try:
+                result = create_account_keys(account)
+            except Exception as e:
+                call_in_gui_thread(self._keys_not_generated, account, e)
+            else:
+                call_in_gui_thread(self._keys_generated, account, session, *result)
+
+        import threading
+        threading.Thread(target=generate, name='pgp-keygen', daemon=True).start()
+
+    def _keys_not_generated(self, account, error):
+        self._keys_generating.discard(account.id)
+        ActivityLog().error(f'[pgp] Could not generate a PGP key for account {account.id}: {error!r}')
+
+    def _keys_generated(self, account, session, private_key, private_file, public_file):
+        self._keys_generating.discard(account.id)
+        if account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized) and account.sms.private_key.normalized != os.path.realpath(private_file):
+            return      # another key arrived meanwhile (escrow, import)
+        account.sms.private_key = private_file
+        account.sms.public_key = public_file
+        account.save()
+        for request in list(self.pgp_requests[account, GeneratePGPKeyRequest]):
+            request.dialog.hide()
+            self.pgp_requests.remove(request)
+        sessions = [blink_session for blink_session in self.sessions if blink_session.account is account]
+        for blink_session in sessions:
+            stream = blink_session.fake_streams.get('messages')
+            if stream is not None:
+                stream._load_pgp_keys()
+        if session is None or session not in sessions:
+            session = sessions[0] if sessions else None
+        if session is not None:
+            NotificationCenter().post_notification('PGPKeysDidGenerate', sender=session, data=NotificationData(private_key=private_key, public_key=private_key.pubkey))
+        else:
+            ActivityLog().info(f'[pgp] Generated a new PGP key {private_key.fingerprint.keyid} for account {account.id}')
+        self._keys_installed(account)
+        try:
+            from blink.contacts import AddressbookNotifier
+            with AddressbookNotifier().quiet():
+                KeyEscrowManager().repair(account)      # keep it on the server now, not on the next reload
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Key escrow repair failed for {account.id}: {e!r}')
 
     def _show_generate_dialog(self, account, scenario, session=None):
         if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
@@ -2786,7 +2842,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         if waiting is None:
             waiting = self._waiting[account.id] = []
             elapsed = time.time() - self._first_asked[account.id]
-            ActivityLog().info(f'[pgp] Waiting for the addressbook of {account.id} before offering to generate a PGP key: it may carry one')
+            ActivityLog().info(f'[pgp] Waiting for the addressbook of {account.id} before generating a PGP key: it may carry one')
             call_later(max(0.5, self.answer_timeout - elapsed + 0.1), self._release, account)
         waiting.append(callback)
 
