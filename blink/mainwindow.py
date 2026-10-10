@@ -39,6 +39,7 @@ from blink.resources import ApplicationData, IconManager, Resources, themed_icon
 from blink.util import run_in_gui_thread, translate
 from blink.widgets.buttons import AccountState, SwitchViewButton
 from blink.widgets.color import follow_theme
+from blink.widgets.style import make_segmented
 
 
 __all__ = ['MainWindow']
@@ -177,6 +178,9 @@ class MainWindow(base_class, ui_class):
         self.audio_call_button.clicked.connect(self._SH_AudioCallButtonClicked)
         self.video_call_button.clicked.connect(self._SH_VideoCallButtonClicked)
         self.chat_session_button.clicked.connect(self._SH_ChatSessionButtonClicked)
+        # the call buttons as one segmented control
+        self.dial_buttons_layout.setSpacing(0)
+        make_segmented('call', self.audio_call_button, self.video_call_button, self.chat_session_button, self.screen_sharing_button)
         self.back_to_contacts_button.clicked.connect(self.search_box.clear)  # this can be set in designer -Dan
         self.back_to_contacts_button.hide()     # the search box's clear button (X) does the same
         self.conference_button.makeConference.connect(self._SH_MakeConference)
