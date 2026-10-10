@@ -113,8 +113,11 @@ def emoji_font(point_size):
 
 def reactable(item):
     """Whether a message takes a reaction: as on mobile, everything that can be replied to except
-    a location share (its body keeps changing), a file still being sent and a message that failed."""
+    a location share (its body keeps changing), a call record, a file still being sent and a message
+    that failed."""
     if item is None or getattr(item, 'upload', None) is not None:
+        return False
+    if item.category == 'call':
         return False
     if bubble_kind(item) == 'note':
         return False

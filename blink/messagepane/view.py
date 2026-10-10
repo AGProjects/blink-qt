@@ -291,7 +291,7 @@ class TranscriptView(QListView):
                 menu.addAction(translate('message_pane', 'Cancel Sending'), lambda: self.actionRequested.emit('discard_upload', item))
             menu.exec(global_position)
             return
-        if bubble_kind(item) != 'note':
+        if bubble_kind(item) != 'note' and item.category != 'call':     # a call record takes no reply
             menu.addSeparator()
             menu.addAction(translate('message_pane', 'Reply'), lambda: self.actionRequested.emit('reply', item))
             if item.outgoing and bubble_kind(item) == 'text':
