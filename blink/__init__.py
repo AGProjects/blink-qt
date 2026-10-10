@@ -247,6 +247,8 @@ class Blink(QApplication, metaclass=QSingleton):
         SharedSettingsMigration().start()
         from blink.rtp_log import RTPLog
         RTPLog().start()        # the RTP Media tab of the logs window and logs/rtp_trace.txt
+        from blink.sylk_discovery import SylkServerDiscovery
+        SylkServerDiscovery().start()   # the domains' SylkServer settings (DNS TXT _sylkserver.<domain>), cached
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
 
         notification_center = NotificationCenter()
