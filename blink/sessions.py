@@ -4585,6 +4585,28 @@ class BlinkFileTransfer(BlinkSessionBase):
         notification_center.post_notification('BlinkFileTransferNewIncoming', sender=self)
         self.sip_session.accept([self.stream])
 
+    def _own_copy(self, filename):
+        """The file is sent from a copy of its own, in the message's folder (file_transfers/<account>/
+        <peer>/<transfer id>/), as a received one is kept: the message never refers to the user's
+        file, or to the file of a message it was forwarded from, so either can be deleted or changed
+        without touching it, and deleting the message deletes only its copy. The encrypted .asc is
+        made next to the copy."""
+        from blink.file_transfer import transfer_filename, transfer_folder
+        from blink.history import conversation_key
+        key = conversation_key(str(self.contact_uri.uri), self.account)
+        directory = transfer_folder(ApplicationData.get('file_transfers'), str(self.account.id), key, self.id)
+        target = os.path.join(directory, transfer_filename(os.path.basename(filename)))
+        if os.path.realpath(filename) == os.path.realpath(target):
+            return filename         # a retry: already the copy
+        try:
+            makedirs(directory)
+            shutil.copy2(filename, target)
+        except (IOError, OSError) as e:
+            ActivityLog().error(f'[transfer] Cannot copy {filename} to {directory}, sending the original: {e}')
+            return filename
+        ActivityLog().info(f'[transfer] Sending a copy of {filename}: {target}')
+        return target
+
     def init_outgoing(self, account, contact, contact_uri, filename, transfer_id=RandomID):
         assert self.state is None
         self.direction = 'outgoing'
@@ -4597,13 +4619,9 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         self._uri = self._normalize_uri(contact_uri.uri)
 
+        filename = self._own_copy(filename)
         self.file_selector = FileSelector.for_file(filename)
         self._stat = os.fstat(self.file_selector.fd.fileno())
-
-        if self.file_selector.type.startswith('image'):
-            directory = ApplicationData.get(f'downloads/{self.id}')
-            makedirs(directory)
-            shutil.copy(filename, directory)
 
         # Over HTTP when the account has a file transfer service, as Sylk Mobile and Blink for macOS
         # send files (mobile does not take MSRP); MSRP for Bonjour and accounts with no service.

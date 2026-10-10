@@ -651,6 +651,14 @@ class DownloadHistory(object, metaclass=Singleton):
         if not file_in_cache:
             #log.info(f'== Not removing file, not present in cache: {file.file_id} {cached_file}')
             return
+        # only a file of this message's own folder in Blink's storage: a file that was sent is
+        # registered where it was sent from -- the user's own file, or the download of another
+        # message it was forwarded from -- and must outlive this message
+        own_storage = [os.path.realpath(ApplicationData.get(name)) for name in ('file_transfers', 'downloads')]
+        real_folder = os.path.realpath(os.path.dirname(cached_file))
+        if os.path.basename(real_folder) != str(file.file_id) or not any(real_folder.startswith(root + os.sep) for root in own_storage):
+            ActivityLog().info(f'[transfer] Keeping {cached_file}: it is not the own file of message {file.file_id} (sent from there)')
+            return
         log.info(f'== Removing file from cache: {file.file_id} {cached_file}')
         unlink(cached_file)
         try:
