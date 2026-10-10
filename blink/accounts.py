@@ -71,6 +71,13 @@ class AccountInfo(object):
         return 'Bonjour' if self.account is BonjourAccount() else str(self.account.id)
 
     @property
+    def label(self):
+        """The account's label (Preferences, Account Information), or None."""
+        if self.account is BonjourAccount():
+            return None
+        return (getattr(self.account, 'label', None) or '').strip() or None
+
+    @property
     def icon(self):
         if self.registration_state == 'started':
             return self.activity_icon
@@ -122,11 +129,15 @@ class AccountModel(QAbstractListModel):
         if role == Qt.ItemDataRole.DisplayRole:
             if account_info.account is BonjourAccount():
                 return account_info.name
+            if account_info.label:
+                return account_info.label        # the user's name for it, in place of the address
             # an invented address while contacts are mangled (blink.contact_mangler); AccountInfo.name stays real
             from blink.contact_mangler import mangled_account_label
             return mangled_account_label(account_info.name)
         elif role == Qt.ItemDataRole.DecorationRole:
             return account_info.icon
+        elif role == Qt.ItemDataRole.ToolTipRole:
+            return account_info.name if account_info.label else None
         elif role == Qt.ItemDataRole.UserRole:
             return account_info
         return None

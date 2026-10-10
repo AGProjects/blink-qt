@@ -274,6 +274,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.account_enabled_presence_button.clicked.connect(self._SH_AccountEnabledPresenceButtonClicked)
         self.account_enabled_mwi_button.clicked.connect(self._SH_AccountEnabledMWIButtonClicked)
         self.display_name_editor.editingFinished.connect(self._SH_DisplayNameEditorEditingFinished)
+        self.account_label_editor.editingFinished.connect(self._SH_AccountLabelEditorEditingFinished)
         self.password_editor.editingFinished.connect(self._SH_PasswordEditorEditingFinished)
 
         # Account media settings
@@ -850,6 +851,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.account_enabled_mwi_button.setChecked(account.message_summary.enabled if account is not bonjour_account else False)
 
         self._show_mangled(self.display_name_editor, account.display_name, 'name', account)
+        self.account_label_editor.setText(account.label or '' if account is not bonjour_account else '')
+        for widget in (self.account_label_line, self.account_label_label, self.account_label_editor, self.account_label_note):
+            widget.setVisible(account is not bonjour_account)
 
         if account is not bonjour_account:
             self.password_editor.setText(account.auth.password)
@@ -930,6 +934,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if not account.xcap.enabled:
                 self.xcap_root_editor.setEnabled(False)
             self.xcap_root_editor.setText(account.xcap.xcap_root or '')
+            self._show_discovered_xcap_root(account)
+            self._show_discovered_voicemail_uri(account)
             self.server_tools_url_editor.setText(account.server.settings_url or '')
             self.conference_server_editor.setText(account.server.conference_server or '')
 
@@ -1095,7 +1101,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.password_editor.hide()
             else:
                 if tab_widget.indexOf(self.server_settings_tab) == -1:
-                    tab_widget.addTab(self.server_settings_tab, translate('preferences_window', "Server Settings"))
+                    tab_widget.insertTab(1, self.server_settings_tab, translate('preferences_window', "Server"))     # after Account
                 if tab_widget.indexOf(self.network_tab) == -1:
                     tab_widget.addTab(self.network_tab, translate('preferences_window', "NAT Traversal"))
                 if tab_widget.indexOf(self.advanced_tab) == -1:
@@ -1158,12 +1164,22 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account = self.selected_account
         account.message_summary.enabled = checked
         account.save()
+        self._show_discovered_voicemail_uri(account)
 
     def _SH_DisplayNameEditorEditingFinished(self):
         account = self.selected_account
         display_name = self._edited_text(self.display_name_editor) or None
         if account.display_name != display_name:
             account.display_name = display_name
+            account.save()
+
+    def _SH_AccountLabelEditorEditingFinished(self):
+        account = self.selected_account
+        if account is None or account is BonjourAccount():
+            return
+        label = self.account_label_editor.text().strip() or None
+        if account.label != label:
+            account.label = label
             account.save()
 
     def _SH_PasswordEditorEditingFinished(self):
@@ -1362,12 +1378,47 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if account.message_summary.voicemail_uri != voicemail_uri:
             account.message_summary.voicemail_uri = voicemail_uri
             account.save()
+        self._show_discovered_voicemail_uri(account)
+
+    def _show_discovered_voicemail_uri(self, account):
+        """Under Voicemail URI: the Message-Account of the message summary (MWI, RFC 3842) the
+        server sends to one's own subscription; when there is one it is what Voicemail dials,
+        before the address typed in (sipsimple Account.voicemail_uri)."""
+        discovered = None
+        if account is not None and account is not BonjourAccount() and account.message_summary.enabled:
+            discovered = getattr(account, '_mwi_voicemail_uri', None)
+        text = ''
+        if discovered:
+            text = translate('preferences_window', 'Discovered: %s') % discovered
+            typed = account.message_summary.voicemail_uri
+            if typed and str(typed) != str(discovered):
+                text += ' ' + translate('preferences_window', '(used instead of the address above)')
+        self.voicemail_uri_discovered_label.setText(text)
+        self.voicemail_uri_discovered_label.setVisible(bool(text))
+
+    def _NH_SIPAccountGotMessageSummary(self, notification):
+        if notification.sender is self.selected_account:
+            self._show_discovered_voicemail_uri(notification.sender)
 
     def _SH_EnableXcapButtonClicked(self, checked):
         account = self.selected_account
         account.xcap.enabled = checked
         self.xcap_root_editor.setEnabled(checked)
         account.save()
+        self._show_discovered_xcap_root(account)
+
+    def _show_discovered_xcap_root(self, account):
+        """Under XCAP Root URL: the root in use when it was discovered (DNS TXT xcap.<domain>), not typed in."""
+        root = None
+        if account is not None and account is not BonjourAccount() and account.xcap.enabled and not account.xcap.xcap_root:
+            root = getattr(getattr(account, 'xcap_manager', None), 'xcap_root', None)
+        self.xcap_root_discovered_label.setText(translate('preferences_window', 'Discovered: %s') % root if root else '')
+        self.xcap_root_discovered_label.setVisible(bool(root))
+
+    def _NH_XCAPManagerClientDidInitialize(self, notification):
+        account = self.selected_account
+        if account is not None and getattr(account, 'xcap_manager', None) is notification.sender:
+            self._show_discovered_xcap_root(account)
 
     def _SH_XCAPRootEditorEditingFinished(self):
         account = self.selected_account
@@ -1375,6 +1426,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if account.xcap.xcap_root != xcap_root:
             account.xcap.xcap_root = xcap_root
             account.save()
+        self._show_discovered_xcap_root(account)
 
     def _SH_ServerToolsURLEditorEditingFinished(self):
         account = self.selected_account
@@ -1863,6 +1915,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='SIPRegistrationInfoDidChange')
         notification.center.add_observer(self, name='SylkServerConfigurationDidChange')
+        notification.center.add_observer(self, name='XCAPManagerClientDidInitialize')
+        notification.center.add_observer(self, name='SIPAccountGotMessageSummary')
 
     def _NH_AudioDevicesDidChange(self, notification):
         self.load_audio_devices()
@@ -1910,6 +1964,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.account_enabled_presence_button.setChecked(account.presence.enabled)
             if 'display_name' in notification.data.modified:
                 self._show_mangled(self.display_name_editor, account.display_name, 'name', account)
+            if 'label' in notification.data.modified and account is not BonjourAccount():
+                self.account_label_editor.setText(account.label or '')
             if 'rtp.audio_codec_list' in notification.data.modified:
                 self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_list is not None)
             if 'rtp.video_codec_list' in notification.data.modified:

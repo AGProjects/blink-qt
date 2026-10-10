@@ -168,7 +168,7 @@
           </property>
           <widget class="QWidget" name="account_information_tab">
            <attribute name="title">
-            <string>Account Information</string>
+            <string>Account</string>
            </attribute>
            <layout class="QGridLayout" name="account_information_tab_layout">
             <property name="leftMargin">
@@ -209,7 +209,7 @@
               </property>
              </widget>
             </item>
-            <item row="6" column="0" colspan="2">
+            <item row="7" column="0" colspan="2">
              <spacer name="account_information_spacer">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -222,7 +222,7 @@
               </property>
              </spacer>
             </item>
-            <item row="7" column="0" colspan="2">
+            <item row="8" column="0" colspan="2">
              <widget class="QLabel" name="account_registration_label">
               <property name="layoutDirection">
                <enum>Qt::LeftToRight</enum>
@@ -255,6 +255,42 @@
               </property>
              </widget>
             </item>
+            <item row="4" column="0" colspan="2">
+             <widget class="Line" name="account_label_line">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>10</height>
+               </size>
+              </property>
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="0">
+             <widget class="QLabel" name="account_label_label">
+              <property name="text">
+               <string>Label:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="1">
+             <widget class="QLineEdit" name="account_label_editor"/>
+            </item>
+            <item row="6" column="1">
+             <widget class="QLabel" name="account_label_note">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="text">
+               <string>Shown instead of the address in the account selector</string>
+              </property>
+             </widget>
+            </item>
             <item row="0" column="0" colspan="2">
              <widget class="QCheckBox" name="account_enabled_button">
               <property name="text">
@@ -262,17 +298,338 @@
               </property>
              </widget>
             </item>
-            <item row="4" column="1">
+            </layout>
+          </widget>
+          <widget class="QWidget" name="server_settings_tab">
+           <attribute name="title">
+            <string>Server</string>
+           </attribute>
+           <layout class="QGridLayout" name="server_settings_tab_layout">
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <property name="spacing">
+             <number>5</number>
+            </property>
+            <item row="8" column="0">
+             <widget class="QLabel" name="xcap_root_label">
+              <property name="text">
+               <string>XCAP Root URL:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="13" column="0">
+             <widget class="QLabel" name="voicemail_uri_label">
+              <property name="text">
+               <string>Voicemail URI:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="15" column="1" colspan="5">
+             <widget class="QCheckBox" name="account_enabled_mwi_button">
+              <property name="text">
+               <string>Enable Message Waiting Indicator</string>
+              </property>
+             </widget>
+            </item>
+           <item row="10" column="1" colspan="5">
              <widget class="QCheckBox" name="account_enabled_presence_button">
               <property name="text">
                <string>Enable presence</string>
               </property>
              </widget>
             </item>
-            <item row="5" column="1">
-             <widget class="QCheckBox" name="account_enabled_mwi_button">
+            <item row="9" column="1" colspan="5">
+             <widget class="QLabel" name="xcap_root_discovered_label">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
               <property name="text">
-               <string>Enable Message Waiting Indicator</string>
+               <string/>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByMouse</set>
+              </property>
+             </widget>
+            </item>
+            <item row="14" column="1" colspan="5">
+             <widget class="QLabel" name="voicemail_uri_discovered_label">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByMouse</set>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0" colspan="6">
+             <widget class="QLabel" name="sip_proxy_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>SIP</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="2">
+             <widget class="QLabel" name="outbound_proxy_port_label">
+              <property name="text">
+               <string>Port:</string>
+              </property>
+              <property name="indent">
+               <number>3</number>
+              </property>
+             </widget>
+            </item>
+            <item row="19" column="1" colspan="5">
+             <widget class="LineEdit" name="conference_server_editor">
+              <property name="widgetSpacing" stdset="0">
+               <number>0</number>
+              </property>
+              <property name="inactiveText" stdset="0">
+               <string>conference</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QLineEdit" name="outbound_proxy_host_editor"/>
+            </item>
+            <item row="16" column="0" colspan="6">
+             <widget class="QLabel" name="voicemail_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
+              <property name="text">
+               <string>Other Servers</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="0" colspan="6">
+             <widget class="QLabel" name="addressbook_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
+              <property name="text">
+               <string>Addressbook</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="0" colspan="6">
+             <widget class="Line" name="addressbook_line">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="auth_username_label">
+              <property name="text">
+               <string>Auth Username:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0" colspan="6">
+             <widget class="Line" name="line_3">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="3">
+             <widget class="QSpinBox" name="outbound_proxy_port">
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>65535</number>
+              </property>
+              <property name="value">
+               <number>5060</number>
+              </property>
+             </widget>
+            </item>
+            <item row="19" column="0">
+             <widget class="QLabel" name="conference_server_label">
+              <property name="text">
+               <string>Conference Server:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="20" column="0" colspan="6">
+             <spacer name="server_settings_spacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item row="17" column="0" colspan="6">
+             <widget class="Line" name="line_5">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="11" column="0" colspan="6">
+             <widget class="QLabel" name="voicemail_section_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
+              <property name="text">
+               <string>Voicemail</string>
+              </property>
+             </widget>
+            </item>
+            <item row="12" column="0" colspan="6">
+             <widget class="Line" name="voicemail_line">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="13" column="1" colspan="5">
+             <widget class="LineEdit" name="voicemail_uri_editor">
+              <property name="inactiveText" stdset="0">
+               <string>Discovered by subscribing to myself</string>
+              </property>
+              <property name="widgetSpacing" stdset="0">
+               <number>0</number>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="outbound_proxy_label">
+              <property name="minimumSize">
+               <size>
+                <width>105</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Outbound Proxy:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="4">
+             <widget class="QLabel" name="outbound_proxy_transport_label">
+              <property name="text">
+               <string>Transport:</string>
+              </property>
+              <property name="indent">
+               <number>3</number>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QLineEdit" name="auth_username_editor"/>
+            </item>
+            <item row="18" column="0">
+             <widget class="QLabel" name="server_tools_url_label">
+              <property name="text">
+               <string>Server Setting URL:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="1" colspan="5">
+             <widget class="LineEdit" name="xcap_root_editor">
+              <property name="inactiveText" stdset="0">
+               <string>Taken from the DNS TXT record for xcap.domain</string>
+              </property>
+              <property name="widgetSpacing" stdset="0">
+               <number>0</number>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="5">
+             <widget class="QComboBox" name="outbound_proxy_transport_button">
+              <item>
+               <property name="text">
+                <string>UDP</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>TCP</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>TLS</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="2" column="1" colspan="5">
+             <widget class="QCheckBox" name="always_use_my_proxy_button">
+              <property name="text">
+               <string>Always use the proxy server for outgoing sessions</string>
+              </property>
+             </widget>
+            </item>
+            <item row="18" column="1" colspan="5">
+             <widget class="QLineEdit" name="server_tools_url_editor"/>
+            </item>
+            <item row="7" column="1" colspan="5">
+             <widget class="QCheckBox" name="enable_xcap_button">
+              <property name="text">
+               <string>Enable XCAP storage</string>
               </property>
              </widget>
             </item>
@@ -882,255 +1239,6 @@
             </item>
            </layout>
           </widget>
-          <widget class="QWidget" name="server_settings_tab">
-           <attribute name="title">
-            <string>Server Settings</string>
-           </attribute>
-           <layout class="QGridLayout" name="server_settings_tab_layout">
-            <property name="leftMargin">
-             <number>10</number>
-            </property>
-            <property name="topMargin">
-             <number>10</number>
-            </property>
-            <property name="rightMargin">
-             <number>10</number>
-            </property>
-            <property name="bottomMargin">
-             <number>10</number>
-            </property>
-            <property name="spacing">
-             <number>5</number>
-            </property>
-            <item row="9" column="0">
-             <widget class="QLabel" name="xcap_root_label">
-              <property name="text">
-               <string>XCAP Root URL:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="0">
-             <widget class="QLabel" name="voicemail_uri_label">
-              <property name="text">
-               <string>Voicemail URI:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="0" colspan="6">
-             <widget class="QLabel" name="sip_proxy_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>SIP Proxy server</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="2">
-             <widget class="QLabel" name="outbound_proxy_port_label">
-              <property name="text">
-               <string>Port:</string>
-              </property>
-              <property name="indent">
-               <number>3</number>
-              </property>
-             </widget>
-            </item>
-            <item row="11" column="1" colspan="5">
-             <widget class="LineEdit" name="conference_server_editor">
-              <property name="widgetSpacing" stdset="0">
-               <number>0</number>
-              </property>
-              <property name="inactiveText" stdset="0">
-               <string>conference</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="1">
-             <widget class="QLineEdit" name="outbound_proxy_host_editor"/>
-            </item>
-            <item row="5" column="0" colspan="6">
-             <widget class="QLabel" name="voicemail_label">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">margin-top: 20px;</string>
-              </property>
-              <property name="text">
-               <string>Other Servers</string>
-              </property>
-             </widget>
-            </item>
-            <item row="4" column="0">
-             <widget class="QLabel" name="auth_username_label">
-              <property name="text">
-               <string>Auth Username:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0" colspan="6">
-             <widget class="Line" name="line_3">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="3">
-             <widget class="QSpinBox" name="outbound_proxy_port">
-              <property name="minimum">
-               <number>1</number>
-              </property>
-              <property name="maximum">
-               <number>65535</number>
-              </property>
-              <property name="value">
-               <number>5060</number>
-              </property>
-             </widget>
-            </item>
-            <item row="11" column="0">
-             <widget class="QLabel" name="conference_server_label">
-              <property name="text">
-               <string>Conference Server:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="12" column="0" colspan="6">
-             <spacer name="server_settings_spacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>40</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item row="6" column="0" colspan="6">
-             <widget class="Line" name="line_5">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="1" colspan="5">
-             <widget class="LineEdit" name="voicemail_uri_editor">
-              <property name="inactiveText" stdset="0">
-               <string>Discovered by subscribing to myself</string>
-              </property>
-              <property name="widgetSpacing" stdset="0">
-               <number>0</number>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="0">
-             <widget class="QLabel" name="outbound_proxy_label">
-              <property name="minimumSize">
-               <size>
-                <width>105</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>Outbound Proxy:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="4">
-             <widget class="QLabel" name="outbound_proxy_transport_label">
-              <property name="text">
-               <string>Transport:</string>
-              </property>
-              <property name="indent">
-               <number>3</number>
-              </property>
-             </widget>
-            </item>
-            <item row="4" column="1">
-             <widget class="QLineEdit" name="auth_username_editor"/>
-            </item>
-            <item row="10" column="0">
-             <widget class="QLabel" name="server_tools_url_label">
-              <property name="text">
-               <string>Server Setting URL:</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-             </widget>
-            </item>
-            <item row="9" column="1" colspan="5">
-             <widget class="LineEdit" name="xcap_root_editor">
-              <property name="inactiveText" stdset="0">
-               <string>Taken from the DNS TXT record for xcap.domain</string>
-              </property>
-              <property name="widgetSpacing" stdset="0">
-               <number>0</number>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="5">
-             <widget class="QComboBox" name="outbound_proxy_transport_button">
-              <item>
-               <property name="text">
-                <string>UDP</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>TCP</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>TLS</string>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item row="2" column="1" colspan="5">
-             <widget class="QCheckBox" name="always_use_my_proxy_button">
-              <property name="text">
-               <string>Always use the proxy server for outgoing sessions</string>
-              </property>
-             </widget>
-            </item>
-            <item row="10" column="1" colspan="5">
-             <widget class="QLineEdit" name="server_tools_url_editor"/>
-            </item>
-            <item row="7" column="1">
-             <widget class="QCheckBox" name="enable_xcap_button">
-              <property name="text">
-               <string>Enable XCAP storage</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
           <widget class="QWidget" name="network_tab">
            <attribute name="title">
             <string>NAT Traversal</string>
@@ -1703,7 +1811,7 @@
                   </font>
                  </property>
                  <property name="text">
-                  <string>When calling to phone numbers</string>
+                  <string>Phone numbers</string>
                  </property>
                 </widget>
                </item>

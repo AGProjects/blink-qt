@@ -32,7 +32,11 @@ class MSRPSettingsExtension(MSRPSettings):
 
 
 class PresenceSettingsExtension(PresenceSettings):
-    enabled = Setting(type=bool, default=True)
+    enabled = Setting(type=bool, default=False)      # off unless the user turns it on (Server Settings)
+
+
+class BonjourPresenceSettingsExtension(PresenceSettings):
+    enabled = Setting(type=bool, default=True)       # Bonjour neighbours, as before
 
 
 class PSTNSettings(SettingsGroup):
@@ -96,6 +100,7 @@ class XCAPSettingsExtension(XCAPSettings):
 
 class AccountExtension(SettingsObjectExtension):
     display_name = Setting(type=str, default=user_info.fullname, nillable=True)
+    label = Setting(type=str, default=None, nillable=True)      # shown instead of the address in the account selector
     message_summary = MessageSummarySettingsExtension
     msrp = MSRPSettingsExtension
     pstn = PSTNSettings
@@ -110,7 +115,7 @@ class AccountExtension(SettingsObjectExtension):
 
 class BonjourAccountExtension(SettingsObjectExtension):
     msrp = BonjourMSRPSettingsExtension
-    presence = PresenceSettingsExtension
+    presence = BonjourPresenceSettingsExtension
     rtp = RTPSettingsExtension
     sip = BonjourSIPSettings
     sms = SMSSettings
