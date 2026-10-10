@@ -798,7 +798,7 @@ class MessagePane(QWidget):
         button.adjustSize()
         # clear of the scrollbar, also of one drawn over the content (an overlay style reports no width)
         scrollbar = self.transcript.verticalScrollBar()
-        right = self.stack.width() - 24 - max(scrollbar.sizeHint().width(), 16)
+        right = self.stack.width() - 6 - max(scrollbar.sizeHint().width(), 12)
         button.move(max(0, right - button.width()), 10)
         button.raise_()
 

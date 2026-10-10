@@ -232,9 +232,9 @@ class ConversationHeader(QWidget):
             button.setText(text)
             font = button.font()
             if font.pointSizeF() > 0:
-                font.setPointSizeF(font.pointSizeF() * 1.3)
+                font.setPointSizeF(font.pointSizeF() * 1.05)
             else:
-                font.setPixelSize(round(font.pixelSize() * 1.3))
+                font.setPixelSize(round(font.pixelSize() * 1.05))
             button.setFont(font)
             button.clicked.connect(lambda checked=False, step=step: self.fontStep.emit(step))
             self.font_buttons.append(button)
