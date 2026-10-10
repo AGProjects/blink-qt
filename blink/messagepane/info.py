@@ -127,6 +127,14 @@ def _url_link(value):
     return _Link(url) if url.lower().startswith(('https://', 'http://')) else url
 
 
+def _file_link(path):
+    """A local file as a link that shows it in the file manager."""
+    if not path:
+        return path
+    from PyQt6.QtCore import QUrl
+    return _Link(QUrl.fromLocalFile(str(path)).toString(), str(path))
+
+
 def _cell(value):
     if isinstance(value, _Link):
         return f'<a href="{html.escape(value.url, quote=True)}" title="{html.escape(value.url, quote=True)}">{html.escape(value.text)}</a>'
@@ -182,7 +190,7 @@ def _show(parent, item, shown, stored, related_rows, answers, agents=()):
     if meta:
         parts.append(_section(translate('message_info', 'File transfer'), [
             ('Name', meta.get('filename')), ('Size', meta.get('filesize')), ('Type', meta.get('filetype')),
-            ('URL', _url_link(meta.get('url'))), ('Available until', meta.get('until')), ('Here', local_file(item) or 'not downloaded'),
+            ('URL', _url_link(meta.get('url'))), ('Available until', meta.get('until')), ('Here', _file_link(local_file(item)) or 'not downloaded'),
             ('Failure', failure_reason(item)), ('Caption', item.caption),
         ]))
     if item.category == 'location':
@@ -358,6 +366,26 @@ def _open_link(url):
     from PyQt6.QtGui import QDesktopServices
     if url.scheme() in ('http', 'https'):
         QDesktopServices.openUrl(url)
+    elif url.isLocalFile():
+        _show_in_file_manager(url)
+
+
+def _show_in_file_manager(url):
+    """The file selected in the file manager (org.freedesktop.FileManager1.ShowItems: Files,
+    Dolphin, Nemo...), else its folder opened."""
+    import os
+    import shutil
+    from PyQt6.QtCore import QProcess, QUrl
+    from PyQt6.QtGui import QDesktopServices
+    path = url.toLocalFile()
+    if os.path.exists(path) and shutil.which('gdbus'):
+        arguments = ['call', '--session', '--dest', 'org.freedesktop.FileManager1', '--object-path', '/org/freedesktop/FileManager1',
+                     '--method', 'org.freedesktop.FileManager1.ShowItems', "['%s']" % url.toString().replace("'", "%27"), '']
+        if QProcess.startDetached('gdbus', arguments)[0]:
+            return
+    folder = path if os.path.isdir(path) else os.path.dirname(path)
+    if os.path.isdir(folder):
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
 
 def _dialog(parent, title, body):
