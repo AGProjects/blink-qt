@@ -4,7 +4,8 @@ Avatar (the contact's photo, else initials on a colour of their own), name,
 info line (is typing..., else the address the conversation is on), the lock
 with what is known about encryption (A− and A+ before it make the text of the
 transcript and the composer smaller or larger, as one segmented control), the calendar (years, months and days
-with how many messages each has; choosing a day jumps there) and the audio and
+with how many messages each has; choosing a day jumps there; the pane shows it in the
+strip, left of the search field) and the audio and
 video call buttons (one segmented control).
 Calls start from the conversation's account: the one its newest message was
 on, else the default one (a Bonjour neighbour: the Bonjour account).
@@ -197,6 +198,7 @@ class ConversationHeader(QWidget):
         self.lock_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
         self.calendar_button = self._tool_button(translate('message_pane', 'Jump to a date'))
         self.calendar_button.setIconSize(QSize(16, 16))     # the clock's outline fills its box: drawn smaller than the other glyphs
+        self.calendar_button.setFixedSize(26, 26)          # shown in the strip, left of the search field (MessagePane)
         self.calendar_menu = QMenu(self.calendar_button)
         self.calendar_menu.aboutToShow.connect(self._fill_calendar_menu)
         self.calendar_button.setMenu(self.calendar_menu)
@@ -249,7 +251,7 @@ class ConversationHeader(QWidget):
         call_group.addWidget(self.video_button)
         row.addWidget(self.stop_audio_button)
         row.addLayout(font_group)
-        for button in (self.lock_button, self.calendar_button, self.location_button):
+        for button in (self.lock_button, self.location_button):
             row.addWidget(button)
         row.addLayout(call_group)
 

@@ -88,6 +88,7 @@ class MessagePane(QWidget):
         self.strip = TranscriptStrip(self)
         self.strip.hide()
         layout.addWidget(self.strip)
+        self.strip.add_before_search(self.header.calendar_button)     # the calendar sits left of the search field
         from blink.messagepane.filters import FilterBar
         self.filters = FilterBar(self)
         layout.addWidget(self.filters)

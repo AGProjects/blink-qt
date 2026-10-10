@@ -3,7 +3,7 @@
 On the left, what is loaded ("36 messages, 6 Oct 08:07 – 7 Oct 09:12") and a
 note: loading older messages, the beginning of the conversation, or, only once
 the user has scrolled up, that scrolling further up loads older messages. On
-the right the search field: typing searches the whole conversation in history
+the right the calendar (the header's: jump to a date) and the search field: typing searches the whole conversation in history
 (the transcript shows the hits, highlighted).
 
 Clicking the field opens the search: an X appears at its right and the
@@ -106,6 +106,11 @@ class TranscriptStrip(QWidget):
         self.search_field.returnPressed.connect(self._search)
         self.apply_theme()
         follow_theme(self)
+
+    def add_before_search(self, widget):
+        """A control of the pane shown left of the search field (the header's calendar)."""
+        layout = self.layout()
+        layout.insertWidget(layout.indexOf(self.search_field), widget)
 
     def apply_theme(self):
         palette = self.info_label.palette()
