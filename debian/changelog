@@ -10,7 +10,9 @@ blink (7.0.0) unstable; urgency=medium
   * Improve Logs window
   * Refactor preferences panel
   * Added profiles to switch between multiple accounts/addressbooks sets
-  * Usability improvements
+  * Ubuntu Desktop integration (DND, Dark Theme, Notification center, dock unread badges)
+  * G.729 audio codec
+  * Many usability improvements
   * Bug fixes
 
  -- Adrian Georgescu <ag@ag-projects.com>  Thu, 08 Oct 2026 21:38:01 -0300
