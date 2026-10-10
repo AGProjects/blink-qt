@@ -229,6 +229,13 @@ class MainWindow(base_class, ui_class):
         # Call menu actions
         self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
         self.join_conference_action.triggered.connect(self.conference_dialog.show)
+        # Call me, maybe? (as Sylk Mobile): shown when an account's domain runs SylkServer
+        self.call_me_action = QAction(translate('main_window', 'Call me, maybe?...'), self)
+        self.call_me_action.triggered.connect(self._AH_CallMeMaybeActionTriggered)
+        self.call_menu.insertAction(self.call_menu.actions()[0] if self.call_menu.actions() else None, self.call_me_action)    # first in the menu
+        self.call_menu.aboutToShow.connect(self._update_call_me_action)
+        NotificationCenter().add_observer(self, name='SylkServerConfigurationDidChange')
+        self._update_call_me_action()
         self.history_menu.aboutToShow.connect(self._SH_HistoryMenuAboutToShow)
         self.history_menu.triggered.connect(self._AH_HistoryMenuTriggered)
         self.transfer_menu.aboutToShow.connect(self._SH_TransferMenuAboutToShow)
@@ -658,6 +665,34 @@ class MainWindow(base_class, ui_class):
         settings = SIPSimpleSettings()
         settings.google_contacts.enabled = not settings.google_contacts.enabled
         settings.save()
+
+    def _selected_account(self):
+        index = self.identity.currentIndex()
+        return self.identity.itemData(index).account if index != -1 else None
+
+    def _update_call_me_action(self, *args):
+        # only for the account selected in the main window, and only when its domain runs SylkServer
+        if getattr(self, 'call_me_action', None) is None:
+            return              # the account list is filled before the menus are set up
+        from blink.callme import call_me_target
+        try:
+            self.call_me_action.setVisible(call_me_target(self._selected_account()) is not None)
+        except Exception as e:
+            self.call_me_action.setVisible(False)
+            ActivityLog().warning(f'[ui] Cannot tell whether the account can be called from the web: {e!r}')
+
+    def _NH_SylkServerConfigurationDidChange(self, notification):
+        self._update_call_me_action()
+
+    def _AH_CallMeMaybeActionTriggered(self):
+        from blink.callme import CallMeMaybeDialog, call_me_target
+        account = self._selected_account()
+        call_url = call_me_target(account)
+        if call_url is None:
+            self.call_me_action.setVisible(False)
+            return
+        ActivityLog().info(f'[ui] Call me, maybe: {account.id} at {call_url}')
+        CallMeMaybeDialog(account, call_url, self).exec()
 
     def _AH_RedialActionTriggered(self):
         session_manager = SessionManager()
@@ -1150,6 +1185,7 @@ class MainWindow(base_class, ui_class):
             self.export_pgp_key_action.setEnabled(True)
 
     def _SH_IdentityCurrentIndexChanged(self, index):
+        self._update_call_me_action()
         if index != -1:
             account = self.identity.itemData(index).account
             self._show_display_name(account)
