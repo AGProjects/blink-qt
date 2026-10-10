@@ -3,7 +3,8 @@
 Only what is in the viewport, 0.3 s after scrolling or a change stops, and only
 what auto_fetch_reason allows (pictures to 8 MiB, PDFs to 10 MiB, videos to 20
 MiB and audio to 10 MiB when a week old at most; other files never). Skipped too: a file already
-here, one that failed before (its folder keeps .failure.json; a click retries
+here, one from a contact not granted auto_download_media (shared contact attribute,
+false by default; one's own files always), one that failed before (its folder keeps .failure.json; a click retries
 it), one being fetched, and an encrypted one without a key to open it.
 Downloads go through SessionManager.get_file_from_url, which also decrypts;
 progress is kept here (progress(id) -> 0..1 or None) for the bubble to show,
@@ -27,10 +28,20 @@ from blink.messagepane.format import auto_fetch_reason
 from blink.util import run_in_gui_thread
 
 
-__all__ = ['AutoFetcher']
+__all__ = ['AutoFetcher', 'auto_download_allowed']
 
 
 FILE_CATEGORIES = ('image', 'audio', 'video', 'other')
+
+
+def auto_download_allowed(contact, direction='incoming'):
+    """Whether a file is fetched without being asked for: always one's own (sent from another
+    device of ours), else only when the contact has been granted it (its shared
+    auto_download_media, false by default), so nobody can push files onto this device."""
+    if direction == 'outgoing':
+        return True
+    settings = getattr(contact, 'settings', contact)
+    return bool(getattr(settings, 'auto_download_media', False))
 
 
 @implementer(IObserver)
@@ -95,6 +106,9 @@ class AutoFetcher(QObject):
         except (TypeError, ValueError):
             size = None
         age_days = (datetime.now(timezone.utc) - item.timestamp).days
+        if automatic and not auto_download_allowed(getattr(self.pane, 'contact', None), item.direction):
+            log.debug(f'Not fetching {meta["filename"]} of message {item.id} on its own: the contact is not allowed to send files automatically')
+            return          # not marked requested: allowing the contact later fetches what is in view
         if automatic:
             reason = auto_fetch_reason(item.category, meta['filename'], size, age_days)
             if reason is not None:

@@ -40,6 +40,9 @@ class ContactExtension(ContactExtension):
     auto_answer = SharedSetting(type=Boolean, default=False)
     organization = SharedSetting(type=str, default='')
     disable_smileys = SharedSetting(type=Boolean, default=False)
+    # files this contact sends are fetched on their own only when allowed: nobody can push
+    # files onto this device without having been granted it (blink.messagepane.fetch)
+    auto_download_media = SharedSetting(type=Boolean, default=False)
 
     # who last changed the entry and when (blink.addressbook_origin), never set by hand
     modified_by = SharedSetting(type=str, default='')

@@ -128,6 +128,7 @@ class MessagePane(QWidget):
         self._forward_after_download = {}       # message id: (item, conversation keys), sent once its file is here
         self.grid.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
         self._make_grid_controls()
+        self._make_auto_download_button()
         self.composer = Composer(self)
         self.composer.hide()
         layout.addWidget(self.composer)
@@ -165,6 +166,7 @@ class MessagePane(QWidget):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
         notification_center.add_observer(self, name='PGPKeysShouldReload')
+        notification_center.add_observer(self, name='AddressbookContactDidChange')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
@@ -218,6 +220,7 @@ class MessagePane(QWidget):
         how = f'{len(model.items)} messages already loaded' if cached and model.loaded else 'loading'
         also = [other for other in view_key if other != key]
         ActivityLog().info(f'[Message with {key}] Conversation selected in the message pane ({uri.uri}, {how})' + (f', with the messages of {", ".join(also)}' if also else ''))
+        self._update_auto_download_button()
 
     @staticmethod
     def _contact_keys(contact, key):
@@ -270,6 +273,7 @@ class MessagePane(QWidget):
         self.grid.set_model(None)
         self.transcript.setModel(None)
         self.stack.setCurrentWidget(self.empty_label)
+        self._update_auto_download_button()
 
     def _model(self, view_key, key):
         model = self.models.pop(view_key, None)
@@ -379,6 +383,11 @@ class MessagePane(QWidget):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _NH_AddressbookContactDidChange(self, notification):
+        settings = self._auto_download_settings()
+        if settings is not None and notification.sender is settings:
+            self._update_auto_download_button()
+
     def _NH_CFGSettingsObjectDidChange(self, notification):
         if not isinstance(notification.sender, BlinkSettings) or 'interface.mangle_contacts' not in notification.data.modified:
             return
@@ -448,14 +457,22 @@ class MessagePane(QWidget):
                     signal.disconnect(self.fetcher.schedule)
                 except TypeError:
                     pass
+            for signal in (self._model_connected.initialLoadFinished, self._model_connected.rowsInserted, self._model_connected.modelReset):
+                try:
+                    signal.disconnect(self._update_auto_download_button)
+                except TypeError:
+                    pass
         self._model_connected = model
         if model is not None:
             for signal in (model.initialLoadFinished, model.rowsInserted, model.dataChanged):
                 signal.connect(self.check_read)
             for signal in (model.initialLoadFinished, model.rowsInserted, model.jumped):
                 signal.connect(self.fetcher.schedule)
+            for signal in (model.initialLoadFinished, model.rowsInserted, model.modelReset):
+                signal.connect(self._update_auto_download_button)
             self.check_read()
             self.fetcher.schedule()
+        self._update_auto_download_button()
 
     def is_reading(self):
         """Whether the user has the conversation in front of them."""
@@ -746,6 +763,76 @@ class MessagePane(QWidget):
         self.columns_box.hide()
         self.download_button.hide()
         self.select_button.hide()
+
+    # Auto download media: a floating button over the transcript's top right corner, shown when the
+    # conversation has files from the contact and the contact is not allowed to send files that are
+    # fetched on their own (the shared auto_download_media, as in Edit Contact)
+
+    def _make_auto_download_button(self):
+        from PyQt6.QtWidgets import QToolButton
+        button = self.auto_download_button = QToolButton(self.stack)
+        button.setText(translate('message_pane', 'Auto download media'))
+        button.setToolTip(translate('message_pane', 'Download the pictures, videos and files this contact sends without asking (on all your devices)'))
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        font = button.font()
+        if font.pointSizeF() > 0:
+            font.setPointSizeF(max(font.pointSizeF() - 2, 6))
+        else:
+            font.setPixelSize(max(font.pixelSize() - 2, 8))
+        button.setFont(font)
+        button.setStyleSheet('QToolButton { background: rgba(127, 127, 127, 70); border: 1px solid rgba(127, 127, 127, 110);'
+                             ' border-radius: 9px; padding: 2px 9px; }'
+                             ' QToolButton:hover { background: rgba(127, 127, 127, 130); }')
+        button.clicked.connect(self._SH_AutoDownloadClicked)
+        button.hide()
+        self.stack.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        from PyQt6.QtCore import QEvent
+        if watched is self.stack and event.type() == QEvent.Type.Resize:
+            self._place_auto_download_button()
+        return super().eventFilter(watched, event)
+
+    def _place_auto_download_button(self):
+        button = self.auto_download_button
+        button.adjustSize()
+        # clear of the scrollbar, also of one drawn over the content (an overlay style reports no width)
+        scrollbar = self.transcript.verticalScrollBar()
+        right = self.stack.width() - 24 - max(scrollbar.sizeHint().width(), 16)
+        button.move(max(0, right - button.width()), 10)
+        button.raise_()
+
+    def _auto_download_settings(self):
+        """The contact's address book entry (where auto_download_media is), or None (Bonjour, no contact)."""
+        from sipsimple.addressbook import Contact
+        settings = getattr(self.contact, 'settings', None)
+        return settings if isinstance(settings, Contact) else None
+
+    def _has_incoming_files(self):
+        model = self.models.get(self.view_key) if self.view_key is not None else None
+        return model is not None and any(item.direction == 'incoming' and item.category in ('image', 'audio', 'video', 'other') for item in model.items)
+
+    def _update_auto_download_button(self, *args):
+        settings = self._auto_download_settings()
+        show = (settings is not None and not settings.auto_download_media and self.stack.currentWidget() is not self.empty_label
+                and self._has_incoming_files())
+        self.auto_download_button.setVisible(show)
+        if show:
+            self._place_auto_download_button()
+
+    def _SH_AutoDownloadClicked(self):
+        settings = self._auto_download_settings()
+        if settings is None or settings.auto_download_media:
+            return
+        from blink.contacts import in_one_xcap_update
+
+        def allow():
+            settings.auto_download_media = True
+            settings.save()
+        in_one_xcap_update('auto-download-media', allow)
+        ActivityLog().info(f'[Message with {self.key}] Media sent by {settings.name or self.key} are downloaded automatically from now on')
+        self.auto_download_button.hide()
+        QTimer.singleShot(1000, self.fetcher.schedule)      # once the setting is saved: what is in view is fetched
 
     def _SH_SearchActiveChanged(self, active):
         """The category chips come with the search; closing it shows the whole conversation again."""

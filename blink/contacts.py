@@ -7370,6 +7370,13 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setItemData(4, translate('contact_editor', 'audio+chat'))
         self.preferred_media.hide()     # double-click always opens the conversation: nothing to prefer
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
+        # room for 5 addresses, the rest scroll
+        table = self.addresses_table
+        table.setFixedHeight(table.horizontalHeader().sizeHint().height() + 5 * table.verticalHeader().defaultSectionSize() + 2 * table.frameWidth())
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # as tall as its contents (the .ui's minimum height left empty space above the buttons)
+        self.setMinimumSize(self.minimumWidth(), 0)
+        self.resize(self.width(), self.sizeHint().height())
 
     def open_for_add(self, sip_address='', target_group=None):
         self.edited_contact = None
@@ -7397,6 +7404,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.icon_selector.init_with_contact(contact)
         self.presence.setChecked(contact.presence.subscribe)
         self.auto_answer.setChecked(contact.auto_answer)
+        self.auto_download_media.setChecked(bool(contact.auto_download_media))
         self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
         self.original_groups = [group for group in self._selectable_groups() if contact.id in {member.id for member in group.contacts}]
         self.selected_groups = list(self.original_groups)
@@ -7538,6 +7546,7 @@ class ContactEditorDialog(base_class, ui_class):
             contact.auto_answer = True
         else:
             contact.auto_answer = False
+        contact.auto_download_media = self.auto_download_media.isChecked()     # shared: replicated to the other devices
 
         if self.icon_selector.filename is self.icon_selector.NotSelected:
             pass
