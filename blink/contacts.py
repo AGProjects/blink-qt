@@ -787,13 +787,20 @@ class ContactRepair(object, metaclass=Singleton):
         entries = {key: value for key, value in entries.items() if key not in added}
         if not entries:
             return 0
+        # in the file-io thread: a new contact is saved there at once, so the Test group that
+        # lists it is saved (and stamped by addressbook_origin) with it, in one XCAP update
+        in_one_xcap_update('test-numbers', self._write_test_numbers, entries, added)
+        return len(entries)
+
+    def _write_test_numbers(self, entries, added):
+        activity = ActivityLog()
         manager = addressbook.AddressbookManager()
         existing = list(manager.get_contacts())
         set_aside = {member.id for member in getattr(ContactTrash.deleted_group(), 'contacts', ())}
         blocked = blocked_group()
         set_aside |= {member.id for member in blocked.contacts} if blocked is not None else set()
         created, filed, named = [], [], []
-        with addressbook_origin.reason('test-numbers'), addressbook.AddressbookManager.transaction():
+        if True:
             try:
                 group = manager.get_group('test')
             except KeyError:
@@ -830,7 +837,6 @@ class ContactRepair(object, metaclass=Singleton):
             activity.info(f"[addressbook] Test numbers: filed into Test {', '.join(filed)}")
         if named:
             activity.info(f"[addressbook] Test numbers: named {', '.join(named)}")
-        return len(created) + len(filed)
 
     def repair_contacts(self):
         activity = ActivityLog()
