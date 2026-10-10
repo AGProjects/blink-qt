@@ -80,6 +80,8 @@ class MessagePane(QWidget):
         self.header = ConversationHeader(self)
         self.header.hide()
         self.header.dayChosen.connect(self._jump_to)
+        self.header.nowChosen.connect(self._back_to_now)
+        self.header.jumped = self._jumped
         self.header.locationAction.connect(self._location_action)
         self.header.addressChosen.connect(self._SH_AddressChosen)
         self.header.accountChosen.connect(self._SH_AccountChosen)
@@ -539,6 +541,20 @@ class MessagePane(QWidget):
             return
         model.jump_to(day)
         self.strip.set_conversation(model, self.transcript)     # a search gives way to the jump
+
+    def _jumped(self):
+        """After a jump to a day, until the newest messages are loaded again."""
+        model = self.models.get(self.view_key)
+        return model is not None and model.has_newer and not model.search_text
+
+    def _back_to_now(self):
+        model = self.models.get(self.view_key)
+        if model is None:
+            return
+        if model.has_newer:
+            model.load()                      # the newest messages again
+            self.strip.set_conversation(model, self.transcript)
+        self.transcript.follow_bottom()
 
     # Composer
 

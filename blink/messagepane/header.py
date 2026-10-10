@@ -122,6 +122,7 @@ class AvatarLabel(QLabel):
 
 class ConversationHeader(QWidget):
     dayChosen = pyqtSignal(object)      # a date to jump to
+    nowChosen = pyqtSignal()            # back to the newest messages, after a jump
     fontStep = pyqtSignal(int)          # -1 smaller, +1 larger
     locationAction = pyqtSignal(str)    # 'send' (current location) or 'request' (theirs)
     addressChosen = pyqtSignal(object)  # another address of the contact (a contact URI)
@@ -258,6 +259,11 @@ class ConversationHeader(QWidget):
         self.apply_theme()
         follow_theme(self)
 
+    @staticmethod
+    def jumped():
+        """Whether the transcript was moved to a past day (set by the pane): the calendar then offers Back to Now."""
+        return False
+
     def _tool_button(self, tooltip=None):
         button = QToolButton(self)
         button.setAutoRaise(True)
@@ -314,6 +320,9 @@ class ConversationHeader(QWidget):
         """Years, then months, then days, newest first, each with its number of messages."""
         menu = self.calendar_menu
         menu.clear()
+        if self.jumped():
+            menu.addAction(translate('message_pane', 'Back to Now'), self.nowChosen.emit)
+            menu.addSeparator()
         days = {}
         for text, count in self.day_counts.items():
             try:
