@@ -161,6 +161,9 @@ class Blink(QApplication, metaclass=QSingleton):
                 ActivityLog().info(f'[profile] Profile {switched[0]} deleted (kept in {ApplicationData.get("profiles/.deleted")})')
             self.new_profile = not profiles.has_accounts()      # offer to add an account, as on a first run
         ActivityLog().info(f'[profile] Profile: {profiles.current_profile()}')
+        from PyQt6.QtGui import QImageReader
+        if b'svg' not in [bytes(image_format) for image_format in QImageReader.supportedImageFormats()]:
+            ActivityLog().error('[ui] Qt cannot read SVG images: most icons will be missing. Install qt6-svg-plugins (Debian 13 and later) or libqt6svg6')
         self.registrar_addresses = {}
         self._tls_diagnosed = {}
         self._certificate_errors_logged = {}  # (server, reason) -> monotonic time of the last logged certificate error

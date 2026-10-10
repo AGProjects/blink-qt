@@ -1724,6 +1724,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         def blended_pixmap(pixmap, color):
             blended_pixmap = QPixmap(pixmap)
+            if blended_pixmap.isNull():
+                return blended_pixmap       # the SVG did not load (no Qt SVG plugin): painting on it crashes Qt
             painter = QPainter(blended_pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
