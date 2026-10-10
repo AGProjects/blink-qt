@@ -117,6 +117,16 @@ class _Link(object):
         self.text = text or url
 
 
+def _url_link(value):
+    """A URL as stored (percent-encoded, as mobile sends it: https%3A//...) decoded, and a link
+    when it is a web one."""
+    if not value:
+        return value
+    from urllib.parse import unquote
+    url = unquote(str(value)).strip()
+    return _Link(url) if url.lower().startswith(('https://', 'http://')) else url
+
+
 def _cell(value):
     if isinstance(value, _Link):
         return f'<a href="{html.escape(value.url, quote=True)}" title="{html.escape(value.url, quote=True)}">{html.escape(value.text)}</a>'
@@ -172,7 +182,7 @@ def _show(parent, item, shown, stored, related_rows, answers, agents=()):
     if meta:
         parts.append(_section(translate('message_info', 'File transfer'), [
             ('Name', meta.get('filename')), ('Size', meta.get('filesize')), ('Type', meta.get('filetype')),
-            ('URL', meta.get('url')), ('Available until', meta.get('until')), ('Here', local_file(item) or 'not downloaded'),
+            ('URL', _url_link(meta.get('url'))), ('Available until', meta.get('until')), ('Here', local_file(item) or 'not downloaded'),
             ('Failure', failure_reason(item)), ('Caption', item.caption),
         ]))
     if item.category == 'location':
@@ -193,22 +203,7 @@ def _show(parent, item, shown, stored, related_rows, answers, agents=()):
     for number, related in enumerate(related_rows, 1):
         parts.append(_section(translate('message_info', 'Related %d') % number, list(related.items())))
 
-    dialog = QDialog(parent)
-    dialog.setWindowTitle(translate('message_info', 'Message Info'))
-    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-    dialog.resize(560, 640)
-    layout = QVBoxLayout(dialog)
-    browser = QTextBrowser(dialog)
-    browser.setOpenLinks(False)
-    browser.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
-    browser.setHtml(''.join(parts))
-    layout.addWidget(browser)
-    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
-    buttons.rejected.connect(dialog.close)
-    layout.addWidget(buttons)
-    _open_panels.append(dialog)
-    dialog.destroyed.connect(lambda *args, dialog=dialog: _open_panels.remove(dialog) if dialog in _open_panels else None)
-    dialog.show()
+    _dialog(parent, translate('message_info', 'Message Info'), ''.join(parts))
 
 
 _CALL_FIELDS = (('direction', 'Direction'), ('outcome', 'Outcome'), ('duration', 'Duration'), ('status', 'SIP status'), ('reason', 'Reason'),
@@ -373,7 +368,8 @@ def _dialog(parent, title, body):
     layout = QVBoxLayout(dialog)
     browser = QTextBrowser(dialog)
     browser.setOpenLinks(False)
-    browser.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+    browser.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard |
+                                    Qt.TextInteractionFlag.LinksAccessibleByMouse | Qt.TextInteractionFlag.LinksAccessibleByKeyboard)
     browser.setHtml(body)
     browser.anchorClicked.connect(_open_link)
     layout.addWidget(browser)
