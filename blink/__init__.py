@@ -147,7 +147,20 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
+        from blink import profiles
+        try:
+            switched = profiles.apply_pending_switch()      # before anything reads the configuration
+        except Exception as e:
+            switched = None
+            ActivityLog().error(f'[profile] Cannot switch profiles: {e!r}')
         self._log_versions()
+        self.new_profile = False
+        if switched:
+            ActivityLog().info(f'[profile] Switched from profile {switched[0]} to {switched[1]}')
+            if os.path.isdir(ApplicationData.get('profiles/.deleted')) and not os.path.isdir(ApplicationData.get(f'profiles/{switched[0]}')):
+                ActivityLog().info(f'[profile] Profile {switched[0]} deleted (kept in {ApplicationData.get("profiles/.deleted")})')
+            self.new_profile = not profiles.has_accounts()      # offer to add an account, as on a first run
+        ActivityLog().info(f'[profile] Profile: {profiles.current_profile()}')
         self.registrar_addresses = {}
         self._tls_diagnosed = {}
         self._certificate_errors_logged = {}  # (server, reason) -> monotonic time of the last logged certificate error
@@ -259,7 +272,7 @@ class Blink(QApplication, metaclass=QSingleton):
         branding.setup(self)
 
     def run(self):
-        self.first_run = not os.path.exists(ApplicationData.get('config'))
+        self.first_run = not os.path.exists(ApplicationData.get('config')) or getattr(self, 'new_profile', False)
         self._install_signal_handlers()
         self.sip_application.start(FileStorage(ApplicationData.directory))
         self.exec()

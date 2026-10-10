@@ -1193,6 +1193,14 @@ class MessageHistory(object, metaclass=Singleton):
             return ' and 0'
         return f" and {column} in ({', '.join(self.db.sqlrepr(str(value)) for value in values)})"
 
+    def _shown_accounts_sql(self, accounts):
+        """The accounts whose messages are read: those given, else the enabled accounts, the ones
+        loaded from the configuration in use (blink.profiles: another profile's accounts, and
+        their conversations, are not shown even when the peer is the same)."""
+        if accounts is None:
+            return ' and ' + self._get_enabled_account_filter()
+        return self._in_sql('account_id', accounts)
+
     def _remote_uri_sql(self, remote_uri):
         """remote_uri = x, or for a contact with several addresses (a list or tuple of
         conversation keys) remote_uri in (...): its conversations shown as one."""
@@ -1327,20 +1335,20 @@ class MessageHistory(object, metaclass=Singleton):
         """{conversation key: newest message time} for ordering conversations."""
         query = (f'select remote_uri, max(timestamp) from {Message.sqlmeta.table}'
                  f' where {NOT_DELETED_SQL} and category is not null' + ('' if include_calls else " and category != 'call'")
-                 + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
+                 + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
         return {str(remote_uri): str(newest) for remote_uri, newest in self.db.queryAll(query) if remote_uri and newest}
 
     def last_call_times(self, accounts=None, remote_uri=None):
         """{conversation key: start time of the newest call}."""
         query = (f'select remote_uri, max(timestamp) from {Message.sqlmeta.table}'
                  f" where {NOT_DELETED_SQL} and category = 'call'"
-                 + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
+                 + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
         return {str(remote_uri): str(newest) for remote_uri, newest in self.db.queryAll(query) if remote_uri and newest}
 
     def last_message_accounts(self, accounts=None, remote_uri=None):
         """{conversation key: account id of its newest message}, the account a conversation continues on."""
         table = Message.sqlmeta.table
-        where = f' where {NOT_DELETED_SQL} and category is not null' + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri)
+        where = f' where {NOT_DELETED_SQL} and category is not null' + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri)
         query = (f'select m.remote_uri, m.account_id from {table} m'
                  f' join (select remote_uri, max(timestamp) as newest from {table}{where} group by remote_uri) latest'
                  f' on m.remote_uri = latest.remote_uri and m.timestamp = latest.newest'
@@ -1357,7 +1365,7 @@ class MessageHistory(object, metaclass=Singleton):
         """
         table = Message.sqlmeta.table
         where = (f" where {NOT_DELETED_SQL} and category = 'text'"
-                 + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri))
+                 + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri))
         columns = 'remote_uri, account_id, message_id, timestamp, content_type, content'
         try:
             rows = self.db.queryAll(f'select {columns} from (select {columns}, row_number() over'
@@ -1376,7 +1384,7 @@ class MessageHistory(object, metaclass=Singleton):
         reaction_ids = set()
         if result:
             query = (f"select content from {table} where content_type = '{METADATA_CONTENT_TYPE}' and {NOT_DELETED_SQL} and content like '%reply%'"
-                     + self._in_sql('account_id', accounts) + self._in_sql('remote_uri', remote_uri))
+                     + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri))
             for (content,) in self.db.queryAll(query):
                 link = reply_metadata(content)
                 if link:
@@ -1388,12 +1396,12 @@ class MessageHistory(object, metaclass=Singleton):
         Encrypted bodies not yet decrypted cannot match."""
         pattern = '%' + str(text).replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
         query = (f"{self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL} and category = 'text'"
-                 f" and content like {self.db.sqlrepr(pattern)} escape '\\'" + self._in_sql('account_id', accounts))
+                 f" and content like {self.db.sqlrepr(pattern)} escape '\\'" + self._shown_accounts_sql(accounts))
         return list(Message.select(query, orderBy=['-timestamp', '-id'], limit=int(limit)))
 
     def present_categories(self, remote_uri, accounts=None):
         """The category filters a conversation has messages for, 'links' included."""
-        where = (f' where {NOT_DELETED_SQL} and {self._remote_uri_sql(remote_uri)}' + self._in_sql('account_id', accounts))
+        where = (f' where {NOT_DELETED_SQL} and {self._remote_uri_sql(remote_uri)}' + self._shown_accounts_sql(accounts))
         table = Message.sqlmeta.table
         found = {str(category) for (category,) in self.db.queryAll(f'select distinct category from {table}{where} and category is not null') if category}
         if 'text' in found and self.db.queryAll(f"select 1 from {table}{where} and category = 'text' and has_link = 1 limit 1"):
@@ -1406,7 +1414,7 @@ class MessageHistory(object, metaclass=Singleton):
         the oldest `limit` of them, oldest first (paging forwards). Location trail
         ticks are left out unless asked for (they belong to their share's bubble) and
         metadata sidecars always are."""
-        query = f'{self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL}' + self._category_sql(category) + self._in_sql('account_id', accounts)
+        query = f'{self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL}' + self._category_sql(category) + self._shown_accounts_sql(accounts)
         # sidecars (reply links, captions, waveforms) are not bubbles: they come with related_messages()
         query += f" and content_type != '{METADATA_CONTENT_TYPE}'"
         if not include_trail:
@@ -1426,7 +1434,7 @@ class MessageHistory(object, metaclass=Singleton):
         query = (f"select date(timestamp, 'localtime') as day, count(*) from {table}"
                  f" where {self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL} and category is not null"
                  f" and content_type != '{METADATA_CONTENT_TYPE}' and (related_action is null or related_action not in ({actions}))"
-                 + self._in_sql('account_id', accounts) + ' group by day')
+                 + self._shown_accounts_sql(accounts) + ' group by day')
         return {str(day): int(count) for day, count in self.db.queryAll(query) if day}
 
     def related_messages(self, message_ids):
@@ -2388,7 +2396,7 @@ class MessageHistory(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else conversation_key(uri, session.account)
         try:
-            query = Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.state != 'deleted', OR(Message.q.deleted == None, Message.q.deleted == 0)))
+            query = Message.select(f"remote_uri = {self.db.sqlrepr(remote_uri)} and state != 'deleted' and {NOT_DELETED_SQL} and {self._get_enabled_account_filter()}")
             total = query.count()
             result = list(query.orderBy('timestamp')[-entries:])
         except Exception as e:

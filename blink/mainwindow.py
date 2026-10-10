@@ -8,7 +8,7 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, QRectF, QSettings, QSize, QTimer, QUrl, QTranslator
 from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QAction, QActionGroup, QPainter, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
-from PyQt6.QtWidgets import QMessageBox, QProgressBar, QSplitter
+from PyQt6.QtWidgets import QLabel, QMessageBox, QProgressBar, QSplitter
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -225,6 +225,13 @@ class MainWindow(base_class, ui_class):
         self.answering_machine_action.triggered.connect(self._AH_EnableAnsweringMachineActionTriggered)
         self.release_notes_action.triggered.connect(partial(QDesktopServices.openUrl, QUrl('https://icanblink.com/changelog-linux/')))
         self.quit_action.triggered.connect(self._AH_QuitActionTriggered)
+
+        # Blink > Profiles: sets of accounts with their own address book (blink.profiles)
+        self.profiles_menu = QMenu(translate('main_window', 'Profiles'), self)
+        actions = self.blink_menu.actions()
+        position = actions.index(self.accounts_menu.menuAction()) + 1
+        self.blink_menu.insertMenu(actions[position] if position < len(actions) else None, self.profiles_menu)
+        self.profiles_menu.aboutToShow.connect(self._fill_profiles_menu)
 
         # Call menu actions
         self.redial_action.triggered.connect(self._AH_RedialActionTriggered)
@@ -922,6 +929,116 @@ class MainWindow(base_class, ui_class):
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def _fill_profiles_menu(self):
+        from blink import profiles
+        menu = self.profiles_menu
+        menu.clear()
+        current = profiles.current_profile()
+        group = QActionGroup(menu)
+        for name in profiles.profile_names():
+            action = menu.addAction(name)
+            action.setCheckable(True)
+            action.setChecked(name == current)
+            group.addAction(action)
+            if name != current:
+                action.triggered.connect(partial(self._switch_profile, name))
+        menu.addSeparator()
+        menu.addAction(translate('main_window', 'Save Profile As...'), self._save_profile_as)
+        menu.addAction(translate('main_window', 'New Profile...'), self._new_profile)
+        delete = menu.addAction(translate('main_window', 'Delete Profile...'), self._delete_profile)
+        delete.setEnabled(len(profiles.profile_names()) > 1)
+
+    def _ask_profile_name(self, title, label, text=''):
+        from PyQt6.QtWidgets import QInputDialog, QLabel, QLineEdit
+        from blink import profiles
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setInputMode(QInputDialog.InputMode.TextInput)
+        dialog.setLabelText(label)
+        dialog.setTextValue(text)
+        for child in dialog.findChildren(QLabel):
+            child.setWordWrap(True)         # the explanation wraps instead of widening the box
+        for child in dialog.findChildren(QLineEdit):
+            child.setMinimumWidth(240)
+        dialog.setFixedWidth(340)
+        ok = dialog.exec() == QInputDialog.DialogCode.Accepted
+        name = dialog.textValue().strip()
+        if not ok or not name:
+            return None
+        if not profiles.valid_name(name):
+            QMessageBox.warning(self, title, translate('main_window', 'A profile name cannot contain / \\ or : and cannot start with a dot.'))
+            return None
+        if name in profiles.profile_names():
+            QMessageBox.warning(self, title, translate('main_window', 'There is a profile named %s already.') % name)
+            return None
+        return name
+
+    def _save_profile_as(self):
+        from blink import profiles
+        current = profiles.current_profile()
+        name = self._ask_profile_name(translate('main_window', 'Save Profile As'), translate('main_window', 'Name of this profile (contains the current accounts, their address book and general settings):'), current)
+        if name is None or name == current:
+            return
+        try:
+            profiles.rename_current(name)
+        except Exception as e:
+            QMessageBox.warning(self, translate('main_window', 'Save Profile As'), str(e))
+            return
+        ActivityLog().info(f'[profile] Profile {current} renamed to {name}')
+
+    def _new_profile(self):
+        from blink import profiles
+        name = self._ask_profile_name(translate('main_window', 'New Profile'), translate('main_window', 'Name of the new profile (will copy general settings but have no accounts, yet).'))
+        if name is None:
+            return
+        try:
+            profiles.create_profile(name)
+        except Exception as e:
+            QMessageBox.warning(self, translate('main_window', 'New Profile'), str(e))
+            return
+        ActivityLog().info(f'[profile] Profile {name} created from the general settings of {profiles.current_profile()}')
+        self._switch_profile(name)
+
+    def _switch_profile(self, name):
+        from blink import profiles
+        answer = QMessageBox.question(self, translate('main_window', 'Switch Profile'),
+                                      translate('main_window', 'Switch to profile %s? Blink restarts to use it.') % name)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        profiles.request_switch(name)
+        ActivityLog().info(f'[profile] Switching to profile {name}, restarting')
+        QApplication.instance().restart()
+
+    def _delete_profile(self):
+        """Delete the profile in use: choose the one to continue with, Blink restarts in it and
+        the deleted one is put aside (profiles/.deleted), never erased."""
+        from PyQt6.QtWidgets import QInputDialog
+        from blink import profiles
+        current = profiles.current_profile()
+        others = [name for name in profiles.profile_names() if name != current]
+        if not others:
+            return
+        accounts = profiles.accounts_of_current()
+        what = (translate('main_window', 'Delete profile %s, with its accounts %s?') % (current, ', '.join(accounts)) if accounts
+                else translate('main_window', 'Delete profile %s?') % current)
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle(translate('main_window', 'Delete Profile'))
+        dialog.setLabelText(what + '\n\n' + translate('main_window', 'It is kept in profiles/.deleted. Continue with profile:'))
+        dialog.setComboBoxItems(others)
+        dialog.setComboBoxEditable(False)
+        dialog.setOkButtonText(translate('main_window', 'Delete and Restart'))
+        for child in dialog.findChildren(QLabel):
+            child.setWordWrap(True)
+        dialog.setFixedWidth(360)
+        if dialog.exec() != QInputDialog.DialogCode.Accepted:
+            return
+        switch_to = dialog.textValue()
+        if switch_to not in others:
+            return
+        profiles.request_delete_current(switch_to)
+        ActivityLog().info(f'[profile] Deleting profile {current}, continuing with {switch_to}, restarting')
+        QApplication.instance().restart()
 
     def _AH_QuitActionTriggered(self):
         if self.system_tray_icon is not None:
