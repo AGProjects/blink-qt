@@ -221,7 +221,7 @@ _DELIVERY_MARKS = {
     'accepted': ('✓', 'sent'),
     'sent': ('✓', 'sent'),
     'delivered': ('✔', 'delivered'),
-    'displayed': ('✔✔', 'displayed'),
+    'displayed': ('\u2713\u2713', 'displayed'),   # ✓✓ (U+2713): ✔ (U+2714) is an emoji too and may be drawn from the colour emoji font, which ignores the pen colour
     'failed': ('⚠', 'failed'),
     'failed-local': ('⚠', 'failed'),
     'error': ('⚠', 'failed'),

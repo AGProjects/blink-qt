@@ -1000,7 +1000,7 @@ class BubbleDelegate(QStyledItemDelegate):
         time_rect = QRectF(bubble.left() + self.padding_h, bubble.bottom() - self.padding_v - QFontMetricsF(small).height(),
                            bubble.width() - 2 * self.padding_h, QFontMetricsF(small).height())
         if layout.mark:
-            mark_colour = {'displayed': QColor('#58a6ff') if is_dark_theme() else QColor('#1a73e8'),
+            mark_colour = {'displayed': QColor('#3fb950') if is_dark_theme() else QColor('#2e7d32'),     # read: green
                            'failed': QColor('#ff7b72') if is_dark_theme() else QColor('#c62828')}.get(layout.mark_kind, secondary)
             painter.setPen(mark_colour)
             painter.drawText(time_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, layout.mark)
