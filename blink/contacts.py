@@ -15,7 +15,7 @@ from PyQt6.QtCore import QByteArray, QEvent, QLocale, QMimeData, QPoint, QPointF
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
-from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QListView, QMenu, QMessageBox, QRadioButton, QTableView, QWidget
+from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QListView, QMenu, QMessageBox, QRadioButton, QSizePolicy, QTableView, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -68,6 +68,7 @@ from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri,
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme, secondary_text_color
+from blink.widgets.labels import ElidedLabel
 from blink.widgets.util import ContextMenuActions, FontScaledSize, badge_font
 
 
@@ -3556,7 +3557,7 @@ class Contact(object):
                 return instance_id
             if self.type == 'bonjour':
                 return bonjour_info(self.settings)
-            return self.note or self.uri.uri
+            return self.uri.uri         # the presence note is on the first line, after the name
         except (AttributeError, TypeError):
             return ''
 
@@ -3943,6 +3944,16 @@ class ContactWidget(base_class, ui_class):
         self.info_label.setForegroundRole(QPalette.ColorRole.WindowText)
         self.time_label.setPalette(palette)
         self.time_label.setForegroundRole(QPalette.ColorRole.WindowText)
+        # the presence note, after the name in the colour of the second line: it takes only the room the
+        # name and the time leave, and is the one cut short
+        self.note_label = ElidedLabel(self)
+        self.note_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.note_label.setPalette(palette)
+        self.note_label.setForegroundRole(QPalette.ColorRole.WindowText)
+        self.note_label.setAlignment(self.name_label.alignment())
+        self.note_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.name_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.name_time_layout.insertWidget(1, self.note_label, 1)
         time_font = QFont(self.font())
         if time_font.pointSizeF() > 0:
             time_font.setPointSizeF(max(time_font.pointSizeF() - 1, 6))
@@ -3968,9 +3979,15 @@ class ContactWidget(base_class, ui_class):
         name = getattr(contact, 'display_name', contact.name)
         info = contact.info
         pixmap = contact.pixmap
+        note = (getattr(contact, 'note', None) or '').strip()
         if mangling_enabled():
             name, info, pixmap = mangled_row(contact, name, info)
+            if note:
+                from blink.contact_mangler import mangled_text
+                note = mangled_text(note, uri=str(getattr(contact.uri, 'uri', '') or '') or None, name=getattr(contact, 'name', None))
         self.name_label.setText(name)
+        self.note_label.setText(f'· {" ".join(note.split())}' if note else '')
+        self.note_label.setVisible(bool(note))
         self.info_label.setTextFormat(Qt.TextFormat.PlainText)     # may quote a message
         time_text = format_row_time(getattr(contact, 'row_time', None))
         self.time_label.setText(time_text)
@@ -4248,6 +4265,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         self.contact_selected_widget.name_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
         self.contact_selected_widget.info_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
         self.contact_selected_widget.time_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+        self.contact_selected_widget.note_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
 
         # No theme except Oxygen honors the BackgroundRole
         palette = self.contact_oddline_widget.palette()
@@ -4843,6 +4861,8 @@ class ContactModel(QAbstractListModel):
             return item.size_hint
         elif role == Qt.ItemDataRole.DisplayRole:
             return str(item)
+        elif role == Qt.ItemDataRole.ToolTipRole and isinstance(item, Contact):
+            return (getattr(item, 'note', None) or '').strip() or None
         return None
 
     def supportedDropActions(self):
