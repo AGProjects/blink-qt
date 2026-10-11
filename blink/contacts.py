@@ -2401,9 +2401,16 @@ def remember_bonjour_neighbour(instance_id, name, host):
         return
     names = _load_bonjour_names()
     entry = {'name': str(name), 'host': str(host or '')}
-    if names.get(instance_id) == entry:
+    previous = names.get(instance_id)
+    if isinstance(previous, dict) and previous.get('nickname'):
+        entry['nickname'] = previous['nickname']       # the user's name for them stays
+    if previous == entry:
         return
     names[instance_id] = entry
+    _save_bonjour_names(names)
+
+
+def _save_bonjour_names(names):
     try:
         makedirs(ApplicationData.directory)
         with open(_bonjour_names_file(), 'w', encoding='utf-8') as names_file:
@@ -2412,9 +2419,50 @@ def remember_bonjour_neighbour(instance_id, name, host):
         log.warning('Cannot save Bonjour neighbour names: %s' % e)
 
 
+def bonjour_nickname(instance_id):
+    """What the user calls a Bonjour neighbour (Edit Name), or ''."""
+    entry = _load_bonjour_names().get(bare_instance_id(instance_id) or '')
+    return str(entry.get('nickname') or '') if isinstance(entry, dict) else ''
+
+
+def rename_bonjour_neighbour(instance_id, nickname):
+    """Call a neighbour what the user wants, as on macOS: kept against the instance id in the
+    local neighbours file (never the addressbook: a link-local neighbour has no server), beside
+    the announced name. An empty name clears it, and the announced name is shown again.
+    Returns True when something changed."""
+    instance_id = bare_instance_id(instance_id)
+    if not instance_id:
+        return False
+    names = _load_bonjour_names()
+    entry = dict(names.get(instance_id) or {})
+    nickname = ' '.join(str(nickname or '').split())
+    if nickname == str(entry.get('nickname') or ''):
+        return False
+    if nickname:
+        entry['nickname'] = nickname
+    else:
+        entry.pop('nickname', None)
+    names[instance_id] = entry
+    _save_bonjour_names(names)
+    ActivityLog().info(f'[bonjour] Neighbour {instance_id} ' + (f'named {nickname}' if nickname else 'shown by its announced name again'))
+    return True
+
+
+def edit_bonjour_name(parent, contact):
+    """Edit Name for a Bonjour neighbour (macOS: Rename)."""
+    instance_id = bare_instance_id(contact.settings.id)
+    current = bonjour_nickname(instance_id) or contact.settings.name or ''
+    name, ok = QInputDialog.getText(parent, translate('contact_list', 'Edit Name'),
+                                    translate('contact_list', 'Display name (empty for the name the neighbour announces):'), text=current)
+    if ok and rename_bonjour_neighbour(instance_id, name):
+        parent.viewport().update()
+
+
 def remembered_bonjour_name(instance_id):
-    """'Name (computer)' for a neighbour met before, or None."""
+    """'Name (computer)' for a neighbour met before (or the user's name for them), or None."""
     entry = _load_bonjour_names().get(bare_instance_id(instance_id))
+    if isinstance(entry, dict) and entry.get('nickname'):
+        return entry['nickname']
     if not isinstance(entry, dict) or not entry.get('name'):
         return None
     return '%s (%s)' % (entry['name'], entry['host']) if entry.get('host') else entry['name']
@@ -3648,7 +3696,7 @@ class Contact(object):
     @property
     def name(self):
         if self.type == 'bonjour':
-            return '%s (%s)' % (self.settings.name, self.settings.hostname)
+            return bonjour_nickname(self.settings.id) or '%s (%s)' % (self.settings.name, self.settings.hostname)
         elif self.type == 'google':
             return self.settings.name or self.settings.organization or ''
         else:
@@ -3882,7 +3930,7 @@ class ContactDetail(object):
     @property
     def name(self):
         if self.type == 'bonjour':
-            return '%s (%s)' % (self.settings.name, self.settings.hostname)
+            return bonjour_nickname(self.settings.id) or '%s (%s)' % (self.settings.name, self.settings.hostname)
         elif self.type == 'google':
             return self.settings.name or self.settings.organization or ''
         else:
@@ -6028,6 +6076,7 @@ class ContactListView(QListView):
             elif contact.type == 'bonjour':
                 # a neighbour's conversation is not in the Messages group (never in the addressbook)
                 menu.addSeparator()
+                menu.addAction(translate('contact_list', 'Edit Name...'), lambda: edit_bonjour_name(self, contact))
                 menu.addAction(self.actions.remove_conversation)
             else:
                 menu.addSeparator()
