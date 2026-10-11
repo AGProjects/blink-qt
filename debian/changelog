@@ -1,3 +1,16 @@
+blink (7.0.2) unstable; urgency=medium
+
+  * Fixed handling remote delete for our own op
+  * Added timestamp for conference and calls contacts
+  * Blocking contacts fixes
+  * Added bonjour nicknames
+  * Synchronize presence blocked policy document with Blocked group
+  * Show presence note and last message per contact
+  * Show last message poer contact on all groups
+  * Turn off presence subscriptions if contact blocked remotely
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Sun, 11 Oct 2026 13:34:24 -0300
+
 blink (7.0.1) unstable; urgency=medium
 
   * Adjust A-A+ button size
