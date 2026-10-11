@@ -2582,13 +2582,13 @@ def conversation_uri(contact):
 
 def row_time_kind(group_settings):
     """What the time on the right of a contact row is in this group: 'message' in Messages,
-    'call' in Calls and Tel, None elsewhere."""
+    'call' in Calls, Tel and Conference (when the last conference in a room was), None elsewhere."""
     if is_messages_group(group_settings):
         return 'message'
     if group_settings is None or isinstance(group_settings, VirtualGroup):
         return None
     try:
-        if is_group(group_settings, CALLS) or is_group(group_settings, TEL):
+        if is_group(group_settings, CALLS) or is_group(group_settings, TEL) or is_group(group_settings, CONFERENCE):
             return 'call'
     except Exception:
         pass
