@@ -12,6 +12,7 @@ blink (7.0.1) unstable; urgency=medium
   * Mak display ticks green color
   * Join Conference: do not autofocus the room field
   * Added data manager window
+  * Added utility scripts folder
 
  -- Adrian Georgescu <ag@ag-projects.com>  Sun, 11 Oct 2026 12:08:16 -0300
 

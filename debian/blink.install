@@ -1,2 +1,3 @@
 debian/blink.desktop usr/share/applications/
 debian/blink.xpm usr/share/pixmaps/
+scripts/* usr/share/blink/scripts/

@@ -7,3 +7,6 @@ override_dh_clean:
 	dh_clean
 	rm -rf build dist MANIFEST
 
+override_dh_fixperms:
+	dh_fixperms
+	chmod 755 debian/blink/usr/share/blink/scripts/*

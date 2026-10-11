@@ -23,6 +23,7 @@ include debian/rules
 include debian/source/format
 
 graft docs
+graft scripts
 
 recursive-include blink *.pyx
 recursive-exclude blink *.c
