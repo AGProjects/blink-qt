@@ -3537,21 +3537,20 @@ class Contact(object):
             # In the Messages group a row is a conversation, and a Bonjour
             # conversation is the neighbour's instance id.
             in_messages_group = is_messages_group(getattr(self.group, 'settings', None))
-            if in_messages_group:
-                # they are typing, else the last typed message of the conversation, when there is one
-                from blink.history import ConversationPreviews, ConversationTyping
-                keys = self.conversation_keys
-                if ConversationTyping().is_typing(keys):
-                    return translate('contact_list', '✎ is typing…')
-                from blink.history import ConversationLocations
-                sharing = ConversationLocations().sharing(keys)
-                if sharing == 'meet':
-                    return translate('contact_list', '⌖ is meeting up with you…')
-                if sharing:
-                    return translate('contact_list', '⌖ is sharing location…')
-                preview = ConversationPreviews().preview(keys)
-                if preview:
-                    return preview
+            # in every group: they are typing, else the last typed message of the conversation, when there is one
+            from blink.history import ConversationPreviews, ConversationTyping
+            keys = self.conversation_keys
+            if ConversationTyping().is_typing(keys):
+                return translate('contact_list', '✎ is typing…')
+            from blink.history import ConversationLocations
+            sharing = ConversationLocations().sharing(keys)
+            if sharing == 'meet':
+                return translate('contact_list', '⌖ is meeting up with you…')
+            if sharing:
+                return translate('contact_list', '⌖ is sharing location…')
+            preview = ConversationPreviews().preview(keys)
+            if preview:
+                return preview
             instance_id = neighbour_instance_id(self, str(self.uri.uri) if self.uri is not None else None)
             if instance_id and (in_messages_group or self.type != 'bonjour'):
                 return instance_id
@@ -4766,10 +4765,14 @@ class ContactModel(QAbstractListModel):
         # and are ordered by it: a changed row moves to its place (rows moved, not reset, so the
         # selection and the scroll position stay); the previews are already coalesced
         keys = notification.data.keys
-        changed = [item for item in self.items if isinstance(item, Contact) and row_time_kind(getattr(item.group, 'settings', None)) is not None
-                   and (keys is None or not keys.isdisjoint(item.conversation_keys))]
+        changed = [item for item in self.items if isinstance(item, Contact) and (keys is None or not keys.isdisjoint(item.conversation_keys))]
         for contact in changed:
-            self._reposition_contact(contact)
+            if row_time_kind(getattr(contact.group, 'settings', None)) is not None:
+                self._reposition_contact(contact)
+            else:
+                # the second line of a row in any other group quotes the conversation too
+                index = self.index(self.items.index(contact))
+                self.dataChanged.emit(index, index)
 
     def _reposition_contact(self, contact):
         """Move a contact to its place in its group if its sort key changed, and repaint it."""
