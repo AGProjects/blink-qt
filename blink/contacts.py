@@ -310,10 +310,28 @@ def is_blocked_address(uri, account=None):
 
 def blocked_contact_menu(menu, parent, contacts):
     """What a blocked contact offers, wherever it is shown: Unblock, Edit Name and Delete."""
-    menu.addAction(translate('contact_list', 'Unblock'), lambda: unblock_contacts(blocked_group(), contacts))
+    menu.addAction(translate('contact_list', 'Unblock'), lambda: confirm_unblock(parent, blocked_group(), contacts))
     if len(contacts) == 1:
         menu.addAction(translate('contact_list', 'Edit Name...'), lambda: edit_contact_name(parent, contacts[0]))
     menu.addAction(translate('contact_list', 'Delete'), lambda: confirm_soft_delete(parent, contacts))
+
+
+def confirm_unblock(parent, group, contacts):
+    """Unblock only once the user said so: an unblock lets their calls and messages through again."""
+    if group is None or not contacts:
+        return False
+    names = [contact.name or contact.id for contact in contacts]
+    question = (translate('contact_list', "Unblock '%s'?") % names[0] if len(contacts) == 1 else
+                translate('contact_list', 'Unblock %d contacts?') % len(contacts))
+    text = question + '\n\n' + translate('contact_list', 'Their calls and messages will reach you again, on all your devices, and they will see your presence.')
+    box = QMessageBox(QMessageBox.Icon.Warning, translate('contact_list', 'Unblock'), text, QMessageBox.StandardButton.Cancel, parent)
+    unblock = box.addButton(translate('contact_list', 'Unblock'), QMessageBox.ButtonRole.AcceptRole)
+    box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+    box.exec()
+    if box.clickedButton() is not unblock:
+        return False
+    unblock_contacts(group, contacts)
+    return True
 
 
 def edit_contact_name(parent, contact):
@@ -590,16 +608,27 @@ class ContactTrash(object):
 
     @classmethod
     def soft_delete(cls, contacts):
+        # in the file-io thread, as Block: the saves of Deleted and of every group the contact leaves
+        # go to the server as one update. From the GUI thread each went on its own, and one could
+        # be lost (taken out of Blocked here, still in Blocked on the server: back after the reload)
+        in_one_xcap_update('delete', cls._soft_delete, contacts)
+
+    @classmethod
+    def _soft_delete(cls, contacts):
         from blink.history import HistoryManager
         history = HistoryManager().message_history
-        with addressbook_origin.reason('delete'), addressbook.AddressbookManager.transaction():
+        if True:
             deleted_group = cls.deleted_group(create=True)
             # out of every other group (Messages, Calls, Tel, Conference and the user's own): in
             # Deleted only. A restore files it back into Tel and Conference (ContactRepair) and
             # Messages (from history); Calls takes it back with its next call.
             other_groups = [group for group in addressbook.AddressbookManager().get_groups() if group.id != DELETED_GROUP_ID]
+            blocked = blocked_group()
             changed = set()
+            released = []           # contacts that leave Blocked: their presence block goes in this same update
             for contact in contacts:
+                if blocked is not None and contact.id in {member.id for member in blocked.contacts}:
+                    released.append(contact)
                 keys = cls._keys(contact)
                 for key in keys:
                     history.tombstone_conversation(key)
@@ -617,6 +646,21 @@ class ContactTrash(object):
             for group in other_groups:
                 if group.id in changed:
                     group.save()
+            # the presence changes that would otherwise follow as updates of their own
+            # (release_presence_block, sync_deleted_presence), made here
+            manager = addressbook.AddressbookManager()
+            addresses = {canonical_uri(str(uri.uri)) for contact in released for uri in contact.uris} - {''}
+            for policy in [policy for policy in manager.get_policies() if policy.presence.policy == 'block' and canonical_uri(str(policy.uri)) in addresses]:
+                ActivityLog().info(f'[presence] {policy.uri} left Blocked: its presence block removed')
+                policy.delete()
+            for contact in contacts:
+                if contact in released and contact.presence.policy == 'block':
+                    contact.presence.policy = 'allow'
+                    ActivityLog().info(f'[presence] {contact.name or contact.id} left Blocked: allowed to see our presence')
+                if contact.presence.subscribe:
+                    contact.presence.subscribe = False
+                    ActivityLog().info(f'[trash] Presence of {contact.name or contact.id} no longer subscribed')
+                contact.save()
 
     @classmethod
     def restore(cls, contacts):
@@ -5939,7 +5983,7 @@ class ContactListView(QListView):
             # blocked, in Blocked or any other group: unblocked or deleted, nothing else (no calls or messages to them)
             group = blocked_group()
             contacts = list({item.settings.id: item.settings for item in selected_items}.values())
-            menu.addAction(translate('contact_list', 'Unblock'), lambda: unblock_contacts(group, contacts))
+            menu.addAction(translate('contact_list', 'Unblock'), lambda: confirm_unblock(self, group, contacts))
             if len(contacts) == 1:
                 menu.addAction(translate('contact_list', 'Edit Name...'), lambda: edit_contact_name(self, contacts[0]))
             menu.addAction(self.actions.delete_selection if len(selected_items) > 1 else self.actions.delete_item)
