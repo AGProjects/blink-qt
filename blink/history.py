@@ -1097,6 +1097,15 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().info(f'[db] Message {message_id} marked deleted: {rows} rows' + (f', {sidecars} sidecars' if sidecars else '') + (f' ({source})' if source else ''))
             return
         try:
+            stored = Message._connection.queryOne(f'select count(*) from {Message.sqlmeta.table} where message_id = {Message._connection.sqlrepr(str(message_id))}')[0]
+        except Exception:
+            stored = 0
+        if stored:
+            # stored and already hidden: the server's copy of a removal made here, or a second
+            # notice of one made elsewhere. Nothing to do, and nothing to keep for later.
+            log.debug(f'Message {message_id} is already removed' + (f' ({source})' if source else ''))
+            return
+        try:
             if not list(PendingRemoval.selectBy(message_id=str(message_id), account_id=str(account_id or ''))):
                 PendingRemoval(message_id=str(message_id), account_id=str(account_id or ''), remote_uri=str(remote_uri) if remote_uri else None,
                                removed_at=removed_at, source=source)
