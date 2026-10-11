@@ -30,6 +30,7 @@ from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
+from blink.logging import ActivityLog
 from blink.resources import IconManager, Resources
 from blink.screensharing.support import can_share_my_screen, can_view_screens
 from blink.util import run_in_gui_thread
@@ -458,11 +459,28 @@ class PresenceSubscriptionHandler(object):
     def _NH_SIPAccountGotPresenceState(self, notification):
         account = notification.sender
         new_pidf_map = dict((self.sip_prefix_re.sub('', uri), resource.pidf_list) for uri, resource in notification.data.resource_map.items())
+        self._log_presence(account, new_pidf_map, notification.data.full_state)
         account_map = self._pidf_map.setdefault(account.id, {})
         if notification.data.full_state:
             account_map.clear()
         account_map.update(new_pidf_map)
         self._process_presence_data(list(new_pidf_map.keys()))
+
+    def _log_presence(self, account, pidf_map, full_state):
+        """One [presence] line per address whose presence changed: its state and note on each device."""
+        logged = self.__dict__.setdefault('_logged_presence', {})
+        for uri, pidf_list in sorted(pidf_map.items()):
+            try:
+                text = describe_presence(pidf_list)
+            except Exception as e:
+                text = f'unreadable ({e!r})'
+            key = (account.id, uri)
+            if logged.get(key) == text:
+                continue
+            if not pidf_list and key not in logged:
+                continue        # never had presence: nothing to say
+            logged[key] = text
+            ActivityLog().info(f'[presence] {uri}: {text}' + (' (full state)' if full_state else '') + f' for {account.id}')
 
     def _NH_SIPAccountGotPresenceWinfo(self, notification):
         addressbook_manager = addressbook.AddressbookManager()
@@ -493,6 +511,27 @@ class PresenceSubscriptionHandler(object):
                     if uri not in self._winfo_timers:
                         self._winfo_timers[uri] = reactor.callLater(600, self._winfo_timers.pop, uri, None)
                         notification.center.post_notification('SIPAccountGotPendingWatcher', sender=account, data=NotificationData(uri=uri, display_name=None, event='presence'))
+
+
+def describe_presence(pidf_list):
+    """A presence document set as words: 'available "In the office" (Blink on laptop); busy "On the phone" (Sylk)'."""
+    devices = []
+    for pidf_doc in pidf_list:
+        for service in pidf_doc.services:
+            if service.status.extended:
+                state = str(service.status.extended)
+            else:
+                state = 'available' if service.status.basic == 'open' else 'offline'
+            notes = [' '.join(str(note).split()) for note in service.notes] if service.notes else []
+            text = state + ''.join(f' "{note}"' for note in notes if note)
+            device_info = getattr(service, 'device_info', None)
+            device = (str(getattr(device_info, 'description', None) or '') or str(getattr(device_info, 'user_agent', None) or '')) if device_info is not None else ''
+            if device:
+                text += f' ({device})'
+            devices.append(text)
+    if not devices:
+        return 'offline (no presence)'
+    return '; '.join(devices)
 
 
 class PresenceManager(object):

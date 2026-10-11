@@ -148,6 +148,133 @@ def blocked_group():
     return None
 
 
+def audit_presence_blocks():
+    """Once the addressbook has loaded: bring the presence rules (pres-rules over XCAP) and the
+    Blocked group together, and log what was found and done.
+
+    Two lists say "blocked", written by different clients at different times:
+      - the Blocked group: whom calls and messages are refused from, replicated with the
+        addressbook (Blink for macOS, Sylk Mobile, Blink Qt's Block);
+      - the presence rules: who may not see our presence. The policy of a contact ("Allow to
+        see my presence state" off), or a Policy entry for an address that is no contact (a
+        refused watcher, Block presence on macOS).
+
+    The healing only ever adds blocks, so two devices doing it at once end in the same place:
+      1. A Policy entry blocking an address no contact has: a contact is made for it and
+         blocked (Blocked group, presence policy block, no subscription).
+      2. A Policy entry blocking an address an existing contact has, the contact not blocked:
+         the contact is not blocked, only its presence policy set to block.
+      3. A contact whose own policy is block, not in Blocked: left alone (a choice of its own).
+      4. A member of Blocked whose presence policy is not block (or still subscribed to): the
+         policy is set to block and the subscription turned off.
+    The changes go to the server as one update. An unblock must therefore clear both lists
+    (Blink Qt's Unblock does), or the next start blocks the address again.
+    """
+    try:
+        manager = addressbook.AddressbookManager()
+        contacts = list(manager.get_contacts())
+        group = blocked_group()
+        blocked_ids = {member.id for member in group.contacts} if group is not None else set()
+        group_blocked = {}          # address: contact name
+        for contact in contacts:
+            if contact.id in blocked_ids:
+                for uri in contact.uris:
+                    address = canonical_uri(str(uri.uri))
+                    if address:
+                        group_blocked.setdefault(address, contact.name or contact.id)
+        contact_policy = {}         # address: name, contacts whose own presence policy is block
+        for contact in contacts:
+            if contact.presence.policy == 'block' and contact.id not in blocked_ids:
+                for uri in contact.uris:
+                    address = canonical_uri(str(uri.uri))
+                    if address:
+                        contact_policy.setdefault(address, contact.name or contact.id)
+        entries = {}                # address: Policy, the entries for addresses that are no contact of their own
+        for policy in manager.get_policies():
+            if policy.presence.policy == 'block':
+                address = canonical_uri(str(policy.uri))
+                if address:
+                    entries.setdefault(address, policy)
+
+        to_create, to_restrict = [], []         # (address, name) to block; contacts to set the policy of
+        for address, policy in sorted(entries.items()):
+            if address in group_blocked:
+                continue
+            owner = MessagesGroupFiler._find_by_canonical(address, contacts)
+            if owner is None:
+                to_create.append((address, getattr(policy, 'name', None) or None))
+            elif owner.id not in blocked_ids and owner.presence.policy != 'block' and owner not in to_restrict:
+                to_restrict.append(owner)
+        to_fix = [contact for contact in contacts if contact.id in blocked_ids and (contact.presence.policy != 'block' or contact.presence.subscribe)]
+
+        activity = ActivityLog()
+        activity.info(f'[presence] Presence rules: {len(entries)} blocked addresses, {len(contact_policy)} contacts not allowed to see our presence;'
+                      f' the Blocked group holds {len(blocked_ids)} contacts' + ('' if to_create or to_restrict or to_fix else ': nothing to heal'))
+        for address, name in to_create:
+            activity.info(f'[presence]   blocked by the presence rules, no contact: {address}: a blocked contact is made')
+        for contact in to_restrict:
+            activity.info(f'[presence]   blocked by the presence rules, contact {contact.name or contact.id} not blocked: not allowed to see our presence')
+        for contact in to_fix:
+            activity.info(f'[presence]   in Blocked, {contact.name or contact.id}: presence policy block' + (', no subscription' if contact.presence.subscribe else ''))
+        if to_create or to_restrict or to_fix:
+            in_one_xcap_update('presence-heal', _heal_presence_blocks, to_create, to_restrict, to_fix)
+    except Exception as e:
+        ActivityLog().warning(f'[presence] Comparing the presence rules with the Blocked group failed: {e!r}')
+
+
+def release_presence_block(contacts):
+    """Contacts taken out of Blocked, here or on another device: the presence block goes with it.
+    Their policy back to allow and subscribed to again (not while in Deleted), and the Policy
+    entries blocking their addresses removed, or the healing at the next start would block them
+    again (audit_presence_blocks)."""
+    manager = addressbook.AddressbookManager()
+    contacts = [contact for contact in contacts if manager.has_contact(contact.id) and not is_blocked_contact(contact)]
+    if not contacts:
+        return
+    addresses = {canonical_uri(str(uri.uri)) for contact in contacts for uri in contact.uris} - {''}
+    policies = [policy for policy in manager.get_policies() if policy.presence.policy == 'block' and canonical_uri(str(policy.uri)) in addresses]
+    contacts = [contact for contact in contacts if contact.presence.policy == 'block' or (not contact.presence.subscribe and not is_deleted_contact(contact))]
+    if contacts or policies:
+        in_one_xcap_update('unblock-presence', _release_presence_block, contacts, policies)
+
+
+def _release_presence_block(contacts, policies):
+    for contact in contacts:
+        contact.presence.policy = 'allow'
+        if not is_deleted_contact(contact):
+            contact.presence.subscribe = True
+        contact.save()
+        ActivityLog().info(f'[presence] {contact.name or contact.id} left Blocked: allowed to see our presence' + ('' if is_deleted_contact(contact) else ', subscribed to'))
+    for policy in policies:
+        ActivityLog().info(f'[presence] {policy.uri} left Blocked: its presence block removed')
+        policy.delete()
+
+
+def _heal_presence_blocks(to_create, to_restrict, to_fix):
+    account = AccountManager().default_account
+    created = []
+    for address, name in to_create:
+        contact = addressbook.Contact()
+        contact.name = name or address
+        contact.uris = [addressbook.ContactURI(uri=address, type='tel' if pstn_e164(address, account) else 'SIP')]
+        contact.presence.policy = 'block'
+        contact.presence.subscribe = False
+        contact.save()
+        publish_contact_for_groups(contact)
+        created.append(contact)
+    for contact in to_restrict:
+        contact.presence.policy = 'block'
+        contact.save()
+    for contact in to_fix:
+        contact.presence.policy = 'block'
+        contact.presence.subscribe = False
+        contact.save()
+    if created:
+        _block_contacts(created)
+    ActivityLog().info(f'[presence] Healed: {len(created)} blocked contacts made, {len(to_restrict)} contacts no longer see our presence,'
+                       f' {len(to_fix)} Blocked members with presence blocked')
+
+
 def is_blocked_contact(contact):
     """Whether an addressbook contact (its settings) is in the Blocked group."""
     group = blocked_group()
@@ -182,9 +309,27 @@ def is_blocked_address(uri, account=None):
 
 
 def blocked_contact_menu(menu, parent, contacts):
-    """What a blocked contact offers, wherever it is shown: Unblock and Delete."""
+    """What a blocked contact offers, wherever it is shown: Unblock, Edit Name and Delete."""
     menu.addAction(translate('contact_list', 'Unblock'), lambda: unblock_contacts(blocked_group(), contacts))
+    if len(contacts) == 1:
+        menu.addAction(translate('contact_list', 'Edit Name...'), lambda: edit_contact_name(parent, contacts[0]))
     menu.addAction(translate('contact_list', 'Delete'), lambda: confirm_soft_delete(parent, contacts))
+
+
+def edit_contact_name(parent, contact):
+    """Only the display name, for a contact the contact editor is not offered for (a blocked one)."""
+    name, ok = QInputDialog.getText(parent, translate('contact_list', 'Edit Name'), translate('contact_list', 'Display name:'), text=contact.name or '')
+    name = ' '.join(name.split())
+    if not ok or not name or name == contact.name:
+        return
+    in_one_xcap_update('rename', _set_contact_name, contact, name)
+
+
+def _set_contact_name(contact, name):
+    old = contact.name
+    contact.name = name
+    contact.save()
+    ActivityLog().info(f"[contacts] Renamed {old or contact.id} to {name}")
 
 
 def confirm_soft_delete(parent, contacts):
@@ -581,6 +726,7 @@ class CallsGroupFiler(object, metaclass=Singleton):
         if self.xcap_loaded:
             return
         self.xcap_loaded = True
+        audit_presence_blocks()
         deferred, self.deferred = self.deferred, []
         for remote_uri, display_name, account in deferred:
             ActivityLog().info(f'[contacts] Filing the call with {remote_uri} now that the addressbook has loaded')
@@ -5070,6 +5216,8 @@ class ContactModel(QAbstractListModel):
         if notification.sender.id == DELETED_GROUP_ID:
             sync_deleted_presence(False, list(notification.data.modified['contacts'].added))
             sync_deleted_presence(True, list(notification.data.modified['contacts'].removed))
+        elif is_group(notification.sender, BLOCKED):
+            release_presence_block(list(notification.data.modified['contacts'].removed))
 
     def _NH_VirtualGroupWasActivated(self, notification):
         group = Group(notification.sender)
@@ -5152,18 +5300,11 @@ class ContactModel(QAbstractListModel):
             bonjour_group.reset_state()
 
     def _NH_AddressbookContactDidChange(self, notification):
-        # make sure the presence policy and subscribe flag are synchronized
+        # subscribing to their presence and letting them see ours are separate settings (the contact
+        # editor, as on macOS): only a deleted contact is never subscribed to
         contact = notification.sender
         if is_deleted_contact(contact):
-            # never subscribed to while deleted, whatever the policy
             sync_deleted_presence(False, [contact])
-            return
-        if contact.presence.policy == 'default':
-            contact.presence.policy = 'allow' if contact.presence.subscribe else 'block'
-            contact.save()
-        elif contact.presence.subscribe != (True if contact.presence.policy == 'allow' else False):
-            contact.presence.subscribe = True if contact.presence.policy == 'allow' else False
-            contact.save()
 
     @staticmethod
     def range_iterator(indexes):
@@ -5751,6 +5892,8 @@ class ContactListView(QListView):
             group = blocked_group()
             contacts = list({item.settings.id: item.settings for item in selected_items}.values())
             menu.addAction(translate('contact_list', 'Unblock'), lambda: unblock_contacts(group, contacts))
+            if len(contacts) == 1:
+                menu.addAction(translate('contact_list', 'Edit Name...'), lambda: edit_contact_name(self, contacts[0]))
             menu.addAction(self.actions.delete_selection if len(selected_items) > 1 else self.actions.delete_item)
             self.actions.delete_selection.setEnabled(True)
             self.actions.delete_item.setEnabled(True)
@@ -7441,6 +7584,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.organization_editor.setText('')
         self.icon_selector.init_with_contact(None)
         self.presence.setChecked(True)
+        self.presence_policy.setChecked(True)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData('messages'))   # new contacts default to messages
         self.original_groups = []
         self.selected_groups = [target_group.settings] if target_group is not None and is_selectable_group(target_group.settings) else []
@@ -7458,6 +7602,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.organization_editor.setText(contact.organization or '')
         self.icon_selector.init_with_contact(contact)
         self.presence.setChecked(contact.presence.subscribe)
+        self.presence_policy.setChecked(contact.presence.policy == 'allow')
         self.auto_answer.setChecked(contact.auto_answer)
         self.auto_download_media.setChecked(bool(contact.auto_download_media))
         self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
@@ -7590,12 +7735,9 @@ class ContactEditorDialog(base_class, ui_class):
 
         contact.name = self.name_editor.text()
         contact.organization = self.organization_editor.text().strip()     # shared with the other clients (ag-projects:sipsimple)
-        if self.presence.isChecked():
-            contact.presence.policy = 'allow'
-            contact.presence.subscribe = True
-        else:
-            contact.presence.policy = 'block'
-            contact.presence.subscribe = False
+        # two settings, as on macOS: whether we watch their presence, and whether they may watch ours
+        contact.presence.subscribe = self.presence.isChecked()
+        contact.presence.policy = 'allow' if self.presence_policy.isChecked() else 'block'
 
         if self.auto_answer.isChecked():
             contact.auto_answer = True
@@ -7664,6 +7806,8 @@ class ContactEditorDialog(base_class, ui_class):
             self.name_editor.setText(contact.name)
         if 'presence.subscribe' in modified_attributes:
             self.presence.setChecked(contact.presence.subscribe)
+        if 'presence.policy' in modified_attributes:
+            self.presence_policy.setChecked(contact.presence.policy == 'allow')
         if 'preferred_media' in modified_attributes:
             self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
         if modified_attributes.intersection(('uris', 'uris.default')):
