@@ -45,6 +45,7 @@ from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
 from blink.file_transfer import FILE_TRANSFER_PATH, base_url_from_transfer, derive_base_url, upload_url
+from blink.message_envelopes import API_MESSAGES_BULK_DELETE_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE
 from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, call_recording_envelope, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
@@ -1405,6 +1406,9 @@ class MessageManager(object, metaclass=Singleton):
             NotificationCenter().post_notification('BlinkGotMessageDelete', sender=session, data=payload['message_id'])
         return 'messages removed'
 
+    def _journal_messages_bulk_delete(self, account, message, content_type, first_sync, contacts):
+        return self.apply_messages_bulk_delete(account, message.get('content'), 'from the journal')
+
     def _journal_conversation_read(self, account, message, content_type, first_sync, contacts):
         # the conversation is in the payload; the entry's own contact is the fallback
         contact, device = conversation_read_marker(message.get('content'))
@@ -1942,6 +1946,12 @@ class MessageManager(object, metaclass=Singleton):
             if account is not BonjourAccount():
                 from blink.contacts import AddressbookNotifier
                 AddressbookNotifier().handle_tick(account, body, sender.uri)
+            return
+
+        if content_type.lower() == MESSAGES_BULK_DELETE_CONTENT_TYPE:
+            # a Data manager deletion on another device of ours (the journal brings it again: applying twice erases nothing more)
+            if account is not BonjourAccount():
+                self.apply_messages_bulk_delete(account, body, 'live')
             return
 
         if content_type.lower() in FILE_TRANSFER_CONTENT_TYPES:
@@ -2563,6 +2573,18 @@ class MessageManager(object, metaclass=Singleton):
         outgoing_message = OutgoingMessage(session.account if account is None else account, session.contact, id, 'application/sylk-api-message-remove', session=session, use_cpim=False)
         self._send_message(outgoing_message)
 
+    def send_message_remove(self, account, contact_uri, message_id):
+        """Remove one message on the server and the account's other devices, as a delete in the conversation
+        does, without opening a conversation for it. Returns whether it was sent."""
+        if account is BonjourAccount() or not account.enabled or not message_id or not contact_uri:
+            return False
+        from blink.contacts import URIUtils
+        contact, _ = URIUtils.find_contact(contact_uri)
+        if contact is None:
+            return False
+        self._send_message(OutgoingMessage(account, contact, message_id, 'application/sylk-api-message-remove', use_cpim=False, sessionless=True))
+        return True
+
     def send_conversation_read(self, session):
         """Tell this account's other devices the conversation was read here. Sent to the
         server API from the account to itself; the server replicates it to every device
@@ -2603,6 +2625,41 @@ class MessageManager(object, metaclass=Singleton):
                 continue
             self.send_conversation_remove(blink_session, account=account)
 
+    def send_messages_bulk_delete(self, account, payload):
+        """Ask the other devices of the account to erase what a Data manager deletion here erased
+        (docs/messaging/messages-bulk-delete.md). Sent to the server API from the account to itself:
+        the server keeps it in the journal and sends it to every device, this one included (skipped
+        by its device id)."""
+        if account is BonjourAccount() or not account.enabled:
+            return False
+        if not account.sms.enable_message_replication:
+            ActivityLog().info(f'[data] Bulk delete not announced: {account.id} does not replicate messages to other devices')
+            return False
+        from blink.contacts import URIUtils
+        from blink.data_manage import criteria_label
+        ActivityLog().info(f'[data] Announcing the bulk delete {payload["bulk_delete_id"]} ({criteria_label(payload["criteria"])}) to the other devices of {account.id}')
+        contact, contact_uri = URIUtils.find_contact(account.uri)
+        # no conversation (session) carries it: sent straight to the account's proxy, or OutgoingMessage.send drops it
+        self._send_message(OutgoingMessage(account, contact, json.dumps(payload), API_MESSAGES_BULK_DELETE_CONTENT_TYPE, use_cpim=False, sessionless=True))
+        return True
+
+    def apply_messages_bulk_delete(self, account, body, source):
+        """Erase what a bulk delete from another device of the account asks for. Returns the journal outcome."""
+        from blink.data_manage import bulk_delete_criteria, criteria_label
+        from blink.history import MessageHistory
+        payload = parse_payload(body)
+        criteria = bulk_delete_criteria(payload)
+        if criteria is None:
+            ActivityLog().warning(f'[data] Bulk delete for {account.id} ({source}) ignored, its criteria are missing or too broad: {str(body)[:300]!r}')
+            return 'failed'
+        if payload.get('device_id') == this_device_id():
+            log.debug(f'Ignoring our own bulk delete {payload.get("bulk_delete_id")}')
+            return 'own bulk deletes'
+        device = payload.get('device_id') or 'another device'
+        MessageHistory().bulk_delete(str(account.id), criteria, files=payload.get('files', True) is not False,
+                                     source=f'on request of {device}, {source}', label=criteria_label(criteria), cascade=payload.get('cascade') is True)
+        return 'bulk deletes'
+
     def send_conversation_remove(self, session, account=None):
         account = session.account if account is None else account
         if account is BonjourAccount():
@@ -2642,7 +2699,7 @@ class MessageManager(object, metaclass=Singleton):
                 content = json.dumps({'contact': key, 'timestamp': str(ISOTimestamp.now())})
                 self._own_conversation_removes.note(canonical_uri(key, account))
                 contact, contact_uri = URIUtils.find_contact(account.uri)
-                self._send_message(OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', use_cpim=False))
+                self._send_message(OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', use_cpim=False, sessionless=True))
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
         if host.default_ip is None:

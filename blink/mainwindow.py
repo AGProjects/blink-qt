@@ -274,6 +274,14 @@ class MainWindow(base_class, ui_class):
         self.logs_window_action.triggered.connect(self._AH_LogsWindowActionTriggered)
         self.message_pane_action.toggled.connect(self.set_message_pane_visible)
 
+        # Blink -> Accounts -> Data manager, after Manage accounts (the window is made on first use)
+        self.data_window = None
+        self.data_window_action = QAction(translate('main_window', 'Data manager'), self)
+        self.data_window_action.triggered.connect(self._AH_DataWindowActionTriggered)
+        actions = self.accounts_menu.actions()
+        position = actions.index(self.manage_accounts_action) + 1 if self.manage_accounts_action in actions else len(actions)
+        self.accounts_menu.insertAction(actions[position] if position < len(actions) else None, self.data_window_action)
+
     def refresh_devices(self):
         """Read the sound devices again; a chosen device that is gone falls back to the system default.
         Each side is checked against its own list: a microphone need not be a speaker too."""
@@ -833,6 +841,12 @@ class MainWindow(base_class, ui_class):
     def _AH_LogsWindowActionTriggered(self, checked):
         blink = QApplication.instance()
         blink.logs_window.show()
+
+    def _AH_DataWindowActionTriggered(self, checked):
+        if self.data_window is None:
+            from blink.datawindow import DataWindow
+            self.data_window = DataWindow()
+        self.data_window.show()
 
     def _AH_VoicemailActionTriggered(self, checked):
         account = self.sender().data()

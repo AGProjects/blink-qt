@@ -16,7 +16,7 @@ from collections import Counter, OrderedDict, defaultdict
 
 from blink.message_envelopes import (ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, CONTACT_UPDATE_CONTENT_TYPE, CONVERSATION_READ_CONTENT_TYPE,
                                      CONVERSATION_REMOVE_CONTENT_TYPE, DATA_EXPORT_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPE, LOCATION_CONTENT_TYPE,
-                                     MESSAGE_REMOVE_CONTENT_TYPE, METADATA_CONTENT_TYPE, PGP_PRIVATE_KEY_CONTENT_TYPE, PGP_PUBLIC_KEY_CONTENT_TYPE,
+                                     MESSAGE_REMOVE_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE, METADATA_CONTENT_TYPE, PGP_PRIVATE_KEY_CONTENT_TYPE, PGP_PUBLIC_KEY_CONTENT_TYPE,
                                      RCS_FILE_TRANSFER_CONTENT_TYPE)
 
 
@@ -62,6 +62,7 @@ def journal_action(content_type):
     'receipt'              message/imdn: delivery state of a message (skipped on a first sync)
     'conversation_remove'  hide a conversation up to the removal time
     'message_remove'       hide one message (kept until it arrives if it is not stored yet)
+    'messages_bulk_delete' erase what matches the criteria of a Data manager deletion on another device
     'conversation_read'    mark a conversation read
     'public_key'           save a peer's PGP public key
     'file_transfer'        store a Sylk file transfer
@@ -78,6 +79,8 @@ def journal_action(content_type):
         return 'conversation_remove'
     if content_type == MESSAGE_REMOVE_CONTENT_TYPE:
         return 'message_remove'
+    if content_type == MESSAGES_BULK_DELETE_CONTENT_TYPE:
+        return 'messages_bulk_delete'
     if content_type == CONVERSATION_READ_CONTENT_TYPE:
         return 'conversation_read'
     if content_type == PGP_PUBLIC_KEY_CONTENT_TYPE:

@@ -1591,6 +1591,158 @@ class MessageHistory(object, metaclass=Singleton):
             self.get_unread_messages()
             self.get_all_contacts()
 
+    # The Data window (blink.datawindow): what it drills into, and its bulk removal
+
+    @run_in_thread('db')
+    def data_accounts(self, callback):
+        """Calls back with [(account id, rows)] of the active accounts of the profile in use that have
+        history here, most first: another profile's accounts, and disabled ones, are not offered."""
+        table = Message.sqlmeta.table
+        try:
+            rows = self.db.queryAll(f'select account_id, count(*) from {table} where {NOT_DELETED_SQL} and {self._get_enabled_account_filter()}'
+                                    f' group by account_id order by 2 desc')
+        except Exception as e:
+            ActivityLog().error(f'[db] Counting the messages per account failed: {e}')
+            rows = []
+        callback([(str(account_id), int(count)) for account_id, count in rows if account_id])
+
+    @run_in_thread('db')
+    def data_inventory(self, account_id, callback, head=400):
+        """Calls back with every row of an account that is not removed, as tuples (id, message_id,
+        remote_uri, local day, timestamp, direction, category, content_type, related_action, the
+        first `head` characters of the content, related_msg_id)."""
+        table = Message.sqlmeta.table
+        query = (f"select id, message_id, remote_uri, date(timestamp, 'localtime'), timestamp, direction, category, content_type, related_action,"
+                 f" substr(content, 1, {int(head)}), related_msg_id from {table} where account_id = {self.db.sqlrepr(str(account_id))} and {NOT_DELETED_SQL}")
+        try:
+            rows = self.db.queryAll(query)
+        except Exception as e:
+            ActivityLog().error(f'[db] Reading the messages of {account_id} for the Data window failed: {e}')
+            rows = []
+        callback(list(rows))
+
+    @run_in_thread('db')
+    def data_message(self, row_id, callback):
+        """Calls back with one row as {column: value} (None if it is gone), content and metadata in full."""
+        table = Message.sqlmeta.table
+        columns = ('id', 'message_id', 'account_id', 'remote_uri', 'display_name', 'uri', 'timestamp', 'direction', 'content_type', 'category',
+                   'state', 'encryption_type', 'decrypted', 'decryption_error', 'disposition', 'read', 'has_link', 'related_msg_id', 'related_action',
+                   'deleted', 'journal_id', 'sip_callid', 'media_type', 'cpim_from', 'cpim_to', 'cpim_timestamp', 'private', 'expire_time',
+                   'metadata', 'content')
+        try:
+            row = self.db.queryOne(f"select {', '.join(columns)} from {table} where id = {int(row_id)}")
+        except Exception as e:
+            ActivityLog().error(f'[db] Reading message row {row_id} failed: {e}')
+            row = None
+        callback(dict(zip(columns, row)) if row else None)
+
+    @run_in_thread('db')
+    def purge_messages(self, account_id, row_ids, callback=None):
+        """Erase rows of one account by their id, a deletion made here by the user: no tombstones.
+        The folders of the file transfers among them go too. Calls back with how many were erased."""
+        removed = self._erase_rows(account_id, row_ids, files=True, source='Data manager')
+        if callback is not None:
+            callback(removed)
+
+    @run_in_thread('db')
+    def bulk_delete(self, account_id, criteria, files=True, source=None, label=None, cascade=False):
+        """Erase the rows of an account that match a bulk delete from another device (blink.data_manage:
+        bulk_delete_criteria): no tombstones, nothing kept for messages that come later."""
+        from blink.data_manage import criteria_matches_action
+        table = Message.sqlmeta.table
+        where = [f'account_id = {self.db.sqlrepr(str(account_id))}']
+        if criteria.get('category'):
+            where.append(f'category = {self.db.sqlrepr(criteria["category"])}')
+        if criteria.get('content_type'):
+            where.append(f'lower(content_type) = {self.db.sqlrepr(criteria["content_type"])}')
+        if criteria.get('contact'):
+            keys = self._conversation_keys(criteria['contact'])
+            where.append(f"remote_uri in ({', '.join(self.db.sqlrepr(key) for key in keys)})")
+        try:
+            if criteria.get('from'):
+                where.append(f'timestamp >= {self.db.sqlrepr(self._storage_time(criteria["from"]))}')
+            if criteria.get('until'):
+                where.append(f'timestamp < {self.db.sqlrepr(self._storage_time(criteria["until"]))}')
+        except (ValueError, OverflowError) as e:
+            ActivityLog().error(f'[db] Bulk delete for {account_id} ignored, unreadable time: {e}')
+            return
+        try:
+            rows = self.db.queryAll(f"select id, category, content_type, related_action, substr(content, 1, 400) from {table} where {' and '.join(where)}")
+        except Exception as e:
+            ActivityLog().error(f'[db] Bulk delete for {account_id} failed: {e}')
+            return
+        ids = [row_id for row_id, category, content_type, related_action, head in rows
+               if criteria_matches_action(criteria, category, content_type, related_action, head)]
+        if cascade and ids:
+            ids = self._with_related_rows(account_id, ids)
+        removed = self._erase_rows(account_id, ids, files=files, source=source) if ids else 0
+        ActivityLog().info(f'[data] Bulk delete of {removed} rows of {account_id} ({label or criteria})' + (f' {source}' if source else ''))
+
+    def _with_related_rows(self, account_id, row_ids):
+        """These rows and the rows filed against them by related_msg_id, all the way down. Caller is in the db thread."""
+        table = Message.sqlmeta.table
+        account = self.db.sqlrepr(str(account_id))
+        chosen = set(row_ids)
+        message_ids = set()
+        for start in range(0, len(row_ids), 500):
+            chunk = ', '.join(str(int(row_id)) for row_id in row_ids[start:start + 500])
+            message_ids.update(message_id for (message_id,) in self.db.queryAll(f'select message_id from {table} where id in ({chunk})') if message_id)
+        frontier = sorted(message_ids)
+        while frontier:
+            found = []
+            for start in range(0, len(frontier), 500):
+                parents = ', '.join(self.db.sqlrepr(message_id) for message_id in frontier[start:start + 500])
+                for row_id, message_id in self.db.queryAll(f'select id, message_id from {table} where account_id = {account} and related_msg_id in ({parents})'):
+                    if row_id in chosen:
+                        continue
+                    chosen.add(row_id)
+                    if message_id and message_id not in message_ids:
+                        message_ids.add(message_id)
+                        found.append(message_id)
+            frontier = found
+        return sorted(chosen)
+
+    def _erase_rows(self, account_id, row_ids, files=True, source=None):
+        """Erase rows by id, and the folders of the file transfers among them when `files`. Caller is in the db thread."""
+        import shutil
+        from blink.file_transfer import transfer_folder
+        table = Message.sqlmeta.table
+        ids = sorted({int(row_id) for row_id in row_ids})
+        types = ', '.join(self.db.sqlrepr(content_type) for content_type in FILE_TRANSFER_CONTENT_TYPES)
+        root = ApplicationData.get('file_transfers')
+        removed = 0
+        folders = []
+        transfers = []
+        keys = set()
+        try:
+            for start in range(0, len(ids), 500):
+                chunk = ', '.join(str(row_id) for row_id in ids[start:start + 500])
+                if files:
+                    for message_id, remote_uri, content in self.db.queryAll(f'select message_id, remote_uri, content from {table} where id in ({chunk}) and content_type in ({types})'):
+                        meta = file_transfer_envelope(content)
+                        if meta and meta.get('transfer_id') and remote_uri:
+                            folders.append(transfer_folder(root, account_id, remote_uri, meta['transfer_id']))
+                        if message_id:
+                            transfers.append(message_id)
+                keys.update(str(remote_uri) for (remote_uri,) in self.db.queryAll(f'select distinct remote_uri from {table} where id in ({chunk})') if remote_uri)
+                removed += self.db.queryOne(f'select count(*) from {table} where id in ({chunk})')[0]
+                self.db.queryAll(f'delete from {table} where id in ({chunk})')
+        except Exception as e:
+            ActivityLog().error(f'[db] Erasing messages of {account_id} failed after {removed}: {e!r}')
+        for folder in folders:
+            if os.path.isdir(folder):
+                shutil.rmtree(folder, ignore_errors=True)
+        download_history = DownloadHistory()
+        for message_id in transfers:
+            download_history.remove(message_id)
+        ActivityLog().info(f'[db] Erased {removed} messages of {account_id} in {len(keys)} conversations' + (f', {len(folders)} file transfer folders' if folders else '')
+                           + (f' ({source})' if source else ''))
+        if removed:
+            call_in_gui_thread(ConversationPreviews().invalidate, sorted(keys))
+            self.get_unread_messages()
+            self.get_all_contacts()
+        return removed
+
     @run_in_thread('db')
     def move_conversation(self, old_key, new_key, account_id=None):
         """File every message of one conversation under another key.
