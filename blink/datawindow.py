@@ -1,6 +1,6 @@
 """The Data window: the message history in bulk.
 
-Manage: drill into an account's stored rows by type (category, location
+Messages: drill into an account's stored rows by type (category, location
 sharing, or content type), action (location_start/update/stop, the action of a
 metadata sidecar, ...), contact and year/month/day, look at any one of them,
 and remove a selection here and from the journal on the server
@@ -736,7 +736,7 @@ class DataWindow(QWidget):
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget(self)
         self.manage_panel = ManagePanel(self.tabs)
-        self.tabs.addTab(self.manage_panel, translate('data_window', 'Manage'))
+        self.tabs.addTab(self.manage_panel, translate('data_window', 'Messages'))
         layout.addWidget(self.tabs)
         geometry = QSettings().value('data_window/geometry')
         if geometry:
