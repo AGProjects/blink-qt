@@ -317,6 +317,29 @@ def is_deleted_contact(contact):
     return getattr(contact, 'id', None) in {member.id for member in group.contacts}
 
 
+def sync_deleted_presence(subscribe, contacts):
+    """No presence subscription for the contacts in Deleted; a restored one is subscribed to
+    again, unless its presence is blocked. The flag is in the addressbook: every device follows."""
+    manager = addressbook.AddressbookManager()
+    contacts = [contact for contact in contacts
+                if manager.has_contact(contact.id)          # one deleted for good is gone, not restored
+                and bool(contact.presence.subscribe) != subscribe and (not subscribe or contact.presence.policy != 'block')]
+    if contacts:
+        in_one_xcap_update('deleted-presence', _sync_deleted_presence, subscribe, contacts)
+
+
+def _sync_deleted_presence(subscribe, contacts):
+    manager = addressbook.AddressbookManager()
+    for contact in contacts:
+        if not manager.has_contact(contact.id) or is_deleted_contact(contact) == subscribe:
+            continue        # deleted for good, or moved again since
+        contact.presence.subscribe = subscribe
+        if subscribe and contact.presence.policy == 'default':
+            contact.presence.policy = 'allow'
+        contact.save()
+        ActivityLog().info(f"[trash] Presence of {contact.name or contact.id} {'subscribed again' if subscribe else 'no longer subscribed'}")
+
+
 def deleted_contact_menu(menu, parent, contacts):
     """What a deleted contact offers, wherever it is shown: Restore and Delete Permanently,
     no calls, messages or edits (it comes back to use only by being restored)."""
@@ -4998,6 +5021,8 @@ class ContactModel(QAbstractListModel):
         for contact in notification.sender.contacts:
             self.addContact(Contact(contact, group))
         self._update_deleted_group_visibility()
+        if notification.sender.id == DELETED_GROUP_ID:
+            sync_deleted_presence(False, list(notification.sender.contacts))
 
     def _update_deleted_group_visibility(self):
         # the Deleted group is shown only while it holds somebody
@@ -5019,6 +5044,9 @@ class ContactModel(QAbstractListModel):
         for contact in notification.data.modified['contacts'].added:
             self.addContact(Contact(contact, group))
         self._update_deleted_group_visibility()
+        if notification.sender.id == DELETED_GROUP_ID:
+            sync_deleted_presence(False, list(notification.data.modified['contacts'].added))
+            sync_deleted_presence(True, list(notification.data.modified['contacts'].removed))
 
     def _NH_VirtualGroupWasActivated(self, notification):
         group = Group(notification.sender)
@@ -5103,6 +5131,10 @@ class ContactModel(QAbstractListModel):
     def _NH_AddressbookContactDidChange(self, notification):
         # make sure the presence policy and subscribe flag are synchronized
         contact = notification.sender
+        if is_deleted_contact(contact):
+            # never subscribed to while deleted, whatever the policy
+            sync_deleted_presence(False, [contact])
+            return
         if contact.presence.policy == 'default':
             contact.presence.policy = 'allow' if contact.presence.subscribe else 'block'
             contact.save()
