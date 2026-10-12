@@ -397,6 +397,25 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history.get_all_contacts()
 
 
+def first_sync_pending(account_id=None):
+    """Whether the first journal sync of the account (None: of any account) is not done yet
+    (journal/<account>/first-sync.marker): what it stores by the thousand is logged at debug level."""
+    try:
+        if account_id is not None:
+            return os.path.exists(ApplicationData.get(os.path.join('journal', str(account_id), FIRST_SYNC_MARKER)))
+        return bool(glob.glob(os.path.join(ApplicationData.get('journal'), '*', FIRST_SYNC_MARKER)))
+    except Exception:
+        return False
+
+
+def history_info(account_id, text):
+    """An activity line about stored history, at debug level while the account's first sync runs."""
+    if first_sync_pending(account_id):
+        log.debug(text)
+    else:
+        ActivityLog().info(f'[db] {text}')
+
+
 class TableVersion(SQLObject):
     class sqlmeta:
         table = 'table_versions'
@@ -943,19 +962,26 @@ class MessageHistory(object, metaclass=Singleton):
         return {'related_msg_id': link[0], 'related_action': link[1]}
 
     @classmethod
-    def _stored_location(cls, message_id, fields, remote_uri):
+    def _stored_location(cls, message_id, fields, remote_uri, account=None):
         """After a location tick is stored: log it (trail ticks only at debug level,
-        they come every few seconds). Caller is in the db thread."""
+        they come every few seconds; everything at debug level while the first journal
+        sync of the account is not done, thousands of them). Caller is in the db thread."""
         action = fields.get('related_action')
+        quiet = account is not None and first_sync_pending(account.id)
         # a share's bubble draws its trail: tell it (blink.messagepane.locations)
         NotificationCenter().post_notification('BlinkMessageHistoryLocationDidStore',
                                                data=NotificationData(remote_uri=remote_uri, message_id=message_id, action=action, session_id=fields.get('related_msg_id') or message_id))
         if action is None:
-            ActivityLog().info(f'[db] Location message {message_id} with {remote_uri} stored, it cannot be read without decrypting')
+            text = f'Location message {message_id} with {remote_uri} stored, it cannot be read without decrypting'
         elif action in cls.__trail_actions__:
             log.debug(f'Location {action} {message_id} stored in the trail of share {fields.get("related_msg_id")}')
+            return
         else:
-            ActivityLog().info(f'[db] Location {action} {message_id} with {remote_uri} stored for share {fields.get("related_msg_id")}')
+            text = f'Location {action} {message_id} with {remote_uri} stored for share {fields.get("related_msg_id")}'
+        if quiet:
+            log.debug(text)
+        else:
+            ActivityLog().info(f'[db] {text}')
 
     @classmethod
     def _stored_companion(cls, message_id, fields):
@@ -1096,7 +1122,7 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().error(f'[db] Removing message {message_id} failed: {e}')
             return
         if rows or sidecars:
-            ActivityLog().info(f'[db] Message {message_id} marked deleted: {rows} rows' + (f', {sidecars} sidecars' if sidecars else '') + (f' ({source})' if source else ''))
+            history_info(account_id, f'Message {message_id} marked deleted: {rows} rows' + (f', {sidecars} sidecars' if sidecars else '') + (f' ({source})' if source else ''))
             return
         try:
             stored = Message._connection.queryOne(f'select count(*) from {Message.sqlmeta.table} where message_id = {Message._connection.sqlrepr(str(message_id))}')[0]
@@ -1114,7 +1140,7 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             ActivityLog().error(f'[db] Keeping the removal of message {message_id} failed: {e}')
             return
-        ActivityLog().info(f'[db] Message {message_id} is not stored yet, its removal is kept until it arrives' + (f' ({source})' if source else ''))
+        log.debug(f'Message {message_id} is not stored yet, its removal is kept until it arrives' + (f' ({source})' if source else ''))
 
     @run_in_thread('db')
     def tombstone_conversation(self, remote_uri, before_time=None, when=None, account_id=None, session=None):
@@ -1141,7 +1167,7 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             ActivityLog().error(f'[db] Removing the conversation with {remote_uri} failed: {e}')
             return
-        ActivityLog().info(f'[db] Conversation with {remote_uri} marked deleted: {count} rows' + (f' up to {floor}' if floor is not None else '') + (f' for account {account_id}' if account_id else ''))
+        history_info(account_id, f'Conversation with {remote_uri} marked deleted: {count} rows' + (f' up to {floor}' if floor is not None else '') + (f' for account {account_id}' if account_id else ''))
         if session is not None:
             self.load(remote_uri, session)
 
@@ -1167,7 +1193,7 @@ class MessageHistory(object, metaclass=Singleton):
             ActivityLog().info(f'[db] Conversation with {remote_uri} came back: message {message_id} from {timestamp} is newer than its removal, {count} rows shown again')
         else:
             cls._set_deleted(f'message_id = {db.sqlrepr(str(message_id))} and remote_uri = {db.sqlrepr(str(remote_uri))}', True, removed_at)
-            ActivityLog().info(f'[db] Message {message_id} from {timestamp} hidden: the conversation with {remote_uri} was removed after it')
+            log.debug(f'Message {message_id} from {timestamp} hidden: the conversation with {remote_uri} was removed after it')
 
     @run_in_thread('db')
     def restore_conversation(self, remote_uri):
@@ -2367,7 +2393,7 @@ class MessageHistory(object, metaclass=Singleton):
                     return      # replayed (the server call history every 5 minutes): nothing to do, nothing to log
                 row.set(metadata=json.dumps(merged), content=call_summary(merged) or '',
                         media_type=dominant_media(merged.get('media') or []) or row.media_type)
-                ActivityLog().info(f"[db] Call record of {what} merged into the stored one: {(stored or {}).get('outcome')} -> {merged.get('outcome')}, source {merged.get('source')}")
+                history_info(account_id, f"Call record of {what} merged into the stored one: {(stored or {}).get('outcome')} -> {merged.get('outcome')}, source {merged.get('source')}")
                 self._call_record_stored(account, row.remote_uri)
                 return
             remote_party = str(record.get('remoteParty') or '')
@@ -2395,7 +2421,7 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             ActivityLog().error(f'[db] Storing the call record of {what} failed: {e!r}')
         else:
-            ActivityLog().info(f"[db] Call record of {what} stored: {record.get('outcome')}, source {record.get('source')}")
+            history_info(account_id, f"Call record of {what} stored: {record.get('outcome')}, source {record.get('source')}")
             self._call_record_stored(account, canonical_uri(remote_party, account) or remote_party)
 
     @staticmethod
@@ -2468,13 +2494,13 @@ class MessageHistory(object, metaclass=Singleton):
             if message.content_type == METADATA_CONTENT_TYPE:
                 cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh
             elif message.content_type == LOCATION_CONTENT_TYPE and optional_fields.get('related_action') in cls.__trail_actions__:
-                cls._stored_location(message.id, optional_fields, remote_uri)     # moves a pin: nothing to refresh
+                cls._stored_location(message.id, optional_fields, remote_uri, account)     # moves a pin: nothing to refresh
             elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
                 # from_history: a journal (server history) entry, not a live message: it does not file its party in Messages
                 notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction, from_history=True))
                 if message.content_type == LOCATION_CONTENT_TYPE:
-                    cls._stored_location(message.id, optional_fields, remote_uri)
+                    cls._stored_location(message.id, optional_fields, remote_uri, account)
 
     @classmethod
     @run_in_thread('db')
@@ -2906,13 +2932,14 @@ class ConversationPreviews(object, metaclass=Singleton):
         self._dirty = set()
         self._dirty_all = False
         self._scheduled = False
+        self._importing = False     # a journal import is going on: what it changes is refreshed once, at its end
         self._keys = {}             # account id: (path, mtime, PGPKey or None)
         self._undecryptable = set()
         notification_center = NotificationCenter()
         for name in ('SIPApplicationDidStart', 'BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryAllContactsDidSucceed',
                      'BlinkMessageHistoryConversationDidRemove', 'BlinkMessageDidDecrypt', 'BlinkMessageWillDelete',
                      'BlinkGotHistoryMessageUpdate', 'BlinkMessageHistoryCallHistoryDidStore', 'BlinkGotHistoryCallRecord',
-                     'BlinkMessageHistoryCallRecordDidStore'):
+                     'BlinkMessageHistoryCallRecordDidStore', 'BlinkJournalProgress', 'BlinkJournalDidApply'):
             notification_center.add_observer(self, name=name)
 
     def handle_notification(self, notification):
@@ -2923,7 +2950,22 @@ class ConversationPreviews(object, metaclass=Singleton):
             self.invalidate()
 
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
-        self.invalidate([notification.data.remote_uri])
+        # a live message updates its contact's line at once, also while a journal is imported
+        self.invalidate([notification.data.remote_uri], live=not getattr(notification.data, 'from_history', False))
+
+    @run_in_gui_thread
+    def _NH_BlinkJournalProgress(self, notification):
+        importing = notification.data.phase not in ('done', 'download')
+        if self._importing and not importing:
+            self._importing = False
+            self.invalidate(None if self._dirty_all else list(self._dirty), live=True)
+        else:
+            self._importing = importing
+
+    @run_in_gui_thread
+    def _NH_BlinkJournalDidApply(self, notification):
+        self._importing = False
+        self.invalidate(live=True)      # once, for everything the import stored
 
     def _NH_BlinkMessageHistoryConversationDidRemove(self, notification):
         self.invalidate([notification.data.contact])
@@ -2948,11 +2990,15 @@ class ConversationPreviews(object, metaclass=Singleton):
         return max((self.call_times[key] for key in keys if key in self.call_times), default=None)
 
     @run_in_gui_thread
-    def invalidate(self, keys=None):
+    def invalidate(self, keys=None, live=False):
+        """Refresh the previews of keys (None: all). While a journal is imported only a live change
+        is refreshed; the rest is kept and refreshed once when the import ends."""
         if keys is None:
             self._dirty_all = True
         else:
             self._dirty.update(str(key) for key in keys if key)
+        if self._importing and not live:
+            return
         if not self._scheduled:
             self._scheduled = True
             call_later(self.delay, self._flush)

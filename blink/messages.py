@@ -757,6 +757,8 @@ class MessageManager(object, metaclass=Singleton):
         self._own_upload_ids = OrderedDict()   # transfer ids of files this device uploads: the server sends their message, back to us too
         self.journal_receipts = {}      # {account id: {message id: state}}, collected in a first sync
         self.quitting = False           # set at once on SIPApplicationWillEnd: the journal import stops (JournalInterrupted)
+        self._bulk_key_lookups = set()  # addresses asked for in bulk after a first sync: their keys are counted, not listed
+        self._bulk_keys_saved = 0
         self.seen_message_ids = SeenMessageIds(self.seen_message_ids_size)  # handled live or from the journal, whichever came first
         self._own_conversation_reads = OwnMarkers(ttl=30)  # read markers this device sent, to recognise their echo
         self._own_conversation_removes = OwnMarkers(ttl=60)  # conversation removals this device asked the server for
@@ -809,7 +811,11 @@ class MessageManager(object, metaclass=Singleton):
         directory = settings.chat.keys_directory.normalized
         filename = os.path.join(directory, id + '.pubkey')
         makedirs(directory)
-        ActivityLog().info(f'[pgp] Saved the PGP public key of {id}')
+        if self._quiet_public_key(None, id):
+            self._bulk_keys_saved += 1
+            log.debug(f'Saved the PGP public key of {id}')
+        else:
+            ActivityLog().info(f'[pgp] Saved the PGP public key of {id}')
 
         with open(filename, 'wb') as f:
             data = data if isinstance(data, bytes) else data.encode()
@@ -1453,7 +1459,9 @@ class MessageManager(object, metaclass=Singleton):
             return 'failed'
         contact, contact_uri = URIUtils.find_contact(address)
         timestamp = ISOTimestamp(message['timestamp'])
-        ActivityLog().info(f'[Message with {contact_uri.uri}] Conversation removed on another device (from the journal), messages up to {timestamp} for account {account.id}')
+        from blink.history import first_sync_pending
+        text = f'[Message with {contact_uri.uri}] Conversation removed on another device (from the journal), messages up to {timestamp} for account {account.id}'
+        log.debug(text) if first_sync_pending(account.id) else ActivityLog().info(text)
         session = self._journal_session(contact)
         if session is None:
             NotificationCenter().post_notification('BlinkGotHistoryConversationRemove', sender=account, data=NotificationData(contact=contact_uri.uri, timestamp=timestamp))
@@ -2023,7 +2031,11 @@ class MessageManager(object, metaclass=Singleton):
                 peer, what = aor(to_header.uri), 'Outgoing (sent from another device)'
             else:
                 peer, what = instance_id or aor(sender.uri), 'Incoming'
-            ActivityLog().info(f'[Message with {peer}] {what} {enc_text}{content_type.lower()} message {message_id} for account {account.id}{via}')
+            text = f'[Message with {peer}] {what} {enc_text}{content_type.lower()} message {message_id} for account {account.id}{via}'
+            if content_type.lower() == 'text/pgp-public-key' and self._quiet_public_key(account, peer):
+                log.debug(text)         # an answer to the lookups after the first sync, or one during it: counted, not listed
+            else:
+                ActivityLog().info(text)
         if account is BonjourAccount() and instance_id:
             log.debug(f'Bonjour neighbour instance id is {instance_id}')
 
@@ -2476,8 +2488,27 @@ class MessageManager(object, metaclass=Singleton):
         ActivityLog().info(f'[pgp] Asking the server for the public keys of {len(missing)} contacts of {account.id} ({len(addresses) - len(missing)} of {len(addresses)} already known)')
         JournalLog()(account.id, 'public keys', asked=len(missing), known=len(addresses) - len(missing))
         from PyQt6.QtCore import QTimer
+        self._bulk_key_lookups.update(address.lower() for address in missing)
         for number, address in enumerate(missing):
             QTimer.singleShot(number * self.public_key_lookup_interval, lambda address=address: self._lookup_public_key(account, address))
+        # one line when the answers are in, instead of two per key
+        call_later(len(missing) * self.public_key_lookup_interval / 1000 + 15, self._report_bulk_keys, account, len(missing))
+
+    def _quiet_public_key(self, account, address):
+        """Whether a received or saved public key is logged at debug level only: during the first
+        journal sync of the account, or as an answer to the bulk lookup that follows it."""
+        address = str(address or '').lower().removeprefix('sip:')
+        if address in self._bulk_key_lookups:
+            return True
+        if account is not None and account is not BonjourAccount():
+            from blink.history import first_sync_pending
+            return first_sync_pending(account.id)
+        return False
+
+    def _report_bulk_keys(self, account, asked):
+        saved, self._bulk_keys_saved = self._bulk_keys_saved, 0
+        self._bulk_key_lookups.clear()
+        ActivityLog().info(f'[pgp] Public keys of contacts of {account.id}: {saved} of {asked} asked for received and saved')
 
     def _lookup_public_key(self, account, address):
         if not account.enabled:
