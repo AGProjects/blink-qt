@@ -66,6 +66,10 @@ class TranscriptView(QListView):
             VideoProbe.instance().probed.connect(self._SH_VideoProbed)
         self._anchor = None         # (maximum, value) before rows were inserted at the top
         self._stick = True          # follow the bottom
+        self._decrypt_timer = QTimer(self)      # the rows in view that hold ciphertext are decrypted once the view settles
+        self._decrypt_timer.setSingleShot(True)
+        self._decrypt_timer.setInterval(150)
+        self._decrypt_timer.timeout.connect(self._decrypt_visible)
         scrollbar = self.verticalScrollBar()
         scrollbar.valueChanged.connect(self._SH_ScrollValueChanged)
         scrollbar.rangeChanged.connect(self._SH_ScrollRangeChanged)
@@ -88,7 +92,29 @@ class TranscriptView(QListView):
 
     def _connections(self, model):
         return ((model.rowsAboutToBeInserted, self._SH_RowsAboutToBeInserted), (model.initialLoadFinished, self._SH_InitialLoadFinished),
-                (model.jumped, self._SH_Jumped))
+                (model.jumped, self._SH_Jumped), (model.rowsInserted, self._schedule_decrypt), (model.modelReset, self._schedule_decrypt))
+
+    # Decrypting what is in view (ConversationModel.decrypt_rows)
+
+    decrypt_margin = 5      # rows above and below the view decrypted with it, so scrolling a little shows them opened
+
+    def _schedule_decrypt(self, *args):
+        self._decrypt_timer.start()
+
+    def _decrypt_visible(self):
+        model = self.model()
+        if model is None or not hasattr(model, 'decrypt_rows') or model.rowCount() == 0:
+            return
+        viewport = self.viewport().rect()
+        top = self.indexAt(viewport.topLeft() + QPoint(viewport.width() // 2, 0))
+        bottom = self.indexAt(viewport.bottomLeft() + QPoint(viewport.width() // 2, -1))
+        first = top.row() if top.isValid() else 0
+        last = bottom.row() if bottom.isValid() else model.rowCount() - 1
+        model.decrypt_rows(first - self.decrypt_margin, last + self.decrypt_margin)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._schedule_decrypt()
 
     def _SH_Jumped(self, row):
         """After a jump to a day: its first message at the top."""
@@ -123,6 +149,7 @@ class TranscriptView(QListView):
         elif self._stick:
             scrollbar.setValue(maximum)
         self._fill()
+        self._schedule_decrypt()
 
     def _fill(self):
         """A page that does not fill the view has no scroll bar to scroll up with: load the one before."""
@@ -134,6 +161,7 @@ class TranscriptView(QListView):
                 QTimer.singleShot(0, model.load_newer)
 
     def _SH_ScrollValueChanged(self, value):
+        self._schedule_decrypt()
         model = self.model()
         self._stick = self._at_bottom() and not (model is not None and model.has_newer)
         if model is not None and model.has_newer and not model.loading and value >= self.verticalScrollBar().maximum() - self.load_margin:

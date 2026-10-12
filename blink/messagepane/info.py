@@ -56,7 +56,31 @@ def _load(parent, item, shown):
     related_rows = [{'message_id': row.message_id, 'action': row.related_action, 'content_type': row.content_type,
                      'time': str(row.timestamp), 'deleted': row.deleted, 'detail': _detail(row, label_metadata, reply_metadata)} for row in related]
     agents = MessageHistory().agents(item.id)
-    call_in_gui_thread(_show, parent, item, shown, stored, related_rows, answers, agents)
+    keys = _encryption_keys(item, stored)
+    call_in_gui_thread(_show, parent, item, shown, stored, related_rows, answers, agents, keys)
+
+
+def _encryption_keys(item, stored):
+    """The PGP keys a message was encrypted to, as 'ID (owner)' lines: read from the
+    ciphertext while it is stored, else as kept when it was decrypted (encryption_keys)."""
+    from blink.message_envelopes import is_pgp_armoured
+    from blink.pgp_keyids import describe, encrypted_to
+    key_ids = []
+    for content in [item.content] + [row.get('content') for row in stored]:
+        if is_pgp_armoured(content):
+            key_ids = encrypted_to(content)
+            if key_ids:
+                break
+    if not key_ids:
+        for row in stored:
+            kept = row.get('encryption_keys')
+            if kept:
+                key_ids = [key_id for key_id in str(kept).split(',') if key_id.strip()]
+                break
+    try:
+        return describe(key_ids)
+    except Exception:
+        return list(key_ids)
 
 
 _AGENT_LABELS = {'sent': 'Sent from', 'delivered': 'Delivered to', 'displayed': 'Displayed on', 'error': 'Error from',
@@ -148,7 +172,7 @@ def _section(title, pairs):
     return f'<h3 style="margin-top:14px">{html.escape(title)}</h3><table cellspacing="2">{rows}</table>' if rows else ''
 
 
-def _show(parent, item, shown, stored, related_rows, answers, agents=()):
+def _show(parent, item, shown, stored, related_rows, answers, agents=(), keys=()):
     from blink.message_envelopes import file_transfer_envelope
     from blink.messagepane.files import failure_reason, local_file
     row = stored[0] if stored else {}
@@ -173,12 +197,14 @@ def _show(parent, item, shown, stored, related_rows, answers, agents=()):
         ('Content type', item.content_type),
         ('Category', item.category),
         ('Encryption', item.encryption_type),
+        ('Encrypted to', '\n'.join(keys) if keys else ('not recorded' if item.encryption_type else None)),
     ]))
     parts.append(_section(translate('message_info', 'Delivery'), [
         ('State', item.state),
         ('Disposition asked for', item.disposition),
         ('Read', {1: 'yes', 0: 'no'}.get(item.read, item.read)),
-        ('Decrypted', {'1': 'yes', '0': 'no'}.get(str(item.decrypted), item.decrypted)),
+        ('Decrypted', {'1': 'yes', '0': 'no', '2': 'failed', '3': 'to try again'}.get(str(item.decrypted), item.decrypted)),
+        ('Decryption error', row.get('decryption_error')),
     ]))
     parts.append(_section(translate('message_info', 'Clients'), _agent_rows(agents)))
     reply = item.reply

@@ -217,6 +217,7 @@ class ConversationModel(QAbstractListModel):
         self.search_text = ''
         self.category = None        # one category only (set_category), or all
         self._generation = 0    # a reload makes answers to earlier queries stale
+        self._decrypting = set()    # message ids handed to the db thread to decrypt (decrypt_rows)
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(int(self.refresh_delay * 1000))
@@ -270,6 +271,84 @@ class ConversationModel(QAbstractListModel):
             arrow = '→' if item.outgoing else '←'
             return f"{item.timestamp.astimezone().strftime('%H:%M')} {arrow} {plain_summary(item)}"
         return None
+
+    # Decrypting what is in view
+
+    def decrypt_rows(self, first, last):
+        """Decrypt the rows first..last (those in view) still holding ciphertext: messages
+        stored encrypted (from the journal, or before the key was here) are only opened
+        when they are looked at. Each id is tried once per model; a failure is stored
+        (decrypted '2') with the reason, as for a live message."""
+        from blink.message_envelopes import is_pgp_armoured
+        if self.closed or not self.items:
+            return
+        first, last = max(0, first), min(len(self.items) - 1, last)
+        wanted = [(item.id, item.account_id, item.content) for item in self.items[first:last + 1]
+                  if item.upload is None and item.id not in self._decrypting and str(item.decrypted) != '2' and is_pgp_armoured(item.content)]
+        if not wanted:
+            return
+        self._decrypting.update(message_id for message_id, _account, _content in wanted)
+        self._decrypt(wanted)
+
+    @run_in_thread('db')
+    def _decrypt(self, wanted):
+        import pgpy
+        import warnings
+        from blink.history import ConversationPreviews, MessageHistory
+        previews = ConversationPreviews()
+        history = MessageHistory()
+        opened, failed, keyless = {}, 0, set()
+        for message_id, account_id, content in wanted:
+            key = previews._private_key(account_id)      # cached per account, read again when the file changes
+            if key is None:
+                keyless.add(account_id)
+                continue
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')
+                    plaintext = key.decrypt(pgpy.PGPMessage.from_blob(content)).message
+                if isinstance(plaintext, (bytes, bytearray)):
+                    plaintext = bytes(plaintext).decode('utf-8')
+            except Exception as e:
+                from blink.pgp_keyids import describe, encrypted_to
+                failed += 1
+                rows = history.store_undecryptable_message(message_id, e)
+                ActivityLog().warning(f'[pgp] Message {message_id} with {self.name} would not decrypt with the key of {account_id}: {e}; '
+                                      f"encrypted to {', '.join(describe(encrypted_to(content))) or 'no key ids'}")
+            else:
+                rows = history.store_decrypted_message(message_id, plaintext)
+            row = next((row for row in rows if str(row.account_id) == account_id), rows[0] if rows else None)
+            if row is not None:
+                opened[message_id] = MessageItem(row)
+        for account_id in keyless:
+            log.debug(f'Not decrypting messages of {account_id} in view: no private key here')
+        if opened:
+            ActivityLog().info(f'[pgp] Decrypted {len(opened) - failed} messages with {self.name} in view' + (f', {failed} would not decrypt' if failed else ''))
+            call_in_gui_thread(self._apply_decrypted, opened, keyless)
+        elif keyless:
+            call_in_gui_thread(self._forget_decrypting, [message_id for message_id, account_id, _content in wanted if account_id in keyless])
+
+    def _forget_decrypting(self, message_ids):
+        """No key for them yet: tried again when they are in view after one arrives."""
+        self._decrypting.difference_update(message_ids)
+
+    def _apply_decrypted(self, opened, keyless=()):
+        if self.closed:
+            return
+        for message_id, fresh in opened.items():
+            current = self.ids.get(message_id)
+            if current is None:
+                continue
+            for name in ('reply', 'caption', 'peaks', 'upload', 'row_id'):
+                setattr(fresh, name, getattr(current, name))
+            if not self._shows(fresh):
+                continue        # e.g. no longer in the category shown: goes with the next reload
+            position = self.items.index(current)
+            self.items[position] = self.ids[message_id] = fresh
+            index = self.index(position)
+            self.dataChanged.emit(index, index)
+        if keyless:
+            self._decrypting.difference_update(item.id for item in self.items if item.account_id in keyless)
 
     # Loading
 
@@ -337,6 +416,7 @@ class ConversationModel(QAbstractListModel):
     def load(self):
         """The newest page: what opening the conversation shows."""
         self._generation += 1
+        self._decrypting.clear()    # a key may have arrived or changed since: try again what comes into view
         self._set_loading(True)
         self._fetch(self._generation, 'initial', before=None)
 

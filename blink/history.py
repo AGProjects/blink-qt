@@ -438,6 +438,8 @@ class Message(SQLObject):
     cpim_timestamp  = StringCol(default=None)                 # sender timestamp as received
     private         = IntCol(default=0, defaultSQL='0')
     expire_time     = IntCol(default=0, defaultSQL='0')  # reserved, Sylk Mobile 'expire'
+    # version 12
+    encryption_keys = StringCol(default=None)                 # PGP key ids the ciphertext was encrypted to, comma separated
     remote_idx      = DatabaseIndex('remote_uri')
     id_idx          = DatabaseIndex('message_id')
     unq_idx         = DatabaseIndex(message_id, account_id, remote_uri, unique=True)
@@ -706,7 +708,7 @@ class DownloadHistory(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class MessageHistory(object, metaclass=Singleton):
-    __version__ = 11
+    __version__ = 12
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
 
     def __init__(self):
@@ -1494,16 +1496,25 @@ class MessageHistory(object, metaclass=Singleton):
 
     @run_in_thread('db')
     def update_decrypted_message(self, message_id, plaintext):
-        """Store the plaintext of a decrypted message in place of its ciphertext.
+        """Store the plaintext of a decrypted message in place of its ciphertext."""
+        self.store_decrypted_message(message_id, plaintext)
+
+    def store_decrypted_message(self, message_id, plaintext):
+        """update_decrypted_message, in the db thread already; returns the rows.
 
         This is the first moment an encrypted file transfer or text can be
         classified, so a missing category and the link flag are filled in here.
+        The ids of the keys the ciphertext was encrypted to are kept, as the
+        ciphertext is not (encryption_keys).
         """
+        from blink.pgp_keyids import encrypted_to
         rows = list(Message.selectBy(message_id=str(message_id)))
         if not rows:
             log.debug(f'No stored message {message_id} to store the decrypted body of')
-            return
+            return rows
         for row in rows:
+            if not row.encryption_keys and is_pgp_armoured(row.content):
+                row.encryption_keys = ','.join(encrypted_to(row.content)) or None
             row.content = plaintext
             row.decrypted = '1'
             row.decryption_error = ''
@@ -1513,6 +1524,19 @@ class MessageHistory(object, metaclass=Singleton):
                     row.category = category
             if row.category == 'text' and not row.has_link:
                 row.has_link = has_link(row.content_type, plaintext) or 0
+        return rows
+
+    def store_undecryptable_message(self, message_id, error):
+        """In the db thread: the ciphertext of this message would not open with our key
+        (decrypted '2', as a live message that failed); returns the rows."""
+        from blink.pgp_keyids import encrypted_to
+        rows = list(Message.selectBy(message_id=str(message_id)))
+        for row in rows:
+            row.decrypted = '2'
+            row.decryption_error = str(error)[:1000]
+            if not row.encryption_keys and is_pgp_armoured(row.content):
+                row.encryption_keys = ','.join(encrypted_to(row.content)) or None
+        return rows
 
     rekey_marker = 'history-canonical-keys.done'
 
@@ -2072,6 +2096,13 @@ class MessageHistory(object, metaclass=Singleton):
             filed += 1
         ActivityLog().info(f'[db] {filed} of {len(rows)} location messages filed against their share' + (f', {len(rows) - filed} cannot be read without decrypting' if len(rows) > filed else ''))
         return filed
+
+    def _upgrade_to_v12(self):
+        """PGP key ids of encrypted messages"""
+        # filled when the ciphertext is decrypted (it is not kept); rows still holding
+        # ciphertext have their ids read from it
+        self._add_column('encryption_keys', 'TEXT DEFAULT NULL')
+        return 0
 
     def _add_column(self, name, definition):
         try:
