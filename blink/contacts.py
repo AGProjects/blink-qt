@@ -911,6 +911,15 @@ class ContactRepair(object, metaclass=Singleton):
     def __init__(self):
         self.done = False
         self._started = False
+        self.loaded = set()     # ids of the accounts whose addressbook has been fetched at least once
+        self.settled = set()    # ids of the accounts whose addressbook has been through a run (BlinkAddressbookDidSettle)
+
+    def addressbook_ready(self, account):
+        """Whether what adds contacts for this account (test numbers, the server's call history)
+        may do it: its addressbook was fetched and repaired, or it has none and the first run is done."""
+        if account.xcap.enabled:
+            return account.id in self.settled
+        return self.done
 
     def start(self):
         if self._started:
@@ -939,14 +948,21 @@ class ContactRepair(object, metaclass=Singleton):
                 ActivityLog().exception(f'[addressbook] Filing the test numbers failed: {e!r}')
 
     def _NH_XCAPManagerDidReloadData(self, notification):
-        if not self.done:
-            # a little later than the filers, so groups created by them are in place
+        account = getattr(notification.sender, 'account', None)
+        first = account is not None and account.id not in self.loaded
+        if account is not None:
+            self.loaded.add(account.id)
+        if not self.done or first:
+            # a little later than the filers, so groups created by them are in place; again for an
+            # account whose addressbook comes after the first run (added, or enabled, later)
+            self.done = self.done and not first
             call_later(self.settle_delay + 5, self.run)
 
     def run(self):
         if self.done:
             return
         self.done = True
+        self.settled |= self.loaded         # their addressbooks are here: the test numbers below may be filed for them
         activity = ActivityLog()
         try:
             # healing what the server handed us: every device does it on its own, nothing to announce
@@ -957,8 +973,11 @@ class ContactRepair(object, metaclass=Singleton):
                 self.file_test_numbers()
         except Exception as e:
             activity.exception(f'[addressbook] Repairing the addressbook failed: {e!r}')
-            return
-        activity.info(f'[addressbook] Repair done: {repaired} contacts repaired, {filed} contacts filed into Tel or Conference, {merged} duplicates merged')
+        else:
+            activity.info(f'[addressbook] Repair done: {repaired} contacts repaired, {filed} contacts filed into Tel or Conference, {merged} duplicates merged')
+        # the addressbook has loaded and been healed: what adds contacts of its own (the server's
+        # call history) waits for this, not to make contacts the addressbook was still bringing
+        NotificationCenter().post_notification('BlinkAddressbookDidSettle', sender=self, data=NotificationData(accounts=set(self.settled)))
 
     test_numbers_file = 'test_numbers.json'     # numbers already added, per profile (blink.profiles)
 
@@ -992,6 +1011,8 @@ class ContactRepair(object, metaclass=Singleton):
         for account in AccountManager().get_accounts():
             if account is BonjourAccount() or not account.enabled:
                 continue
+            if not self.addressbook_ready(account):
+                continue        # filed when its addressbook has arrived (run): the server may already have them
             numbers = (discovery.configuration(account.id.domain) or {}).get('testNumbers')
             for entry in numbers if isinstance(numbers, list) else ():
                 uri = str(entry.get('uri') or '').strip() if isinstance(entry, dict) else ''

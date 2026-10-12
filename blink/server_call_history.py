@@ -8,6 +8,14 @@ call: sessionId (the Call-ID), fromTag, toTag, remoteParty, startTime,
 stopTime, timezone, duration, status, media, proxyIP, sipTraceUrl and,
 on newer servers, outcome.
 
+For an account with XCAP enabled the first fetch waits, without a time limit,
+for its addressbook to have been fetched from the server and settled
+(BlinkAddressbookDidSettle, after ContactRepair), plus a few seconds for its
+writes to reach the server; an account without XCAP waits for the first
+ContactRepair run only: filing a call makes or files its contact (Calls,
+Tel, Conference), and doing that before the addressbook arrived makes
+duplicates of contacts it was bringing.
+
 Each call becomes a call detail record with source 'server' and goes to
 MessageHistory.store_call_record, as a record from another device does: it merges it into the row this device stored
 for the same Call-ID, where the server's view wins the fields it knows best
@@ -32,7 +40,7 @@ from sipsimple.threading import run_in_thread
 
 from blink.logging import ActivityLog
 from blink.message_envelopes import build_call_record
-from blink.util import run_in_gui_thread
+from blink.util import call_later, run_in_gui_thread
 
 
 __all__ = ['ServerCallHistory']
@@ -146,10 +154,14 @@ def history_url(account):
 @implementer(IObserver)
 class ServerCallHistory(object, metaclass=Singleton):
 
+    settle_delay = 5            # seconds after the addressbook settled before the first fetch
+
     def __init__(self):
         self.timers = {}        # account id: QTimer
         self.running = set()    # account ids with a fetch under way
+        self.waiting = {}       # account id: account, started before its addressbook settled (ContactRepair.addressbook_ready)
         notification_center = NotificationCenter()
+        notification_center.add_observer(self, name='BlinkAddressbookDidSettle')
         notification_center.add_observer(self, name='SIPAccountDidActivate')
         notification_center.add_observer(self, name='SIPAccountDidDeactivate')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
@@ -161,6 +173,15 @@ class ServerCallHistory(object, metaclass=Singleton):
         if not account.server.settings_url:
             ActivityLog().info(f'[calls] No server call history for {account.id}: the Server Settings URL is not set')
             return
+        from blink.contacts import ContactRepair
+        if not ContactRepair().addressbook_ready(account):
+            if account.id not in self.waiting:
+                ActivityLog().info(f'[calls] Server call history of {account.id}: waiting for the addressbook to load before fetching it')
+            self.waiting[account.id] = account
+            return
+        self._start_now(account)
+
+    def _start_now(self, account):
         timer = QTimer()
         timer.setInterval(POLL_INTERVAL * 1000)
         timer.timeout.connect(lambda account=account: self.fetch(account))
@@ -169,6 +190,7 @@ class ServerCallHistory(object, metaclass=Singleton):
         self.fetch(account)
 
     def stop(self, account):
+        self.waiting.pop(account.id, None)
         timer = self.timers.pop(account.id, None)
         if timer is not None:
             timer.stop()
@@ -250,6 +272,19 @@ class ServerCallHistory(object, metaclass=Singleton):
 
     def _NH_SIPAccountDidActivate(self, notification):
         self.start(notification.sender)
+
+    def _NH_BlinkAddressbookDidSettle(self, notification):
+        if self.waiting:
+            call_later(self.settle_delay, self._addressbook_settled)
+
+    def _addressbook_settled(self):
+        from blink.contacts import ContactRepair
+        repair = ContactRepair()
+        for account_id, account in list(self.waiting.items()):
+            if repair.addressbook_ready(account):
+                del self.waiting[account_id]
+                if account.enabled:
+                    self.start(account)
 
     def _NH_SIPAccountDidDeactivate(self, notification):
         self.stop(notification.sender)
