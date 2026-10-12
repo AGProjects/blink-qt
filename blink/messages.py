@@ -736,6 +736,10 @@ def contact_instance_id(contact, contact_uri):
     return placeholder_instance_id(contact_uri.uri)
 
 
+class JournalInterrupted(Exception):
+    """Blink is quitting: the journal page being applied is kept, to be applied again at the next start."""
+
+
 @implementer(IObserver)
 class MessageManager(object, metaclass=Singleton):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type,
@@ -752,6 +756,7 @@ class MessageManager(object, metaclass=Singleton):
         self._own_message_ids = OrderedDict()  # ids of messages sent by this device, to recognise their replicated copies
         self._own_upload_ids = OrderedDict()   # transfer ids of files this device uploads: the server sends their message, back to us too
         self.journal_receipts = {}      # {account id: {message id: state}}, collected in a first sync
+        self.quitting = False           # set at once on SIPApplicationWillEnd: the journal import stops (JournalInterrupted)
         self.seen_message_ids = SeenMessageIds(self.seen_message_ids_size)  # handled live or from the journal, whichever came first
         self._own_conversation_reads = OwnMarkers(ttl=30)  # read markers this device sent, to recognise their echo
         self._own_conversation_removes = OwnMarkers(ttl=60)  # conversation removals this device asked the server for
@@ -782,6 +787,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryConversationDidRemove')
         notification_center.add_observer(self, name='BlinkJournalFirstSyncDidFinish')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification_center.add_observer(self, name='SIPApplicationWillEnd')
         KeyEscrowManager().start()
 
     @run_in_thread('file-io')
@@ -992,6 +998,9 @@ class MessageManager(object, metaclass=Singleton):
         marker = b'"message_id"'
         updated = time.monotonic()
         for chunk in response.iter_content(chunk_size=64 * 1024):
+            if self.quitting:
+                response.close()
+                raise JournalInterrupted('quitting while a page was downloading')     # the page is fetched again, whole
             chunks.append(chunk)
             window = tail + chunk
             found += window.count(marker)
@@ -1087,12 +1096,24 @@ class MessageManager(object, metaclass=Singleton):
         started = time.monotonic()
         pages = entries = transferred = 0
         expected = None     # entries the server has after the cursor (X-Sylk-Journal-Remaining of the first page)
-        self._journal_progress(account, 'download', 0)
+        # pages downloaded by an earlier run that was stopped (quit) and not imported yet: the
+        # progress counts them, so a resumed download goes on from where it was, not from 0
+        cache = JournalCache(directory)
+        cached = 0
+        for name in cache.pages():
+            try:
+                cached += len(cache.load(name).get('messages') or [])
+            except (OSError, ValueError, AttributeError):
+                pass
+        self._journal_progress(account, 'download', cached, None)
         complete = False
         stopped = None
         stats = JournalStats(account.id, first_sync=first_sync, cursor=account.sms.history_synchronization_id, reason=reason)
 
         while pages < self.journal_max_pages:
+            if self.quitting:
+                stopped = 'quitting'
+                break
             cursor = account.sms.history_synchronization_id
             url = self._journal_page_url(account)
             page_started = time.monotonic()
@@ -1105,8 +1126,11 @@ class MessageManager(object, metaclass=Singleton):
                         expected = int(r.headers.get('X-Sylk-Journal-Remaining'))
                     except (TypeError, ValueError):
                         expected = 0        # an older server: the total is not known
-                body = self._journal_read_page(account, r, entries, expected)
+                body = self._journal_read_page(account, r, cached + entries, cached + expected if expected else 0)
                 data = json.loads(body)
+            except JournalInterrupted:
+                stopped = 'quitting'
+                break
             except requests.HTTPError as e:
                 stopped = f'HTTP {e.response.status_code}'
                 if e.response.status_code == 401:
@@ -1147,7 +1171,7 @@ class MessageManager(object, metaclass=Singleton):
             transferred += len(body)
             last_id = messages[-1].get('message_id')
             stats.page_downloaded(name, len(messages), len(body), time.monotonic() - page_started, last_id)
-            self._journal_progress(account, 'download', entries, max(expected or 0, entries) if expected else None)
+            self._journal_progress(account, 'download', cached + entries, cached + max(expected or 0, entries) if expected else None)
             log.info(f'Cached journal page {name} ({len(messages)} entries, {len(body)} bytes, cursor {last_id})')
             jlog(account.id, 'download page', page=pages, file=name, entries=len(messages), bytes=len(body),
                  took=f'{time.monotonic() - page_started:.1f}s', remaining=(expected - entries + len(messages)) if expected else None,
@@ -1164,6 +1188,12 @@ class MessageManager(object, metaclass=Singleton):
         jlog(account.id, 'download stopped' if stopped else 'download end', reason=stopped, pages=pages, entries=entries, bytes=transferred,
              took=f'{time.monotonic() - started:.1f}s', complete=complete if not stopped else None)
 
+        if stopped == 'quitting':
+            # the pages downloaded so far stay cached and the cursor after the last of them: the next
+            # start downloads the rest first, then imports all of them (nothing is imported now)
+            activity.info(f'[journal] Download of {account.id} stopped by quitting after {pages} pages ({entries} entries), resumed at the next start')
+            self._journal_progress(account, 'done')
+            return
         if pages:
             activity.info(f'[journal] Downloaded {entries} journal entries of {account.id} in {pages} pages ({transferred} bytes, {time.monotonic() - started:.1f}s)')
         elif complete:
@@ -1221,7 +1251,11 @@ class MessageManager(object, metaclass=Singleton):
         totals = Counter()
         contacts = Counter()
         applied = 0
+        interrupted = None
         for name in names:
+            if self.quitting:
+                interrupted = (name, 'before the page')
+                break
             try:
                 page = cache.load(name)
             except (OSError, ValueError) as e:
@@ -1245,6 +1279,9 @@ class MessageManager(object, metaclass=Singleton):
                     # a first sync is one for all its pages (only the first page has no cursor)
                     page_stats = self._apply_server_history_messages(account, page.get('messages') or [], first_sync=page_first_sync,
                                                                      contacts=contacts, stats=stats, progress=progress)
+                except JournalInterrupted as e:
+                    interrupted = (name, str(e))
+                    break
                 except Exception as e:
                     page_stats = None
                     error = e
@@ -1270,10 +1307,24 @@ class MessageManager(object, metaclass=Singleton):
             applied += 1
             done_entries += sizes.get(name, 0)
             totals.update(page_stats)
+            activity.info(f'[journal] Applied journal page {applied} of {len(names)} of {account.id} ({sizes.get(name, 0)} entries, '
+                          f'{time.monotonic() - page_started:.1f}s) and removed it: {name}')
             jlog(account.id, 'page applied', file=name, took=f'{time.monotonic() - page_started:.1f}s',
                  **{re.sub(r'[^0-9a-z]+', '_', outcome.lower()).strip('_'): count for outcome, count in sorted(page_stats.items())}, deleted='yes')
             log.info(f'Applied journal page {name}: ' + ', '.join(f'{count} {outcome}' for outcome, count in sorted(page_stats.items())))
         stats.apply_seconds += time.monotonic() - started
+        if interrupted is not None:
+            # nothing is settled: the page is kept (not counted as a failed attempt), its receipts are
+            # collected again with it, the first sync stays unfinished; what was stored of the page is
+            # recognised as already stored when it is applied again
+            name, where = interrupted
+            self.journal_receipts.pop(account.id, None)
+            left = len(names) - applied
+            ActivityLog().info(f'[journal] Import of {account.id} stopped by quitting ({where}): {applied} of {len(names)} pages applied,'
+                               f' {left} kept for the next start ({name} onwards)')
+            jlog(account.id, 'apply interrupted', page=name, where=where, applied=f'{applied}/{len(names)}', kept=left)
+            self._journal_progress(account, 'done')
+            return
         summary = ', '.join(f'{count} {outcome}' for outcome, count in sorted(totals.items())) or 'nothing'
         activity.info(f'[journal] Applied {sum(totals.values())} journal entries of {account.id} from {applied} of {len(names)} pages in {stats.apply_seconds:.1f}s: {summary}')
         for line in stats.summary_lines():
@@ -1300,7 +1351,10 @@ class MessageManager(object, metaclass=Singleton):
 
     @run_in_thread('sync')
     def _process_server_history_messages(self, account, messages):
-        self._apply_server_history_messages(account, messages)
+        try:
+            self._apply_server_history_messages(account, messages)
+        except JournalInterrupted:
+            pass        # quitting
 
     @staticmethod
     def _journal_progress(account, phase, done=None, total=None):
@@ -1325,6 +1379,9 @@ class MessageManager(object, metaclass=Singleton):
         stored = MessageHistory().stored_message_ids(message.get('message_id') for message in messages)
         db_wait = 0.0       # seconds waited for the db thread (stats of the journal log)
         for index, message in enumerate(messages, 1):
+            if self.quitting:
+                # what fails while Blink stops would be counted as failed and the page deleted with it
+                raise JournalInterrupted(f'quitting at entry {index} of {len(messages)}')
             content_type = str(message.get('content_type') or '').lower()
             action = journal_action(content_type)
             if self.seen_message_ids.seen(message.get('message_id')) or str(message.get('message_id') or '') in stored:
@@ -1537,8 +1594,14 @@ class MessageManager(object, metaclass=Singleton):
             return f'metadata {link[1]}' if link is not None else 'metadata (unlinked)'
         return f'stored as {content_type}'
 
-    @run_in_gui_thread
     def handle_notification(self, notification):
+        if notification.name == 'SIPApplicationWillEnd':
+            self.quitting = True        # at once, in the posting thread: the import thread checks it between entries
+            return
+        self._handle_in_gui_thread(notification)
+
+    @run_in_gui_thread
+    def _handle_in_gui_thread(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 

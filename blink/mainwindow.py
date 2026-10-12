@@ -82,6 +82,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
         notification_center.add_observer(self, name='BlinkMessagePaneDidReadConversation')
         notification_center.add_observer(self, name='BlinkJournalProgress')
+        notification_center.add_observer(self, name='BlinkBackgroundDecryptionProgress')
 
         notification_center.add_observer(self, sender=AccountManager())
 
@@ -349,6 +350,8 @@ class MainWindow(base_class, ui_class):
         self.journal_progress_timer.setSingleShot(True)
         self.journal_progress_timer.setInterval(1500)
         self.journal_progress_timer.timeout.connect(self.journal_progress.show)
+        self._journal_in_progress = False
+        self._decryption_progress = None        # (done, total) of the background decryption, while it runs
 
         # the message pane, right of the contact list (which becomes the conversation switcher);
         # closed at start whatever it was when Blink quit, so starting never shows (and reads) a conversation
@@ -1567,18 +1570,46 @@ class MainWindow(base_class, ui_class):
             self.raise_()
             self.activateWindow()
 
+    # The progress bar under the account selector: the journal download and import, and when
+    # none is going on the background decryption of stored messages (blink.pgp_decryptor)
+
     def _NH_BlinkJournalProgress(self, notification):
         phase = notification.data.phase
-        bar = self.journal_progress
         if phase == 'done':
-            self.journal_progress_timer.stop()
-            bar.hide()
+            self._journal_in_progress = False
+            if self._decryption_progress is not None:
+                self._show_decryption_progress()
+            else:
+                self._hide_progress()
             return
-        if not bar.isVisible() and not self.journal_progress_timer.isActive():
-            self.journal_progress_timer.start()
+        self._journal_in_progress = True
         account = notification.sender.id
         done, total = notification.data.done or 0, notification.data.total
         label = translate('main_window', 'Downloading messages') if phase == 'download' else translate('main_window', 'Importing messages')
+        self._show_progress(label, done, total, account)
+
+    def _NH_BlinkBackgroundDecryptionProgress(self, notification):
+        if notification.data.phase == 'done':
+            self._decryption_progress = None
+            if not self._journal_in_progress:
+                self._hide_progress()
+            return
+        self._decryption_progress = (notification.data.done or 0, notification.data.total)
+        if not self._journal_in_progress:
+            self._show_decryption_progress()
+
+    def _show_decryption_progress(self):
+        done, total = self._decryption_progress
+        self._show_progress(translate('main_window', 'Decrypting messages'), done, total)
+
+    def _hide_progress(self):
+        self.journal_progress_timer.stop()
+        self.journal_progress.hide()
+
+    def _show_progress(self, label, done, total, account=None):
+        bar = self.journal_progress
+        if not bar.isVisible() and not self.journal_progress_timer.isActive():
+            self.journal_progress_timer.start()
         if total:
             bar.setRange(0, total)
             bar.setValue(min(done, total))
@@ -1589,7 +1620,8 @@ class MainWindow(base_class, ui_class):
             bar.setRange(0, 1)
             bar.setValue(0)
             bar.setFormat(f'{label} {done}')
-        bar.setToolTip(f'{label} of {account}: {done} of {total}' if total else f'{label} of {account}: {done}')
+        of = f' of {account}' if account else ''
+        bar.setToolTip(f'{label}{of}: {done} of {total}' if total else f'{label}{of}: {done}')
 
     @run_in_gui_thread
     def handle_notification(self, notification):

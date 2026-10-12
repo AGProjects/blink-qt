@@ -71,6 +71,7 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         self._failed = set()        # message ids that would not open in this run
         self._keys = {}             # account id: (path, mtime, PGPKey or None), used in the decrypting thread only
         self._done = self._opened = self._not_opened = 0
+        self._total = 0             # messages found at the start of the run (the progress bar)
         self._started_at = 0.0
         self.total_opened = self.total_not_opened = 0      # since Blink started, over all runs (logged at quit)
         self.last_view_decrypt = 0.0    # time.time() of the pane's last decrypt_rows
@@ -172,11 +173,20 @@ class BackgroundDecryptor(object, metaclass=Singleton):
             self._finished()
             return
         ActivityLog().info(f'[pgp] Decrypting {len(self._queue)} stored messages in the background ({reason})')
+        self._total = len(self._queue)
+        self._progress('decrypt', 0, self._total)
         self._next()
+
+    @staticmethod
+    def _progress(phase, done=None, total=None):
+        """For the main window's progress bar (shared with the journal download, which goes first):
+        'decrypt' with done of total messages, then 'done'."""
+        NotificationCenter().post_notification('BlinkBackgroundDecryptionProgress', data=NotificationData(phase=phase, done=done, total=total))
 
     def _next(self):
         if not self._started:
             self.running = False
+            self._progress('done')
             return
         if not self._queue:
             self._finished()
@@ -204,6 +214,7 @@ class BackgroundDecryptor(object, metaclass=Singleton):
             return str(value)
 
     def _finished(self):
+        self._progress('done')
         if self._done:
             took = time.time() - self._started_at
             ActivityLog().info(f'[pgp] Background decryption done: {self._opened} messages decrypted'
@@ -318,6 +329,7 @@ class BackgroundDecryptor(object, metaclass=Singleton):
             ActivityLog().warning(f'[pgp] Stored message {message_id} would not decrypt: {error}')
         if changed:
             NotificationCenter().post_notification('BlinkMessagesDidDecryptInBackground', sender=self, data=NotificationData(ids=changed))
+        self._progress('decrypt', self._total - len(self._queue), self._total)
         if self._done // self.progress_every != before // self.progress_every:
             ActivityLog().info(f'[pgp] Background messages decryption progress: {self._done} done, {len(self._queue)} left, reached messages of {self._local_time(self._reached)}')
         call_later(self.batch_pause, self._next)
