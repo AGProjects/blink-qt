@@ -53,12 +53,23 @@ from blink.util import call_in_gui_thread, call_later, run_in_gui_thread
 class BackgroundDecryptor(object, metaclass=Singleton):
     start_delay = 30.0          # seconds after Blink starts
     batch_size = 20
-    # at most this share of one CPU: after a message that took t of CPU, sleep t * (1 / duty - 1);
-    # more while Blink is not the application in use (window not active), less while it is
-    duty_cycle_active = 0.15
-    duty_cycle_idle = 0.5
+    # The speed, chosen by the user (the button by the progress bar): at most this share of one
+    # CPU -- after a message that took t of CPU, sleep t * (1 / duty - 1) -- while Blink is the
+    # application in use and while it is not, and the seconds between two batches.
+    speeds = {
+        'fast':   (0.8, 0.9, 0.2),
+        'normal': (0.15, 0.5, 1.0),
+        'gentle': (0.05, 0.2, 3.0),
+    }
+    speed_names = (('fast', 'Fast'), ('normal', 'Normal'), ('gentle', 'Gentle'), ('paused', 'Paused'))
+    speed_descriptions = {
+        'fast': 'Uses most of one CPU core, finishes soonest',
+        'normal': 'Light while you use Blink, faster when it is in the background',
+        'gentle': 'Hardly noticeable, takes longest',
+        'paused': 'Stopped until resumed',
+    }
+    speed_file = 'pgp_decryption_speed'     # <data>/pgp_decryption_speed: the choice, kept between runs
     message_pause = 0.02        # and never less than this, in seconds, between two messages
-    batch_pause = 1.0           # seconds between two batches
     busy_pause = 5.0            # seconds to wait while the message pane decrypts what is in view
     progress_every = 200        # messages between two progress lines in the Activity log
 
@@ -75,6 +86,8 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         self._started_at = 0.0
         self.total_opened = self.total_not_opened = 0      # since Blink started, over all runs (logged at quit)
         self.last_view_decrypt = 0.0    # time.time() of the pane's last decrypt_rows
+        self.speed = self._load_speed()
+        self._held = False          # a batch was due while paused: started on resume
 
     def start(self):
         if self._started:
@@ -103,7 +116,43 @@ class BackgroundDecryptor(object, metaclass=Singleton):
 
     @property
     def duty_cycle(self):
-        return self.duty_cycle_active if self.in_use else self.duty_cycle_idle
+        active, idle, _pause = self.speeds.get(self.speed, self.speeds['normal'])
+        return active if self.in_use else idle
+
+    @property
+    def batch_pause(self):
+        return self.speeds.get(self.speed, self.speeds['normal'])[2]
+
+    @property
+    def paused(self):
+        return self.speed == 'paused'
+
+    def _load_speed(self):
+        try:
+            from blink.resources import ApplicationData
+            with open(ApplicationData.get(self.speed_file)) as file:
+                speed = file.read().strip()
+        except (OSError, ImportError):
+            return 'normal'
+        return speed if speed in self.speeds or speed == 'paused' else 'normal'
+
+    def set_speed(self, speed):
+        """The user's choice (GUI thread): kept between runs; Paused holds the run until another is chosen."""
+        if speed == self.speed or not (speed in self.speeds or speed == 'paused'):
+            return
+        self.speed = speed
+        try:
+            from blink.resources import ApplicationData
+            with open(ApplicationData.get(self.speed_file), 'w') as file:
+                file.write(speed + '\n')
+        except OSError as e:
+            ActivityLog().warning(f'[pgp] Cannot keep the background decryption speed: {e}')
+        ActivityLog().info(f'[pgp] Background decryption speed: {dict(self.speed_names)[speed]}')
+        if self.running:
+            self._progress('decrypt', self._total - len(self._queue), self._total)
+        if not self.paused and self._held:
+            self._held = False
+            self._next()
 
     def handle_notification(self, notification):
         if notification.name == 'SIPApplicationWillEnd':
@@ -177,11 +226,10 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         self._progress('decrypt', 0, self._total)
         self._next()
 
-    @staticmethod
-    def _progress(phase, done=None, total=None):
+    def _progress(self, phase, done=None, total=None):
         """For the main window's progress bar (shared with the journal download, which goes first):
-        'decrypt' with done of total messages, then 'done'."""
-        NotificationCenter().post_notification('BlinkBackgroundDecryptionProgress', data=NotificationData(phase=phase, done=done, total=total))
+        'decrypt' with done of total messages and the speed, then 'done'."""
+        NotificationCenter().post_notification('BlinkBackgroundDecryptionProgress', data=NotificationData(phase=phase, done=done, total=total, speed=self.speed))
 
     def _next(self):
         if not self._started:
@@ -190,6 +238,9 @@ class BackgroundDecryptor(object, metaclass=Singleton):
             return
         if not self._queue:
             self._finished()
+            return
+        if self.paused:
+            self._held = True       # resumed by set_speed
             return
         if time.time() - self.last_view_decrypt < self.busy_pause:
             call_later(self.busy_pause, self._next)     # the pane is opening what is in view: let it have the CPU
