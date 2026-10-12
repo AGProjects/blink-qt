@@ -7,7 +7,7 @@ import urllib.request, urllib.parse, urllib.error
 
 from PyQt6 import uic, sip
 from PyQt6.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel, QUrl, QUrlQuery
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QCursor, QIcon
 from PyQt6.QtNetwork import QAuthenticator
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -622,6 +622,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         self.add_account_button.setFocus()
         self.accept_button.setEnabled(False)
         self._initialize()
+        self._center_on_screen()
         self.show()
 
     def open_for_create(self):
@@ -629,7 +630,21 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
         self.create_account_button.setFocus()
         self.accept_button.setEnabled(False)
         self._initialize()
+        self._center_on_screen()
         self.show()
+
+    def _center_on_screen(self):
+        main_window = getattr(QApplication.instance(), 'main_window', None)
+        if main_window is not None and main_window.isVisible():
+            screen = main_window.screen()
+        else:
+            screen = QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+        if screen is None:
+            return
+        self.adjustSize()
+        geometry = self.frameGeometry()
+        geometry.moveCenter(screen.availableGeometry().center())
+        self.move(geometry.topLeft())
 
 
 del ui_class, base_class

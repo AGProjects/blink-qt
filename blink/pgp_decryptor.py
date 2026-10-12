@@ -49,6 +49,113 @@ from blink.uris import BONJOUR_ACCOUNT_ID
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread
 
 
+# The worker: a plain python3 process that imports pgpy only (not blink, not Qt), at the lowest
+# priority, so the desktop and Blink's UI always come first. JSON lines on stdin and stdout:
+#   {"account": id, "key": armored private key}   remembered, no answer
+#   {"duty": 0.1..1}                               share of a core it may use, no answer
+#   {"id": message id, "account": id, "content": ciphertext}
+#       -> {"id": ..., "plaintext": ...} or {"id": ..., "error": ...}
+WORKER_CODE = r"""
+import json, os, sys, time, warnings
+warnings.simplefilter('ignore')
+try:
+    os.nice(19)
+except OSError:
+    pass
+import pgpy
+keys, duty = {}, 1.0
+for line in sys.stdin:
+    try:
+        request = json.loads(line)
+    except ValueError:
+        continue
+    if 'key' in request:
+        try:
+            keys[request['account']] = pgpy.PGPKey.from_blob(request['key'])[0]
+        except Exception as e:
+            keys[request['account']] = e
+        continue
+    if 'duty' in request:
+        duty = min(1.0, max(0.02, float(request['duty'])))
+        continue
+    began = time.thread_time()
+    answer = {'id': request.get('id')}
+    key = keys.get(request.get('account'))
+    try:
+        if key is None or isinstance(key, Exception):
+            raise RuntimeError(f'no usable private key: {key}')
+        plaintext = key.decrypt(pgpy.PGPMessage.from_blob(request['content'])).message
+        if isinstance(plaintext, (bytes, bytearray)):
+            plaintext = bytes(plaintext).decode('utf-8')
+        answer['plaintext'] = plaintext
+    except Exception as e:
+        answer['error'] = str(e) or e.__class__.__name__
+    sys.stdout.write(json.dumps(answer) + '\n')
+    sys.stdout.flush()
+    if duty < 1.0:
+        time.sleep((time.thread_time() - began) * (1 / duty - 1))
+"""
+
+
+class DecryptWorker(object):
+    """One worker process, used from the 'pgp-decrypt' thread only. Its answers are read by a
+    thread of its own into a queue (select on a buffered pipe would miss lines already read)."""
+
+    answer_timeout = 60.0       # seconds for one message: longer, and the worker is taken for hung
+
+    def __init__(self):
+        import queue
+        import subprocess
+        import sys
+        import threading
+        self.process = subprocess.Popen([sys.executable, '-I', '-c', WORKER_CODE], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, text=True, encoding='utf-8', bufsize=1)
+        self.answers = queue.Queue()
+        self.keys = {}          # account id: the key file mtime sent
+        self.duty = None
+        threading.Thread(target=self._read, name='pgp-decrypt-worker-reader', daemon=True).start()
+
+    def _read(self):
+        import json
+        try:
+            for line in self.process.stdout:
+                try:
+                    self.answers.put(json.loads(line))
+                except ValueError:
+                    pass
+        except (OSError, ValueError):
+            pass
+        self.answers.put(None)      # it ended
+
+    @property
+    def alive(self):
+        return self.process.poll() is None
+
+    def send(self, request):
+        import json
+        self.process.stdin.write(json.dumps(request) + '\n')
+        self.process.stdin.flush()
+
+    def receive(self):
+        """The next answer, or None (died, or hung: then it is stopped)."""
+        import queue
+        try:
+            answer = self.answers.get(timeout=self.answer_timeout)
+        except queue.Empty:
+            self.stop()
+            return None
+        if answer is None:
+            self.answers.put(None)  # stays ended for any later receive
+        return answer
+
+    def stop(self):
+        try:
+            self.process.kill()
+            self.process.wait(timeout=5)
+        except Exception:
+            pass
+
+
 @implementer(IObserver)
 class BackgroundDecryptor(object, metaclass=Singleton):
     start_delay = 30.0          # seconds after Blink starts
@@ -61,7 +168,13 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         'normal': (0.15, 0.5, 1.0),
         'gentle': (0.05, 0.2, 3.0),
     }
-    speed_names = (('fast', 'Fast'), ('normal', 'Normal'), ('gentle', 'Gentle'), ('paused', 'Paused'))
+    # With worker processes (blink.pgp_decryptor.WORKER_CODE, at the lowest priority), the number
+    # of them and the share of a core each may use: Fast takes every core but one.
+    @staticmethod
+    def _workers_for(speed):
+        cores = os.cpu_count() or 2
+        return {'fast': (max(1, cores - 1), 1.0), 'normal': (min(2, max(1, cores - 1)), 0.5), 'gentle': (1, 0.15)}.get(speed, (1, 0.15))
+    speed_names = (('fast', 'Fast'), ('normal', 'Normal'), ('gentle', 'Gentle'), ('paused', 'Pause'))     # as in the menu
     speed_descriptions = {
         'fast': 'Uses most of one CPU core, finishes soonest',
         'normal': 'Light while you use Blink, faster when it is in the background',
@@ -84,10 +197,14 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         self._done = self._opened = self._not_opened = 0
         self._total = 0             # messages found at the start of the run (the progress bar)
         self._started_at = 0.0
+        self._mark = (0.0, 0)
+        self.eta = None
         self.total_opened = self.total_not_opened = 0      # since Blink started, over all runs (logged at quit)
         self.last_view_decrypt = 0.0    # time.time() of the pane's last decrypt_rows
         self.speed = self._load_speed()
         self._held = False          # a batch was due while paused: started on resume
+        self._workers = []          # DecryptWorker, in the 'pgp-decrypt' thread
+        self.use_workers = True     # False once workers could not be started: decrypted in-process, as before
 
     def start(self):
         if self._started:
@@ -128,26 +245,39 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         return self.speed == 'paused'
 
     def _load_speed(self):
+        """The speed kept, and the one Resume goes back to: '<speed> [<speed before the pause>]'."""
+        self.resume_speed = 'normal'
         try:
             from blink.resources import ApplicationData
             with open(ApplicationData.get(self.speed_file)) as file:
-                speed = file.read().strip()
+                words = file.read().split()
         except (OSError, ImportError):
             return 'normal'
-        return speed if speed in self.speeds or speed == 'paused' else 'normal'
+        speed = words[0] if words and (words[0] in self.speeds or words[0] == 'paused') else 'normal'
+        if len(words) > 1 and words[1] in self.speeds:
+            self.resume_speed = words[1]
+        elif speed in self.speeds:
+            self.resume_speed = speed
+        return speed
+
+    def resume(self):
+        """Resume after Pause, at the speed it had before."""
+        self.set_speed(self.resume_speed if self.resume_speed in self.speeds else 'normal')
 
     def set_speed(self, speed):
         """The user's choice (GUI thread): kept between runs; Paused holds the run until another is chosen."""
         if speed == self.speed or not (speed in self.speeds or speed == 'paused'):
             return
         self.speed = speed
+        if speed in self.speeds:
+            self.resume_speed = speed
         try:
             from blink.resources import ApplicationData
             with open(ApplicationData.get(self.speed_file), 'w') as file:
-                file.write(speed + '\n')
+                file.write(f'{speed} {self.resume_speed}\n')
         except OSError as e:
             ActivityLog().warning(f'[pgp] Cannot keep the background decryption speed: {e}')
-        ActivityLog().info(f'[pgp] Background decryption speed: {dict(self.speed_names)[speed]}')
+        ActivityLog().info('[pgp] Background decryption paused' if speed == 'paused' else f'[pgp] Background decryption speed: {dict(self.speed_names)[speed]}')
         if self.running:
             self._progress('decrypt', self._total - len(self._queue), self._total)
         if not self.paused and self._held:
@@ -177,9 +307,11 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         left = len(self._queue)
         ActivityLog().info(f'[pgp] Background decryption since start: {self.total_opened} messages decrypted'
                            + (f', {self.total_not_opened} would not decrypt' if self.total_not_opened else '')
-                           + (f', {left} left in the run stopped by quitting (reached messages of {self._local_time(self._reached)})' if self.running and left else ''))
+                           + (f', {left} left in the run stopped by quitting (reached messages of {self._local_time(self._reached)},'
+                              f' {self._rate(self._done, time.time() - self._started_at)} in that run)' if self.running and left else ''))
         self._started = False
         self._queue = []
+        self._stop_workers()        # at once: not queued behind a batch in the decrypting thread
 
     # Running (GUI thread)
 
@@ -198,6 +330,7 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         self._again = False
         self._done = self._opened = self._not_opened = 0
         self._started_at = time.time()
+        self._mark = (self._started_at, 0)     # (time, done) at the last progress line: the recent rate
         self._find(accounts, reason)
 
     @run_in_thread('db')
@@ -229,7 +362,12 @@ class BackgroundDecryptor(object, metaclass=Singleton):
     def _progress(self, phase, done=None, total=None):
         """For the main window's progress bar (shared with the journal download, which goes first):
         'decrypt' with done of total messages and the speed, then 'done'."""
-        NotificationCenter().post_notification('BlinkBackgroundDecryptionProgress', data=NotificationData(phase=phase, done=done, total=total, speed=self.speed))
+        if phase == 'decrypt' and self.running and self._done and not self.paused:
+            elapsed = time.time() - self._started_at
+            eta = self._eta(len(self._queue), self._done / elapsed if elapsed > 0 else 0)
+        else:
+            eta = None
+        NotificationCenter().post_notification('BlinkBackgroundDecryptionProgress', data=NotificationData(phase=phase, done=done, total=total, speed=self.speed, eta=eta))
 
     def _next(self):
         if not self._started:
@@ -245,9 +383,27 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         if time.time() - self.last_view_decrypt < self.busy_pause:
             call_later(self.busy_pause, self._next)     # the pane is opening what is in view: let it have the CPU
             return
-        batch, self._queue = self._queue[:self.batch_size], self._queue[self.batch_size:]
+        size = self.batch_size * (self._workers_for(self.speed)[0] if self.use_workers else 1)
+        batch, self._queue = self._queue[:size], self._queue[size:]
         self._reached = batch[-1][2]
         self._load([(account_id, message_id) for account_id, message_id, _timestamp in batch])
+
+    @staticmethod
+    def _eta(left, rate):
+        """'ETA 6m 12s (at 11:04)' for left messages at rate per second, or None."""
+        if not left or rate <= 0:
+            return None
+        seconds = int(left / rate)
+        hours, rest = divmod(seconds, 3600)
+        minutes, seconds = divmod(rest, 60)
+        span = f'{hours}h {minutes:02d}m' if hours else (f'{minutes}m {seconds:02d}s' if minutes else f'{seconds}s')
+        at = time.strftime('%H:%M', time.localtime(time.time() + left / rate))
+        return f'ETA {span} (at {at})'
+
+    @staticmethod
+    def _rate(count, seconds):
+        """Messages decrypted per second, as 'N.N msg/s'."""
+        return f'{count / seconds:.1f} msg/s' if seconds > 0 else '? msg/s'
 
     @staticmethod
     def _local_time(value):
@@ -266,10 +422,11 @@ class BackgroundDecryptor(object, metaclass=Singleton):
 
     def _finished(self):
         self._progress('done')
+        self._release_workers()
         if self._done:
             took = time.time() - self._started_at
             ActivityLog().info(f'[pgp] Background decryption done: {self._opened} messages decrypted'
-                               + (f', {self._not_opened} would not decrypt' if self._not_opened else '') + f' in {took:.0f}s')
+                               + (f', {self._not_opened} would not decrypt' if self._not_opened else '') + f' in {took:.0f}s ({self._rate(self._done, took)})')
         self.running = False
         if self._again:
             self.run('asked again while running')
@@ -302,6 +459,87 @@ class BackgroundDecryptor(object, metaclass=Singleton):
 
     @run_in_thread('pgp-decrypt')
     def _decrypt(self, work):
+        work = [item for item in work if item[2] and '-----BEGIN PGP MESSAGE-----' in item[2]]   # opened meanwhile (in view, or live)
+        if self.use_workers and work:
+            try:
+                results = self._decrypt_in_workers(work)
+            except Exception as e:
+                self.use_workers = False
+                self._stop_workers()
+                ActivityLog().warning(f'[pgp] Decrypting in worker processes failed, decrypting in Blink itself: {e!r}')
+            else:
+                self._store(results)
+                return
+        self._decrypt_here(work)
+
+    def _pool(self):
+        """The workers for the current speed ('pgp-decrypt' thread): started, restarted or stopped to match."""
+        count, duty = self._workers_for(self.speed)
+        self._workers = [worker for worker in self._workers if worker.alive]
+        while len(self._workers) > count:
+            self._workers.pop().stop()
+        started = 0
+        while len(self._workers) < count:
+            self._workers.append(DecryptWorker())
+            started += 1
+        if started:
+            ActivityLog().info(f'[pgp] Background decryption: {len(self._workers)} worker processes ({dict(self.speed_names)[self.speed]})')
+        for worker in self._workers:
+            if worker.duty != duty:
+                worker.send({'duty': duty})
+                worker.duty = duty
+        return self._workers
+
+    def _send_key(self, worker, account_id):
+        try:
+            account = BonjourAccount() if account_id == BONJOUR_ACCOUNT_ID else AccountManager().get_account(account_id)
+        except KeyError:
+            return False
+        setting = account.sms.private_key
+        path = setting.normalized if setting is not None else None
+        if not path or not os.path.exists(path):
+            return False
+        mtime = os.path.getmtime(path)
+        if worker.keys.get(account_id) != mtime:
+            with open(path, encoding='utf-8', errors='replace') as file:
+                worker.send({'account': account_id, 'key': file.read()})
+            worker.keys[account_id] = mtime
+        return True
+
+    def _decrypt_in_workers(self, work):
+        """Spread the messages over the workers, then collect the answers; a message whose worker died
+        or hung is left as it is (tried again in a later run)."""
+        workers = self._pool()
+        share = {worker: [] for worker in workers}
+        for index, (account_id, message_id, content) in enumerate(work):
+            worker = workers[index % len(workers)]
+            try:
+                if not self._send_key(worker, account_id):
+                    continue        # no key here for it
+                worker.send({'id': message_id, 'account': account_id, 'content': content})
+            except (BrokenPipeError, OSError):
+                continue
+            share[worker].append(message_id)
+        results = []
+        for worker, ids in share.items():
+            for _ in ids:
+                answer = worker.receive()
+                if answer is None:
+                    ActivityLog().warning(f'[pgp] A decryption worker stopped answering, restarted for the next batch')
+                    worker.stop()
+                    break
+                if 'plaintext' in answer:
+                    results.append((answer['id'], answer['plaintext'], None))
+                else:
+                    results.append((answer['id'], None, answer.get('error') or 'unknown error'))
+        return results
+
+    def _stop_workers(self):
+        workers, self._workers = self._workers, []
+        for worker in workers:
+            worker.stop()
+
+    def _decrypt_here(self, work):
         import pgpy
         results = []
         for account_id, message_id, content in work:
@@ -324,6 +562,10 @@ class BackgroundDecryptor(object, metaclass=Singleton):
             took = time.thread_time() - began           # CPU this thread spent on the message
             time.sleep(max(self.message_pause, took * (1 / self.duty_cycle - 1)))     # leave the CPU and the interpreter to the rest
         self._store(results)
+
+    @run_in_thread('pgp-decrypt')
+    def _release_workers(self):
+        self._stop_workers()
 
     def key(self, account_id):
         """The private key of an account, read again when its file changes ('pgp-decrypt' thread only)."""
@@ -382,5 +624,13 @@ class BackgroundDecryptor(object, metaclass=Singleton):
             NotificationCenter().post_notification('BlinkMessagesDidDecryptInBackground', sender=self, data=NotificationData(ids=changed))
         self._progress('decrypt', self._total - len(self._queue), self._total)
         if self._done // self.progress_every != before // self.progress_every:
-            ActivityLog().info(f'[pgp] Background messages decryption progress: {self._done} done, {len(self._queue)} left, reached messages of {self._local_time(self._reached)}')
+            now = time.time()
+            since, before_done = self._mark
+            self._mark = (now, self._done)
+            recent = (self._done - before_done) / (now - since) if now > since else 0
+            overall = self._done / (now - self._started_at) if now > self._started_at else 0
+            self.eta = self._eta(len(self._queue), recent or overall)
+            ActivityLog().info(f'[pgp] Background messages decryption progress: {self._done} done, {len(self._queue)} left, reached messages of {self._local_time(self._reached)}, '
+                               f'{self._rate(self._done - before_done, now - since)} now, {self._rate(self._done, now - self._started_at)} overall'
+                               f' ({dict(self.speed_names).get(self.speed, self.speed)}), {self.eta or "ETA unknown"}')
         call_later(self.batch_pause, self._next)

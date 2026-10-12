@@ -374,7 +374,7 @@ class MainWindow(base_class, ui_class):
             if speed == 'paused':
                 self.decryption_speed_menu.insertSeparator(action)
         self.decryption_speed_menu.setToolTipsVisible(True)
-        self.decryption_speed_group.triggered.connect(lambda action: BackgroundDecryptor().set_speed(action.data()))
+        self.decryption_speed_group.triggered.connect(self._SH_DecryptionSpeedChosen)
         self.decryption_speed_button.setMenu(self.decryption_speed_menu)
         self.decryption_speed_button.hide()
         progress_layout.addWidget(self.decryption_speed_button)
@@ -1634,23 +1634,38 @@ class MainWindow(base_class, ui_class):
             if not self._journal_in_progress:
                 self._hide_progress()
             return
-        self._decryption_progress = (notification.data.done or 0, notification.data.total, getattr(notification.data, 'speed', 'normal'))
+        self._decryption_progress = (notification.data.done or 0, notification.data.total, getattr(notification.data, 'speed', 'normal'), getattr(notification.data, 'eta', None))
         if not self._journal_in_progress:
             self._show_decryption_progress()
 
     def _show_decryption_progress(self):
         from blink.pgp_decryptor import BackgroundDecryptor
-        done, total, speed = self._decryption_progress
+        done, total, speed, eta = self._decryption_progress
         names = dict(BackgroundDecryptor.speed_names)
         for action in self.decryption_speed_group.actions():
-            action.setChecked(action.data() == speed)
-        self.decryption_speed_button.setText(translate('main_window', names.get(speed, 'Normal')) + ' \u25be')
+            if action.data() == 'paused':
+                # Pause while it runs, Resume (back to the speed before) while paused
+                action.setText(translate('main_window', 'Resume' if speed == 'paused' else 'Pause'))
+                action.setToolTip(translate('main_window', 'Go on at the speed it had before' if speed == 'paused' else BackgroundDecryptor.speed_descriptions['paused']))
+                action.setChecked(False)
+            else:
+                action.setChecked(action.data() == speed)
+        # the menu says what to do (Pause), the button what is (Paused)
+        self.decryption_speed_button.setText(translate('main_window', 'Paused' if speed == 'paused' else names.get(speed, 'Normal')) + ' \u25be')
         self.decryption_speed_button.show()
         if speed == 'paused':
             labels = (translate('main_window', 'Decrypting messages paused'), translate('main_window', 'Decrypting paused'), translate('main_window', 'Paused'))
         else:
             labels = (translate('main_window', 'Decrypting messages'), translate('main_window', 'Decrypting'))
-        self._show_progress(labels, done, total)
+        self._show_progress(labels, done, total, extra=eta)
+
+    def _SH_DecryptionSpeedChosen(self, action):
+        from blink.pgp_decryptor import BackgroundDecryptor
+        decryptor = BackgroundDecryptor()
+        if action.data() == 'paused' and decryptor.paused:
+            decryptor.resume()
+        else:
+            decryptor.set_speed(action.data())
 
     def _hide_progress(self):
         self._progress_shown = None
@@ -1658,13 +1673,13 @@ class MainWindow(base_class, ui_class):
         self.progress_row.hide()
         self.decryption_speed_button.hide()
 
-    def _show_progress(self, labels, done, total, account=None):
+    def _show_progress(self, labels, done, total, account=None, extra=None):
         """labels: the label, longest first, then shorter ones: the longest text that fits the bar is
         shown (with the percentage when there is room), else the count alone, elided if need be."""
         bar = self.journal_progress
         if not self.progress_row.isVisible() and not self.journal_progress_timer.isActive():
             self.journal_progress_timer.start()
-        self._progress_shown = (labels, done, total, account)
+        self._progress_shown = (labels, done, total, account, extra)
         if total:
             bar.setRange(0, total)
             bar.setValue(min(done, total))
@@ -1684,7 +1699,7 @@ class MainWindow(base_class, ui_class):
             text = metrics.elidedText(candidates[-1], Qt.TextElideMode.ElideRight, room) if room else ''
         bar.setFormat(text)     # no %v/%m/%p left in it: the numbers are written in
         of = f' of {account}' if account else ''
-        bar.setToolTip(f'{labels[0]}{of}: {done} of {total}' if total else f'{labels[0]}{of}: {done}')
+        bar.setToolTip((f'{labels[0]}{of}: {done} of {total}' if total else f'{labels[0]}{of}: {done}') + (f'\n{extra}' if extra else ''))
 
     def eventFilter(self, watched, event):
         from PyQt6.QtCore import QEvent
