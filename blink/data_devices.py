@@ -512,9 +512,10 @@ class ImportPanel(QWidget):
         return session.inventory
 
     def _local_ids(self, session, kind):
-        """The ids that do not need importing; for files, a row whose file is missing is left out, so its bytes are fetched again."""
+        """The ids that do not need importing; for files, a row whose file is missing is left out, so its bytes are
+        fetched again -- unless the other device has no bytes for it either, when there is nothing to fetch."""
         ids, missing = self._inventory(session)
-        return ids - set(missing) if kind == 'files' else ids
+        return ids - (set(missing) - session.client.no_file) if kind == 'files' else ids
 
     # -- talking to the other device -----------------------------------------------------------
 
@@ -712,8 +713,8 @@ class ImportPanel(QWidget):
         from blink.file_transfer import transfer_filename, transfer_folder
         from blink.uris import canonical_uri
         ids = session.client.ids('files', category, period, contact)
+        local = self._local_ids(session, 'files')
         message_ids, missing = self._inventory(session)
-        local = message_ids - set(missing)
         new = [message_id for message_id in ids if message_id not in local]
         result['server'], result['new'] = len(ids), len(new)
         self._progress(session, 0, len(new))
@@ -733,11 +734,14 @@ class ImportPanel(QWidget):
                 peer, meta = missing[message_id]       # the message is here, only its file is not: no row is written
             else:
                 peer, meta = data_import.other_party(row, session.account_id), data_import.transfer_envelope(row)
-            try:
-                payload = session.client.blob(message_id)
-            except data_import.ExportServerError as e:
-                _log(f'[import] No file for {message_id} ({meta.get("filename")}): {e}')
-                payload = None
+            if message_id in session.client.no_file:
+                payload = None          # only the row is there to take
+            else:
+                try:
+                    payload = session.client.blob(message_id)
+                except data_import.ExportServerError as e:
+                    _log(f'[import] No file for {message_id} ({meta.get("filename")}): {e}')
+                    payload = None
             if payload is not None and data_import.looks_like_pgp(payload, meta):
                 try:
                     payload = _decrypt_file(session.account, payload)
@@ -756,7 +760,7 @@ class ImportPanel(QWidget):
                 except OSError as e:
                     ActivityLog().error(f'[import] Cannot save {name}: {e}')
                     payload = None
-            if payload is None:
+            if payload is None and message_id not in session.client.no_file:
                 result['files_failed'] += 1
             if message_id not in missing:
                 # the row goes in even without its bytes: the file can still be fetched from the server while it keeps it

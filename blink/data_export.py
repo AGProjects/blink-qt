@@ -130,9 +130,11 @@ class TransferStorage(object):
             return
         self.folders.setdefault(os.path.basename(folder), {}).update(files)
 
-    def find(self, meta, message_id):
+    def find(self, meta, message_id, encrypted=False):
         """The (decrypted) file of a transfer, or None: under any of the ids it is known by -- the
-        envelope's transfer_id, the URL's id segment, the message id -- as the message pane looks."""
+        envelope's transfer_id, the URL's id segment, the message id -- as the message pane looks.
+        With encrypted, a .asc never decrypted here will do when the plain file is not there:
+        the importing side decrypts it (data_import.looks_like_pgp)."""
         from blink.file_transfer import safe_component, transfer_filename
         name = transfer_filename(meta.get('filename'))
         plain = name[:-4] if name.endswith('.asc') else name
@@ -140,8 +142,11 @@ class TransferStorage(object):
         for transfer_id in (meta.get('transfer_id'), url_parts[-2] if len(url_parts) >= 5 else None, message_id):
             if not transfer_id:
                 continue
-            path = self.folders.get(safe_component(transfer_id), {}).get(plain)
-            if path is not None:
+            files = self.folders.get(safe_component(transfer_id), {})
+            for candidate in (plain, plain + '.asc') if encrypted else (plain,):
+                path = files.get(candidate)
+                if path is None:
+                    continue
                 try:
                     if os.path.getsize(path) > 0:
                         return path
@@ -220,7 +225,7 @@ class ExportSnapshot(object):
             meta = envelope(body) if body and not armored else None
             if not meta or not meta.get('filename'):
                 return
-            path = self.storage.find(meta, str(msgid))
+            path = self.storage.find(meta, str(msgid), encrypted=True)
             category = category if category in FILE_CATEGORIES else 'other'
             plain = {'filename': _display_name(meta),
                      'filetype': meta.get('filetype') or None,
@@ -369,12 +374,20 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._reply_json(200, snapshot.calendar(contact), seal)
             if path == '/api/ids':
                 ids = [row['msg_id'] for peer, day, row in snapshot.rows(kind, category, period, contact)]
-                return self._reply_json(200, {'kind': kind, 'count': len(ids), 'ids': ids}, seal)
+                reply = {'kind': kind, 'count': len(ids), 'ids': ids}
+                if kind == 'files':
+                    # rows offered without bytes here (the row still carries the message); a Blink importer
+                    # does not ask /api/blob for them, the phone ignores the key
+                    reply['without_file'] = [message_id for message_id in ids if not snapshot.by_id[message_id][1]]
+                return self._reply_json(200, reply, seal)
             if path == '/api/rows-bulk':
                 rows = [row for peer, day, row in snapshot.rows(kind, category, period, contact)]
                 return self._reply_json(200, {'count': len(rows), 'rows': rows}, seal)
             if path == '/api/idindex':
                 items = [{'id': row['msg_id'], 'day': day, 'contact': peer} for peer, day, row in snapshot.rows(kind, category, 'all', contact)]
+                if kind == 'files':
+                    for item in items:
+                        item['file'] = bool(snapshot.by_id[item['id']][1])
                 return self._reply_json(200, {'items': items}, seal)
             if path == '/api/contacts-counts':
                 contacts = snapshot.contact_counts(kind, category, period)

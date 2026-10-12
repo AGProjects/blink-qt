@@ -225,6 +225,9 @@ class ImportClient(object):
         # Liveness, for the heartbeat: a request in flight or one that just
         # answered says more about the phone than a ping could.
         self.last_success = 0.0
+        # File transfer ids the other device holds no bytes for: said by a Blink exporter
+        # (without_file, file: false) or learned from a 404 on /api/blob (the phone)
+        self.no_file = set()
         self._in_flight = 0
         self._lock = threading.Lock()
 
@@ -314,11 +317,14 @@ class ImportClient(object):
         return (self._json('/api/calendar', {'contact': contact}) or {}).get('index') or {}
 
     def id_index(self, kind, category):
-        return (self._json('/api/idindex', {'kind': kind, 'category': category}) or {}).get('items') or []
+        items = (self._json('/api/idindex', {'kind': kind, 'category': category}) or {}).get('items') or []
+        self.no_file.update(item['id'] for item in items if item.get('id') and item.get('file') is False)
+        return items
 
     def ids(self, kind, category, period, contact=None):
-        return (self._json('/api/ids', {'kind': kind, 'category': category,
-                                        'period': period, 'contact': contact}) or {}).get('ids') or []
+        reply = self._json('/api/ids', {'kind': kind, 'category': category, 'period': period, 'contact': contact}) or {}
+        self.no_file.update(reply.get('without_file') or ())
+        return reply.get('ids') or []
 
     def rows_bulk(self, kind, category, period, contact=None):
         return (self._json('/api/rows-bulk', {'kind': kind, 'category': category,
@@ -328,7 +334,14 @@ class ImportClient(object):
         return self._json('/api/meta', {'id': msg_id})
 
     def blob(self, msg_id):
-        return self._get('/api/blob', {'id': msg_id}, timeout=BLOB_TIMEOUT)
+        if msg_id in self.no_file:
+            raise ExportServerError('not on the other device')
+        try:
+            return self._get('/api/blob', {'id': msg_id}, timeout=BLOB_TIMEOUT)
+        except ExportServerError as e:
+            if str(e).startswith('HTTP 404 '):
+                self.no_file.add(msg_id)
+            raise
 
 
 # -- the calendar ---------------------------------------------------------------
