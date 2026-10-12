@@ -1019,15 +1019,38 @@ class ContactRepair(object, metaclass=Singleton):
                 if uri:
                     entries.setdefault(canonical_uri(uri) or uri, (re.sub('^sips?:', '', uri), str(entry.get('name') or '').strip()))
         added = self._added_test_numbers()
-        entries = {key: value for key, value in entries.items() if key not in added}
+        pending = self.__dict__.setdefault('_test_numbers_pending', set())
+        entries = {key: value for key, value in entries.items() if key not in added and key not in pending}
         if not entries:
             return 0
+        # two calls close together (the run, a configuration change) must not both create them
+        pending.update(entries)
         # in the file-io thread: a new contact is saved there at once, so the Test group that
         # lists it is saved (and stamped by addressbook_origin) with it, in one XCAP update
         in_one_xcap_update('test-numbers', self._write_test_numbers, entries, added)
         return len(entries)
 
+    @staticmethod
+    def _test_group(manager):
+        """The Test group, whoever made it: Blink's ('test'), or one of another client by kind or name."""
+        groups = list(manager.get_groups())
+        for test in (lambda group: group.id == 'test',
+                     lambda group: str(getattr(group, 'kind', '') or '').lower() == 'test',
+                     lambda group: str(group.name or '').strip().lower() == 'test'):
+            group = next((group for group in groups if test(group)), None)
+            if group is not None:
+                return group
+        return None
+
     def _write_test_numbers(self, entries, added):
+        try:
+            self._write_test_numbers_now(entries, added)
+        finally:
+            self.__dict__.setdefault('_test_numbers_pending', set()).difference_update(entries)
+
+    def _write_test_numbers_now(self, entries, added):
+        """Only what the addressbook as fetched from the server does not have is created: a
+        number some contact already has is filed into Test (and named, if it has no name)."""
         activity = ActivityLog()
         manager = addressbook.AddressbookManager()
         existing = list(manager.get_contacts())
@@ -1036,9 +1059,8 @@ class ContactRepair(object, metaclass=Singleton):
         set_aside |= {member.id for member in blocked.contacts} if blocked is not None else set()
         created, filed, named = [], [], []
         if True:
-            try:
-                group = manager.get_group('test')
-            except KeyError:
+            group = self._test_group(manager)
+            if group is None:
                 group = addressbook.Group(id='test')
                 group.name = 'Test'
                 group.position = None
