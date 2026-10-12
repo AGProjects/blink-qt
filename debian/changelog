@@ -1,3 +1,13 @@
+blink (7.0.3) unstable; urgency=medium
+
+  * Fixes for the first time journal sync
+  * Fixed overwriting PGP key if server was not yet queried
+  * Decrypt older PGP messages in the background
+  * Decrypt non-decrypted message in view in real time
+  * Show the PGP key ids a message was encrypted with in message info panel
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Mon, 12 Oct 2026 11:04:46 -0300
+
 blink (7.0.2) unstable; urgency=medium
 
   * Fixed handling remote delete for our own op
