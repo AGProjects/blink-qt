@@ -350,13 +350,58 @@ def _set_contact_name(contact, name):
     ActivityLog().info(f"[contacts] Renamed {old or contact.id} to {name}")
 
 
+def _contact_label(contact):
+    if contact.name:
+        return contact.name
+    try:
+        return str(next(iter(contact.uris)).uri)
+    except (StopIteration, Exception):
+        return contact.id
+
+
+def ask_about_shared_messages(parent, title, question, info, shared, warning=False):
+    """Some addresses of the contacts being deleted are also listed by other contacts: their
+    conversation is the other contacts' too. Returns None (cancelled), False (delete the
+    contact only, those conversations stay) or True (delete their messages as well)."""
+    lines = []
+    for key, owners in shared.items():
+        lines.append(f"{key}  ({', '.join(owners)})")
+    details = (translate('contact_list', 'These addresses are also in other contacts:') + '\n' + '\n'.join('    ' + line for line in lines) + '\n\n' +
+               translate('contact_list', 'Delete only the contact and keep the messages of these addresses for the other contacts, or delete those messages as well?'))
+    box = QMessageBox(QMessageBox.Icon.Warning if warning else QMessageBox.Icon.Question, title, question, parent=parent)
+    box.setInformativeText(info + '\n\n' + details)
+    contact_only = box.addButton(translate('contact_list', 'Delete Contact Only'), QMessageBox.ButtonRole.AcceptRole)
+    with_messages = box.addButton(translate('contact_list', 'Delete Contact and Messages'), QMessageBox.ButtonRole.DestructiveRole)
+    box.addButton(QMessageBox.StandardButton.Cancel)
+    box.setDefaultButton(contact_only)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked is contact_only:
+        return False
+    if clicked is with_messages:
+        return True
+    return None
+
+
 def confirm_soft_delete(parent, contacts):
-    names = [contact.name or contact.id for contact in contacts]
+    if not contacts:
+        return False
+    names = [_contact_label(contact) for contact in contacts]
+    title = translate('contact_list', 'Delete Contact')
     question = (translate('contact_list', "Move '%s' to the Deleted group?") % names[0] if len(contacts) == 1 else
                 translate('contact_list', 'Move %d contacts to the Deleted group?') % len(contacts))
-    text = question + '\n\n' + translate('contact_list', 'Their messages are hidden, not deleted, and can be restored from the Deleted group. Delete them permanently from there to remove them for good.')
-    if QMessageBox.question(parent, translate('contact_list', 'Delete Contact'), text) == QMessageBox.StandardButton.Yes:
-        ContactTrash.soft_delete(contacts)
+    info = translate('contact_list', 'Their messages are hidden, not deleted, and can be restored from the Deleted group. Delete them permanently from there to remove them for good.')
+    shared = ContactTrash.shared_keys(contacts)
+    if shared:
+        choice = ask_about_shared_messages(parent, title, question, info, shared)
+        if choice is None:
+            return False
+        ContactTrash.soft_delete(contacts, shared_messages=choice)
+        return True
+    if QMessageBox.question(parent, title, question + '\n\n' + info) != QMessageBox.StandardButton.Yes:
+        return False
+    ContactTrash.soft_delete(contacts)
+    return True
 
 
 def blockable_contacts(items):
@@ -514,11 +559,19 @@ def deleted_contact_menu(menu, parent, contacts):
 def confirm_delete_permanently(parent, contacts):
     if not contacts:
         return False
-    names = [contact.name or contact.id for contact in contacts]
+    names = [_contact_label(contact) for contact in contacts]
+    title = translate('contact_list', 'Delete Permanently')
     question = (translate('contact_list', "Permanently delete '%s'?") % names[0] if len(contacts) == 1 else
                 translate('contact_list', 'Permanently delete %d contacts?') % len(contacts))
-    text = question + '\n\n' + translate('contact_list', 'The contact is removed from the server address book, and its messages are deleted on all your devices. This cannot be undone.')
-    if QMessageBox.warning(parent, translate('contact_list', 'Delete Permanently'), text, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+    info = translate('contact_list', 'The contact is removed from the server address book, and its messages are deleted on all your devices. This cannot be undone.')
+    shared = ContactTrash.shared_keys(contacts)
+    if shared:
+        choice = ask_about_shared_messages(parent, title, question, info, shared, warning=True)
+        if choice is None:
+            return False
+        ContactTrash.delete_permanently(contacts, shared_messages=choice)
+        return True
+    if QMessageBox.warning(parent, title, question + '\n\n' + info, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
         return False
     ContactTrash.delete_permanently(contacts)
     return True
@@ -582,6 +635,24 @@ class ContactTrash(object):
                 keys.append(key)
         return keys
 
+    @classmethod
+    def shared_keys(cls, contacts):
+        """{conversation key: [names of the other contacts listing it]} for the addresses of
+        these contacts that a contact not among them lists too, in the order of the contacts."""
+        going = {contact.id for contact in contacts}
+        owners = {}
+        for other in addressbook.AddressbookManager().get_contacts():
+            if other.id in going:
+                continue
+            for key in cls._keys(other):
+                owners.setdefault(key, []).append(_contact_label(other))
+        shared = OrderedDict()
+        for contact in contacts:
+            for key in cls._keys(contact):
+                if key in owners and key not in shared:
+                    shared[key] = sorted(set(owners[key]))
+        return shared
+
     @staticmethod
     def deleted_group(create=False):
         manager = addressbook.AddressbookManager()
@@ -607,14 +678,17 @@ class ContactTrash(object):
             ActivityLog().info(f'[trash] Contact {contact.name or contact.id} left the Deleted group: {why}')
 
     @classmethod
-    def soft_delete(cls, contacts):
+    def soft_delete(cls, contacts, shared_messages=False):
+        """shared_messages: whether the conversations of addresses another contact lists too
+        are hidden as well; by default they stay, they are the other contact's conversation."""
+        spared = set() if shared_messages else set(cls.shared_keys(contacts))
         # in the file-io thread, as Block: the saves of Deleted and of every group the contact leaves
         # go to the server as one update. From the GUI thread each went on its own, and one could
         # be lost (taken out of Blocked here, still in Blocked on the server: back after the reload)
-        in_one_xcap_update('delete', cls._soft_delete, contacts)
+        in_one_xcap_update('delete', cls._soft_delete, contacts, spared)
 
     @classmethod
-    def _soft_delete(cls, contacts):
+    def _soft_delete(cls, contacts, spared=frozenset()):
         from blink.history import HistoryManager
         history = HistoryManager().message_history
         if True:
@@ -629,7 +703,8 @@ class ContactTrash(object):
             for contact in contacts:
                 if blocked is not None and contact.id in {member.id for member in blocked.contacts}:
                     released.append(contact)
-                keys = cls._keys(contact)
+                keys = [key for key in cls._keys(contact) if key not in spared]
+                kept = [key for key in cls._keys(contact) if key in spared]
                 for key in keys:
                     history.tombstone_conversation(key)
                 if contact.id not in {member.id for member in deleted_group.contacts}:
@@ -641,7 +716,8 @@ class ContactTrash(object):
                         changed.add(group.id)
                         left.append(group.name)
                 ActivityLog().info(f"[trash] Contact {contact.name or contact.id} moved to Deleted" + (f" (out of {', '.join(left)})" if left else '')
-                                   + f", conversations hidden: {', '.join(keys) or 'none'}")
+                                   + f", conversations hidden: {', '.join(keys) or 'none'}"
+                                   + (f", kept (another contact lists them): {', '.join(kept)}" if kept else ''))
             deleted_group.save()
             for group in other_groups:
                 if group.id in changed:
@@ -697,7 +773,9 @@ class ContactTrash(object):
         return started is not None and time.monotonic() - started < cls.purge_window
 
     @classmethod
-    def delete_permanently(cls, contacts):
+    def delete_permanently(cls, contacts, shared_messages=False):
+        """shared_messages: whether the conversations of addresses another contact lists too
+        are erased as well (here and on the other devices); by default they stay."""
         from blink.history import HistoryManager
         history = HistoryManager().message_history
         going = {contact.id for contact in contacts}
@@ -706,9 +784,16 @@ class ContactTrash(object):
             if other.id not in going:
                 claimed.update(canonical_uri(str(uri.uri)) for uri in other.uris)
         kept, purged = [], []
+        shared = []         # listed by another contact too, erased because the user said so
         for contact in contacts:
             for key in cls._keys(contact):
-                (kept if key in claimed else purged).append(key)
+                if key not in claimed:
+                    purged.append(key)
+                elif shared_messages:
+                    shared.append(key)
+                    purged.append(key)
+                else:
+                    kept.append(key)
         now = time.monotonic()
         cls.purging = {key: started for key, started in cls.purging.items() if now - started < cls.purge_window}
         cls.purging.update((key, now) for key in purged)
@@ -725,6 +810,10 @@ class ContactTrash(object):
         for key in kept:
             ActivityLog().info(f'[trash] Keeping the conversation with {key}: another contact lists it')
             history.restore_conversation(key)
+        if shared:
+            shared = sorted(set(shared))
+            ActivityLog().info(f"[trash] Erasing the conversations with {', '.join(shared)} as asked, though another contact lists them")
+            history.purge_conversations(shared, reason='contact deleted permanently, messages of shared addresses too')
         MessageManager().announce_conversation_removal(sorted(set(purged)))
 
 
@@ -6401,12 +6490,7 @@ class ContactListView(QListView):
         rest = [index for index, item in zip(indexes, items) if item not in trash]
         if trash:
             contacts = list({item.settings.id: item.settings for item in trash}.values())
-            names = [contact.name or next(iter(contact.uris)).uri for contact in contacts]
-            question = (translate('contact_list', "Move '%s' to the Deleted group?") % names[0] if len(contacts) == 1 else
-                        translate('contact_list', 'Move %d contacts to the Deleted group?') % len(contacts))
-            text = question + '\n\n' + translate('contact_list', 'Their messages are hidden, not deleted, and can be restored from the Deleted group. Delete them permanently from there to remove them for good.')
-            if QMessageBox.question(self, translate('contact_list', 'Delete Contact'), text) == QMessageBox.StandardButton.Yes:
-                ContactTrash.soft_delete(contacts)
+            confirm_soft_delete(self, contacts)
         if rest:
             self.model().removeItems(rest)
         self.selectionModel().clearSelection()
@@ -6864,12 +6948,7 @@ class ContactSearchListView(QListView):
         contacts = list({item.settings.id: item.settings for item in items if isinstance(item, Contact) and item.type == 'addressbook' and
                          getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID}.values())
         if contacts:
-            names = [contact.name or next(iter(contact.uris)).uri for contact in contacts]
-            question = (translate('contact_list', "Move '%s' to the Deleted group?") % names[0] if len(contacts) == 1 else
-                        translate('contact_list', 'Move %d contacts to the Deleted group?') % len(contacts))
-            text = question + '\n\n' + translate('contact_list', 'Their messages are hidden, not deleted, and can be restored from the Deleted group. Delete them permanently from there to remove them for good.')
-            if QMessageBox.question(self, translate('contact_list', 'Delete Contact'), text) == QMessageBox.StandardButton.Yes:
-                ContactTrash.soft_delete(contacts)
+            confirm_soft_delete(self, contacts)
 
     def _AH_UndoLastDelete(self):
         model = self.model().sourceModel()
