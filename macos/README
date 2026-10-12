@@ -19,9 +19,27 @@ SIP SIMPLE SDK that was already built there is reused instead of being
 recompiled. On subsequent runs the (slow) PJSIP build is skipped whenever an
 importable sipsimple of a sufficient version is already present.
 
-The SIP SIMPLE SDK and its dependencies are installed from pinned, tagged
-GitHub releases (see macos/python-requirements.txt and
-macos/sipsimple-requirements.txt) rather than cloned via darcs.
+The SIP SIMPLE SDK (>= 5.6.0) is built by python3-sipsimple's own mac/ scripts
+from a checkout at ~/work/python3-sipsimple (cloned from GitHub if absent;
+override with SIPSIMPLE_SRC=...). Those handle universal MacPorts libraries,
+ffmpeg pinned to 4.4.5 (do NOT `port install ffmpeg`, pjmedia needs 4.x), the
+optional G.729 codec and PJSIP 2.17 (PJSIP_VERSION=2.12 for the legacy series).
+FORCE_SDK=1 rebuilds it even if a sufficient version is installed.
+
+The Python libraries (macos/python-requirements.txt,
+macos/sipsimple-requirements.txt, macos/requirements-osx.txt) are refreshed on
+every run, and install_blink.sh ends with a report of which optional features
+(QtMultimedia, QtPdf, QtPositioning, PyNaCl, segno, GStreamer...) are usable.
+
+To only update the Python packages of an existing environment:
+
+source ./macos/activate_venv.sh
+pip3 install -r macos/requirements-osx.txt
+
+Optional GStreamer support (voice notes compressed to AAC, video call
+recording); without it voice notes are sent as WAV:
+
+WITH_GSTREAMER=1 ./macos/install_blink.sh
 
 To run Blink in place:
 

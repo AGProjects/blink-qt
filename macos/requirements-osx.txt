@@ -1,8 +1,20 @@
-cython==0.29.37
+# Blink Qt runtime + build requirements on macOS (installed into the shared
+# SIP SIMPLE virtualenv by install_blink.sh). The SDK's own dependencies are in
+# python-requirements.txt / sipsimple-requirements.txt.
+#
+# cython is NOT pinned: the venv is shared with python3-sipsimple, which
+# builds with Cython 3; pinning 0.29 here would downgrade it under the SDK.
+cython
+setuptools
 wheel
 lxml
 lxml_html_clean
 pgpy
+pynacl
+segno
+python-dateutil
+# PyQt6 wheels include QtMultimedia, QtPositioning, QtSvg, QtNetwork;
+# PyQt6-WebEngine provides QtWebEngine*, QtWebChannel and QtPdf.
 PyQt6
 PyQt6-WebEngine
 requests
@@ -10,7 +22,8 @@ sqlobject
 twisted
 zope.interface
 google-api-python-client
-pyinstaller
-pyobjc-framework-AVFoundation==10.0
 google_auth_oauthlib
 numpy
+# Foundation / AppKit / objc (macos_notification.py, resources.py)
+pyobjc-framework-Cocoa
+pyinstaller

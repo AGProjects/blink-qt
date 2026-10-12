@@ -12,6 +12,8 @@ pyinstaller --add-data resources:share/blink --add-data blink:blink \
 --hidden-import=PyQt6.QtSvg --hidden-import=PyQt6.QtSvgWidgets \
 --hidden-import=PyQt6.QtNetwork --hidden-import=PyQt6.QtWebChannel \
 --hidden-import=PyQt6.QtWebEngineCore --hidden-import=PyQt6.QtWebEngineWidgets \
+--hidden-import=PyQt6.QtMultimedia --hidden-import=PyQt6.QtPdf --hidden-import=PyQt6.QtPositioning \
+--hidden-import=nacl.secret --hidden-import=segno --hidden-import=Foundation --hidden-import=AppKit \
 --collect-submodules application --collect-submodules sipsimple \
 --collect-submodules eventlib --collect-submodules msrplib --collect-submodules xcaplib \
 --collect-submodules gnutls --collect-submodules otr --collect-submodules blink \
