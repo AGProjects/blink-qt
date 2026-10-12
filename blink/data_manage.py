@@ -15,6 +15,7 @@ No Qt here, so the classification and the requests can be tested alone.
 """
 
 import json
+import os
 import re
 import uuid
 
@@ -23,11 +24,13 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from blink.message_envelopes import LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE
+from blink.file_transfer import FAILURE_GONE, safe_component, transfer_filename
+from blink.message_envelopes import LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, file_transfer_envelope
 
 
 __all__ = ['with_related', 'period_bounds', 'bulk_delete_payload', 'bulk_delete_criteria', 'criteria_matches_action', 'criteria_label', 'BULK_DELETE_CATEGORIES',
            'Row', 'ENCRYPTED', 'classify', 'type_label', 'action_label', 'row_label', 'build_rows', 'select', 'count_by', 'aggregate_days',
+           'FileRow', 'FILE_KINDS', 'ON_SERVER', 'FAILED', 'NO_KEY', 'DOWNLOADABLE', 'status_label', 'scan_transfer_storage', 'build_file_rows',
            'REMOVE_BATCH', 'PROGRESS_EVERY', 'JournalRemoveError', 'JournalRemoveUnsupported', 'JournalRemoveRefused', 'journal_remove_url', 'remove_from_journal']
 
 
@@ -356,3 +359,172 @@ def criteria_label(criteria):
     parts = [what, criteria.get('contact') or 'all contacts']
     parts.append(f'{criteria.get("from") or "the beginning"} .. {criteria["until"]}')
     return ', '.join(parts)
+
+
+# File transfers whose file is on the server and not on this computer
+#
+# A transfer's file is here when one of its folders holds it -- file_transfers/<account>/<peer>/<id>/,
+# or downloads/<id>/ before that layout -- the decrypted file for an .asc, under any of the ids the
+# message is known by: the envelope's transfer_id, the URL's id segment, the message id. That is what
+# blink.messagepane.files.local_file looks for one message at a time; here the storage is listed once
+# for the whole history. A transfer is on the server when it has a URL, has not passed its `until`,
+# and was not answered 404/410 before (.failure.json of kind gone).
+
+FILE_KINDS = ('image', 'audio', 'video', 'other')
+
+ON_SERVER = 'on_server'     # not fetched yet
+FAILED = 'failed'           # fetching failed before (.failure.json, not gone): Download asks again
+NO_KEY = 'no_key'           # encrypted (.asc) and the account has no private key to open it
+
+DOWNLOADABLE = (ON_SERVER, FAILED)
+
+STATUS_LABELS = {ON_SERVER: 'On the server', FAILED: 'Failed before', NO_KEY: 'Encrypted, no key here'}
+
+# 'type' and 'action' (the status) so that select, count_by and aggregate_days drill into them as into messages
+FileRow = namedtuple('FileRow', 'id message_id contact day timestamp direction type action name wire_name size filetype url until reason ids')
+
+_FILE_EXTENSIONS = {'image': ('jpg', 'jpeg', 'png', 'gif', 'heic', 'heif', 'webp', 'tiff', 'bmp'),
+                    'video': ('mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', '3gp'),
+                    'audio': ('mp3', 'm4a', 'wav', 'aac', 'ogg', 'opus', 'caf', 'flac')}
+
+
+def status_label(status):
+    if status is None:
+        return 'Any status'
+    return STATUS_LABELS.get(status, status)
+
+
+def scan_transfer_storage(file_transfers_root, downloads_root):
+    """{transfer folder name: (set of file names, failure dict or None)} of everything stored, partial
+    downloads (.download) left out. A name in several peer folders has the union of their files."""
+    storage = {}
+
+    def add(path, transfer_id):
+        names = set()
+        failure = None
+        try:
+            with os.scandir(path) as entries:
+                for entry in entries:
+                    if entry.name == '.failure.json':
+                        try:
+                            with open(entry.path) as file:
+                                failure = json.load(file)
+                        except (OSError, ValueError):
+                            failure = None
+                        if not isinstance(failure, dict):
+                            failure = {}
+                    elif not entry.name.endswith('.download') and entry.is_file():
+                        names.add(entry.name)
+        except OSError:
+            return
+        known = storage.get(transfer_id)
+        if known is not None:
+            names |= known[0]
+            failure = known[1] if known[1] is not None else failure
+        storage[transfer_id] = (names, failure)
+
+    def folders(path):
+        try:
+            with os.scandir(path) as entries:
+                return [entry for entry in entries if entry.is_dir(follow_symlinks=False)]
+        except OSError:
+            return []
+
+    for account in folders(file_transfers_root):
+        for peer in folders(account.path):
+            for transfer in folders(peer.path):
+                add(transfer.path, transfer.name)
+    for transfer in folders(downloads_root):
+        add(transfer.path, transfer.name)
+    return storage
+
+
+def _url_id(url):
+    # <base>/<sender>/<receiver>/<transfer id>/<name>
+    parts = str(url or '').split('?', 1)[0].rstrip('/').split('/')
+    return parts[-2] if len(parts) >= 5 else None
+
+
+def _expired(until, now):
+    if not until:
+        return False
+    try:
+        from dateutil.parser import parse
+        expires = parse(str(until))
+    except (ValueError, OverflowError, TypeError, ImportError):
+        return False
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    return expires < now
+
+
+def _file_kind(category, filetype, name):
+    if category in FILE_KINDS:
+        return category
+    filetype = str(filetype or '').lower()
+    for kind in ('image', 'video', 'audio'):
+        if filetype.startswith(kind + '/'):
+            return kind
+    extension = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    for kind, extensions in _FILE_EXTENSIONS.items():
+        if extension in extensions:
+            return kind
+    return 'other'
+
+
+def build_file_rows(db_rows, storage, can_decrypt=True, now=None):
+    """(rows, counts) from MessageHistory.data_file_transfers tuples and scan_transfer_storage: rows are
+    the transfers whose file is not here and is on the server; counts tells what became of the others:
+    {'transfers', 'here', 'expired', 'gone', 'no_url', 'unreadable'}."""
+    now = now or datetime.now(timezone.utc)
+    counts = Counter(transfers=0, here=0, expired=0, gone=0, no_url=0, unreadable=0)
+    rows = []
+    for row_id, message_id, remote_uri, day, timestamp, direction, category, content in db_rows:
+        counts['transfers'] += 1
+        meta = file_transfer_envelope(content) if content else None
+        if not meta or not meta.get('filename') or not message_id:
+            counts['unreadable'] += 1       # an envelope nobody decrypted, or not one at all
+            continue
+        wire_name = transfer_filename(meta['filename'])
+        name = wire_name[:-4] if wire_name.endswith('.asc') else wire_name
+        ids = []
+        for transfer_id in (meta.get('transfer_id'), _url_id(meta.get('url')), message_id):
+            if transfer_id and safe_component(transfer_id) not in ids:
+                ids.append(safe_component(transfer_id))
+        failure = None
+        here = False
+        for transfer_id in ids:
+            found = storage.get(transfer_id)
+            if found is None:
+                continue
+            if name in found[0]:
+                here = True
+                break
+            if failure is None:
+                failure = found[1]
+        if here:
+            counts['here'] += 1
+            continue
+        if not meta.get('url'):
+            counts['no_url'] += 1
+            continue
+        if _expired(meta.get('until'), now):
+            counts['expired'] += 1
+            continue
+        if failure is not None and failure.get('kind') == FAILURE_GONE:
+            counts['gone'] += 1
+            continue
+        if failure is not None:
+            status, reason = FAILED, str(failure.get('reason') or 'failed')
+        elif wire_name.endswith('.asc') and not can_decrypt:
+            status, reason = NO_KEY, 'encrypted, and this account has no private key here'
+        else:
+            status, reason = ON_SERVER, ''
+        try:
+            size = int(meta.get('filesize') or 0) or None
+        except (TypeError, ValueError):
+            size = None
+        rows.append(FileRow(int(row_id), str(message_id), str(remote_uri or ''), str(day or ''), str(timestamp or ''), str(direction or ''),
+                            _file_kind(category, meta.get('filetype'), name), status, name, str(meta['filename']), size, str(meta.get('filetype') or ''),
+                            str(meta['url']), meta.get('until'), reason, tuple(ids)))
+    return rows, dict(counts)

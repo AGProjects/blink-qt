@@ -180,7 +180,12 @@ class AutoFetcher(QObject):
     def _NH_BlinkFileTransferDidEnd(self, notification):
         # after decryption, when there was any: the file is where local_file finds it
         message_id = getattr(notification.data, 'id', None)
-        if message_id is None or message_id not in self._progress:
+        if message_id is None:
+            return
+        if message_id not in self._progress:
+            # fetched by someone else (the Data manager): the bubble shows the file from now on
+            if not getattr(notification.data, 'error', None):
+                self.changed.emit(message_id)
             return
         self._progress.pop(message_id, None)
         for file, known in list(self._files.items()):

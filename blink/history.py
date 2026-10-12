@@ -1696,6 +1696,34 @@ class MessageHistory(object, metaclass=Singleton):
         callback(dict(zip(columns, row)) if row else None)
 
     @run_in_thread('db')
+    def data_file_transfer_accounts(self, callback):
+        """Like data_accounts, counting the file transfer messages only."""
+        table = Message.sqlmeta.table
+        types = ', '.join(self.db.sqlrepr(content_type) for content_type in FILE_TRANSFER_CONTENT_TYPES)
+        try:
+            rows = self.db.queryAll(f'select account_id, count(*) from {table} where content_type in ({types}) and {NOT_DELETED_SQL}'
+                                    f' and {self._get_enabled_account_filter()} group by account_id order by 2 desc')
+        except Exception as e:
+            ActivityLog().error(f'[db] Counting the file transfers per account failed: {e}')
+            rows = []
+        callback([(str(account_id), int(count)) for account_id, count in rows if account_id])
+
+    @run_in_thread('db')
+    def data_file_transfers(self, account_id, callback):
+        """Calls back with the file transfer messages of an account that are not removed, as tuples
+        (id, message_id, remote_uri, local day, timestamp, direction, category, content)."""
+        table = Message.sqlmeta.table
+        types = ', '.join(self.db.sqlrepr(content_type) for content_type in FILE_TRANSFER_CONTENT_TYPES)
+        query = (f"select id, message_id, remote_uri, date(timestamp, 'localtime'), timestamp, direction, category, content from {table}"
+                 f" where account_id = {self.db.sqlrepr(str(account_id))} and content_type in ({types}) and {NOT_DELETED_SQL}")
+        try:
+            rows = self.db.queryAll(query)
+        except Exception as e:
+            ActivityLog().error(f'[db] Reading the file transfers of {account_id} for the Data window failed: {e}')
+            rows = []
+        callback(list(rows))
+
+    @run_in_thread('db')
     def purge_messages(self, account_id, row_ids, callback=None):
         """Erase rows of one account by their id, a deletion made here by the user: no tombstones.
         The folders of the file transfers among them go too. Calls back with how many were erased."""
