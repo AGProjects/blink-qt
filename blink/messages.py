@@ -796,7 +796,8 @@ class MessageManager(object, metaclass=Singleton):
         except KeyError:
             pass
         else:
-            # don't process my own public key
+            # don't process my own public key: the answer to the start's lookup (KeyEscrowManager)
+            call_in_gui_thread(KeyEscrowManager().server_public_key_received, account, data)
             return
 
         directory = settings.chat.keys_directory.normalized
@@ -1731,6 +1732,10 @@ class MessageManager(object, metaclass=Singleton):
                 self._request_history_synchronization_token(account, 'SylkServer found')
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
+        try:
+            KeyEscrowManager().check_key_status(notification.sender)
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Checking the private key failed: {e!r}')
         account = notification.sender
         if account is not BonjourAccount():
             # give the registration a moment to settle (and the server to see the device)
@@ -2856,22 +2861,129 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self._waiting = {}              # account id -> callbacks held until the answer
         self.server_key = {}            # account id -> 'pending' | 'present' | 'absent' | 'failed'
         self._lookups = {}              # account id -> the lookup in flight
+        self.server_public_keys = {}    # account id -> the public key the server sent for us (armored)
+        self._status_logged = set()
+        self._status_asked = set()
 
     def start(self):
         if not self._started:
             self._started = True
             NotificationCenter().add_observer(self, name='XCAPManagerDidReloadData')
+            # started from MessageManager, made while SIPApplicationDidStart is being handled:
+            # the accounts are loaded, but that notification will not reach us
+            call_in_gui_thread(call_later, 2, self._log_key_status_of_all)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    # The private key of every account: where it is, logged once at start
+
+    server_key_wait = 5.0       # seconds for the key that follows the server's 200
+
+    def _log_key_status_of_all(self):
+        try:
+            for account in AccountManager().iter_accounts():
+                self.check_key_status(account)
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Checking the private key of the accounts failed: {e!r}')
+
+    def check_key_status(self, account):
+        """Log the account's key status once, when it is known (log_key_status). Asked at
+        start, on each addressbook reload and on registration, whichever comes first."""
+        if account.id in self._status_asked or not account.enabled:
+            return
+        self._status_asked.add(account.id)
+        if not account.sms.enable_pgp:
+            ActivityLog().info(f'[pgp] Private key of {account.id}: PGP is disabled for the account')
+            return
+        ActivityLog().info(f'[pgp] Checking the private key of {account.id}')
+        try:
+            self.when_answered(account, lambda: self.log_key_status(account))
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Checking the private key of {account.id} failed: {e!r}')
+
+    def server_public_key_received(self, account, data):
+        if isinstance(data, (bytes, bytearray)):
+            data = bytes(data).decode('utf-8', 'replace')
+        first = account.id not in self.server_public_keys
+        self.server_public_keys[account.id] = data
+        if first and self.server_key.get(account.id) != 'present':
+            self.server_key[account.id] = 'present'     # an answer older servers give only this way
+
+    def log_key_status(self, account, waited=False):
+        """Three lines: the key on this device, the escrow on our own XCAP contact and the
+        public key the server keeps, each compared with this device's."""
+        if account.id in self._status_logged:
+            return
+        if not waited and self.server_key.get(account.id) == 'present' and account.id not in self.server_public_keys:
+            call_later(self.server_key_wait, self.log_key_status, account, True)     # the key follows the 200 as a message
+            return
+        self._status_logged.add(account.id)
+        from blink.pgp_keyids import key_fingerprint
+        activity = ActivityLog()
+        try:
+            local_fingerprint = None
+            public_path = account.sms.public_key.normalized if account.sms.public_key is not None else None
+            if public_path and os.path.exists(public_path):
+                with open(public_path, 'rb') as file:
+                    local_fingerprint = key_fingerprint(file.read())
+            has_private = account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)
+
+            def compared(fingerprint):
+                if fingerprint is None:
+                    return 'unreadable key'
+                if local_fingerprint is None:
+                    return f'key {fingerprint}'
+                return f'key {fingerprint}, ' + ('the same as this device' if fingerprint == local_fingerprint else 'DIFFERENT from this device')
+
+            if has_private:
+                here = f'private key present, key {local_fingerprint or "unreadable"} ({account.sms.private_key.normalized})'
+            else:
+                here = 'no private key' + (f' (public key {local_fingerprint} only)' if local_fingerprint else '')
+
+            if account is BonjourAccount():
+                activity.info(f'[pgp] Private key of {account.id}: this device: {here}')
+                return
+
+            if not account.xcap.enabled:
+                escrow = 'the account has no XCAP addressbook'
+            elif account.id not in self.checked:
+                escrow = f'unknown, the addressbook was not fetched within {self.answer_timeout:.0f}s'
+            else:
+                record = key_escrow.read_self_keys(account)
+                contacts = key_escrow.self_contact_elements(account)
+                if record is not None:
+                    escrow = (f"present on contact {record.get('contact_id')} ({record.get('namespace')}), written {record.get('timestamp') or '?'} "
+                              f"by \"{record.get('device') or '?'}\", {compared(key_fingerprint(record.get('public_key')))}"
+                              + ('' if record.get('private_key') else ', WITHOUT the private key'))
+                elif contacts:
+                    escrow = f"none, on {len(contacts)} contact(s) with our address ({', '.join(str(element.get('id')) for element in contacts)})"
+                else:
+                    escrow = 'none, no contact carries our address'
+
+            state = self.server_key.get(account.id)
+            if state == 'absent':
+                server = 'no public key'
+            elif state == 'present':
+                kept = self.server_public_keys.get(account.id)
+                server = compared(key_fingerprint(kept)) if kept else 'keeps a public key, or is an older SylkServer that does not say it does not (none received)'
+            else:
+                server = 'unknown, the public key lookup was not answered'
+
+            activity.info(f'[pgp] Private key of {account.id}: this device: {here}')
+            activity.info(f'[pgp] Private key of {account.id}: addressbook escrow: {escrow}')
+            activity.info(f'[pgp] Private key of {account.id}: server public key: {server}')
+        except Exception as e:
+            activity.exception(f'[pgp] Reporting the private key of {account.id} failed: {e!r}')
+
     def _NH_XCAPManagerDidReloadData(self, notification):
         account = getattr(notification.sender, 'account', None)
         if not isinstance(account, Account):
             return
         self.checked.add(account.id)
+        self.check_key_status(account)
         from blink.contacts import AddressbookNotifier
         with AddressbookNotifier().quiet():
             # restore before reporting, so one pass tells one story

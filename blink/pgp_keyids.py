@@ -16,7 +16,7 @@ describe(key_ids) turns ids into lines for people: 'ID (address)' or
 'ID (address, our key)' or 'ID (unknown key)'.
 """
 
-__all__ = ['encrypted_to', 'key_owners', 'describe']
+__all__ = ['encrypted_to', 'key_owners', 'describe', 'key_fingerprint']
 
 import os
 import threading
@@ -112,3 +112,19 @@ def describe(key_ids):
             address, own = owner
             lines.append(f'{key_id} ({address}, our key)' if own else f'{key_id} ({address})')
     return lines
+
+
+def key_fingerprint(armored):
+    """The fingerprint of an armored PGP key (public or private), or None."""
+    if not armored:
+        return None
+    if isinstance(armored, (bytes, bytearray)):
+        armored = bytes(armored).decode('utf-8', 'replace')
+    try:
+        import pgpy
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            key, _ = pgpy.PGPKey.from_blob(armored)
+        return str(key.fingerprint).replace(' ', '')
+    except Exception:
+        return None
