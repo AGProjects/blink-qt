@@ -228,7 +228,8 @@ class ConversationModel(QAbstractListModel):
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
                      'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
-                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore', 'BlinkMessageHistoryCallRecordDidStore'):
+                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore', 'BlinkMessageHistoryCallRecordDidStore',
+                     'BlinkMessagesDidDecryptInBackground'):
             notification_center.add_observer(self, name=name)
 
     def close(self):
@@ -243,7 +244,8 @@ class ConversationModel(QAbstractListModel):
         for name in ('BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryConversationDidRemove', 'BlinkGotHistoryMessageDelete',
                      'BlinkMessageWillDelete', 'BlinkMessageDidDecrypt', 'BlinkJournalDidApply', 'BlinkMessageHistoryCallHistoryDidStore',
                      'BlinkMessageDidSucceed', 'BlinkMessageDidFail', 'BlinkGotDispositionNotification', 'BlinkDidSendDispositionNotification',
-                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore', 'BlinkMessageHistoryCallRecordDidStore'):
+                     'BlinkMessageHistoryConversationWasRead', 'BlinkMessageHistoryCompanionDidStore', 'BlinkMessageHistoryCallRecordDidStore',
+                     'BlinkMessagesDidDecryptInBackground'):
             notification_center.discard_observer(self, name=name)
 
     @property
@@ -288,18 +290,22 @@ class ConversationModel(QAbstractListModel):
         if not wanted:
             return
         self._decrypting.update(message_id for message_id, _account, _content in wanted)
+        import time
+        from blink.pgp_decryptor import BackgroundDecryptor
+        BackgroundDecryptor().last_view_decrypt = time.time()     # it steps aside while what is in view is opened
         self._decrypt(wanted)
 
-    @run_in_thread('db')
+    @run_in_thread('pgp-decrypt')
     def _decrypt(self, wanted):
+        """In the decrypting thread shared with BackgroundDecryptor (never the GUI or the db
+        thread, so neither the UI nor its history queries wait for it); stored in the db thread."""
         import pgpy
         import warnings
-        from blink.history import ConversationPreviews, MessageHistory
-        previews = ConversationPreviews()
-        history = MessageHistory()
-        opened, failed, keyless = {}, 0, set()
+        from blink.pgp_decryptor import BackgroundDecryptor
+        decryptor = BackgroundDecryptor()
+        results, keyless = [], set()
         for message_id, account_id, content in wanted:
-            key = previews._private_key(account_id)      # cached per account, read again when the file changes
+            key = decryptor.key(account_id)
             if key is None:
                 keyless.add(account_id)
                 continue
@@ -310,23 +316,56 @@ class ConversationModel(QAbstractListModel):
                 if isinstance(plaintext, (bytes, bytearray)):
                     plaintext = bytes(plaintext).decode('utf-8')
             except Exception as e:
-                from blink.pgp_keyids import describe, encrypted_to
-                failed += 1
-                rows = history.store_undecryptable_message(message_id, e)
-                ActivityLog().warning(f'[pgp] Message {message_id} with {self.name} would not decrypt with the key of {account_id}: {e}; '
-                                      f"encrypted to {', '.join(describe(encrypted_to(content))) or 'no key ids'}")
+                results.append((message_id, account_id, content, None, str(e) or e.__class__.__name__))
             else:
-                rows = history.store_decrypted_message(message_id, plaintext)
+                results.append((message_id, account_id, content, plaintext, None))
+        for account_id in keyless:
+            log.debug(f'Not decrypting messages of {account_id} in view: no private key here')
+        self._store_decrypted(results, keyless, [message_id for message_id, account_id, _content in wanted if account_id in keyless])
+
+    @run_in_thread('db')
+    def _store_decrypted(self, results, keyless, keyless_ids):
+        from blink.history import MessageHistory
+        from blink.pgp_keyids import describe, encrypted_to
+        history = MessageHistory()
+        opened, failed = {}, 0
+        for message_id, account_id, content, plaintext, error in results:
+            try:
+                if plaintext is not None:
+                    rows = history.store_decrypted_message(message_id, plaintext)
+                else:
+                    failed += 1
+                    rows = history.store_undecryptable_message(message_id, error)
+                    ActivityLog().warning(f'[pgp] Message {message_id} with {self.name} would not decrypt with the key of {account_id}: {error}; '
+                                          f"encrypted to {', '.join(describe(encrypted_to(content))) or 'no key ids'}")
+            except Exception as e:
+                ActivityLog().error(f'[pgp] Storing decrypted message {message_id} failed: {e}')
+                continue
             row = next((row for row in rows if str(row.account_id) == account_id), rows[0] if rows else None)
             if row is not None:
                 opened[message_id] = MessageItem(row)
-        for account_id in keyless:
-            log.debug(f'Not decrypting messages of {account_id} in view: no private key here')
         if opened:
             ActivityLog().info(f'[pgp] Decrypted {len(opened) - failed} messages with {self.name} in view' + (f', {failed} would not decrypt' if failed else ''))
+        if opened or keyless_ids:
             call_in_gui_thread(self._apply_decrypted, opened, keyless)
-        elif keyless:
-            call_in_gui_thread(self._forget_decrypting, [message_id for message_id, account_id, _content in wanted if account_id in keyless])
+
+    def _refresh_items(self, message_ids):
+        """Rows changed behind the model (BackgroundDecryptor): read again and updated in place."""
+        wanted = [(message_id, self.ids[message_id].account_id) for message_id in message_ids if message_id in self.ids]
+        if wanted:
+            self._read_items(wanted)
+
+    @run_in_thread('db')
+    def _read_items(self, wanted):
+        from blink.history import Message
+        fresh = {}
+        for message_id, account_id in wanted:
+            rows = list(Message.selectBy(message_id=message_id))
+            row = next((row for row in rows if str(row.account_id) == account_id), rows[0] if rows else None)
+            if row is not None:
+                fresh[message_id] = MessageItem(row)
+        if fresh:
+            call_in_gui_thread(self._apply_decrypted, fresh)
 
     def _forget_decrypting(self, message_ids):
         """No key for them yet: tried again when they are in view after one arrives."""
@@ -767,6 +806,9 @@ class ConversationModel(QAbstractListModel):
 
     def _NH_BlinkMessageDidDecrypt(self, notification):
         self._schedule_refresh()
+
+    def _NH_BlinkMessagesDidDecryptInBackground(self, notification):
+        self._refresh_items(notification.data.ids)
 
     def _NH_BlinkJournalDidApply(self, notification):
         self._schedule_refresh()

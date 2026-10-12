@@ -546,6 +546,11 @@ class Blink(QApplication, metaclass=QSingleton):
         except Exception as e:
             ActivityLog().error('Cannot follow the desktop Do Not Disturb: %s' % e)
         self.main_window.show()
+        try:
+            from blink.pgp_decryptor import BackgroundDecryptor
+            BackgroundDecryptor().start()       # stored ciphertext opened slowly, out of the GUI and db threads
+        except Exception as e:
+            ActivityLog().error('Cannot start the background decryption: %s' % e)
         accounts = AccountManager().get_accounts()
         if not accounts or (self.first_run and accounts == [BonjourAccount()]):
             self.main_window.preferences_window.show_create_account_dialog()
