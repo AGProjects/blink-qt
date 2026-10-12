@@ -2471,7 +2471,8 @@ class MessageHistory(object, metaclass=Singleton):
                 cls._stored_location(message.id, optional_fields, remote_uri)     # moves a pin: nothing to refresh
             elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 notification_center = NotificationCenter()
-                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction))
+                # from_history: a journal (server history) entry, not a live message: it does not file its party in Messages
+                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction, from_history=True))
                 if message.content_type == LOCATION_CONTENT_TYPE:
                     cls._stored_location(message.id, optional_fields, remote_uri)
 

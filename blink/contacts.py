@@ -1225,13 +1225,23 @@ class MessagesGroupFiler(object, metaclass=Singleton):
     XCAP (or straight away when no account uses XCAP), so a contact the
     server document already holds is found, not created twice. Bonjour
     neighbours are never filed: they live in the Bonjour group.
+
+    Only live messages file their party as above. History -- the journal being
+    imported, and the conversations already in history at start -- never changes
+    the addressbook while it is processed: the addressbook fetched from the
+    server is the current one, and an old entry must not undo what was decided
+    since (a contact taken out of Messages, deleted, moved). Its parties are
+    collected and, once the journal import has finished, only those no contact
+    of the addressbook has get a contact, in Messages, in one update.
     """
 
     settle_delay = 15  # seconds after the first XCAP reload
 
     def __init__(self):
         self.ready = False
-        self.pending = {}           # conversation key -> display name (or None)
+        self.pending = {}           # conversation key -> display name (or None), from live messages
+        self.history_pending = {}   # the same from history (journal, conversations at start): missing contacts only
+        self.importing = False      # a journal import is going on (BlinkJournalProgress)
         self._started = False
 
     def start(self):
@@ -1244,6 +1254,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryAllContactsDidSucceed')
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkJournalDidApply')
+        notification_center.add_observer(self, name='BlinkJournalProgress')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -1261,14 +1272,24 @@ class MessagesGroupFiler(object, metaclass=Singleton):
 
     def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
         for display_name, uri in notification.data.contacts:
-            self.pending.setdefault(str(uri), display_name or None)
+            self.history_pending.setdefault(str(uri), display_name or None)
         self._flush()
 
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
-        self.pending.setdefault(str(notification.data.remote_uri), None)
+        if getattr(notification.data, 'from_history', False):
+            self.history_pending.setdefault(str(notification.data.remote_uri), None)
+        else:
+            self.pending.setdefault(str(notification.data.remote_uri), None)
         self._flush()
 
+    def _NH_BlinkJournalProgress(self, notification):
+        # a run stopped by quitting ends with 'done' too, but without BlinkJournalDidApply: what it
+        # collected waits for the import that finishes it
+        self.importing = notification.data.phase != 'done'
+
     def _NH_BlinkJournalDidApply(self, notification):
+        self.importing = False
+        self._flush()
         if getattr(notification.data, 'first_sync', False):
             # the group has just been filled with everyone the journal mentioned: put it where the user looks
             NotificationCenter().post_notification('BlinkMessagesGroupShouldPromote', sender=self)
@@ -1287,13 +1308,20 @@ class MessagesGroupFiler(object, metaclass=Singleton):
             HistoryManager().message_history.get_all_contacts()
 
     def _flush(self):
-        if not self.ready or not self.pending:
+        if not self.ready:
             return
-        keys, self.pending = self.pending, {}
-        try:
-            self._file(keys)
-        except Exception as e:
-            ActivityLog().exception(f'[contacts] Filing conversations under the Messages group failed: {e!r}')
+        if self.pending:
+            keys, self.pending = self.pending, {}
+            try:
+                self._file(keys)
+            except Exception as e:
+                ActivityLog().exception(f'[contacts] Filing conversations under the Messages group failed: {e!r}')
+        if self.history_pending and not self.importing:
+            keys, self.history_pending = self.history_pending, {}
+            try:
+                self._file(keys, missing_only=True)
+            except Exception as e:
+                ActivityLog().exception(f'[contacts] Adding the missing contacts of history failed: {e!r}')
 
     @staticmethod
     def _find_by_canonical(key, contacts):
@@ -1329,12 +1357,15 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         created.append(new_contact)
         return new_contact
 
-    def _file(self, keys):
+    def _file(self, keys, missing_only=False):
+        """missing_only: from history, a party gets a contact (in Messages) only when no contact of
+        the addressbook has its address; an existing contact is left where it is."""
         from blink import addressbook_origin
         activity = ActivityLog()
         manager = addressbook.AddressbookManager()
         existing = list(manager.get_contacts())
         added, created, skipped = [], [], []
+        known = 0
         blocked = blocked_group()
         blocked_ids = {member.id for member in blocked.contacts} if blocked is not None else set()
         with addressbook_origin.reason('messages'), addressbook.AddressbookManager.transaction():
@@ -1360,6 +1391,11 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                 if is_blocked_address(key):
                     skipped.append(key)         # a blocked party stays in Blocked only
                     continue
+                if missing_only:
+                    found, _found_uri = URIUtils.find_contact(key)
+                    if found.type in ('addressbook', 'bonjour', 'google') or self._find_by_canonical(key, existing) is not None:
+                        known += 1
+                        continue
                 contact = self._contact_for(key, display_name, existing, created)
                 if contact is None or contact.id in blocked_ids:
                     skipped.append(key)
@@ -1371,6 +1407,9 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                     ContactTrash.leave_deleted(contact, 'a newer message brought the conversation back')
             if new_group or added:
                 group.save()
+        if missing_only:
+            activity.info(f'[contacts] History: {len(keys)} conversations, {known} with a contact in the addressbook (left as they are), '
+                          f'{len(created)} contacts created for the others' + (f', {len(skipped)} not fileable' if skipped else ''))
         if new_group:
             activity.info(f'[contacts] Created the Messages group ({MESSAGES_GROUP_ID})')
         for contact in created:
