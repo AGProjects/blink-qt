@@ -6,7 +6,14 @@ import socket
 import platform
 import time
 
+import warnings
+
 from threading import Thread
+
+# pgpy maps its symmetric algorithms to cryptography's at import, TripleDES included, and newer
+# cryptography warns that TripleDES moved (CryptographyDeprecationWarning); nothing Blink can change,
+# so it is not logged. Set before anything imports pgpy; other deprecation warnings still show.
+warnings.filterwarnings('ignore', message=r'TripleDES has been moved', module=r'pgpy(\.|$)')
 
 # QtWebEngine's embedded Chromium spams stderr with harmless errors on systems
 # where it cannot export GPU buffers to a dma_buf (e.g. Raspberry Pi and other
