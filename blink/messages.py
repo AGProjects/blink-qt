@@ -45,7 +45,7 @@ from sipsimple.util import ISOTimestamp
 
 from blink.configuration.datatypes import File
 from blink.file_transfer import FILE_TRANSFER_PATH, base_url_from_transfer, derive_base_url, upload_url
-from blink.message_envelopes import API_MESSAGES_BULK_DELETE_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE
+from blink.message_envelopes import API_MESSAGES_BULK_DELETE_CONTENT_TYPE, DATA_EXPORT_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE
 from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, call_recording_envelope, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
@@ -1367,7 +1367,7 @@ class MessageManager(object, metaclass=Singleton):
         """For the main window's progress bar: 'download' or 'apply', done of total entries (total None: not known), then 'done'."""
         NotificationCenter().post_notification('BlinkJournalProgress', sender=account, data=NotificationData(phase=phase, done=done, total=total))
 
-    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None, progress=None):
+    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None, progress=None, mark_synced=True):
         """Apply journal entries by content type (blink.journal.journal_action). Runs in the sync thread.
 
         Bulk mode: nothing here creates a conversation or decrypts; an entry for a
@@ -1414,8 +1414,9 @@ class MessageManager(object, metaclass=Singleton):
                     progress(index, len(messages), db_wait)
                 time.sleep(self.journal_throttle)
         MessageHistory().wait_for_writes()
-        account.sms.history_synchronization_timestamp = ISOTimestamp.now()
-        account.save()
+        if mark_synced:
+            account.sms.history_synchronization_timestamp = ISOTimestamp.now()
+            account.save()
         return outcomes
 
     def _journal_session(self, contact):
@@ -2083,6 +2084,12 @@ class MessageManager(object, metaclass=Singleton):
             # a Data manager deletion on another device of ours (the journal brings it again: applying twice erases nothing more)
             if account is not BonjourAccount():
                 self.apply_messages_bulk_delete(account, body, 'live')
+            return
+
+        if content_type.lower() == DATA_EXPORT_CONTENT_TYPE:
+            # another device of ours is exporting its history (Data manager > Import from device): never stored
+            if account is not BonjourAccount():
+                self.handle_data_export_announcement(account, body, sender.uri)
             return
 
         if content_type.lower() in FILE_TRANSFER_CONTENT_TYPES:
@@ -2792,6 +2799,84 @@ class MessageManager(object, metaclass=Singleton):
         # no conversation (session) carries it: sent straight to the account's proxy, or OutgoingMessage.send drops it
         self._send_message(OutgoingMessage(account, contact, json.dumps(payload), API_MESSAGES_BULK_DELETE_CONTENT_TYPE, use_cpim=False, sessionless=True))
         return True
+
+    # Data export and import between devices of the account (blink.data_import, blink.data_export)
+
+    def handle_data_export_announcement(self, account, body, sender_uri):
+        """application/sylk-data-export from another device of ours: where its export server is. Acted on
+        only when fresh (a journal replay is not), and never for an export running here."""
+        from blink import data_export, data_import
+        # SIP headers carry bytes, CPIM headers str
+        user, host = (part.decode(errors='replace') if isinstance(part, bytes) else part for part in (sender_uri.user, sender_uri.host))
+        sender = f'{user}@{host}'
+        if sender != str(account.id):
+            ActivityLog().warning(f'[import] Ignoring a data export announcement for {account.id} sent by {sender}')
+            return
+        text = body.decode('utf-8', 'replace') if isinstance(body, bytes) else str(body or '')
+        if '-----BEGIN PGP MESSAGE-----' in text:
+            text = self._decrypt_to_own_key(account, text)
+            if text is None:
+                ActivityLog().info(f'[import] Cannot decrypt the data export announcement for {account.id}')
+                return
+        announcement = data_import.parse_announcement(text)
+        if announcement is None:
+            ActivityLog().info(f'[import] Unreadable data export announcement for {account.id}')
+            return
+        if announcement['key'] in data_export.ACTIVE_TOKENS:
+            return      # our own export, relayed back to us
+        if not data_import.is_fresh(announcement['timestamp']):
+            ActivityLog().info(f'[import] Ignoring a stale data export announcement from {announcement["server"]}')
+            return
+        ActivityLog().info(f'[import] {account.id} is exporting its data at {announcement["server"]} ({"encrypted" if announcement["enc"] else "not encrypted"})')
+        NotificationCenter().post_notification('BlinkDataExportWasAnnounced', sender=account, data=NotificationData(announcement=announcement))
+
+    @staticmethod
+    def _decrypt_to_own_key(account, text):
+        if account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized):
+            return None
+        try:
+            key, _ = pgpy.PGPKey.from_file(account.sms.private_key.normalized)
+            plain = key.decrypt(PGPMessage.from_blob(text)).message
+        except Exception as e:
+            log.warning(f'Cannot decrypt a message to our own key of {account.id}: {e!r}')
+            return None
+        return plain.decode('utf-8', 'replace') if isinstance(plain, (bytes, bytearray)) else str(plain)
+
+    def send_data_export_announcement(self, account, payload):
+        """Tell the other devices of the account where this device's export is (Data manager > Export to device):
+        the payload PGP-encrypted to the account's own public key, to the account itself, not journalled (a
+        replay would be stale by the time anyone read it). Returns whether it was sent."""
+        public_key = self._own_public_key(account)
+        if public_key is None:
+            ActivityLog().warning(f'[export] Cannot announce the export of {account.id}: no PGP public key of our own')
+            return False
+        content = self._seal(public_key, payload)
+        if content is None:
+            return False
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(account.uri)
+        ActivityLog().info(f'[export] Announcing the export to the other devices of {account.id}')
+        self._send_message(OutgoingMessage(account, contact, content, DATA_EXPORT_CONTENT_TYPE, use_cpim=False, skip_journal=True, sessionless=True))
+        return True
+
+    @run_in_thread('sync')
+    def apply_imported_messages(self, account, messages, finished=None):
+        """Store rows imported from another device the way journal entries are stored (same handlers, same
+        duplicate check), in the sync thread so an import never interleaves with a journal run. finished(outcomes)."""
+        outcomes = {}
+        try:
+            outcomes = self._apply_server_history_messages(account, messages, mark_synced=False)
+        except JournalInterrupted:
+            pass
+        except Exception as e:
+            ActivityLog().error(f'[import] Storing {len(messages)} imported messages of {account.id} failed: {e!r}')
+        if finished is not None:
+            finished(outcomes)
+
+    def imported_messages_done(self, account):
+        """After an import: unread counts, the contact list and background decryption follow, as after a journal run."""
+        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account,
+                                               data=NotificationData(new_messages={}, stats_path=None, first_sync=False, first_sync_marker=None))
 
     def apply_messages_bulk_delete(self, account, body, source):
         """Erase what a bulk delete from another device of the account asks for. Returns the journal outcome."""

@@ -1724,6 +1724,42 @@ class MessageHistory(object, metaclass=Singleton):
         callback(list(rows))
 
     @run_in_thread('db')
+    def data_export_rows(self, account_id, callback):
+        """What Export to device offers of an account (blink.data_export.ExportSnapshot): its live text,
+        location and file transfer rows, oldest first, as tuples (message_id, account_id, remote_uri, unix
+        time, local day, direction, content_type, category, related_msg_id, related_action, state,
+        encryption_type, metadata, content)."""
+        table = Message.sqlmeta.table
+        types = ', '.join(self.db.sqlrepr(content_type) for content_type in FILE_TRANSFER_CONTENT_TYPES)
+        query = (f"select message_id, account_id, remote_uri, cast(strftime('%s', timestamp) as integer), date(timestamp, 'localtime'), direction,"
+                 f" content_type, category, related_msg_id, related_action, state, encryption_type, metadata, content from {table}"
+                 f" where account_id = {self.db.sqlrepr(str(account_id))} and {NOT_DELETED_SQL} and message_id is not null and message_id != ''"
+                 f" and (category in ('text', 'location') or content_type in ({types})) order by timestamp")
+        try:
+            rows = self.db.queryAll(query)
+        except Exception as e:
+            ActivityLog().error(f'[export] Reading the messages of {account_id} for the export failed: {e}')
+            rows = []
+        callback(list(rows))
+
+    @run_in_thread('db')
+    def data_import_inventory(self, account_id, callback):
+        """What Import from device compares the other device's ids with: (every message id of the account,
+        removed ones included so an import does not bring them back; [(message_id, remote_uri, content)]
+        of its live file transfers, whose files are looked for on disk)."""
+        table = Message.sqlmeta.table
+        types = ', '.join(self.db.sqlrepr(content_type) for content_type in FILE_TRANSFER_CONTENT_TYPES)
+        account = self.db.sqlrepr(str(account_id))
+        try:
+            ids = {str(message_id) for (message_id,) in self.db.queryAll(f"select message_id from {table} where account_id = {account} and message_id is not null")}
+            transfers = [(str(message_id), str(remote_uri or ''), content) for message_id, remote_uri, content in
+                         self.db.queryAll(f"select message_id, remote_uri, content from {table} where account_id = {account} and content_type in ({types}) and {NOT_DELETED_SQL}")]
+        except Exception as e:
+            ActivityLog().error(f'[import] Reading the messages of {account_id} for the import failed: {e}')
+            ids, transfers = set(), []
+        callback((ids, transfers))
+
+    @run_in_thread('db')
     def purge_messages(self, account_id, row_ids, callback=None):
         """Erase rows of one account by their id, a deletion made here by the user: no tombstones.
         The folders of the file transfers among them go too. Calls back with how many were erased."""

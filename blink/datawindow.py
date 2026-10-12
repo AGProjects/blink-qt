@@ -6,7 +6,8 @@ metadata sidecar, ...), contact and year/month/day, look at any one of them,
 and remove a selection here and from the journal on the server
 (blink.data_manage). File Transfers: the same drill down over the file
 transfers whose file is on the server and not on this computer, and Download
-for the selection. Import and export of data come as tabs of their own.
+for the selection. Import from device and Export to device: history copied
+between devices of the account (blink.data_devices).
 
 Three threads: the GUI; 'db', where the history is read and erased; and
 'data-manage', which talks to the server and waits for the erasing, one batch
@@ -54,6 +55,8 @@ __all__ = ['DataWindow']
 
 
 MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+
+DETAIL_GAP = 10         # space between the list and the row shown under it
 
 PREVIEW_ROWS = 300      # rows of the selection listed, newest first
 
@@ -224,7 +227,7 @@ class ManagePanel(QWidget):
         self.message_delete_button.setVisible(False)
         detail_box = QWidget(self)
         detail_layout = QVBoxLayout(detail_box)
-        detail_layout.setContentsMargins(0, 0, 0, 0)
+        detail_layout.setContentsMargins(0, DETAIL_GAP, 0, 0)
         detail_layout.addWidget(self.detail, 1)
         detail_buttons = QHBoxLayout()
         detail_buttons.addStretch(1)
@@ -840,8 +843,12 @@ class FileTransfersPanel(QWidget):
         self.detail.setPlaceholderText(translate('data_window', 'Click a file transfer to see it in full'))
 
         self.splitter = QSplitter(Qt.Orientation.Vertical, self)
+        detail_box = QWidget(self)
+        detail_layout = QVBoxLayout(detail_box)
+        detail_layout.setContentsMargins(0, DETAIL_GAP, 0, 0)
+        detail_layout.addWidget(self.detail)
         self.splitter.addWidget(self.preview)
-        self.splitter.addWidget(self.detail)
+        self.splitter.addWidget(detail_box)
         self.splitter.setStretchFactor(0, 3)
         self.splitter.setStretchFactor(1, 1)
         layout.addWidget(self.splitter, 1)
@@ -1340,9 +1347,14 @@ class DataWindow(QWidget):
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget(self)
         self.manage_panel = ManagePanel(self.tabs)
-        self.tabs.addTab(self.manage_panel, translate('data_window', 'Messages'))
+        self.tabs.addTab(self.manage_panel, translate('data_window', 'Local messages'))
         self.files_panel = FileTransfersPanel(self.tabs)
-        self.tabs.addTab(self.files_panel, translate('data_window', 'File Transfers'))
+        self.tabs.addTab(self.files_panel, translate('data_window', 'File transfers on server'))
+        from blink.data_devices import ExportPanel, ImportPanel
+        self.import_panel = ImportPanel(self.tabs)
+        self.tabs.addTab(self.import_panel, translate('data_window', 'Import from device'))
+        self.export_panel = ExportPanel(self.tabs)
+        self.tabs.addTab(self.export_panel, translate('data_window', 'Export to device'))
         self.tabs.currentChanged.connect(self._SH_TabChanged)
         layout.addWidget(self.tabs)
         geometry = QSettings().value('data_window/geometry')
@@ -1357,11 +1369,21 @@ class DataWindow(QWidget):
         if self.tabs.currentWidget() is self.files_panel:
             self.files_panel.refresh()
 
+    def open_import(self, account, announcement):
+        """A fresh export announcement from another device of ours: shown on the Import from device tab."""
+        self.import_panel.open(account, announcement)
+        self.tabs.setCurrentWidget(self.import_panel)
+        self.show()
+
     def _SH_TabChanged(self, index):
+        if self.tabs.widget(index) is self.export_panel:
+            self.export_panel.refresh_accounts()
         # the storage is listed when the tab is looked at, not every time the window opens
         if self.tabs.widget(index) is self.files_panel and not self.files_panel.busy and not self.files_panel.loading:
             self.files_panel.refresh(keep_status=True)
 
     def closeEvent(self, event):
         QSettings().setValue('data_window/geometry', self.saveGeometry())
+        # an export is a server on the local network: it does not outlive the window that shows it
+        self.export_panel.stop()
         super().closeEvent(event)

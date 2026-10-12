@@ -64,6 +64,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForOutgoing')
         notification_center.add_observer(self, name='BlinkSessionTransferNewOutgoing')
         notification_center.add_observer(self, name='BlinkFileTransferNewIncoming')
+        notification_center.add_observer(self, name='BlinkDataExportWasAnnounced')
         notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
         self.launcher_badge = LauncherBadge()       # the unread count on the dock icon
@@ -276,13 +277,13 @@ class MainWindow(base_class, ui_class):
         self.logs_window_action.triggered.connect(self._AH_LogsWindowActionTriggered)
         self.message_pane_action.toggled.connect(self.set_message_pane_visible)
 
-        # Blink -> Accounts -> Data manager, after Manage accounts (the window is made on first use)
+        # Blink -> Data manager, after the Accounts and Profiles submenus (the window is made on first use)
         self.data_window = None
         self.data_window_action = QAction(translate('main_window', 'Data manager'), self)
         self.data_window_action.triggered.connect(self._AH_DataWindowActionTriggered)
-        actions = self.accounts_menu.actions()
-        position = actions.index(self.manage_accounts_action) + 1 if self.manage_accounts_action in actions else len(actions)
-        self.accounts_menu.insertAction(actions[position] if position < len(actions) else None, self.data_window_action)
+        actions = self.blink_menu.actions()
+        position = actions.index(self.profiles_menu.menuAction()) + 1
+        self.blink_menu.insertAction(actions[position] if position < len(actions) else None, self.data_window_action)
 
     def refresh_devices(self):
         """Read the sound devices again; a chosen device that is gone falls back to the system default.
@@ -1909,6 +1910,13 @@ class MainWindow(base_class, ui_class):
     def _NH_BlinkSessionTransferNewOutgoing(self, notification):
         self.search_box.clear()
         self.switch_view_button.view = SwitchViewButton.SessionView
+
+    def _NH_BlinkDataExportWasAnnounced(self, notification):
+        # another device of ours is exporting its history: the Data manager comes forward on Import from device
+        if self.data_window is None:
+            from blink.datawindow import DataWindow
+            self.data_window = DataWindow()
+        self.data_window.open_import(notification.sender, notification.data.announcement)
 
     def _NH_BlinkFileTransferNewIncoming(self, notification):
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
