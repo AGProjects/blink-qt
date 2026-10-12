@@ -52,10 +52,13 @@ from blink.util import call_in_gui_thread, call_later, run_in_gui_thread
 @implementer(IObserver)
 class BackgroundDecryptor(object, metaclass=Singleton):
     start_delay = 30.0          # seconds after Blink starts
-    batch_size = 10
-    duty_cycle = 0.1            # at most this share of one CPU: after a message that took t, sleep t * (1 / duty_cycle - 1)
-    message_pause = 0.2         # and never less than this, in seconds, between two messages
-    batch_pause = 3.0           # seconds between two batches
+    batch_size = 20
+    # at most this share of one CPU: after a message that took t of CPU, sleep t * (1 / duty - 1);
+    # more while Blink is not the application in use (window not active), less while it is
+    duty_cycle_active = 0.15
+    duty_cycle_idle = 0.5
+    message_pause = 0.02        # and never less than this, in seconds, between two messages
+    batch_pause = 1.0           # seconds between two batches
     busy_pause = 5.0            # seconds to wait while the message pane decrypts what is in view
     progress_every = 200        # messages between two progress lines in the Activity log
 
@@ -81,6 +84,25 @@ class BackgroundDecryptor(object, metaclass=Singleton):
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
         call_in_gui_thread(call_later, self.start_delay, self.run, 'start')     # a QTimer: armed in the GUI thread
+        call_in_gui_thread(self._follow_application_state)
+
+    in_use = True       # Blink is the active application (written in the GUI thread, read in the decrypting one)
+
+    def _follow_application_state(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QGuiApplication
+        application = QGuiApplication.instance()
+        if application is None:
+            return
+
+        def changed(state):
+            self.in_use = state == Qt.ApplicationState.ApplicationActive
+        application.applicationStateChanged.connect(changed)
+        changed(application.applicationState())
+
+    @property
+    def duty_cycle(self):
+        return self.duty_cycle_active if self.in_use else self.duty_cycle_idle
 
     def handle_notification(self, notification):
         if notification.name == 'SIPApplicationWillEnd':
