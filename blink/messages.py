@@ -393,8 +393,9 @@ class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
     __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
-    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True, skip_journal=False, sessionless=False):
+    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True, skip_journal=False, sessionless=False, on_result=None):
         self.lookup = None
+        self.on_result = on_result          # on_result(code, reason) once: the final answer, or code None when it could not be sent
         self.sessionless = sessionless     # sent without a conversation, straight to the account's proxy
         self.skip_journal = skip_journal
         self.account = account
@@ -413,6 +414,16 @@ class OutgoingMessage(object):
     @property
     def message(self):
         return BlinkMessage(self.content, self.content_type, self.account, timestamp=self.timestamp, id=self.id, is_secure=self.is_secure, direction='outgoing')
+
+    def _report(self, code, reason):
+        callback, self.on_result = self.on_result, None
+        if callback is not None:
+            if isinstance(reason, bytes):
+                reason = reason.decode('utf-8', 'replace')
+            try:
+                callback(code, reason)
+            except Exception as e:
+                ActivityLog().exception(f'[Message] Result handler of {self.content_type} message {self.id} failed: {e!r}')
 
     @property
     def _disabled_imdn_content_type(self):
@@ -568,6 +579,7 @@ class OutgoingMessage(object):
 
     def _NH_DNSLookupDidFail(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
+        self._report(None, str(self.dns_failed_reason or notification.data.error))
         if self.content_type.lower() == IsComposingDocument.content_type:
             return
 
@@ -589,6 +601,7 @@ class OutgoingMessage(object):
         return getattr(self.session, 'remote_instance_id', None) or _bare(self.uri)
 
     def _NH_SIPMessageDidSucceed(self, notification):
+        self._report(getattr(notification.data, 'code', 200), getattr(notification.data, 'reason', ''))
         notification_center = NotificationCenter()
         if self.content_type.lower() in self.__ignored_content_types__:
             if self.content_type.lower() == IMDNDocument.content_type:
@@ -609,6 +622,7 @@ class OutgoingMessage(object):
             ActivityLog().info(f'[Message with {self._peer}] Sent {self.content_type} message {self.id} from account {self.account.id}')
 
     def _NH_SIPMessageDidFail(self, notification):
+        self._report(getattr(notification.data, 'code', None), getattr(notification.data, 'reason', ''))
         content_type = self.content_type.lower()
         if content_type in self.__disabled_imdn_content_types__ or content_type.startswith('application/sylk-api'):
             return
@@ -1599,21 +1613,36 @@ class MessageManager(object, metaclass=Singleton):
         self._send_message(outgoing_message)
 
     def _offer_key_generation(self, account, scenario, session=None):
-        """The generate prompt, held until we know whether the server keeps this account's key:
-        generating one while the addressbook may still bring the real one orphans every message
-        encrypted to it (KeyEscrowManager.when_answered)."""
-        KeyEscrowManager().when_answered(account, lambda: self._generate_keys_silently(account, session))
+        """This device has no key for the account. Generating one while the account already has
+        a key elsewhere orphans every message encrypted to it, so nothing happens before
+        KeyEscrowManager knows: the addressbook (escrow) has been fetched and the server has
+        answered the public key lookup. Only when both say there is no key is one generated
+        without asking; in every other case the user is asked."""
+        KeyEscrowManager().when_answered(account, lambda: self._key_generation_decided(account, scenario, session))
 
-    def _generate_keys_silently(self, account, session=None):
-        """Neither this device nor the server has a key for the account: make one, in the
-        background, without asking (the server keeps it for the other devices)."""
+    def _key_generation_decided(self, account, scenario, session=None):
+        if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
+            return      # restored from the escrow meanwhile, or PGP turned off
+        silent, reason = KeyEscrowManager().may_generate_silently(account)
+        if silent:
+            ActivityLog().info(f'[pgp] No PGP key for account {account.id} in the addressbook or on the server, generating one')
+            self._generate_keys(account, session)
+            return
+        declined = self.__dict__.setdefault('_key_generation_declined', set())
+        if account.id in declined:
+            return      # asked already this run and the user said no
+        ActivityLog().info(f'[pgp] Not generating a PGP key for account {account.id} without asking: {reason}')
+        self._show_generate_dialog(account, scenario, session)
+
+    def _generate_keys(self, account, session=None):
+        """Make the account's keypair in the background: either nobody has one (decided by
+        _key_generation_decided) or the user chose Generate."""
         if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
             return      # restored from the escrow meanwhile, or PGP turned off
         generating = self.__dict__.setdefault('_keys_generating', set())
         if account.id in generating:
             return
         generating.add(account.id)
-        ActivityLog().info(f'[pgp] No PGP key for account {account.id} on this device or on the server, generating one')
 
         def generate():
             from blink.streams.message import create_account_keys
@@ -1668,14 +1697,18 @@ class MessageManager(object, metaclass=Singleton):
         generate_dialog = GeneratePGPKeyDialog()
         generate_request = GeneratePGPKeyRequest(generate_dialog, account, scenario, session)
         generate_request.accepted.connect(self._SH_GeneratePGPKeys)
+        generate_request.rejected.connect(self._SH_GeneratePGPKeysDeclined)
         generate_request.finished.connect(self._SH_PGPRequestFinished)
         bisect.insort_right(self.pgp_requests, generate_request)
         generate_request.dialog.show()
 
     def _SH_GeneratePGPKeys(self, request):
-        session = request.session
-        stream = session.fake_streams.get('messages')
-        stream.generate_keys()
+        ActivityLog().info(f'[pgp] Generating a new PGP key for account {request.account.id}, as the user chose')
+        self._generate_keys(request.account, request.session)
+
+    def _SH_GeneratePGPKeysDeclined(self, request):
+        self.__dict__.setdefault('_key_generation_declined', set()).add(request.account.id)
+        ActivityLog().info(f'[pgp] The user chose not to generate a PGP key for account {request.account.id}')
 
     def _SH_PGPRequestFinished(self, request):
         request.dialog.hide()
@@ -2795,10 +2828,22 @@ class KeyEscrowManager(object, metaclass=Singleton):
     catching up with the document it was handed.
 
     Generating a key waits for the answer (when_answered): the addressbook has
-    loaded, the account has no XCAP, or 15 seconds have passed.
+    loaded (or the account has no XCAP, or 15 seconds have passed) AND the server
+    has answered a public key lookup for the account itself (or it failed).
+    A key is generated without asking only when the addressbook was really
+    fetched and carries no escrow, and the server said it keeps no public key
+    (may_generate_silently); otherwise the user is asked.
+
+    The lookup is the usual sylk-api-pgp-key-lookup, to our own address. SylkServer
+    answers it with 200 when it keeps a public key (the key follows as a
+    text/pgp-public-key message) and 404 "No Public Key" when it keeps none.
+    Any other answer, including the 200 of an older SylkServer that always
+    answers 200, is not a "no".
     """
 
     answer_timeout = 15.0
+    lookup_timeout = 40.0               # longer than a SIP transaction (32 s)
+    no_key_reason = 'no public key'
 
     def __init__(self):
         self._started = False
@@ -2809,6 +2854,8 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.self_contact_created = set()
         self._first_asked = {}
         self._waiting = {}              # account id -> callbacks held until the answer
+        self.server_key = {}            # account id -> 'pending' | 'present' | 'absent' | 'failed'
+        self._lookups = {}              # account id -> the lookup in flight
 
     def start(self):
         if not self._started:
@@ -2902,26 +2949,90 @@ class KeyEscrowManager(object, metaclass=Singleton):
             contact.save()
         ActivityLog().info(f'[pgp] Key escrow: no contact carries {account.id}, created one ({contact.id}) to keep the key on')
 
-    def answered(self, account):
-        """Whether we know yet if the server keeps a key for this account."""
+    def _addressbook_answered(self, account):
         if account.id in self.checked or not account.xcap.enabled:
             return True
         first = self._first_asked.setdefault(account.id, time.time())
         return time.time() - first > self.answer_timeout
 
+    def answered(self, account):
+        """Whether we know enough to decide: the addressbook has loaded (or will not) and the
+        server has answered the public key lookup (or it failed)."""
+        return self._addressbook_answered(account) and self.server_key.get(account.id) in ('present', 'absent', 'failed')
+
+    def may_generate_silently(self, account):
+        """(True, None) when a key may be generated without asking, else (False, why not)."""
+        if account is BonjourAccount():
+            return True, None
+        if not account.xcap.enabled:
+            return False, 'the account has no addressbook on the server to look for its key in'
+        if account.id not in self.checked:
+            return False, 'the addressbook has not been fetched from the server'
+        try:
+            escrowed = bool(key_escrow.self_escrow_records(account))
+        except Exception as e:
+            return False, f'the addressbook could not be searched for a key ({e!r})'
+        if escrowed:
+            return False, 'the addressbook keeps a key for it that this device could not restore'
+        state = self.server_key.get(account.id)
+        if state == 'present':
+            return False, 'the server keeps a public key for it'
+        if state != 'absent':
+            return False, 'the server did not answer whether it keeps a public key for it'
+        return True, None
+
+    def lookup_server_key(self, account):
+        """Ask the server whether it keeps a public key for the account itself (once per run,
+        again after a failure)."""
+        if account is BonjourAccount() or self.server_key.get(account.id) in ('pending', 'present', 'absent'):
+            return
+        from types import SimpleNamespace
+        lookup = object()
+        self._lookups[account.id] = lookup
+        self.server_key[account.id] = 'pending'
+        ActivityLog().info(f'[pgp] Asking the server whether it keeps a public key for {account.id}')
+        target = SimpleNamespace(uri=SimpleNamespace(uri=str(account.id)))     # no session: OutgoingMessage only needs the address
+        OutgoingMessage(account, target, 'Public key request', 'application/sylk-api-pgp-key-lookup',
+                        on_result=lambda code, reason: self._lookup_answered(account, lookup, code, reason)).send()
+        call_later(self.lookup_timeout, self._lookup_answered, account, lookup, None, 'no answer in time')
+
+    def _lookup_answered(self, account, lookup, code, reason):
+        if self._lookups.get(account.id) is not lookup:
+            return      # answered already, or a later lookup replaced it
+        del self._lookups[account.id]
+        reason = (reason or '').strip()
+        if code == 404 and reason.lower() == self.no_key_reason:
+            state = 'absent'
+            ActivityLog().info(f'[pgp] The server keeps no public key for {account.id}')
+        elif code == 200:
+            state = 'present'
+            ActivityLog().info(f'[pgp] The server keeps a public key for {account.id} (or is too old to say it does not)')
+        else:
+            state = 'failed'
+            ActivityLog().info(f'[pgp] The server did not say whether it keeps a public key for {account.id}: {code or ""} {reason}'.rstrip())
+        self.server_key[account.id] = state
+        self._release(account)
+
     def when_answered(self, account, callback):
-        if account is BonjourAccount() or self.answered(account):
+        if account is BonjourAccount():
+            callback()
+            return
+        self.lookup_server_key(account)
+        if self.answered(account):
             callback()
             return
         waiting = self._waiting.get(account.id)
         if waiting is None:
             waiting = self._waiting[account.id] = []
-            elapsed = time.time() - self._first_asked[account.id]
-            ActivityLog().info(f'[pgp] Waiting for the addressbook of {account.id} before generating a PGP key: it may carry one')
-            call_later(max(0.5, self.answer_timeout - elapsed + 0.1), self._release, account)
+            if not self._addressbook_answered(account):
+                elapsed = time.time() - self._first_asked[account.id]
+                ActivityLog().info(f'[pgp] Waiting for the addressbook of {account.id} before generating a PGP key: it may carry one')
+                call_later(max(0.5, self.answer_timeout - elapsed + 0.1), self._release, account)
         waiting.append(callback)
 
     def _release(self, account):
+        if not self.answered(account):
+            return      # still waiting for the addressbook or for the server's answer
         for callback in self._waiting.pop(account.id, []):
             try:
                 callback()
