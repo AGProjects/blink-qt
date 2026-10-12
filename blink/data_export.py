@@ -337,6 +337,18 @@ def _now_iso():
     return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
 
+class _Server(ThreadingHTTPServer):
+    def process_request_thread(self, request, client_address):
+        # With gevent's patched sockets a socket waits on the hub of the thread that made it, and the
+        # request socket was made by accept() in the server thread: remake it here, in the thread that
+        # serves it, or any reply that has to wait fails with "Cannot switch to a different thread".
+        try:
+            request = socket.socket(request.family, request.type, request.proto, fileno=request.detach())
+        except OSError:
+            pass
+        ThreadingHTTPServer.process_request_thread(self, request, client_address)
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = 'BlinkExport/1'
     protocol_version = 'HTTP/1.1'
@@ -498,7 +510,7 @@ class ExportServer(object):
         for attempt in range(PORT_TRIES):
             port = random.randint(PORT_MIN, PORT_MAX)
             try:
-                httpd = ThreadingHTTPServer(('0.0.0.0', port), _Handler)
+                httpd = _Server(('0.0.0.0', port), _Handler)
             except OSError as e:
                 last_error = e
                 continue
