@@ -345,7 +345,7 @@ class ConversationModel(QAbstractListModel):
             if row is not None:
                 opened[message_id] = MessageItem(row)
         if opened:
-            ActivityLog().info(f'[pgp] Decrypted {len(opened) - failed} messages with {self.name} in view' + (f', {failed} would not decrypt' if failed else ''))
+            log.debug(f'Decrypted {len(opened) - failed} messages with {self.name} in view' + (f', {failed} would not decrypt' if failed else ''))
         if opened or keyless_ids:
             call_in_gui_thread(self._apply_decrypted, opened, keyless)
 

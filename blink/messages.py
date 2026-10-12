@@ -1621,9 +1621,24 @@ class MessageManager(object, metaclass=Singleton):
         without asking; in every other case the user is asked."""
         KeyEscrowManager().when_answered(account, lambda: self._key_generation_decided(account, scenario, session))
 
+    @staticmethod
+    def _pgp_messaging_possible(account):
+        """PGP messaging needs SylkServer (key lookup, escrow, journal): Bonjour aside, no key
+        is made for an account whose domain has none (blink.sylk_discovery)."""
+        if account is BonjourAccount():
+            return True
+        from blink.sylk_discovery import has_sylkserver
+        return has_sylkserver(account)
+
     def _key_generation_decided(self, account, scenario, session=None):
         if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
             return      # restored from the escrow meanwhile, or PGP turned off
+        if not self._pgp_messaging_possible(account):
+            refused = self.__dict__.setdefault('_key_generation_refused', set())
+            if account.id not in refused:
+                refused.add(account.id)
+                ActivityLog().info(f'[pgp] Not generating a PGP key for account {account.id}: {account.id.domain} has no SylkServer')
+            return
         silent, reason = KeyEscrowManager().may_generate_silently(account)
         if silent:
             ActivityLog().info(f'[pgp] No PGP key for account {account.id} in the addressbook or on the server, generating one')
@@ -1640,6 +1655,9 @@ class MessageManager(object, metaclass=Singleton):
         _key_generation_decided) or the user chose Generate."""
         if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
             return      # restored from the escrow meanwhile, or PGP turned off
+        if not self._pgp_messaging_possible(account):
+            ActivityLog().info(f'[pgp] Not generating a PGP key for account {account.id}: {account.id.domain} has no SylkServer')
+            return
         generating = self.__dict__.setdefault('_keys_generating', set())
         if account.id in generating:
             return
@@ -2859,7 +2877,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.self_contact_created = set()
         self._first_asked = {}
         self._waiting = {}              # account id -> callbacks held until the answer
-        self.server_key = {}            # account id -> 'pending' | 'present' | 'absent' | 'failed'
+        self.server_key = {}            # account id -> 'pending' | 'present' | 'absent' | 'failed' | 'unsupported' (no SylkServer)
         self._lookups = {}              # account id -> the lookup in flight
         self.server_public_keys = {}    # account id -> the public key the server sent for us (armored)
         self._status_logged = set()
@@ -2894,6 +2912,10 @@ class KeyEscrowManager(object, metaclass=Singleton):
         start, on each addressbook reload and on registration, whichever comes first."""
         if account.id in self._status_asked or not account.enabled:
             return
+        if account is not BonjourAccount():
+            from blink.sylk_discovery import has_sylkserver
+            if not has_sylkserver(account):
+                return      # no SylkServer for the domain: no PGP messaging, nothing to report (asked again later: discovery may find one)
         self._status_asked.add(account.id)
         if not account.sms.enable_pgp:
             ActivityLog().info(f'[pgp] Private key of {account.id}: PGP is disabled for the account')
@@ -2969,6 +2991,8 @@ class KeyEscrowManager(object, metaclass=Singleton):
             elif state == 'present':
                 kept = self.server_public_keys.get(account.id)
                 server = compared(key_fingerprint(kept)) if kept else 'keeps a public key, or is an older SylkServer that does not say it does not (none received)'
+            elif state == 'unsupported':
+                server = f'not asked, {account.id.domain} has no SylkServer'
             else:
                 server = 'unknown, the public key lookup was not answered'
 
@@ -3070,7 +3094,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
     def answered(self, account):
         """Whether we know enough to decide: the addressbook has loaded (or will not) and the
         server has answered the public key lookup (or it failed)."""
-        return self._addressbook_answered(account) and self.server_key.get(account.id) in ('present', 'absent', 'failed')
+        return self._addressbook_answered(account) and self.server_key.get(account.id) in ('present', 'absent', 'failed', 'unsupported')
 
     def may_generate_silently(self, account):
         """(True, None) when a key may be generated without asking, else (False, why not)."""
@@ -3089,14 +3113,23 @@ class KeyEscrowManager(object, metaclass=Singleton):
         state = self.server_key.get(account.id)
         if state == 'present':
             return False, 'the server keeps a public key for it'
+        if state == 'unsupported':
+            return False, 'its domain has no SylkServer to ask whether a key exists'
         if state != 'absent':
             return False, 'the server did not answer whether it keeps a public key for it'
         return True, None
 
     def lookup_server_key(self, account):
         """Ask the server whether it keeps a public key for the account itself (once per run,
-        again after a failure)."""
+        again after a failure). Only a domain with SylkServer (blink.sylk_discovery) is asked;
+        for another one the state is 'unsupported', asked again next time (discovery may have
+        found one since)."""
         if account is BonjourAccount() or self.server_key.get(account.id) in ('pending', 'present', 'absent'):
+            return
+        from blink.sylk_discovery import has_sylkserver
+        if not has_sylkserver(account):
+            # no SylkServer for the domain (no _sylkserver TXT configuration found): nobody to ask
+            self.server_key[account.id] = 'unsupported'
             return
         from types import SimpleNamespace
         lookup = object()

@@ -118,6 +118,7 @@ class MainWindow(base_class, ui_class):
         self.contacts_view.setCurrentWidget(self.contact_list_panel)
         self.search_view.setCurrentWidget(self.search_list_panel)
         self.export_pgp_key_action.setEnabled(False)
+        self.generate_pgp_key.setEnabled(False)
         self.open_unread_messages_button.setEnabled(False)
         self.open_unread_messages_button.setVisible(False)
         self.active_sessions_label.hide()
@@ -698,6 +699,7 @@ class MainWindow(base_class, ui_class):
 
     def _NH_SylkServerConfigurationDidChange(self, notification):
         self._update_call_me_action()
+        self._update_pgp_key_actions()      # a domain found to run SylkServer
 
     def _AH_CallMeMaybeActionTriggered(self):
         from blink.callme import CallMeMaybeDialog, call_me_target
@@ -1309,11 +1311,18 @@ class MainWindow(base_class, ui_class):
     def _SH_IdentityChanged(self, index):
         account_manager = AccountManager()
         account_manager.default_account = self.identity.itemData(index).account
-        account = account_manager.default_account
-        if account is BonjourAccount() or not account.sms.enable_pgp or account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized):
-            self.export_pgp_key_action.setEnabled(False)
-        else:
-            self.export_pgp_key_action.setEnabled(True)
+        self._update_pgp_key_actions()
+
+    def _update_pgp_key_actions(self):
+        """Export and Generate private key: for the selected account when it uses PGP over
+        SylkServer and holds a key. PGP messaging works only with SylkServer (key lookup, escrow,
+        journal) and with Bonjour, whose key is made on its own and is not exported."""
+        from blink.sylk_discovery import has_sylkserver
+        account = AccountManager().default_account
+        usable = (account is not None and account is not BonjourAccount() and account.sms.enable_pgp and has_sylkserver(account)
+                  and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized))
+        self.export_pgp_key_action.setEnabled(usable)
+        self.generate_pgp_key.setEnabled(usable)
 
     def _SH_IdentityCurrentIndexChanged(self, index):
         self._update_call_me_action()
@@ -1707,9 +1716,8 @@ class MainWindow(base_class, ui_class):
                 action = next(action for action in self.voicemail_menu.actions() if action.data() is account)
                 action.setVisible(False if account is BonjourAccount() else account.enabled)
                 action.setEnabled(False if account is BonjourAccount() else account.voicemail_uri is not None)
-            if 'sms.private_key' in notification.data.modified:
-                if account is not BonjourAccount() and account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
-                    self.export_pgp_key_action.setEnabled(True)
+            if {'sms.private_key', 'sms.enable_pgp'}.intersection(notification.data.modified) and account is account_manager.default_account:
+                self._update_pgp_key_actions()
 
 
     # domains whose SIP servers present the certificate of another domain: the TLS name an
@@ -1740,9 +1748,7 @@ class MainWindow(base_class, ui_class):
         action.triggered.connect(self._AH_VoicemailActionTriggered)
 
     def _NH_SIPAccountManagerDidStart(self, notification):
-        account = notification.sender.default_account
-        if account is not BonjourAccount() and account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
-            self.export_pgp_key_action.setEnabled(True)
+        self._update_pgp_key_actions()
 
     def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
         account = notification.data.account
