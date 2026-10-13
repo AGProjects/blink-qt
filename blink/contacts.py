@@ -372,6 +372,23 @@ def _bare_uris(contact):
     return {str(uri.uri).lower().removeprefix('sips:').removeprefix('sip:') for uri in contact.uris}
 
 
+def is_own_contact(contact):
+    """An addressbook contact whose every address is one of our accounts: our own contact."""
+    if not isinstance(contact, addressbook.Contact):
+        return False
+    uris = _bare_uris(contact)
+    return bool(uris) and uris <= own_account_uris()
+
+
+def own_contact_hidden(item):
+    """Our own contact is listed only while it has messages: it exists for the PGP key escrow,
+    and shows up when a message to ourselves arrives (it can still be found by searching)."""
+    if not is_own_contact(getattr(item, 'settings', None)):
+        return False
+    from blink.history import ConversationPreviews
+    return ConversationPreviews().message_time(item.conversation_keys) is None
+
+
 def protected_own_contacts(contacts, soft=False):
     """{contact id: [account ids]} for the contacts among these that are the last to carry
     one of our account URIs.
@@ -409,11 +426,26 @@ def refuse_own_contacts(parent, contacts, soft=False):
         ActivityLog().info(f"[trash] Not deleting {_contact_label(contact)} ({contact.id}): it is the last contact with our address "
                            f"{', '.join(protected[contact.id])} and keeps the backup of the PGP private key")
     if parent is not None:
-        names = ', '.join(f"'{_contact_label(contact)}'" for contact in refused)
-        QMessageBox.information(parent, translate('contact_list', 'Own Contact'),
-                                translate('contact_list', '%s cannot be deleted: it is your own contact, the last one with your address, '
-                                          'and it keeps the backup of your private key that your other devices restore it from.') % names)
+        remove_own_conversations(parent, refused, protected)
     return [contact for contact in contacts if contact.id not in protected]
+
+
+def remove_own_conversations(parent, contacts, protected):
+    """Deleting our own contact removes the conversation with ourselves: the contact stays in the
+    addressbook (it keeps the PGP key escrow) and is not listed until a new message arrives."""
+    names = ', '.join(f"'{_contact_label(contact)}'" for contact in contacts)
+    if QMessageBox.question(parent, translate('contact_list', 'Own Contact'),
+                            translate('contact_list', '%s is your own contact: it stays in the address book, as it keeps the backup of your '
+                                      'private key, and is hidden until a new message to yourself arrives.\n\n'
+                                      'Remove all messages with yourself on all devices? This cannot be undone.') % names) != QMessageBox.StandardButton.Yes:
+        return
+    message_manager = MessageManager()
+    for contact in contacts:
+        for address in protected[contact.id]:
+            ActivityLog().info(f'[trash] Removing the conversation with ourselves ({address}) instead of deleting our own contact {_contact_label(contact)}')
+            blink_session = message_manager.create_message_session(f'sip:{address}', selected=False)
+            if blink_session is not None:
+                message_manager.remove_conversation(blink_session)
 
 
 def ask_about_shared_messages(parent, title, question, info, shared, warning=False):
@@ -4763,7 +4795,7 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         for position in range(list_items.index(group) + 1, len(list_items)):
             if isinstance(list_items[position], Group):
                 break
-            list_view.setRowHidden(position, collapsed)
+            list_view.setRowHidden(position, collapsed or own_contact_hidden(list_items[position]))
 
     def createEditor(self, parent, options, index):
         item = index.data(Qt.ItemDataRole.UserRole)
@@ -5251,6 +5283,8 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkMessagesGroupShouldPromote')
         notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
+        notification_center.add_observer(self, name='SIPAccountManagerDidAddAccount')
+        notification_center.add_observer(self, name='SIPAccountManagerDidRemoveAccount')
 
     def _NH_BlinkConversationPreviewsDidChange(self, notification):
         # Messages group rows quote the last message and show its time, Calls and Tel rows the last call's
@@ -5265,6 +5299,7 @@ class ContactModel(QAbstractListModel):
                 # the second line of a row in any other group quotes the conversation too
                 index = self.index(self.items.index(contact))
                 self.dataChanged.emit(index, index)
+        self.update_own_contact_rows(changed)     # our own contact shows up with its first message
 
     def _reposition_contact(self, contact):
         """Move a contact to its place in its group if its sort key changed, and repaint it."""
@@ -5410,7 +5445,7 @@ class ContactModel(QAbstractListModel):
             if isinstance(item, Group):
                 self.contact_list.openPersistentEditor(self.index(position + index))
             else:
-                self.contact_list.setRowHidden(position + index, item.group.collapsed)
+                self.contact_list.setRowHidden(position + index, self.row_hidden(item))
         bonjour_group = self.bonjour_group
         if bonjour_group in moved_groups:
             bonjour_group.relocation_info = None
@@ -5614,6 +5649,13 @@ class ContactModel(QAbstractListModel):
     def _NH_SIPAccountManagerDidStart(self, notification):
         if notification.sender.default_account is BonjourAccount():
             self._move_bonjour_group_first()
+        self.update_own_contact_rows()
+
+    def _NH_SIPAccountManagerDidAddAccount(self, notification):
+        self.update_own_contact_rows()
+
+    def _NH_SIPAccountManagerDidRemoveAccount(self, notification):
+        self.update_own_contact_rows()
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
         account = notification.data.account
@@ -5633,6 +5675,8 @@ class ContactModel(QAbstractListModel):
         contact = notification.sender
         if is_deleted_contact(contact):
             sync_deleted_presence(False, [contact])
+        if 'uris' in notification.data.modified:
+            self.update_own_contact_rows([item for item in self.items if isinstance(item, Contact) and item.settings is contact])
 
     @staticmethod
     def range_iterator(indexes):
@@ -5746,7 +5790,21 @@ class ContactModel(QAbstractListModel):
         self.beginInsertRows(QModelIndex(), position, position)
         self.items.insert(position, contact)
         self.endInsertRows()
-        self.contact_list.setRowHidden(position, contact.group.collapsed)
+        self.contact_list.setRowHidden(position, self.row_hidden(contact))
+
+    @staticmethod
+    def row_hidden(contact):
+        return contact.group.collapsed or own_contact_hidden(contact)
+
+    def update_own_contact_rows(self, contacts=None):
+        """Show or hide our own contact's rows (own_contact_hidden): after its messages changed,
+        an account came or went, or its addresses changed."""
+        for position, item in enumerate(self.items):
+            if not isinstance(item, Contact) or (contacts is not None and item not in contacts):
+                continue
+            hidden = self.row_hidden(item)
+            if self.contact_list.isRowHidden(position) != hidden:
+                self.contact_list.setRowHidden(position, hidden)
 
     def _add_group(self, group):
         position = self._find_group_insertion_point(group)
