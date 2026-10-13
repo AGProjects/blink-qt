@@ -21,6 +21,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.session import IllegalStateError
 
 from blink.aboutpanel import AboutPanel
+from blink.camera_formats import log_camera_formats
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI, conversation_uri
 from blink.filetransferwindow import FileTransferWindow
@@ -1785,6 +1786,7 @@ class MainWindow(base_class, ui_class):
         self.load_audio_devices()
 
     def _NH_VideoDevicesDidChange(self, notification):
+        log_camera_formats(sorted(set(notification.data.new_devices).difference(notification.data.old_devices), key=str))
         self.video_camera_menu.clear()  # actions will be removed automatically from the action group because they are owned by the menu and only referenced in the action group
         if self.session_model.active_sessions:
             added_devices = set(notification.data.new_devices).difference(notification.data.old_devices)

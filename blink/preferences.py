@@ -18,13 +18,15 @@ from zope.interface import implementer
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.configuration import DefaultValue
-from sipsimple.configuration.datatypes import MSRPRelayAddress, Path, PortRange, SIPProxyAddress, STUNServerAddress, STUNServerAddressList
+from sipsimple.configuration.datatypes import MSRPRelayAddress, Path, PortRange, SIPProxyAddress, STUNServerAddress, STUNServerAddressList, VideoResolution
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.accounts import AddAccountDialog
+from blink.camera_formats import resolution_support
 from blink.configuration.settings import H264_LEVELS, BlinkSettings
 from blink.screen_pointer import is_screen_device
+from blink.screen_share import ScreenShareManager
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
 from blink.pstn_normalize import pstn_apply_leading_zero_rule
@@ -447,10 +449,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.camera_preview.setSizePolicy(size_policy)
         self.camera_preview.mirror = True
 
-        self.video_resolution_button.clear()
-        self.video_resolution_button.addItem('HD 720p', '1280x720')
-        self.video_resolution_button.addItem('VGA', '640x480')
-
         self.video_framerate_button.clear()
         for rate in (10, 15, 20, 24, 25, 30):
             self.video_framerate_button.addItem('%d fps' % rate, rate)
@@ -718,6 +716,42 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.video_camera_button.addItem(device, device)
         self.video_camera_button.addItem(translate('preferences_window', 'None'), None)
         self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
+        self.load_video_resolutions()
+
+    def load_video_resolutions(self, adjust=False):
+        """The resolutions the selected camera delivers. When the user picked the
+        camera (adjust) and it does not deliver the resolution set, the largest it
+        delivers below it is set instead."""
+        settings = SIPSimpleSettings()
+        current = str(settings.video.resolution)
+        no_camera = settings.video.device is None
+        self.video_framerate_button.setEnabled(not no_camera)
+        if no_camera:
+            # no camera, nothing to choose: the resolution set stays for when one is chosen
+            self.video_resolution_button.clear()
+            self.video_resolution_button.setEnabled(False)
+            return
+        support = resolution_support(settings.video.device)
+        known = all(fps is not None for size, label, bitrate, fps in support)
+        offered = [entry for entry in support if entry[3] != 0] if known else support
+        self.video_resolution_button.clear()
+        for size, label, bitrate, fps in offered:
+            if fps:
+                text = translate('preferences_window', '%s (%s, up to %d fps)') % (label, size, round(fps))
+            else:
+                text = '%s (%s)' % (label, size)
+            self.video_resolution_button.addItem(text, str(size))
+        self.video_resolution_button.setEnabled(bool(offered))
+        if not offered:
+            return
+        index = self.video_resolution_button.findData(current)
+        if index == -1 and adjust and known and not is_screen_device(settings.video.device):
+            area = settings.video.resolution.width * settings.video.resolution.height
+            below = [entry for entry in offered if entry[0].width * entry[0].height <= area]
+            size = (below[-1] if below else offered[0])[0]      # CAMERA_RESOLUTIONS goes small to large
+            index = self.video_resolution_button.findData(str(size))
+            self._set_video_resolution(str(size))
+        self.video_resolution_button.setCurrentIndex(index)
 
     def load_settings(self):
         """Load settings from configuration into the UI controls"""
@@ -751,7 +785,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Video devices
         self.load_video_devices()
 
-        self.video_resolution_button.setCurrentIndex(self.video_resolution_button.findData(str(settings.video.resolution)))
         self.video_framerate_button.setCurrentIndex(self.video_framerate_button.findData(settings.video.framerate))
 
         # Video codecs
@@ -1669,10 +1702,17 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings = SIPSimpleSettings()
         settings.video.device = device
         settings.save()
+        self.load_video_resolutions(adjust=True)
 
     def _SH_VideoResolutionButtonActivated(self, index):
-        resolution = self.video_resolution_button.itemData(index)
-        settings = SIPSimpleSettings()
+        self._set_video_resolution(self.video_resolution_button.itemData(index))
+
+    def _set_video_resolution(self, resolution):
+        if resolution is None or str(SIPSimpleSettings().video.resolution) == resolution:
+            return
+        if ScreenShareManager().set_camera_resolution(VideoResolution(resolution)):
+            return      # with its bitrate, and applied to the calls going on
+        settings = SIPSimpleSettings()   # the screen is shared: what the camera is sent at afterwards
         settings.video.resolution = resolution
         settings.video.h264.level = H264_LEVELS.get(resolution, '3.1')
         settings.save()
@@ -1935,6 +1975,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.auto_answer_interval.setValue(settings.sip.auto_answer_interval)
             if 'video.device' in notification.data.modified:
                 self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
+                self.load_video_resolutions()
         elif notification.sender is self.selected_account is not None:
             account = notification.sender
             if 'sip.auto_answer' in notification.data.modified:

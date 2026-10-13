@@ -418,6 +418,8 @@ class Blink(QApplication, metaclass=QSingleton):
             video_devices = []
         if video_devices:
             activity.info('Available video cameras: %s' % ', '.join(video_devices))
+            from blink.camera_formats import log_camera_formats
+            log_camera_formats(video_devices)
         activity.info('Using video camera %s' % settings.video.device)
 
     def event(self, event):

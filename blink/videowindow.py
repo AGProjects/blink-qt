@@ -46,7 +46,8 @@ from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog
 from blink import screen_pointer
 from blink.resources import Resources
-from blink.screen_share import CAMERA_RESOLUTIONS, ScreenShareManager
+from blink.camera_formats import resolution_support
+from blink.screen_share import ScreenShareManager
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.video import VideoSurface
 
@@ -591,6 +592,7 @@ class TrackedVideoSurface(VideoSurface):
     """
 
     firstFrame = pyqtSignal(int, int)
+    frameSizeChanged = pyqtSignal(int, int)    # a later frame of another size than the one before
 
     def __init__(self, parent=None, framerate=None):
         super(TrackedVideoSurface, self).__init__(parent, framerate=framerate)
@@ -615,6 +617,9 @@ class TrackedVideoSurface(VideoSurface):
         if self.frame_count == 1:
             self.frame_size = (frame.width, frame.height)
             self.firstFrame.emit(frame.width, frame.height)
+        elif self.frame_size != (frame.width, frame.height):
+            self.frame_size = (frame.width, frame.height)
+            self.frameSizeChanged.emit(frame.width, frame.height)
 
 
 def local_is_screen():
@@ -667,14 +672,10 @@ class LocalVideoView(TrackedVideoSurface):
 
     @property
     def camera_aspect(self):
-        producer = self.producer
-        try:
-            width, height = producer.framesize
-        except (AttributeError, TypeError, ValueError):
+        size = picture_size(self.producer)      # the remote picture too, when swapped
+        if size is None:
             return 16 / 9
-        if width < 16 or height < 16:
-            return 16 / 9
-        aspect = width / height
+        aspect = size[0] / size[1]
         return aspect if MY_VIDEO_MIN_ASPECT <= aspect <= MY_VIDEO_MAX_ASPECT else 16 / 9
 
     @staticmethod
@@ -916,6 +917,51 @@ class RemoteVideoView(TrackedVideoSurface):
             self.doubleClicked.emit()
 
 
+# The size of the remote picture
+
+# Until the first keyframe is decoded a remote stream reports the decoder's
+# starting format, a square derived from the negotiated level's max-fs
+# (656x656 for H.264 level 3.0), not the picture: sizing the window to it
+# makes it shrink and grow again. The real size is recorded here once the
+# decoder reports it, and until then the picture is assumed to be 16:9.
+
+_decoded_sizes = {}     # id(producer) -> (video stream, producer, (width, height))
+
+
+def _record_decoded_size(stream):
+    producer = getattr(stream, 'producer', None)
+    if producer is None:
+        return False
+    try:
+        width, height = producer.framesize
+    except Exception:
+        return False
+    if width < 16 or height < 16:
+        return False
+    _decoded_sizes[id(producer)] = (stream, producer, (width, height))
+    return True
+
+
+def _forget_decoded_sizes(blink_session):
+    for key, (stream, producer, size) in list(_decoded_sizes.items()):
+        if getattr(stream, 'blink_session', None) is blink_session:
+            del _decoded_sizes[key]
+
+
+def picture_size(producer):
+    """(width, height) of what a producer shows, None while not known."""
+    if producer is None:
+        return None
+    if type(producer).__name__ == 'RemoteVideoStream':
+        entry = _decoded_sizes.get(id(producer))
+        return entry[2] if entry is not None and entry[1] is producer else None
+    try:
+        width, height = producer.framesize
+    except Exception:
+        return None
+    return (width, height) if width >= 16 and height >= 16 else None
+
+
 # The video docked in the main window
 
 DOCKED_MIN_HEIGHT = 120
@@ -947,12 +993,8 @@ class DockedVideoPanel(QWidget):
         self.my_video_view.firstFrame.connect(lambda width, height: self.my_video_view.layout_in_parent())
 
     def height_for_width(self, width):
-        producer = self.video_view.producer
-        try:
-            frame_width, frame_height = producer.framesize
-            aspect = frame_width / frame_height if frame_width >= 16 and frame_height >= 16 else 16 / 9
-        except (AttributeError, TypeError, ValueError, ZeroDivisionError):
-            aspect = 16 / 9
+        size = picture_size(self.video_view.producer)
+        aspect = size[0] / size[1] if size is not None else 16 / 9
         return int(max(DOCKED_MIN_HEIGHT, min(DOCKED_MAX_HEIGHT, width / aspect)))
 
     def set_producers(self, remote, local):
@@ -1154,6 +1196,8 @@ class VideoWindow(QWidget):
 
         self.video_view.firstFrame.connect(self._SH_MainViewFirstFrame)
         self.my_video_view.firstFrame.connect(self._SH_ThumbnailFirstFrame)
+        self.video_view.frameSizeChanged.connect(lambda width, height: self._SH_FrameSizeChanged('main view', width, height))
+        self.my_video_view.frameSizeChanged.connect(lambda width, height: self._SH_FrameSizeChanged('thumbnail', width, height))
 
         self._update_title()
         self.update_mute_button()
@@ -1182,14 +1226,8 @@ class VideoWindow(QWidget):
     def video_aspect(self):
         if self.aspect_ratio is not None:
             return self.aspect_ratio
-        producer = self._remote_producer if not self.swapped else None
-        try:
-            width, height = producer.framesize
-            if width >= 16 and height >= 16:
-                return width / height
-        except (AttributeError, TypeError, ValueError):
-            pass
-        return 16 / 9
+        size = picture_size(self._remote_producer if not self.swapped else None)
+        return size[0] / size[1] if size is not None else 16 / 9
 
     def size_hint_for_width(self, width):
         width = max(width, self.minimumWidth())
@@ -1466,14 +1504,24 @@ class VideoWindow(QWidget):
         main_window = QApplication.instance().main_window
         if session is None or session.items.audio is None:
             return
+        if not self._dock_keeping_state():
+            return
+        main_window.show_conversation_in_pane(session.contact, session.contact_uri)
+
+    def _dock_keeping_state(self):
         # how the window was, to be put back the same when the video comes out of the drawer
         self._undocked_state = dict(full_screen=self.isFullScreen(), maximized=self.isMaximized(), geometry=None)
         if self.isFullScreen():
             self.showNormal()
         self._undocked_state['geometry'] = self.saveGeometry()
-        if not self.dock():
+        return self.dock()
+
+    def _dock_for_screen_sharing(self):
+        session = self.blink_session
+        if session is None or self.ending or self.docked or session.items.audio is None:
             return
-        main_window.show_conversation_in_pane(session.contact, session.contact_uri)
+        if self._dock_keeping_state():
+            self.log('Sharing the screen: video moved under the call in the main window')
 
     _undocked_state = None
     _watching_message_pane = False
@@ -1663,11 +1711,15 @@ class VideoWindow(QWidget):
         resolution_group = QActionGroup(resolution_menu)
         sharing = manager.sharing
         current_resolution = str(SIPSimpleSettings().video.resolution)
-        for size, label, bitrate in CAMERA_RESOLUTIONS:
-            action = resolution_menu.addAction('%s (%s)' % (label, size))
+        try:
+            camera_name = SIPApplication.video_device.real_name
+        except AttributeError:
+            camera_name = SIPSimpleSettings().video.device
+        for size, label, bitrate, fps in resolution_support(camera_name):
+            action = resolution_menu.addAction('%s (%s)' % (label, size) if not fps else '%s (%s, %d fps)' % (label, size, round(fps)))
             action.setCheckable(True)
             action.setChecked(str(size) == current_resolution and not sharing)
-            action.setEnabled(not sharing)
+            action.setEnabled(not sharing and fps != 0)     # 0: the camera does not deliver it
             action.triggered.connect(lambda checked, size=size, label=label: self.set_camera_resolution(size, label))
             resolution_group.addAction(action)
         if sharing:
@@ -1899,6 +1951,10 @@ class VideoWindow(QWidget):
             self._remote_video_arrived()
         self.screenshot_button.setEnabled(True)
 
+    def _SH_FrameSizeChanged(self, view, width, height):
+        if self.blink_session is not None:
+            self.log('Frame size in the %s is now %dx%d' % (view, width, height))
+
     def _SH_ThumbnailFirstFrame(self, width, height):
         if self.blink_session is None:
             return
@@ -2090,12 +2146,30 @@ class VideoWindow(QWidget):
             self.update_mute_button()
 
     def _NH_VideoStreamRemoteFormatDidChange(self, notification):
-        if getattr(notification.sender, 'blink_session', None) is self.blink_session and self.aspect_ratio is None:
+        if getattr(notification.sender, 'blink_session', None) is not self.blink_session:
+            return
+        if _record_decoded_size(notification.sender):
+            self.log('Remote picture size: %dx%d' % picture_size(notification.sender.producer))
+        if self.aspect_ratio is None:
             self._fit_to_aspect()
 
     def _NH_VideoStreamReceivedKeyFrame(self, notification):
-        if getattr(notification.sender, 'blink_session', None) is self.blink_session:
-            self._remote_video_arrived()
+        stream = notification.sender
+        if getattr(stream, 'blink_session', None) is not self.blink_session:
+            return
+        self._remote_video_arrived()
+        if picture_size(getattr(stream, 'producer', None)) is None:
+            # a picture of the decoder's starting size brings no format change:
+            # what it reports once the keyframe is decoded is the picture
+            QTimer.singleShot(1000, lambda: self._keyframe_size_check(stream))
+
+    def _keyframe_size_check(self, stream):
+        if self.blink_session is None or picture_size(getattr(stream, 'producer', None)) is not None:
+            return
+        if _record_decoded_size(stream):
+            self.log('Remote picture size: %dx%d' % picture_size(stream.producer))
+            if self.aspect_ratio is None:
+                self._fit_to_aspect()
 
     def _NH_VideoDeviceDidChangeCamera(self, notification):
         new_camera = notification.data.new_camera
@@ -2106,9 +2180,10 @@ class VideoWindow(QWidget):
         on_screen = local_is_screen()
         started_sharing = on_screen and not self.local_was_screen
         self.local_was_screen = on_screen
-        if started_sharing and self.isVisible() and not self.isMinimized():
-            # out of the way of what is being shared
-            self.showMinimized()
+        if started_sharing and self.isVisible():
+            # out of the way of what is being shared: into the drawer under the call, as for
+            # the message pane (once this camera change is through)
+            QTimer.singleShot(0, self._dock_for_screen_sharing)
         mirror = not on_screen
         if not self.connected:
             self.video_view.mirror = mirror
@@ -2203,6 +2278,7 @@ class VideoWindowManager(object):
         window.show_controls()
 
     def _SH_WindowClosed(self, blink_session):
+        _forget_decoded_sizes(blink_session)
         window = self.windows.get(blink_session)
         if window is not None and window.blink_session is None:
             del self.windows[blink_session]

@@ -8,7 +8,7 @@ from PyQt6.QtCore import QMetaObject, QPoint, QRect, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (QColor, QCursor, QIcon, QImage, QPainter, QPixmap,
                          QTransform)
 from PyQt6.QtWidgets import QWidget
-from sipsimple.core import FrameBufferVideoRenderer, VideoCamera
+from sipsimple.core import FrameBufferVideoRenderer, SIPCoreError, VideoCamera
 
 from blink import video_frames
 from blink.resources import Resources
@@ -95,17 +95,32 @@ class VideoSurface(QWidget):
             self._subscription = None
         if producer is not None and not isinstance(producer, VideoCamera):
             if self._renderer is not None and self._renderer.producer is not None:
-                self._renderer.producer = None
+                self._set_renderer_producer(None)
             self._subscription = video_frames.subscribe(producer, self._handle_frame)
             self._producer = producer if self._subscription is not None else None
         else:
             if producer is not None and self._renderer is None:
                 self._renderer = FrameBufferVideoRenderer(self._handle_frame)
             if self._renderer is not None:
-                self._renderer.producer = producer
+                self._set_renderer_producer(producer)
             self._producer = producer
         if self._clock is not None and self._producer is not None:
             self._clock.start()
+
+    def _set_renderer_producer(self, producer):
+        try:
+            self._renderer.producer = producer
+        except SIPCoreError:
+            # the camera it was attached to is closed already (the device was
+            # switched): that renderer is stuck on it, start over with a new one
+            try:
+                self._renderer.close()
+            except SIPCoreError:
+                pass
+            self._renderer = None
+            if producer is not None:
+                self._renderer = FrameBufferVideoRenderer(self._handle_frame)
+                self._renderer.producer = producer
 
     producer = property(_get_producer, _set_producer)
     del _get_producer, _set_producer
@@ -131,7 +146,10 @@ class VideoSurface(QWidget):
             self._subscription.release()
             self._subscription = None
         if self._renderer is not None:
-            self._renderer.close()
+            try:
+                self._renderer.close()
+            except SIPCoreError:    # its camera is closed already
+                pass
             self._renderer = None
         self._producer = None
 
