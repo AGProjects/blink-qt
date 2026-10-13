@@ -879,6 +879,8 @@ class MainWindow(base_class, ui_class):
     def _AH_GeneratePGPkeyActionTriggered(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() else None
+        if account is None:
+            return
         title = translate('main_window', "Generate new private key")
         if account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
             message = translate('main_window', "You should generate a new private key for %s only if one of your devices have been compromised. Do you want to generate a new private key?") % (account.id)
@@ -1862,19 +1864,18 @@ class MainWindow(base_class, ui_class):
                 self._update_pgp_key_actions()
 
 
-    # domains whose SIP servers present the certificate of another domain: the TLS name an
-    # account of the domain gets when it has none (added, or loaded at start)
-    tls_name_exceptions = {'sylk.link': 'sip2sip.info'}
-
     def _NH_SIPAccountManagerDidAddAccount(self, notification):
         account = notification.data.account
 
-        if account is not BonjourAccount() and not account.sip.tls_name:
-            tls_name = self.tls_name_exceptions.get(account.id.domain.lower())
-            if tls_name:
-                account.sip.tls_name = tls_name
-                account.save()
-                ActivityLog().info(f'[accounts] TLS name of {account.id} set to {tls_name}, the certificate of {account.id.domain} servers')
+        # an account made elsewhere without the TLS name of its domain's servers (accounts.py sets it
+        # before the account starts): it is already registering with the domain's name, so again
+        from blink.accounts import apply_tls_name_exception
+        tls_name = apply_tls_name_exception(account)
+        if tls_name:
+            account.save()
+            ActivityLog().info(f'[accounts] TLS name of {account.id} set to {tls_name}, the certificate of {account.id.domain} servers')
+            if account.enabled and account.sip.register:
+                account.reregister()
 
         action = self.accounts_menu.addAction(account.id if account is not BonjourAccount() else 'Bonjour')
         action.setEnabled(True if account is not BonjourAccount() else BonjourAccount.mdns_available)
