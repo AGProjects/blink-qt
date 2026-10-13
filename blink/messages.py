@@ -105,7 +105,15 @@ class GeneratePGPKeyRequest(QObject):
         self.dialog.key_maybe_present_label.setText(replaced1)
         self.dialog.key_present_label.setText(replaced2)
 
-        if scenario == 1:
+        if scenario == 2:
+            # the server keeps a public key, nothing on this device nor in the addressbook: another device has it
+            self.dialog.key_maybe_present_label.setText(translate('generate_pgp_key_dialog',
+                'There is no private key for %s on this computer and no backup of it on the server, but the server '
+                'keeps its public key: the private key exists on another device where you use this account.\n\n'
+                "Choose 'Export private key' on that device to import it here.") % uri)
+            self.dialog.key_maybe_present_label.show()
+            self.dialog.key_present_label.hide()
+        elif scenario == 1:
             self.dialog.key_maybe_present_label.show()
             self.dialog.key_present_label.hide()
         else:
@@ -1721,6 +1729,8 @@ class MessageManager(object, metaclass=Singleton):
         if account.id in declined:
             return      # asked already this run and the user said no
         ActivityLog().info(f'[pgp] Not generating a PGP key for account {account.id} without asking: {reason}')
+        if KeyEscrowManager().server_key.get(account.id) == 'present' and not key_escrow.self_escrow_records(account):
+            scenario = 2        # on another device: say so
         self._show_generate_dialog(account, scenario, session)
 
     def _generate_keys(self, account, session=None):
@@ -2677,18 +2687,26 @@ class MessageManager(object, metaclass=Singleton):
         if account is None:
             return
 
-        log.info(f'Generate a new private key for {account.id}')
+        """The user chose Generate private key: the current key (if any) is kept aside as
+        -<timestamp>-old, and a new one is made at once."""
         timestamp = datetime.now().strftime('%Y%m%d%H%M')
         settings = SIPSimpleSettings()
         directory = os.path.join(settings.chat.keys_directory.normalized, 'private')
         filename = os.path.join(directory, account.id)
-        os.rename(f'{filename}.privkey', f'{filename}-{timestamp}-old.privkey')
-        os.rename(f'{filename}.pubkey', f'{filename}-{timestamp}-old.pubkey')
-
+        archived = False
+        for extension in ('privkey', 'pubkey'):
+            if os.path.exists(f'{filename}.{extension}'):
+                os.rename(f'{filename}.{extension}', f'{filename}-{timestamp}-old.{extension}')
+                archived = True
         account.sms.public_key = None
         account.sms.private_key = None
         account.save()
-        log.debug(f'Current key deleted for {account.id}')
+        ActivityLog().info(f'[pgp] Generating a new PGP key for account {account.id}, as the user chose from the menu'
+                           + (f' (the current key kept as {account.id}-{timestamp}-old)' if archived else ' (none on this device)'))
+        for request in list(self.pgp_requests[account, GeneratePGPKeyRequest]):
+            request.dialog.hide()
+            self.pgp_requests.remove(request)
+        self._generate_keys(account)
 
     def export_private_key(self, account):
         if account is None:
@@ -3119,6 +3137,11 @@ class KeyEscrowManager(object, metaclass=Singleton):
             self.when_answered(account, lambda: self.log_key_status(account))
         except Exception as e:
             ActivityLog().exception(f'[pgp] Checking the private key of {account.id} failed: {e!r}')
+        if account is not BonjourAccount() and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
+            # no key here: decided at start, not when the first encrypted message arrives. Generated
+            # silently when nobody has one; otherwise the user is told to export it from the device
+            # that has it (or to generate one, having lost them all)
+            MessageManager()._offer_key_generation(account, 1)
 
     def server_public_key_received(self, account, data):
         if isinstance(data, (bytes, bytearray)):

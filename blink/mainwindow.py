@@ -879,8 +879,17 @@ class MainWindow(base_class, ui_class):
     def _AH_GeneratePGPkeyActionTriggered(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() else None
+        if account is None:
+            return
         title = translate('main_window', "Generate new private key")
-        message = translate('main_window', "You should generate a new private key for %s only if one of your devices have been compromised. Do you want to generate a new private key?") % (account.id)
+        if account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+            message = translate('main_window', "You should generate a new private key for %s only if one of your devices have been compromised. Do you want to generate a new private key?") % (account.id)
+        else:
+            message = translate('main_window', "There is no private key for %s on this computer.\n\n"
+                                "If you use this account on another device, choose 'Export private key' there instead. "
+                                "Generate a new private key only if you lost access to all your devices: messages "
+                                "encrypted to the old key cannot be read with the new one.\n\n"
+                                "Do you want to generate a new private key?") % (account.id)
         if QMessageBox.critical(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             MessageManager().generate_private_key(account)
 
@@ -1362,14 +1371,15 @@ class MainWindow(base_class, ui_class):
 
     def _update_pgp_key_actions(self):
         """Export and Generate private key: for the selected account when it uses PGP over
-        SylkServer and holds a key. PGP messaging works only with SylkServer (key lookup, escrow,
-        journal) and with Bonjour, whose key is made on its own and is not exported."""
+        SylkServer. PGP messaging works only with SylkServer (key lookup, escrow, journal) and with
+        Bonjour, whose key is made on its own and is not exported. Export needs a key; Generate does
+        not -- with every other device lost it is the only way to go on."""
         from blink.sylk_discovery import has_sylkserver
         account = AccountManager().default_account
-        usable = (account is not None and account is not BonjourAccount() and account.sms.enable_pgp and has_sylkserver(account)
-                  and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized))
-        self.export_pgp_key_action.setEnabled(usable)
-        self.generate_pgp_key.setEnabled(usable)
+        pgp = account is not None and account is not BonjourAccount() and account.sms.enable_pgp and has_sylkserver(account)
+        has_key = pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)
+        self.export_pgp_key_action.setEnabled(has_key)
+        self.generate_pgp_key.setEnabled(pgp)
 
     def _SH_IdentityCurrentIndexChanged(self, index):
         self._update_call_me_action()
