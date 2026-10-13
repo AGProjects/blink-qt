@@ -15,7 +15,7 @@ from collections import Counter, OrderedDict, deque
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QStyle, QDialog
+from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QStyle, QDialog, QMessageBox
 
 from pgpy import PGPMessage
 from pgpy.errors import PGPEncryptionError, PGPDecryptionError
@@ -1649,6 +1649,7 @@ class MessageManager(object, metaclass=Singleton):
         request.account.save()
         ActivityLog().info(f'[pgp] Imported the PGP private key of account {request.account.id} from another device')
         call_in_gui_thread(self._keys_installed, request.account)
+        call_in_gui_thread(KeyEscrowManager().key_imported, request.account)
 
     def _keys_installed(self, account):
         """A keypair was adopted for this account (imported, or restored from the escrow):
@@ -3030,6 +3031,9 @@ class KeyEscrowManager(object, metaclass=Singleton):
       with the current password -- but only once the server has accepted that
       password: a registration succeeded with it. A password merely typed into the
       preferences may be a typo, and an escrow locked with it opens nowhere.
+    - after a key is imported from another device (key_imported): repair and the
+      password check at once, not on some later reload; an escrow of ANOTHER key is
+      replaced only when the user says so, since it is that key's only server copy.
     Every other difference between the local key and an escrow is the user's call.
     Nothing written here is announced to the other devices: it is this device
     catching up with the document it was handed.
@@ -3068,6 +3072,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.accepted_passwords = {}    # account id -> the password a registration last succeeded with
         self.password_changed = set()   # accounts whose password changed and has not been accepted yet
         self.password_checked = {}      # account id -> the escrow and password last checked (escrow_password_check)
+        self.imported = set()           # accounts whose imported key has not been compared with the escrow yet
 
     def start(self):
         if not self._started:
@@ -3216,7 +3221,75 @@ class KeyEscrowManager(object, metaclass=Singleton):
                 self.check_password(account)
             except Exception as e:
                 ActivityLog().exception(f'[pgp] Key escrow password check failed for {account.id}: {e!r}')
+        try:
+            self._escrow_imported_key(account)      # may ask: outside the quiet stretch
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Key escrow of the imported key of {account.id} failed: {e!r}')
         self._release(account)
+
+    # A key imported from another device goes onto our own contact at once
+
+    def key_imported(self, account):
+        if not isinstance(account, Account) or not account.xcap.enabled or not MessageManager._pgp_messaging_possible(account):
+            return      # no addressbook on the server to keep a backup in
+        self.imported.add(account.id)
+        self.repaired.discard(account.id)
+        self.password_checked.pop(account.id, None)
+        self._escrow_imported_key(account)
+
+    def _escrow_imported_key(self, account):
+        if account.id not in self.imported:
+            return
+        if key_escrow._resource_lists_element(account) is None:
+            ActivityLog().info(f'[pgp] Key escrow: the addressbook of {account.id} has not been fetched yet, '
+                               f'the imported key is saved on the server once it is')
+            return
+        self.imported.discard(account.id)
+        from blink.contacts import AddressbookNotifier
+        foreign = key_escrow.foreign_escrows(account)
+        if not foreign:
+            # none, or the same key: write what is missing, re-encrypt what does not open
+            with AddressbookNotifier().quiet():
+                self.repair(account)
+                self.check_password(account)
+            return
+
+        from blink.pgp_keyids import key_fingerprint
+        contact_id, record = foreign[0]
+        old = key_fingerprint(record.get('public_key'))
+        try:
+            with open(account.sms.public_key.normalized, 'rb') as f:
+                new = key_fingerprint(f.read())
+        except (OSError, AttributeError):
+            new = None
+        old_id = old[-16:].upper() if old else translate('pgp_key_escrow', 'unknown')
+        new_id = new[-16:].upper() if new else translate('pgp_key_escrow', 'unknown')
+        ActivityLog().info(f'[pgp] Key escrow: contact {contact_id} of {account.id} keeps a backup of key {old_id}, '
+                           f'saved {record.get("timestamp", "?")} by "{record.get("device", "?")}", not of the imported key {new_id}: asking')
+
+        main_window = getattr(QApplication.instance(), 'main_window', None)
+        box = QMessageBox(QMessageBox.Icon.Question, translate('pgp_key_escrow', 'Replace PGP key backup'),
+                          translate('pgp_key_escrow', 'The server keeps a backup of another PGP key for %s.\n\n'
+                                                      'Key on the server: %s, saved %s by %s\n'
+                                                      'Imported key: %s\n\n'
+                                                      'Replace the backup with the imported key? The key on the server '
+                                                      'can then no longer be restored on a new device, and messages '
+                                                      'encrypted to it cannot be read there.')
+                          % (account.id, old_id, record.get('timestamp', '?'), record.get('device', '?'), new_id),
+                          parent=main_window)
+        replace_button = box.addButton(translate('pgp_key_escrow', 'Replace'), QMessageBox.ButtonRole.AcceptRole)
+        keep_button = box.addButton(translate('pgp_key_escrow', 'Keep'), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(keep_button)
+        box.exec()
+        if box.clickedButton() is not replace_button:
+            ActivityLog().info(f'[pgp] Key escrow: the user kept the backup of key {old_id} for {account.id}')
+            return
+        ActivityLog().info(f'[pgp] Key escrow: the user chose to replace the backup of key {old_id} for {account.id} with the imported key {new_id}')
+        # announced: the other devices learn of the new backup on their next reload
+        written, reason = key_escrow.write_self_keys(account, force=True)
+        if not written:
+            QMessageBox.warning(main_window, translate('pgp_key_escrow', 'Replace PGP key backup'),
+                                translate('pgp_key_escrow', 'The backup of %s was not replaced: %s') % (account.id, reason or ''))
 
     # The escrow is encrypted with the account password: when that changes, it is
     # encrypted again with the new one, once the server has accepted it

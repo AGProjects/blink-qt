@@ -53,7 +53,7 @@ __all__ = ['ADDRESSBOOK_NS', 'SIPSIMPLE_ATTRIBUTES_NS', 'BLINK_ATTRIBUTES_NS', '
            'read_self_keys', 'escrow_write_targets', 'escrow_write_blockers', 'escrow_write_action',
            'escrow_is_missing', 'escrow_record',
            'write_self_keys', 'install_keypair', 'restore_from_own_contact',
-           'escrow_password_check', 'reencrypt_escrow',
+           'escrow_password_check', 'reencrypt_escrow', 'foreign_escrows',
            'self_contact_report', 'log_self_contact']
 
 import datetime
@@ -533,6 +533,18 @@ def write_self_keys(account, force=False, accounts=None):
     logger.log_info('Key escrow: queued an escrow for %s on %d contact(s): %s'
                     % (account.id, len(written), ', '.join(written)))
     return written, None
+
+
+def foreign_escrows(account):
+    """[(contact id, record)] for the escrows on our own contacts of a key this device does
+    NOT hold, or [] (also when this device holds no key or its public key cannot be read)."""
+    try:
+        with open(_path(account.sms.public_key), 'rb') as fd:
+            ours = fd.read().decode('utf-8', 'replace').replace('\r', '').strip()
+    except (IOError, OSError, TypeError):
+        return []
+    return [(contact_id, record) for contact_id, _label, record in self_escrow_records(account)
+            if (record.get('public_key') or '').replace('\r', '').strip() != ours]
 
 
 def escrow_password_check(account):
