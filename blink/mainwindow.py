@@ -1794,6 +1794,17 @@ class MainWindow(base_class, ui_class):
                 settings.save()
         self.load_video_devices()
 
+    @staticmethod
+    def _check_device_action(group, device, kind):
+        """Tick the device's item in its menu. A device the menu does not list (set before the menu was
+        reloaded for a device that came or went, or the screen as camera, which the menu leaves out)
+        leaves the menu as it is: the menu is rebuilt when the device list changes."""
+        action = next((action for action in group.actions() if action.data() == device), None)
+        if action is None:
+            ActivityLog().info(f'[ui] The {kind} device is set to {device!r}, which the menu does not list (yet)')
+            return
+        action.setChecked(True)
+
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
         blink_settings = BlinkSettings()
@@ -1808,17 +1819,13 @@ class MainWindow(base_class, ui_class):
             if 'audio.auto_answer' in notification.data.modified:
                 self.auto_answer_action.setChecked(settings.audio.auto_answer)
             if 'audio.output_device' in notification.data.modified:
-                action = next(action for action in self.output_devices_group.actions() if action.data() == settings.audio.output_device)
-                action.setChecked(True)
+                self._check_device_action(self.output_devices_group, settings.audio.output_device, 'audio output')
             if 'audio.input_device' in notification.data.modified:
-                action = next(action for action in self.input_devices_group.actions() if action.data() == settings.audio.input_device)
-                action.setChecked(True)
+                self._check_device_action(self.input_devices_group, settings.audio.input_device, 'audio input')
             if 'audio.alert_device' in notification.data.modified:
-                action = next(action for action in self.alert_devices_group.actions() if action.data() == settings.audio.alert_device)
-                action.setChecked(True)
+                self._check_device_action(self.alert_devices_group, settings.audio.alert_device, 'alert')
             if 'video.device' in notification.data.modified:
-                action = next(action for action in self.video_devices_group.actions() if action.data() == settings.video.device)
-                action.setChecked(True)
+                self._check_device_action(self.video_devices_group, settings.video.device, 'video')
             if 'answering_machine.enabled' in notification.data.modified:
                 self.answering_machine_action.setChecked(settings.answering_machine.enabled)
             if 'sounds.play_message_alerts' in notification.data.modified:
