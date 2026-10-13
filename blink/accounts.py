@@ -38,6 +38,22 @@ from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, transl
 __all__ = ['AccountModel', 'ActiveAccountModel', 'AccountSelector', 'AddAccountDialog', 'ServerToolsAccountModel', 'ServerToolsWindow']
 
 
+
+# domains whose SIP servers present the certificate of another domain: the TLS name an account
+# of the domain gets when it has none. Set before the account is saved and starts, since the
+# first registration looks its routes up (with this name) as soon as the account is activated
+TLS_NAME_EXCEPTIONS = {'sylk.link': 'sip2sip.info'}
+
+
+def apply_tls_name_exception(account):
+    """Give the account the TLS name of its domain's servers, when it has none. Returns it, or None."""
+    if account is BonjourAccount() or account.sip.tls_name:
+        return None
+    tls_name = TLS_NAME_EXCEPTIONS.get(account.id.domain.lower())
+    if tls_name:
+        account.sip.tls_name = tls_name
+    return tls_name
+
 class IconDescriptor(object):
     def __init__(self, filename):
         self.filename = filename
@@ -453,7 +469,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
             account.auth.password = self.password
             if account.id.domain in ('sip2sip.info', 'sylk.link'):
                 account.server.settings_url = "https://blink.sipthor.net/settings.phtml"
-                account.tls_name = 'sip2sip.info'
+            apply_tls_name_exception(account)      # before it starts: its first registration looks it up
             account.save()
             account_manager = AccountManager()
             account_manager.default_account = account
@@ -561,6 +577,7 @@ class AddAccountDialog(base_class, ui_class, metaclass=QSingleton):
                 account.xcap.xcap_root = response_data['xcap_root']
                 account.server.conference_server = response_data['conference_server']
                 account.server.settings_url = response_data['settings_url']
+                apply_tls_name_exception(account)      # before it starts: its first registration looks it up
                 account.save()
                 account_manager.default_account = account
                 call_in_gui_thread(self.accept)
