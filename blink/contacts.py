@@ -5879,6 +5879,15 @@ class ContactSearchModel(QSortFilterProxyModel):
         self.setDynamicSortFilter(True)
         self.sort(0)
 
+    search_text = ''
+
+    def setFilterFixedString(self, text):
+        # kept as typed: Qt makes a fixed string an escaped regular expression (ag@sylk.link ->
+        # ag\@sylk\.link, Adrian Sylk -> Adrian\ Sylk), whose pattern then matched no address
+        # and no name searched with more than one word
+        self.search_text = text or ''
+        super(ContactSearchModel, self).setFilterFixedString(text)
+
     def flags(self, index):
         if index.isValid():
             return QSortFilterProxyModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsDragEnabled
@@ -5891,8 +5900,8 @@ class ContactSearchModel(QSortFilterProxyModel):
         item = source_index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Group) or not item.group.virtual:
             return False
-        search_tokens = self.filterRegularExpression().pattern().lower().split()
-        searched_item = ' '.join([item.name] + [uri.uri for uri in item.uris]).lower()  # should we only search in the username part of the uris? -Dan
+        search_tokens = [token.removeprefix('sips:').removeprefix('sip:') for token in self.search_text.lower().split()]
+        searched_item = ' '.join([str(item.name or '')] + [str(uri.uri) for uri in item.uris]).lower()
         return all(token in searched_item for token in search_tokens)
 
     def lessThan(self, left_index, right_index):
