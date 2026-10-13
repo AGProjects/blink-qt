@@ -267,40 +267,74 @@ class PointerOverlay(QWidget):
         painter.end()
 
 
-def _shared_qscreen(info):
+def _close(first, second, slack=2):
+    return abs(first[0] - second[0]) <= slack and abs(first[1] - second[1]) <= slack
+
+
+def _screen_sizes(screen):
+    """Logical and physical (device pixel) size of a QScreen."""
+    geometry = screen.geometry()
+    ratio = screen.devicePixelRatio() or 1
+    return (geometry.width(), geometry.height()), (round(geometry.width() * ratio), round(geometry.height() * ratio))
+
+
+def _shared_qscreen(info, why=None):
     """The QScreen the desktop's position/size of the shared monitor is, or
     a best guess. Under XWayland with scaling the desktop's logical
-    coordinates and Qt's can differ, so it goes from exact to loose."""
+    coordinates and Qt's can differ, so it goes from exact to loose: the
+    position, then the size (logical or in pixels, also the size of the
+    frames captured), then the shape, then the primary screen. why, a list,
+    gets how the screen was found."""
+    why = why if why is not None else []
     application = QApplication.instance()
     screens = application.screens() if application is not None else []
     if not screens:
         return None
     if len(screens) == 1:
+        why.append('the only screen')
         return screens[0]
-    position, size = info.get('position'), info.get('size')
+    position, size, source = info.get('position'), info.get('size'), info.get('source_size')
     if position is not None:
+        position = tuple(position)
         for screen in screens:
             geometry = screen.geometry()
-            if (geometry.x(), geometry.y()) == tuple(position):
+            if (geometry.x(), geometry.y()) == position:
+                why.append('position')
                 return screen
         for screen in screens:
             ratio = screen.devicePixelRatio() or 1
             geometry = screen.geometry()
-            if (round(geometry.x() * ratio), round(geometry.y() * ratio)) == tuple(position):
+            if _close((round(geometry.x() * ratio), round(geometry.y() * ratio)), position):
+                why.append('position in pixels')
                 return screen
-    if size is not None:
-        for screen in screens:
-            geometry = screen.geometry()
-            if (geometry.width(), geometry.height()) == tuple(size):
-                return screen
-        width, height = size
-        if width > 0 and height > 0:
-            aspect = width / height
-            same_shape = [screen for screen in screens if screen.geometry().height() and
-                          abs(screen.geometry().width() / screen.geometry().height() - aspect) < 0.01]
-            if len(same_shape) == 1:
-                return same_shape[0]
+    for name, wanted in (('size', size), ('captured size', source)):
+        if wanted is None:
+            continue
+        wanted = tuple(wanted)
+        matches = [screen for screen in screens if any(_close(sizes, wanted) for sizes in _screen_sizes(screen))]
+        if len(matches) == 1:
+            why.append(name)
+            return matches[0]
+    for name, wanted in (('shape', size), ('captured shape', source)):
+        if wanted is None or wanted[0] <= 0 or wanted[1] <= 0:
+            continue
+        aspect = wanted[0] / wanted[1]
+        same_shape = [screen for screen in screens if screen.geometry().height() and
+                      abs(screen.geometry().width() / screen.geometry().height() - aspect) < 0.01]
+        if len(same_shape) == 1:
+            why.append(name)
+            return same_shape[0]
+    why.append('no match, primary screen')
     return application.primaryScreen()
+
+
+def _describe_screens():
+    parts = []
+    for screen in QApplication.instance().screens():
+        geometry = screen.geometry()
+        logical, physical = _screen_sizes(screen)
+        parts.append('%s at %d,%d %dx%d (%dx%d px)' % (screen.name(), geometry.x(), geometry.y(), logical[0], logical[1], physical[0], physical[1]))
+    return ', '.join(parts)
 
 
 # The manager
@@ -314,6 +348,7 @@ class ScreenShareManager(object, metaclass=Singleton):
         self.capture_wanted = False         # asked the desktop for the screen, not on the wire yet
         self.device_before_share = None     # settings.video.device to put back
         self.device_at_call_start = None    # settings.video.device when the first of the current calls started
+        self.pointer_screen_logged = None   # the screen pointers were last drawn on, for the log
         self.saved_token = None
         self.unwanted_ready = False         # a picked screen nobody wants, seen at the last poll
         self.poll_timer = QTimer()
@@ -909,10 +944,16 @@ class ScreenShareManager(object, metaclass=Singleton):
         if not _local_on_screen():
             return
         info = screen_capture_info()
-        screen = _shared_qscreen(info)
+        why = []
+        screen = _shared_qscreen(info, why)
         if screen is None:
             log('no screen to draw the pointer on')
             return
+        decision = (screen.name(), tuple(info.get('position') or ()), tuple(info.get('size') or ()), tuple(info.get('source_size') or ()))
+        if decision != self.pointer_screen_logged:
+            self.pointer_screen_logged = decision
+            log('pointers go to screen %s (by %s); the desktop shares position=%s size=%s, captured %s; screens: %s' % (
+                screen.name(), why[-1] if why else '?', info.get('position'), info.get('size'), info.get('source_size'), _describe_screens()))
         frame_w, frame_h = -1, -1
         try:
             frame_w, frame_h = SIPApplication.video_device.producer.framesize
