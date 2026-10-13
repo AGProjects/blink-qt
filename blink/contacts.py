@@ -1419,6 +1419,11 @@ class MessagesGroupFiler(object, metaclass=Singleton):
     since (a contact taken out of Messages, deleted, moved). Its parties are
     collected and, once the journal import has finished, only those no contact
     of the addressbook has get a contact, in Messages, in one update.
+
+    The exception: a Messages group this run created (none existed, e.g. a
+    profile whose other devices never made one), or found empty, holds no decision of anybody's
+    to undo, so for the rest of the run history files the existing contacts of
+    its conversations into it too (not one in Deleted or Blocked).
     """
 
     settle_delay = 15  # seconds after the first XCAP reload
@@ -1428,6 +1433,8 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         self.pending = {}           # conversation key -> display name (or None), from live messages
         self.history_pending = {}   # the same from history (journal, conversations at start): missing contacts only
         self.importing = False      # a journal import is going on (BlinkJournalProgress)
+        self.group_created = False  # this run created the Messages group: history fills it with existing contacts too
+        self.reloaded_accounts = set()  # accounts whose addressbook has loaded this run
         self._started = False
 
     def start(self):
@@ -1453,8 +1460,17 @@ class MessagesGroupFiler(object, metaclass=Singleton):
             call_later(2, self._become_ready, 'no account uses XCAP')
 
     def _NH_XCAPManagerDidReloadData(self, notification):
+        account_id = getattr(getattr(notification.sender, 'account', None), 'id', None)
+        first = account_id not in self.reloaded_accounts
+        self.reloaded_accounts.add(account_id)
         if not self.ready:
             call_later(self.settle_delay, self._become_ready, 'the addressbook has loaded')
+        elif first:
+            # ready before this account was there (added, or enabled late): history is asked
+            # for enabled accounts only, so its conversations were not in the first pass
+            ActivityLog().info(f'[contacts] Addressbook of {account_id} loaded after the Messages group filing started: '
+                               f'its conversations are filed in {self.settle_delay} seconds')
+            call_later(self.settle_delay, self._request_conversations)
 
     def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
         for display_name, uri in notification.data.contacts:
@@ -1558,12 +1574,18 @@ class MessagesGroupFiler(object, metaclass=Singleton):
             try:
                 group = manager.get_group(MESSAGES_GROUP_ID)
                 new_group = False
+                if missing_only and not group.contacts and not self.group_created:
+                    # an empty Messages group holds no decision either (made by a client that never filled it)
+                    self.group_created = True
+                    activity.info('[contacts] The Messages group is empty: history files the existing contacts of its conversations into it')
             except KeyError:
                 group = addressbook.Group(id=MESSAGES_GROUP_ID)
                 group.name = MESSAGES_GROUP_NAME
                 group.position = None       # a new group goes to the top of the list
                 new_group = True
+                self.group_created = True
             members = set(group.contacts)
+            deleted_ids = deleted_contact_ids()
             for key, display_name in keys.items():
                 # a room is kept under its bridge domain: Sylk Mobile's videoconference.X
                 # spelling would not match it and create a duplicate that repair then merges
@@ -1581,6 +1603,15 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                     found, _found_uri = URIUtils.find_contact(key)
                     if found.type in ('addressbook', 'bonjour', 'google') or self._find_by_canonical(key, existing) is not None:
                         known += 1
+                        if not self.group_created:
+                            continue
+                        # a Messages group made this run: its existing contacts go in, as they are
+                        contact = found.settings if found.type == 'addressbook' else self._find_by_canonical(key, existing)
+                        if contact is None or contact.id in blocked_ids or contact.id in deleted_ids or contact in members:
+                            continue
+                        group.contacts.add(contact)
+                        members.add(contact)
+                        added.append(contact)
                         continue
                 contact = self._contact_for(key, display_name, existing, created)
                 if contact is None or contact.id in blocked_ids:
@@ -1594,7 +1625,8 @@ class MessagesGroupFiler(object, metaclass=Singleton):
             if new_group or added:
                 group.save()
         if missing_only:
-            activity.info(f'[contacts] History: {len(keys)} conversations, {known} with a contact in the addressbook (left as they are), '
+            activity.info(f'[contacts] History: {len(keys)} conversations, {known} with a contact in the addressbook '
+                          + ('(filed into the Messages group made this run, if not there yet), ' if self.group_created else '(left as they are), ') +
                           f'{len(created)} contacts created for the others' + (f', {len(skipped)} not fileable' if skipped else ''))
         if new_group:
             activity.info(f'[contacts] Created the Messages group ({MESSAGES_GROUP_ID})')
