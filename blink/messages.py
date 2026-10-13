@@ -3039,8 +3039,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
     The lookup is the usual sylk-api-pgp-key-lookup, to our own address. SylkServer
     answers it with 200 when it keeps a public key (the key follows as a
     text/pgp-public-key message) and 404 "No Public Key" when it keeps none.
-    Any other answer, including the 200 of an older SylkServer that always
-    answers 200, is not a "no".
+    Any other answer (an error, no answer in time) is not a "no".
     """
 
     answer_timeout = 15.0
@@ -3111,7 +3110,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         first = account.id not in self.server_public_keys
         self.server_public_keys[account.id] = data
         if first and self.server_key.get(account.id) != 'present':
-            self.server_key[account.id] = 'present'     # an answer older servers give only this way
+            self.server_key[account.id] = 'present'     # the key itself may arrive before the 200
 
     def log_key_status(self, account, waited=False):
         """Three lines: the key on this device, the escrow on our own XCAP contact and the
@@ -3169,7 +3168,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
                 server = 'no public key'
             elif state == 'present':
                 kept = self.server_public_keys.get(account.id)
-                server = compared(key_fingerprint(kept)) if kept else 'keeps a public key, or is an older SylkServer that does not say it does not (none received)'
+                server = compared(key_fingerprint(kept)) if kept else 'keeps a public key (not received)'
             elif state == 'unsupported':
                 server = f'not asked, {account.id.domain} has no SylkServer'
             else:
@@ -3330,7 +3329,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
             ActivityLog().info(f'[pgp] The server keeps no public key for {account.id}')
         elif code == 200:
             state = 'present'
-            ActivityLog().info(f'[pgp] The server keeps a public key for {account.id} (or is too old to say it does not)')
+            ActivityLog().info(f'[pgp] The server keeps a public key for {account.id}')
         else:
             state = 'failed'
             ActivityLog().info(f'[pgp] The server did not say whether it keeps a public key for {account.id}: {code or ""} {reason}'.rstrip())
