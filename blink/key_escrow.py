@@ -53,6 +53,7 @@ __all__ = ['ADDRESSBOOK_NS', 'SIPSIMPLE_ATTRIBUTES_NS', 'BLINK_ATTRIBUTES_NS', '
            'read_self_keys', 'escrow_write_targets', 'escrow_write_blockers', 'escrow_write_action',
            'escrow_is_missing', 'escrow_record',
            'write_self_keys', 'install_keypair', 'restore_from_own_contact',
+           'escrow_password_check', 'reencrypt_escrow',
            'self_contact_report', 'log_self_contact']
 
 import datetime
@@ -532,6 +533,75 @@ def write_self_keys(account, force=False, accounts=None):
     logger.log_info('Key escrow: queued an escrow for %s on %d contact(s): %s'
                     % (account.id, len(written), ', '.join(written)))
     return written, None
+
+
+def escrow_password_check(account):
+    """(contact ids, reason): the contacts whose escrow of OUR key does not open with the current
+    account password, or ([], why nothing can be said).
+
+    Only escrows of the key this device holds are judged. An escrow of another key is somebody
+    else's backup (escrow_write_action), and not being able to open it says nothing about our
+    password, so its presence stops the check rather than inviting a rewrite.
+    """
+    pgpy = _pgpy()
+    if pgpy is None:
+        return [], 'pgpy is not importable'
+    password = (getattr(getattr(account, 'auth', None), 'password', None) or '').strip()
+    if not password:
+        return [], 'no account password available'
+    if not _has_file(account.sms.private_key):
+        return [], 'this device holds no private key for %s' % account.id
+    try:
+        with open(_path(account.sms.public_key), 'rb') as fd:
+            ours = fd.read().decode('utf-8', 'replace').replace('\r', '').strip()
+    except (IOError, OSError, TypeError) as e:
+        return [], 'this device\'s public key could not be read (%s)' % e
+
+    records = self_escrow_records(account)
+    foreign = [contact_id for contact_id, _label, record in records
+               if (record.get('public_key') or '').replace('\r', '').strip() != ours]
+    if foreign:
+        return [], 'contact %s carries an escrow for a key this device does not hold' % foreign[0]
+
+    import warnings
+    stale = []
+    for contact_id, _label, record in records:
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                opened = pgpy.PGPMessage.from_blob((record.get('private_key') or '').encode()).decrypt(password).message
+        except Exception:
+            opened = None
+        if not opened:
+            stale.append(contact_id)
+    return stale, None
+
+
+def reencrypt_escrow(account, accounts=None):
+    """Write the escrow again, encrypted with the current account password, when an escrow of
+    our key does not open with it. The caller decides that the password is good enough to
+    encrypt with: the server has accepted it (a registration succeeded with it).
+
+    Returns (contact ids written, reason); nothing to do is ([], None).
+    """
+    logger = BlinkLogger()
+    stale, reason = escrow_password_check(account)
+    if reason:
+        logger.log_info('Key escrow: not re-encrypting for %s -- %s' % (account.id, reason))
+        return [], reason
+    if not stale:
+        return [], None
+    logger.log_info('Key escrow: the escrow of %s on %s does not open with the current account password, '
+                    're-encrypting it' % (account.id, ', '.join(str(contact_id) for contact_id in stale)))
+    # force only overrides "already saved": the blockers still refuse, and an escrow of a key we
+    # do not hold was ruled out above
+    written, reason = write_self_keys(account, force=True, accounts=accounts)
+    if written:
+        logger.log_info('Key escrow: re-encrypted the escrow of %s with the current account password on %d contact(s)'
+                        % (account.id, len(written)))
+    else:
+        logger.log_info('Key escrow: could not re-encrypt the escrow of %s -- %s' % (account.id, reason))
+    return written, reason
 
 
 def keys_directory():

@@ -3024,8 +3024,13 @@ class KeyEscrowManager(object, metaclass=Singleton):
     - repair: a local key and no escrow anywhere -> write one, once per session.
       With no contact carrying our own address there is nowhere to write it, so
       that contact is created first (as Sylk Mobile does), once per session.
-      The only automatic write: with nothing escrowed nobody's key is displaced;
-      every other difference between the local key and an escrow is the user's call.
+      With nothing escrowed nobody's key is displaced.
+    - re-encrypt: an escrow of OUR key that does not open with the account password
+      (changed here, on the web or on another device) is written again, encrypted
+      with the current password -- but only once the server has accepted that
+      password: a registration succeeded with it. A password merely typed into the
+      preferences may be a typo, and an escrow locked with it opens nowhere.
+    Every other difference between the local key and an escrow is the user's call.
     Nothing written here is announced to the other devices: it is this device
     catching up with the document it was handed.
 
@@ -3060,11 +3065,17 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.server_public_keys = {}    # account id -> the public key the server sent for us (armored)
         self._status_logged = set()
         self._status_asked = set()
+        self.accepted_passwords = {}    # account id -> the password a registration last succeeded with
+        self.password_changed = set()   # accounts whose password changed and has not been accepted yet
+        self.password_checked = {}      # account id -> the escrow and password last checked (escrow_password_check)
 
     def start(self):
         if not self._started:
             self._started = True
-            NotificationCenter().add_observer(self, name='XCAPManagerDidReloadData')
+            notification_center = NotificationCenter()
+            notification_center.add_observer(self, name='XCAPManagerDidReloadData')
+            notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
+            notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
             # started from MessageManager, made while SIPApplicationDidStart is being handled:
             # the accounts are loaded, but that notification will not reach us
             call_in_gui_thread(call_later, 2, self._log_key_status_of_all)
@@ -3201,7 +3212,67 @@ class KeyEscrowManager(object, metaclass=Singleton):
                 self.repair(account)
             except Exception as e:
                 ActivityLog().exception(f'[pgp] Key escrow repair failed for {account.id}: {e!r}')
+            try:
+                self.check_password(account)
+            except Exception as e:
+                ActivityLog().exception(f'[pgp] Key escrow password check failed for {account.id}: {e!r}')
         self._release(account)
+
+    # The escrow is encrypted with the account password: when that changes, it is
+    # encrypted again with the new one, once the server has accepted it
+
+    def _NH_CFGSettingsObjectDidChange(self, notification):
+        account = notification.sender
+        if not isinstance(account, Account) or 'auth.password' not in notification.data.modified:
+            return
+        self.accepted_passwords.pop(account.id, None)
+        if account.sms.enable_pgp and MessageManager._pgp_messaging_possible(account):
+            self.password_changed.add(account.id)
+            ActivityLog().info(f'[pgp] Key escrow: the password of {account.id} changed, the escrow is encrypted '
+                               f'with it once a registration succeeds with it')
+
+    def _NH_SIPAccountRegistrationDidSucceed(self, notification):
+        account = notification.sender
+        if not isinstance(account, Account):
+            return
+        password = (account.auth.password or '').strip()
+        if self.accepted_passwords.get(account.id) == password:
+            return      # a refresh: nothing new is known about the password
+        self.accepted_passwords[account.id] = password
+        if account.id in self.password_changed:
+            self.password_changed.discard(account.id)
+            ActivityLog().info(f'[pgp] Key escrow: the server accepted the new password of {account.id}')
+        from blink.contacts import AddressbookNotifier
+        try:
+            with AddressbookNotifier().quiet():
+                self.check_password(account)
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Key escrow password check failed for {account.id}: {e!r}')
+
+    def check_password(self, account):
+        """Re-encrypt the escrow of our key when it does not open with the account password,
+        and only with a password a registration has succeeded with. Each escrow and password
+        is checked once (decrypting is not free and reloads are frequent)."""
+        if not account.enabled or not account.sms.enable_pgp or not MessageManager._pgp_messaging_possible(account):
+            return
+        password = (account.auth.password or '').strip()
+        if not password or self.accepted_passwords.get(account.id) != password:
+            return      # not accepted by the server (yet): never encrypt the escrow with it
+        if key_escrow._resource_lists_element(account) is None:
+            return      # the addressbook has not been fetched yet; its reload checks again
+        if account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized):
+            return
+        import hashlib
+        records = key_escrow.self_escrow_records(account)
+        if not records:
+            return      # nothing escrowed: repair writes it, with this password
+        signature = (hashlib.sha256(password.encode()).hexdigest(),
+                     tuple(sorted((str(contact_id), str(record.get('timestamp')), len(record.get('private_key') or ''))
+                                  for contact_id, _label, record in records)))
+        if self.password_checked.get(account.id) == signature:
+            return
+        self.password_checked[account.id] = signature
+        key_escrow.reencrypt_escrow(account)
 
     def restore(self, account):
         if account.id in self.restore_done:
