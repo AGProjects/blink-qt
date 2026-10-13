@@ -93,6 +93,8 @@ class RTPStreamInfo(object, metaclass=ABCMeta):
         self.sample_rate = None
         self.local_address = None
         self.remote_address = None
+        self.local_port = None
+        self.remote_port = None
         self.local_rtp_candidate = None
         self.remote_rtp_candidate = None
         self.latency = deque(maxlen=self.dataset_size)
@@ -117,7 +119,9 @@ class RTPStreamInfo(object, metaclass=ABCMeta):
             self.sample_rate = stream.sample_rate
             self.local_address = stream.local_rtp_address
             self.remote_address = stream.remote_rtp_address
-            self.encryption = stream.encryption.type if stream.encryption.active else None
+            self.local_port = getattr(stream, 'local_rtp_port', None)
+            self.remote_port = getattr(stream, 'remote_rtp_port', None)
+            self.encryption =stream.encryption.type if stream.encryption.active else None
             self.encryption_cipher = stream.encryption.cipher if stream.encryption.active else None
             if self.encryption == 'ZRTP' and stream.encryption.zrtp and stream.encryption.zrtp.sas:
                 self.zrtp_sas = stream.encryption.zrtp.sas.decode()
@@ -1265,6 +1269,7 @@ class BlinkSession(BlinkSessionBase):
         stream_info.ice_status = 'succeeded'
         stream_info.local_rtp_candidate = notification.sender.local_rtp_candidate
         stream_info.remote_rtp_candidate = notification.sender.remote_rtp_candidate
+        stream_info.update(notification.sender)  # the selected pair may differ from the SDP address
         notification.center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'media'}))
 
     def _NH_RTPStreamICENegotiationDidFail(self, notification):

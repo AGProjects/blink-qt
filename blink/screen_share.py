@@ -313,6 +313,7 @@ class ScreenShareManager(object, metaclass=Singleton):
         self.overlay = None
         self.capture_wanted = False         # asked the desktop for the screen, not on the wire yet
         self.device_before_share = None     # settings.video.device to put back
+        self.device_at_call_start = None    # settings.video.device when the first of the current calls started
         self.saved_token = None
         self.unwanted_ready = False         # a picked screen nobody wants, seen at the last poll
         self.poll_timer = QTimer()
@@ -499,7 +500,32 @@ class ScreenShareManager(object, metaclass=Singleton):
     def _call_video_over(self):
         """A call or its video ended: the screen is not shared with nobody."""
         if self.sharing and not self._any_video_call():
-            self.stop_sharing()
+            if SP.is_screen_device(self.device_at_call_start) and not self.device_before_share:
+                # the call started on the screen: it stays the video device, only the capture ends
+                self.capture_wanted = False
+                reset_screen_capture()
+                for state in self.calls.values():
+                    state.awaiting_share = False
+            else:
+                self.stop_sharing()
+
+    def _calls_over(self):
+        """The last call ended: the screen is remembered as the video device
+        only when the call started with it, otherwise the camera comes back."""
+        start_device, self.device_at_call_start = self.device_at_call_start, None
+        if SP.is_screen_device(start_device):
+            return
+        if not SP.is_screen_device(SIPSimpleSettings().video.device) and not self.capture_wanted:
+            return
+        camera = self.device_before_share or QSettings().value(CAMERA_BEFORE_KEY, '') or start_device or 'system_default'
+        if SP.is_screen_device(camera):
+            camera = 'system_default'
+        self.capture_wanted = False
+        reset_screen_capture()
+        log('calls over, video back to %s' % camera)
+        _select_device(camera)
+        self.device_before_share = None
+        QSettings().remove(CAMERA_BEFORE_KEY)
 
     # the desktop's answer, the capture going on
 
@@ -577,6 +603,8 @@ class ScreenShareManager(object, metaclass=Singleton):
         settings.remove(CAMERA_BEFORE_KEY)
 
     def _NH_SIPSessionDidStart(self, session, data):
+        if not self.calls:
+            self.device_at_call_start = SIPSimpleSettings().video.device
         state = self._state(session)
         if self._eligible(session) and not state.capabilities_sent:
             state.capabilities_sent = True
@@ -592,6 +620,8 @@ class ScreenShareManager(object, metaclass=Singleton):
         if not self._anyone_sharing() and self.overlay is not None:
             self.overlay.hide()
         self._call_video_over()
+        if state is not None and not self.calls:
+            self._calls_over()
 
     _NH_SIPSessionDidFail = _NH_SIPSessionDidEnd
 

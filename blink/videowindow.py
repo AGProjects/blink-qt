@@ -1166,6 +1166,7 @@ class VideoWindow(QWidget):
         notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoStreamRemoteFormatDidChange')
         notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoStreamReceivedKeyFrame')
         notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoDeviceDidChangeCamera')
+        self.local_was_screen = local_is_screen()
         for name in SCREEN_SHARE_NOTIFICATIONS:
             notification_center.add_observer(ObserverWeakrefProxy(self), name=name)
 
@@ -2102,7 +2103,13 @@ class VideoWindow(QWidget):
         if self.docked:
             self._main_session_list()[1].video_camera_changed(new_camera)
             return
-        mirror = not local_is_screen()
+        on_screen = local_is_screen()
+        started_sharing = on_screen and not self.local_was_screen
+        self.local_was_screen = on_screen
+        if started_sharing and self.isVisible() and not self.isMinimized():
+            # out of the way of what is being shared
+            self.showMinimized()
+        mirror = not on_screen
         if not self.connected:
             self.video_view.mirror = mirror
             self.video_view.producer = new_camera
