@@ -149,9 +149,21 @@ class HistoryManager(object, metaclass=Singleton):
             self.calls = calls
             self.save()
         self._remove_account_keys(account)
+        self._remove_account_journal(account)
         # the db thread runs these after the removal above
         self.message_history.get_unread_messages()
         self.message_history.get_all_contacts()
+
+    @run_in_thread('file-io')
+    def _remove_account_journal(self, account):
+        # journal/<account>: the cursor kept outside the configuration, cached pages, first sync marker.
+        # A cursor left behind would be restored when the account is added again, and its journal --
+        # the history just removed -- would never be downloaded again
+        import shutil
+        directory = ApplicationData.get(f'journal/{account.id}')
+        if os.path.isdir(directory):
+            shutil.rmtree(directory, ignore_errors=True)
+            ActivityLog().info('[db] Removed the journal cursor and cached pages of %s' % account.id)
 
     @run_in_thread('file-io')
     def _remove_account_keys(self, account):

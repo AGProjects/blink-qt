@@ -879,8 +879,6 @@ class MainWindow(base_class, ui_class):
     def _AH_GeneratePGPkeyActionTriggered(self, checked):
         account = self.identity.itemData(self.identity.currentIndex()).account
         account = account if account is not BonjourAccount() else None
-        if account is None:
-            return
         title = translate('main_window', "Generate new private key")
         if account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
             message = translate('main_window', "You should generate a new private key for %s only if one of your devices have been compromised. Do you want to generate a new private key?") % (account.id)
