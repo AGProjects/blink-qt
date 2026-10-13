@@ -1389,11 +1389,21 @@ class MainWindow(base_class, ui_class):
         settings.save()
 
     def _SH_SearchBoxReturnPressed(self):
-        address = self.search_box.text()
-        if address:
-            contact, contact_uri = URIUtils.find_contact(address)
-            session_manager = SessionManager()
-            session_manager.create_session(contact, contact_uri, [StreamDescription('audio')])
+        """Enter in the search box opens a conversation in the message pane, as Enter on a
+        contact does (calls start from their own buttons): the selected result, else the
+        first one, else the typed address."""
+        address = self.search_box.text().strip()
+        if not address:
+            return
+        from blink.contacts import DELETED_GROUP_ID, start_contact_conversation
+        selected = self.search_list.selectionModel().selectedIndexes()
+        index = selected[0] if len(selected) == 1 else self.contact_search_model.index(0, 0)
+        item = index.data(Qt.ItemDataRole.UserRole) if index.isValid() else None
+        if isinstance(item, Contact) and item.uri is not None and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:
+            start_contact_conversation(item, item.uri)
+            return
+        contact, contact_uri = URIUtils.find_contact(address)
+        start_contact_conversation(contact, contact_uri)
 
     def _SH_SearchBoxTextChanged(self, text):
         self.contact_search_model.setFilterFixedString(text)
