@@ -119,6 +119,13 @@
       <number>6</number>
      </property>
      <item>
+      <widget class="QLabel" name="pgp_key_label">
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="button_box_spacer">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>

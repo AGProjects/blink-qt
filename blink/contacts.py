@@ -63,6 +63,7 @@ from blink.resources import ApplicationData, Resources, IconManager, themed_icon
 from blink.avatars import avatar_icon, circular_icon
 from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
+from blink.pgp_keyids import address_keys
 from blink.messages import MessageManager
 from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_fileable_address, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
@@ -7885,6 +7886,8 @@ class ContactEditorDialog(base_class, ui_class):
         self.accepted.connect(self._SH_Accepted)
         self.rejected.connect(self._SH_Rejected)
         self.rejected.connect(self.contact_uri_model.reset)
+        for signal in (self.contact_uri_model.dataChanged, self.contact_uri_model.rowsInserted, self.contact_uri_model.rowsRemoved, self.contact_uri_model.modelReset):
+            signal.connect(self._update_pgp_key_label)
 
     def setupUi(self, contact_editor):
         super(ContactEditorDialog, self).setupUi(contact_editor)
@@ -7894,6 +7897,9 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setItemData(3, translate('contact_editor', 'chat'))
         self.preferred_media.setItemData(4, translate('contact_editor', 'audio+chat'))
         self.preferred_media.hide()     # double-click always opens the conversation: nothing to prefer
+        self.pgp_key_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.pgp_key_label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
+        self.pgp_key_label.hide()
         self.addresses_table.verticalHeader().setDefaultSectionSize(URITypeComboBox().sizeHint().height())
         # room for 5 addresses, the rest scroll
         table = self.addresses_table
@@ -7938,7 +7944,24 @@ class ContactEditorDialog(base_class, ui_class):
         self._update_groups_button()
         self.accept_button.setText(translate('contact_editor', 'Ok'))
         self.accept_button.setEnabled(True)
+        self._update_pgp_key_label()
         self.show()
+
+    def _update_pgp_key_label(self, *args):
+        """The key ids of the public keys held for the addresses being edited, bottom left."""
+        keys = address_keys(item.uri for item in self.contact_uri_model.items if item.uri)
+        if not keys:
+            self.pgp_key_label.clear()
+            self.pgp_key_label.setToolTip('')
+            self.pgp_key_label.hide()
+            return
+        key_ids = list(dict.fromkeys(key_id for _, key_id, _, _ in keys))
+        if len(key_ids) == 1:
+            self.pgp_key_label.setText(translate('contact_editor', 'PGP key id: %s') % key_ids[0])
+        else:
+            self.pgp_key_label.setText(translate('contact_editor', 'PGP key ids: %s') % ', '.join(key_ids))
+        self.pgp_key_label.setToolTip('\n'.join(f'{address}: {fingerprint}' + (translate('contact_editor', ' (our key)') if own else '') for address, _, fingerprint, own in keys))
+        self.pgp_key_label.show()
 
     def _selectable_groups(self):
         """The addressbook groups the editor lists, in contact list order."""

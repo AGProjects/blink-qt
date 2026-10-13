@@ -14,9 +14,11 @@ It is cached and read again only when a key directory changes.
 
 describe(key_ids) turns ids into lines for people: 'ID (address)' or
 'ID (address, our key)' or 'ID (unknown key)'.
+
+address_keys(uris) gives the public keys Blink holds for a contact's addresses.
 """
 
-__all__ = ['encrypted_to', 'key_owners', 'describe', 'key_fingerprint']
+__all__ = ['encrypted_to', 'key_owners', 'describe', 'key_fingerprint', 'address_keys']
 
 import os
 import threading
@@ -128,3 +130,49 @@ def key_fingerprint(armored):
         return str(key.fingerprint).replace(' ', '')
     except Exception:
         return None
+
+
+def _address(uri):
+    """user@domain of a SIP URI or address text, the way key files are named, or None."""
+    address = str(uri or '').strip()
+    for scheme in ('sips:', 'sip:'):
+        if address.lower().startswith(scheme):
+            address = address[len(scheme):]
+            break
+    address = address.split(';', 1)[0].split('?', 1)[0]
+    user, at, domain = address.partition('@')
+    if not at or not user or not domain:
+        return None
+    return f'{user}@{domain.lower()}'.replace('/', '_')
+
+
+def address_keys(uris):
+    """[(address, key id, fingerprint, own)] for the addresses that have a public key on disk, in the given order."""
+    try:
+        directories = _directories()
+    except Exception:
+        return []
+    try:
+        import pgpy
+    except ImportError:
+        return []
+    keys = []
+    seen = set()
+    for uri in uris:
+        address = _address(uri)
+        if address is None or address in seen:
+            continue
+        seen.add(address)
+        for directory, own in reversed(directories):     # our own key first
+            filename = os.path.join(directory, address + '.pubkey')
+            if not os.path.isfile(filename):
+                continue
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')
+                    key, _ = pgpy.PGPKey.from_file(filename)
+            except Exception:
+                continue
+            keys.append((address, str(key.fingerprint.keyid).upper(), str(key.fingerprint).replace(' ', ''), own))
+            break
+    return keys
