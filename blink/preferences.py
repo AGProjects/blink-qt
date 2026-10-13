@@ -467,6 +467,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         for index, action in enumerate(action for action in self.toolbar.actions() if not action.isSeparator()):
             action.index = index
             self.section_group.addAction(action)
+        # the VNC screen sharing settings are obsolete: a screen is now shared as a video call
+        # (the page indexes above still count it, so the other sections keep their pages)
+        self.screen_sharing_action.setVisible(False)
 
         for index in range(self.idd_prefix_button.count()):
             text = self.idd_prefix_button.itemText(index)
