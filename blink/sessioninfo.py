@@ -3,6 +3,7 @@
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtGui import QColor, QPainter, QPalette, QPixmap
+from PyQt6.QtWidgets import QLabel, QSizePolicy
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
@@ -13,6 +14,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.resources import Resources
 from blink.util import run_in_gui_thread, translate
 from blink.widgets.graph import Graph
+from blink.widgets.labels import ElidedLabel
 
 
 __all__ = ['SessionInfoPanel']
@@ -64,12 +66,31 @@ class SessionInfoPanel(base_class, ui_class):
         for graph in (self.latency_graph, self.packet_loss_graph, self.traffic_graph):
             graph.installEventFilter(self)
 
+        # screen sharing is now a video call with the screen as camera, the MSRP screen row is obsolete
+        self.screen_title_label.hide()
+        self.screen_value_widget.hide()
+
         # the call tile above the panel already shows the duration
         self.duration_title_label.hide()
         self.duration_value_label.hide()
 
         self.audio_encryption_label.stream_type = 'audio'
         self.video_encryption_label.stream_type = 'video'
+
+        self.remote_agent_title_label.setText(translate('chat_window', 'Remote UA'))
+
+        self._add_rtp_path_rows()
+
+        # titles left aligned in a column as wide as the longest title, values take all the remaining width
+        layout = self.info_panel_container_layout
+        layout.setColumnStretch(0, 0)
+        layout.setColumnStretch(1, 1)
+        for index in range(layout.count()):
+            row, column, row_span, column_span = layout.getItemPosition(index)
+            widget = layout.itemAt(index).widget()
+            if column == 0 and column_span == 1 and isinstance(widget, QLabel):
+                widget.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                widget.setSizePolicy(QSizePolicy.Policy.Fixed, widget.sizePolicy().verticalPolicy())
 
         self._apply_settings(scale=True)
 
@@ -102,6 +123,73 @@ class SessionInfoPanel(base_class, ui_class):
     def close_panel(self):
         self.blink_session = None
         self.hide()
+
+    def _add_rtp_path_rows(self):
+        # one row under audio and one under video with the remote RTP address and the ICE candidate pair
+        layout = self.info_panel_container_layout
+        moved = []
+        for index in reversed(range(layout.count())):
+            row, column, row_span, column_span = layout.getItemPosition(index)
+            if row >= 7:
+                moved.append((layout.takeAt(index), row, column, row_span, column_span))
+        for item, row, column, row_span, column_span in moved:
+            layout.addItem(item, row + 1, column, row_span, column_span)  # video goes to 8, the free row 8 to 9
+        for stream_type, row in (('audio', 7), ('video', 9)):
+            title_label = QLabel(translate('chat_window', 'Audio RTP' if stream_type == 'audio' else 'Video RTP'), self.info_panel_container_widget)
+            title_label.setProperty('role', 'title')
+            value_label = ElidedLabel(self.info_panel_container_widget)
+            value_label.setProperty('role', 'value')
+            value_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            value_label.setIndent(0)
+            layout.addWidget(title_label, row, 0)
+            layout.addWidget(value_label, row, 1)
+            setattr(self, '%s_path_title_label' % stream_type, title_label)
+            setattr(self, '%s_path_value_label' % stream_type, value_label)
+
+    @staticmethod
+    def _format_address(address, port):
+        if address is None:
+            return None
+        address = '[%s]' % address if ':' in address else address
+        return '%s:%s' % (address, port) if port else address
+
+    def _update_rtp_path(self, blink_session, stream_type, stream_info):
+        title_label = getattr(self, '%s_path_title_label' % stream_type)
+        value_label = getattr(self, '%s_path_value_label' % stream_type)
+        remote = self._format_address(stream_info.remote_address, stream_info.remote_port)
+        visible = stream_type in blink_session.streams and remote is not None
+        title_label.setVisible(visible)
+        value_label.setVisible(visible)
+        if not visible:
+            return
+        local = self._format_address(stream_info.local_address, stream_info.local_port)
+        tooltip = [translate('chat_window', 'Local: %s') % local, translate('chat_window', 'Remote: %s') % remote]
+        if stream_info.ice_status == 'succeeded' and stream_info.local_rtp_candidate is not None and stream_info.remote_rtp_candidate is not None:
+            local_type = stream_info.local_rtp_candidate.type.lower()
+            remote_type = stream_info.remote_rtp_candidate.type.lower()
+            topology = 'ICE %s \u2194 %s' % (local_type, remote_type)
+            for name, candidate in ((translate('chat_window', 'Local candidate'), stream_info.local_rtp_candidate), (translate('chat_window', 'Remote candidate'), stream_info.remote_rtp_candidate)):
+                address = self._format_address(getattr(candidate, 'address', None), getattr(candidate, 'port', None))
+                tooltip.append('%s: %s%s' % (name, candidate.type.lower(), ' %s' % address if address else ''))
+        elif stream_info.ice_status == 'disabled':
+            topology = translate('chat_window', 'no ICE')
+        elif stream_info.ice_status == 'failed':
+            topology = translate('chat_window', 'ICE failed')
+        elif stream_info.ice_status is None:
+            topology = translate('chat_window', 'no ICE')
+        else:
+            topology = translate('chat_window', 'ICE %s') % stream_info.ice_status.replace('_', ' ')
+        value_label.setText('%s  %s' % (remote, topology))
+        value_label.setToolTip('\n'.join(tooltip))
+
+    @staticmethod
+    def _sum_traffic(first, second):
+        # samples are taken at the same time for both streams; a stream added later has fewer, so align at the end
+        first, second = list(first), list(second)
+        if len(first) < len(second):
+            first, second = second, first
+        offset = len(first) - len(second)
+        return first[:offset] + [a + b for a, b in zip(first[offset:], second)]
 
     # settings
     #
@@ -159,6 +247,8 @@ class SessionInfoPanel(base_class, ui_class):
         if 'media' in elements:
             self._update_rtp_stream(blink_session, audio_info, self.audio_value_label, self.audio_connection_label, self.audio_encryption_label)
             self._update_rtp_stream(blink_session, video_info, self.video_value_label, self.video_connection_label, self.video_encryption_label)
+            self._update_rtp_path(blink_session, 'audio', audio_info)
+            self._update_rtp_path(blink_session, 'video', video_info)
 
             if any(len(path) > 1 for path in (chat_info.full_local_path, chat_info.full_remote_path)):
                 self.chat_value_label.setText(translate('chat_window', "Using relay"))
@@ -207,8 +297,8 @@ class SessionInfoPanel(base_class, ui_class):
             self.video_latency_graph.data = video_info.latency
             self.audio_packet_loss_graph.data = audio_info.packet_loss
             self.video_packet_loss_graph.data = video_info.packet_loss
-            self.incoming_traffic_graph.data = audio_info.incoming_traffic
-            self.outgoing_traffic_graph.data = audio_info.outgoing_traffic
+            self.incoming_traffic_graph.data = self._sum_traffic(audio_info.incoming_traffic, video_info.incoming_traffic)
+            self.outgoing_traffic_graph.data = self._sum_traffic(audio_info.outgoing_traffic, video_info.outgoing_traffic)
             self.latency_graph.update()
             self.packet_loss_graph.update()
             self.traffic_graph.update()
