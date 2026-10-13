@@ -1900,6 +1900,9 @@ class MainWindow(base_class, ui_class):
         self.voicemail_menu.removeAction(action)
 
     def _NH_SIPAccountManagerDidChangeDefaultAccount(self, notification):
+        # an account added in this run becomes the default: its domain's SylkServer configuration
+        # may be cached already (no SylkServerConfigurationDidChange), so the PGP menu is set here
+        self._update_pgp_key_actions()
         if notification.data.account is None:
             self.enable_call_buttons(False)
         else:
