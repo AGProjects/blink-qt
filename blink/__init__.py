@@ -393,8 +393,13 @@ class Blink(QApplication, metaclass=QSingleton):
         except ImportError:
             activity.info('Using SIP SIMPLE SDK version %s' % sdk_version)
         else:
+            try:
+                from sipsimple.core import CORE_BUILD
+            except ImportError:
+                CORE_BUILD = None
+            core_version = '%s build %s' % (CORE_REVISION, CORE_BUILD) if CORE_BUILD is not None else CORE_REVISION
             pj_version = PJ_VERSION.decode() if isinstance(PJ_VERSION, bytes) else PJ_VERSION
-            activity.info('Using SIP SIMPLE SDK version %s, core version %s, PJSIP version %s (rev %s)' % (sdk_version, CORE_REVISION, pj_version, PJ_SVN_REVISION))
+            activity.info('Using SIP SIMPLE SDK version %s, core version %s, PJSIP version %s (rev %s)' % (sdk_version, core_version, pj_version, PJ_SVN_REVISION))
         activity.info('Data directory: %s' % ApplicationData.directory)
 
     def _log_media(self):
