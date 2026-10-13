@@ -359,6 +359,62 @@ def _contact_label(contact):
         return contact.id
 
 
+def own_account_uris():
+    """The addresses of our SIP accounts (Bonjour has no addressbook), lowercased, no scheme."""
+    try:
+        return {str(account.id).lower() for account in AccountManager().get_accounts() if isinstance(account, Account)}
+    except Exception:
+        return set()
+
+
+def _bare_uris(contact):
+    return {str(uri.uri).lower().removeprefix('sips:').removeprefix('sip:') for uri in contact.uris}
+
+
+def protected_own_contacts(contacts, soft=False):
+    """{contact id: [account ids]} for the contacts among these that are the last to carry
+    one of our account URIs.
+
+    Our own contact holds the PGP key escrow (blink.key_escrow) that a new device restores
+    the account's private key from, so at least one contact with each account URI must stay
+    in the addressbook. soft: the contacts in Deleted do not count as staying, they are one
+    Delete Permanently away from going.
+    """
+    accounts = own_account_uris()
+    if not accounts:
+        return {}
+    going = {contact.id for contact in contacts}
+    deleted = deleted_contact_ids() if soft else set()
+    staying = set()
+    for other in addressbook.AddressbookManager().get_contacts():
+        if other.id not in going and other.id not in deleted:
+            staying.update(_bare_uris(other))
+    protected = {}
+    for contact in contacts:
+        mine = sorted((_bare_uris(contact) & accounts) - staying)
+        if mine:
+            protected[contact.id] = mine
+    return protected
+
+
+def refuse_own_contacts(parent, contacts, soft=False):
+    """The contacts that may be deleted: our own last contacts are left out, and the user is
+    told why when there is a parent to tell it on."""
+    protected = protected_own_contacts(contacts, soft)
+    if not protected:
+        return contacts
+    refused = [contact for contact in contacts if contact.id in protected]
+    for contact in refused:
+        ActivityLog().info(f"[trash] Not deleting {_contact_label(contact)} ({contact.id}): it is the last contact with our address "
+                           f"{', '.join(protected[contact.id])} and keeps the backup of the PGP private key")
+    if parent is not None:
+        names = ', '.join(f"'{_contact_label(contact)}'" for contact in refused)
+        QMessageBox.information(parent, translate('contact_list', 'Own Contact'),
+                                translate('contact_list', '%s cannot be deleted: it is your own contact, the last one with your address, '
+                                          'and it keeps the backup of your private key that your other devices restore it from.') % names)
+    return [contact for contact in contacts if contact.id not in protected]
+
+
 def ask_about_shared_messages(parent, title, question, info, shared, warning=False):
     """Some addresses of the contacts being deleted are also listed by other contacts: their
     conversation is the other contacts' too. Returns None (cancelled), False (delete the
@@ -384,6 +440,7 @@ def ask_about_shared_messages(parent, title, question, info, shared, warning=Fal
 
 
 def confirm_soft_delete(parent, contacts):
+    contacts = refuse_own_contacts(parent, contacts, soft=True)
     if not contacts:
         return False
     names = [_contact_label(contact) for contact in contacts]
@@ -557,6 +614,7 @@ def deleted_contact_menu(menu, parent, contacts):
 
 
 def confirm_delete_permanently(parent, contacts):
+    contacts = refuse_own_contacts(parent, contacts)
     if not contacts:
         return False
     names = [_contact_label(contact) for contact in contacts]
@@ -681,6 +739,9 @@ class ContactTrash(object):
     def soft_delete(cls, contacts, shared_messages=False):
         """shared_messages: whether the conversations of addresses another contact lists too
         are hidden as well; by default they stay, they are the other contact's conversation."""
+        contacts = refuse_own_contacts(None, contacts, soft=True)     # whoever calls: our own last contact stays
+        if not contacts:
+            return
         spared = set() if shared_messages else set(cls.shared_keys(contacts))
         # in the file-io thread, as Block: the saves of Deleted and of every group the contact leaves
         # go to the server as one update. From the GUI thread each went on its own, and one could
@@ -776,6 +837,9 @@ class ContactTrash(object):
     def delete_permanently(cls, contacts, shared_messages=False):
         """shared_messages: whether the conversations of addresses another contact lists too
         are erased as well (here and on the other devices); by default they stay."""
+        contacts = refuse_own_contacts(None, contacts)      # whoever calls: our own last contact stays
+        if not contacts:
+            return
         from blink.history import HistoryManager
         history = HistoryManager().message_history
         going = {contact.id for contact in contacts}
