@@ -6,7 +6,8 @@ is a thumbnail in one of its corners and the call controls are a translucent
 segmented bar floating at the bottom, which fades out when the mouse rests.
 
 The bar, left to right: Mute, Camera (a menu: preview, swap, stop video, aspect
-ratio, then the cameras), Chat (opens the call in the MSRP sessions window),
+ratio, the resolution the camera is sent at (applied to the call at once),
+then the cameras), Chat (opens the call in the MSRP sessions window),
 Screenshot, Record, Full screen, Info (the call info panel in the main window)
 and End, last and in red. Hold is not on the bar (as on macOS) but is in the
 right-click menu. While the other party shares a screen and draws pointers on
@@ -45,7 +46,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog
 from blink import screen_pointer
 from blink.resources import Resources
-from blink.screen_share import ScreenShareManager
+from blink.screen_share import CAMERA_RESOLUTIONS, ScreenShareManager
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.video import VideoSurface
 
@@ -1655,6 +1656,23 @@ class VideoWindow(QWidget):
             action.triggered.connect(lambda checked, ratio=ratio: self.set_aspect_ratio(ratio))
             group.addAction(action)
 
+        # what the camera is sent at, applied to this call at once
+        manager = ScreenShareManager()
+        resolution_menu = menu.addMenu(translate('video_window', 'Resolution'))
+        resolution_group = QActionGroup(resolution_menu)
+        sharing = manager.sharing
+        current_resolution = str(SIPSimpleSettings().video.resolution)
+        for size, label, bitrate in CAMERA_RESOLUTIONS:
+            action = resolution_menu.addAction('%s (%s)' % (label, size))
+            action.setCheckable(True)
+            action.setChecked(str(size) == current_resolution and not sharing)
+            action.setEnabled(not sharing)
+            action.triggered.connect(lambda checked, size=size, label=label: self.set_camera_resolution(size, label))
+            resolution_group.addAction(action)
+        if sharing:
+            resolution_menu.setToolTip(translate('video_window', 'A shared screen is always sent at 720p'))
+            resolution_menu.setTitle(translate('video_window', 'Resolution (screen: 720p)'))
+
         menu.addSeparator()
         try:
             cameras = [device for device in SIPApplication.engine.video_devices if device not in (None, 'system_default')]
@@ -1768,6 +1786,12 @@ class VideoWindow(QWidget):
     def _peer_name(self):
         contact = self.blink_session.contact if self.blink_session is not None else None
         return contact.name if contact is not None else ''
+
+    def set_camera_resolution(self, size, label):
+        if str(SIPSimpleSettings().video.resolution) == str(size):
+            return
+        if ScreenShareManager().set_camera_resolution(size):
+            self.toast.show_message(translate('video_window', 'Sending video at %s') % label)
 
     def set_aspect_ratio(self, ratio):
         self.aspect_ratio = ratio
