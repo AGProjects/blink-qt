@@ -66,6 +66,7 @@ except ImportError:
 
 from blink.chatwindow import ChatWindow
 from blink.videowindow import VideoWindowManager
+from blink.screen_share import ScreenShareManager
 from blink.logswindow import LogsWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink import addressbook_origin
@@ -223,6 +224,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self.main_window = MainWindow()
         self.chat_window = ChatWindow()
         self.video_window_manager = VideoWindowManager()
+        self.screen_share_manager = ScreenShareManager()     # remote pointer, screen requests; before the SIP application starts
         self.logs_window = LogsWindow()
         self.main_window.__closed__ = True
         self.chat_window.__closed__ = True

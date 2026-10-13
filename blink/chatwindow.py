@@ -60,7 +60,7 @@ from blink.logging import MessagingTrace as log
 from blink.message_envelopes import CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, call_needs_attention, call_record, call_summary, legacy_call_record, this_device_id
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import ApplicationData, IconManager, Resources
-from blink.screensharing.support import can_share_my_screen, can_view_screens
+from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter, IncomingDialogBase, RequestList, BlinkFileTransfer
 from blink.util import run_in_gui_thread, call_later, translate, copy_transfer_file
 from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme
@@ -1949,7 +1949,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     elif stream_types != {'video'}:
                         menu.addAction(self.control_button.actions.remove_video)
                     if 'screen-sharing' not in stream_types:
-                        if not blink_session.remote_focus:  # no screen sharing with a conference
+                        if not blink_session.remote_focus and vnc_screen_sharing_offered():  # no screen sharing with a conference
                             menu.addAction(self.control_button.actions.request_screen)
                             menu.addAction(self.control_button.actions.share_my_screen)
                             self.control_button.actions.request_screen.setEnabled(can_view_screens())

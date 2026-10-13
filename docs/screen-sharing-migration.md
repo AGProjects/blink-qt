@@ -1,6 +1,6 @@
 # Blink Qt — screen sharing as a video device
 
-Status as of 2026-10-09: findings and proposed design, nothing implemented yet.
+Status as of 2026-10-13: implemented (portal + PipeWire only, decision 1 below), with the remote pointer and the screen request handshake of Blink for macOS and Sylk Mobile. See "Implementation" at the end.
 
 ## Why
 
@@ -65,7 +65,29 @@ Blink Qt:
 
 Runtime: PipeWire and a portal backend (`xdg-desktop-portal-gnome`, `-kde` or `-wlr`), which the desktop already provides.
 
-## Open decision
+## Decision
 
-1. Portal + PipeWire only (recommended)
+1. Portal + PipeWire only (chosen)
 2. Portal + PipeWire with the XShm fallback
+
+## Implementation
+
+### python3-sipsimple
+
+`deps/patches/2.17/52_linux_screen_capture.patch` adds `pjmedia/src/pjmedia-videodev/screen_dev.c` and `screen_dev.h`, registers the factory after the cameras and builds `screen_dev.o` everywhere (stubs where the device is not built).
+
+- Built when `setup_pjsip.py` finds `libpipewire-0.3`, `gio-2.0` and `gio-unix-2.0` with pkg-config (`PJMEDIA_VIDEO_DEV_HAS_SCREEN=1`, CFLAGS/LIBS for configure, libraries added to the extension) and FFmpeg's libswscale is in. `SIPSIMPLE_DISABLE_SCREEN_CAPTURE=1` leaves it out. Build-Depends: `libpipewire-0.3-dev`, `libglib2.0-dev`. An existing build tree needs a clean build (configure runs once).
+- One device, "My screen", listed when the session bus has a ScreenCast portal that can capture monitors.
+- Opening the device never asks the user. `pjmedia_screen_dev_request()` starts the handshake on a thread of its own (CreateSession, SelectSources with `types=MONITOR`, `cursor_mode=EMBEDDED`, `persist_mode=2` and the restore token, Start, OpenPipeWireRemote); the state goes PENDING, then READY (or DENIED/FAILED). The application selects the device on READY; opening it at any other time is `PJMEDIA_EVID_NOTREADY` and the SDK falls back to a camera, so a "My screen" left in the settings never shows the picker at start. A READY session nobody opens is closed after 30 s.
+- Monitors only, not windows: a remote pointer has to land on a known place.
+- PipeWire: `MemFd`/`MemPtr` buffers only, `DONT_RECONNECT` so that sharing stopped from the desktop's indicator ends the stream (state ENDED) instead of waiting forever. The newest buffer is held (dropped on `remove_buffer`), a pjmedia clock at the configured rate converts it with libswscale into letterboxed I420 at the requested size and hands it to pjmedia. The PipeWire thread registers with pjlib before logging.
+- Python (`sipsimple.core`): `screen_capture_info()` (state, monitor position/size, source size), `request_screen_capture()`, `reset_screen_capture()`, `screen_capture_restore_token()`, `set_screen_capture_restore_token()`. `CORE_BUILD` is 18.
+
+Tested in a container against PipeWire with a synthetic video node and a stand-in portal: picker answered, denied and abandoned; restore token sent and renewed; session closed after use; producer disappearing mid-capture (no crash, state ENDED); 15 fps of letterboxed frames from a static 1920x1200 source.
+
+### Blink Qt
+
+- `blink/screen_pointer.py`: wire format and geometry (the same messages as Blink for macOS and Sylk Mobile, see the module docstring), tested in `tests/test_screen_pointer.py`.
+- `blink/screen_share.py`, `ScreenShareManager`: capabilities at call start, `start`/`stop` when our video is/stops being the screen, the request handshake (a prompt when asked; accepting shares the screen), pointers drawn on the shared monitor with a click-through overlay window and acked, the desktop's answer polled while sharing. The restore token and the camera to go back to are kept in QSettings. The camera comes back when no call with video is left, when sharing is stopped from the desktop, or when a camera is picked. Capabilities are not sent to phone numbers and conferences.
+- Video window: "My screen" in the Camera menu shares the screen (after the desktop's picker), "Request Screen" asks the other party for theirs, a Pointer button shows while the other party shares a screen it draws pointers on (click the picture to point; Esc leaves pointer mode), the acked click is echoed with a green ring. The local picture is not mirrored while it is the screen. The screen is not offered as a default camera in Preferences or the main window's Video menu.
+- `x11vnc`/VNC desktop sharing over MSRP stays as it was (remote control, X11 only).

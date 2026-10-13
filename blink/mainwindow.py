@@ -26,7 +26,8 @@ from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSe
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
-from blink.screensharing.support import can_share_my_screen, can_view_screens
+from blink.screen_pointer import is_screen_device
+from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.launcher import LauncherBadge
 from blink.logging import ActivityLog
 from blink.messagepane import MessagePane
@@ -183,7 +184,11 @@ class MainWindow(base_class, ui_class):
         self.chat_session_button.clicked.connect(self._SH_ChatSessionButtonClicked)
         # the call buttons as one segmented control
         self.dial_buttons_layout.setSpacing(0)
-        make_segmented('call', self.audio_call_button, self.video_call_button, self.chat_session_button, self.screen_sharing_button)
+        if vnc_screen_sharing_offered():
+            make_segmented('call', self.audio_call_button, self.video_call_button, self.chat_session_button, self.screen_sharing_button)
+        else:
+            self.screen_sharing_button.hide()   # screens are shared in video calls now (screensharing/support.py)
+            make_segmented('call', self.audio_call_button, self.video_call_button, self.chat_session_button)
         self.back_to_contacts_button.clicked.connect(self.search_box.clear)  # this can be set in designer -Dan
         self.back_to_contacts_button.hide()     # the search box's clear button (X) does the same
         self.conference_button.makeConference.connect(self._SH_MakeConference)
@@ -669,6 +674,8 @@ class MainWindow(base_class, ui_class):
         self.video_camera_menu.addSeparator()
 
         for device in SIPApplication.engine.video_devices:
+            if is_screen_device(device):
+                continue        # the screen is shared from a call's video window, it is no default camera
             action = action_map[device] = self.video_camera_menu.addAction(device)
             action.setData(device)
             action.setCheckable(True)

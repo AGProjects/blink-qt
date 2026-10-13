@@ -24,6 +24,7 @@ from sipsimple.threading import run_in_thread
 
 from blink.accounts import AddAccountDialog
 from blink.configuration.settings import H264_LEVELS, BlinkSettings
+from blink.screen_pointer import is_screen_device
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
 from blink.pstn_normalize import pstn_apply_leading_zero_rule
@@ -712,6 +713,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_camera_button.insertSeparator(1)
         self.video_camera_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
         for device in SIPApplication.engine.video_devices:
+            if is_screen_device(device):
+                continue        # the screen is shared from a call's video window, it is no default camera
             self.video_camera_button.addItem(device, device)
         self.video_camera_button.addItem(translate('preferences_window', 'None'), None)
         self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))

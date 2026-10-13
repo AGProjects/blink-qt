@@ -56,7 +56,7 @@ from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
-from blink.screensharing.support import can_share_my_screen, can_view_screens
+from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessioninfo import SessionInfoPanel
 from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
@@ -2987,8 +2987,9 @@ class AudioSessionListView(QListView):
             elif stream_types != {'chat'}:
                 menu.addAction(self.actions.remove_chat)
             if 'screen-sharing' not in stream_types:
-                menu.addAction(self.actions.request_screen)
-                menu.addAction(self.actions.share_my_screen)
+                if vnc_screen_sharing_offered():
+                    menu.addAction(self.actions.request_screen)
+                    menu.addAction(self.actions.share_my_screen)
                 self.actions.request_screen.setEnabled(can_view_screens())
                 self.actions.share_my_screen.setEnabled(can_share_my_screen())
             elif stream_types != {'screen-sharing'}:

@@ -9,7 +9,10 @@ The bar, left to right: Mute, Camera (a menu: preview, swap, stop video, aspect
 ratio, then the cameras), Chat (opens the call in the MSRP sessions window),
 Screenshot, Record, Full screen, Info (the call info panel in the main window)
 and End, last and in red. Hold is not on the bar (as on macOS) but is in the
-right-click menu.
+right-click menu. While the other party shares a screen and draws pointers on
+it, a Pointer button shows: with it on, a click on the picture points there on
+their screen. The Camera menu offers Request Screen when they can share theirs,
+and "My screen" among the cameras shares ours (screen_share.py).
 
 The thumbnail is placed from three things only: the corner the user chose, its
 size as a fraction of the window's width and the camera's shape; it is laid out
@@ -40,7 +43,9 @@ from sipsimple.threading import run_in_thread
 
 from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog
+from blink import screen_pointer
 from blink.resources import Resources
+from blink.screen_share import ScreenShareManager
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.video import VideoSurface
 
@@ -81,6 +86,9 @@ TOAST_SECONDS = 6
 TOAST_HEIGHT = 30
 TOAST_PADDING = 14
 TOAST_GAP = 12
+
+POINTER_ECHO_SECONDS = 0.9    # the green ring where the other side drew our click
+GREEN = QColor(76, 175, 80)
 
 DEFAULT_WINDOW_WIDTH = 720
 
@@ -214,6 +222,22 @@ def _icon_pause(painter):
     painter.restore()
 
 
+def _icon_pointer(painter):
+    # an arrow pointer with a click mark at its tip
+    path = QPainterPath()
+    path.moveTo(9, 3)
+    path.lineTo(9, 15.5)
+    path.lineTo(12, 12.5)
+    path.lineTo(14.2, 17)
+    path.lineTo(16.2, 16)
+    path.lineTo(14, 11.6)
+    path.lineTo(18, 11.6)
+    path.closeSubpath()
+    painter.drawPath(path)
+    for (ax, ay), (bx, by) in (((6.5, 3), (4.5, 1.5)), ((5.8, 6), (3.3, 6)), ((11.5, 1.2), (12.3, -0.6))):
+        painter.drawLine(QPointF(ax, ay), QPointF(bx, by))
+
+
 ICONS = {
     'mic': _icon_mic,
     'mic.slash': lambda painter: _icon_mic(painter, slash=True),
@@ -227,6 +251,7 @@ ICONS = {
     'info': _icon_info,
     'hangup': _icon_hangup,
     'pause': _icon_pause,
+    'pointer': _icon_pointer,
 }
 
 
@@ -591,6 +616,14 @@ class TrackedVideoSurface(VideoSurface):
             self.firstFrame.emit(frame.width, frame.height)
 
 
+def local_is_screen():
+    """The camera is the screen: shown the way it is sent, text must read."""
+    try:
+        return screen_pointer.is_screen_device(SIPApplication.video_device.real_name)
+    except AttributeError:
+        return False
+
+
 def describe_producer(producer):
     """One line about a video producer, for the Activity log."""
     if producer is None:
@@ -797,16 +830,69 @@ class LocalVideoView(TrackedVideoSurface):
 
 
 class RemoteVideoView(TrackedVideoSurface):
-    """The main picture. Dragging it moves the window, a double click toggles full screen."""
+    """The main picture. Dragging it moves the window, a double click toggles full screen.
+
+    In pointer mode a click points at the other party's shared screen instead
+    (pointerClicked, normalized on the picture), and the place they drew it is
+    echoed with a green ring."""
 
     doubleClicked = pyqtSignal()
+    pointerClicked = pyqtSignal(float, float)
 
     def __init__(self, parent):
         super(RemoteVideoView, self).__init__(parent)
         self.interactive = False
         self.press_position = None
+        self.pointer_mode = False
+        self.echo_point = None        # normalized on the picture
+        self.echo_timer = QTimer(self)
+        self.echo_timer.setSingleShot(True)
+        self.echo_timer.timeout.connect(self._SH_EchoTimerTimeout)
+
+    def picture_size(self):
+        image = self._image
+        return (image.width(), image.height()) if image is not None else None
+
+    def show_echo(self, nx, ny):
+        self.echo_point = (nx, ny)
+        self.echo_timer.start(int(POINTER_ECHO_SECONDS * 1000))
+        self.update()
+
+    def clear_echo(self):
+        self.echo_timer.stop()
+        self.echo_point = None
+        self.update()
+
+    def _SH_EchoTimerTimeout(self):
+        self.echo_point = None
+        self.update()
+
+    def paintEvent(self, event):
+        super(RemoteVideoView, self).paintEvent(event)
+        size = self.picture_size()
+        if self.echo_point is None or size is None:
+            return
+        x, y = screen_pointer.frame_to_view(self.echo_point[0], self.echo_point[1], self.width(), self.height(), *size)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        fill = QColor(GREEN)
+        fill.setAlphaF(0.35)
+        painter.setBrush(fill)
+        painter.setPen(QPen(GREEN, 3))
+        painter.drawEllipse(QPointF(x, y), 11, 11)
+        painter.end()
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.pointer_mode:
+            size = self.picture_size()
+            if size is not None:
+                position = event.position()
+                point = screen_pointer.view_to_frame(position.x(), position.y(), self.width(), self.height(), *size)
+                if point is not None:      # not on the black bars around the picture
+                    self.pointerClicked.emit(point[0], point[1])
+            self.press_position = None
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             self.press_position = event.position().toPoint()
             event.accept()
@@ -825,7 +911,7 @@ class RemoteVideoView(TrackedVideoSurface):
         self.press_position = None
 
     def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton and not self.pointer_mode:
             self.doubleClicked.emit()
 
 
@@ -870,6 +956,7 @@ class DockedVideoPanel(QWidget):
 
     def set_producers(self, remote, local):
         self.video_view.producer = remote
+        self.my_video_view.mirror = not local_is_screen()
         self.my_video_view.producer = local
         self.my_video_view.set_placeholder(translate('video_window', 'Starting camera...'))
         self.my_video_view.setVisible(local is not None)
@@ -882,6 +969,7 @@ class DockedVideoPanel(QWidget):
         self.video_view._image = None
 
     def set_camera(self, producer):
+        self.my_video_view.mirror = not local_is_screen()
         self.my_video_view.producer = producer
         self.my_video_view.layout_in_parent()
 
@@ -962,6 +1050,10 @@ class VideoScreenshot(object):
 
 # The window
 
+SCREEN_SHARE_NOTIFICATIONS = ('BlinkScreenPointerDidChange', 'BlinkScreenPointerGotAck',
+                              'BlinkScreenShareRequestDidResolve', 'BlinkScreenShareNotice')
+
+
 @implementer(IObserver)
 class VideoWindow(QWidget):
     closed = pyqtSignal(object)
@@ -983,10 +1075,12 @@ class VideoWindow(QWidget):
         self.received_video = False
         self.docked = False               # hidden, its video shown under the call in the main window
         self._remote_producer = None
+        self.pointer_mode = False         # clicks on the picture point at the other party's shared screen
 
         self.video_view = RemoteVideoView(self)
         self.video_view.setMouseTracking(True)
         self.video_view.doubleClicked.connect(self.toggle_full_screen)
+        self.video_view.pointerClicked.connect(self._SH_PointerClicked)
         self.my_video_view = LocalVideoView(self, framerate=None)
         self.my_video_view.setMouseTracking(True)
         self.my_video_view.hide()
@@ -1002,6 +1096,9 @@ class VideoWindow(QWidget):
         self.camera_button.setToolTip(translate('video_window', 'Video and camera'))
         self.chat_button = bar.add_segment('chat', translate('video_window', 'Chat'))
         self.chat_button.setToolTip(translate('video_window', 'Show the conversation; the video moves under the call in the main window'))
+        self.pointer_button = bar.add_segment('pointer', translate('video_window', 'Pointer'))
+        self.pointer_button.setToolTip(translate('video_window', 'Point at the shared screen'))
+        self.pointer_button.hide()        # only while the other party shares a screen it draws our pointer on
         self.screenshot_button = bar.add_segment('screenshot', translate('video_window', 'Screenshot'))
         self.record_button = bar.add_segment('record', translate('video_window', 'Record'))
         self.record_button.setToolTip(translate('video_window', 'Start recording'))
@@ -1015,6 +1112,7 @@ class VideoWindow(QWidget):
         self.mute_button.clicked.connect(self._SH_MuteButtonClicked)
         self.camera_button.clicked.connect(self._SH_CameraButtonClicked)
         self.chat_button.clicked.connect(self._SH_ChatButtonClicked)
+        self.pointer_button.clicked.connect(self._SH_PointerButtonClicked)
         self.screenshot_button.clicked.connect(self._SH_ScreenshotButtonClicked)
         self.record_button.clicked.connect(self._SH_RecordButtonClicked)
         self.fullscreen_button.clicked.connect(self.toggle_full_screen)
@@ -1067,6 +1165,8 @@ class VideoWindow(QWidget):
         notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoStreamRemoteFormatDidChange')
         notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoStreamReceivedKeyFrame')
         notification_center.add_observer(ObserverWeakrefProxy(self), name='VideoDeviceDidChangeCamera')
+        for name in SCREEN_SHARE_NOTIFICATIONS:
+            notification_center.add_observer(ObserverWeakrefProxy(self), name=name)
 
         self.resize(self.size_hint_for_width(DEFAULT_WINDOW_WIDTH))
         self._center_on_screen()
@@ -1140,7 +1240,7 @@ class VideoWindow(QWidget):
     def show_controls(self):
         self.call_bar.fade_in()
         self.unsetCursor()
-        self.video_view.unsetCursor()
+        self._apply_view_cursor()
         self.idle_timer.start()
         self.my_video_view.layout_in_parent(animate=True)
 
@@ -1148,7 +1248,7 @@ class VideoWindow(QWidget):
         if self.camera_menu_open:
             return
         self.call_bar.fade_out()
-        if self.isFullScreen():
+        if self.isFullScreen() and not self.pointer_mode:
             self.video_view.setCursor(Qt.CursorShape.BlankCursor)
         self.my_video_view.layout_in_parent(animate=True)
 
@@ -1187,7 +1287,9 @@ class VideoWindow(QWidget):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
-            if self.isFullScreen():
+            if self.pointer_mode:
+                self.set_pointer_mode(False)
+            elif self.isFullScreen():
                 self.toggle_full_screen()
             else:
                 self.remove_video()
@@ -1317,6 +1419,7 @@ class VideoWindow(QWidget):
         self.record_button.setEnabled(connected)
         self.chat_button.setEnabled(session.items.audio is not None)
         self.screenshot_button.setEnabled(self.main_view_has_picture)
+        self.update_pointer_button(tile=False)
         self.info_button.setVisible(session.items.audio is not None)
         self.info_button.setEnabled(session.items.audio is not None)
         self.call_bar.tile()
@@ -1400,6 +1503,7 @@ class VideoWindow(QWidget):
         main_window.switch_view_button.view = SwitchViewButton.SessionView
         main_window.main_view.setCurrentWidget(main_window.sessions_panel)
         self.docked = True
+        self.update_pointer_button()      # no pointing at a picture that is not here
         self.idle_timer.stop()
         remote = self._remote_producer if self.connected else None
         # The remote picture takes one renderer only: the window gives it up first. The camera
@@ -1534,6 +1638,13 @@ class VideoWindow(QWidget):
         swap.setChecked(self.swapped)
         swap.setEnabled(connected)
         menu.addAction(translate('video_window', 'Stop Video'), self.remove_video).setEnabled(session.state == 'connected' and 'video' in session.streams)
+        sip_session = self._sip_session()
+        if sip_session is not None:
+            manager = ScreenShareManager()
+            pending = manager.screen_request_pending(sip_session)
+            if pending or manager.can_request_screen(sip_session):
+                menu.addAction(translate('video_window', 'Requesting Screen...') if pending else translate('video_window', 'Request Screen'),
+                               self._SH_RequestScreenTriggered).setEnabled(connected and not pending)
 
         aspect_menu = menu.addMenu(translate('video_window', 'Aspect Ratio'))
         group = QActionGroup(aspect_menu)
@@ -1554,15 +1665,20 @@ class VideoWindow(QWidget):
             current = SIPApplication.video_device.real_name
         except AttributeError:
             current = settings.video.device
+        if ScreenShareManager().capture_wanted:
+            current = screen_pointer.SCREEN_DEVICE_NAME     # the desktop is asking which one
         if not cameras:
             menu.addAction(translate('video_window', 'No Camera')).setEnabled(False)
         camera_group = QActionGroup(menu)
-        for camera in sorted(cameras, key=str.lower):
+        # the cameras, then the screen
+        for camera in sorted(cameras, key=lambda name: (screen_pointer.is_screen_device(name), screen_pointer.screen_index(name) or 0, name.lower())):
             action = menu.addAction(camera)
             action.setCheckable(True)
             action.setChecked(camera == current)
             action.triggered.connect(lambda checked, camera=camera: self.select_camera(camera))
             camera_group.addAction(action)
+            if screen_pointer.is_screen_device(camera):
+                action.setToolTip(translate('video_window', 'Send your screen instead of the camera'))
 
         button = self.camera_button
         position = button.mapToGlobal(QPoint(0, 0))
@@ -1570,13 +1686,88 @@ class VideoWindow(QWidget):
         # above the bar, it sits at the bottom of the window
         self._exec_menu(menu, QPoint(position.x(), position.y() - size.height() - 4))
 
-    @staticmethod
-    def select_camera(camera):
+    def select_camera(self, camera):
+        manager = ScreenShareManager()
+        if screen_pointer.is_screen_device(camera):
+            if manager.sharing:
+                return
+            if manager.share_screen():
+                ActivityLog().info('[video] Sharing the screen')
+                if not local_is_screen():
+                    self.toast.show_message(translate('video_window', 'Choose the screen to share'))
+            else:
+                self.toast.show_message(translate('video_window', 'Your screen cannot be shared'))
+            return
+        if manager.sharing:
+            manager.stop_sharing(camera)
+            return
         settings = SIPSimpleSettings()
         if settings.video.device != camera:
             ActivityLog().info(f'[video] Switching to the {camera} camera')
             settings.video.device = camera
             settings.save()
+
+    # the other party's shared screen
+
+    def _sip_session(self):
+        return self.blink_session.sip_session if self.blink_session is not None else None
+
+    def pointer_available(self):
+        session = self._sip_session()
+        return (session is not None and self.connected and not self.swapped and not self.docked
+                and ScreenShareManager().can_point(session))
+
+    def update_pointer_button(self, tile=True):
+        available = self.pointer_available()
+        if not available and self.pointer_mode:
+            self.set_pointer_mode(False)
+        self.pointer_button.setVisible(available)
+        self.pointer_button.configure('pointer', translate('video_window', 'Pointer'), tint=GREEN if self.pointer_mode else None)
+        if tile:
+            self.call_bar.tile()
+
+    def set_pointer_mode(self, enabled):
+        enabled = bool(enabled)
+        if enabled == self.pointer_mode:
+            return
+        self.pointer_mode = enabled
+        self.video_view.pointer_mode = enabled
+        self.log('Remote pointer %s' % ('on' if enabled else 'off'))
+        self.pointer_button.configure('pointer', translate('video_window', 'Pointer'), tint=GREEN if enabled else None)
+        self._apply_view_cursor()
+        if enabled:
+            self.toast.show_message(translate('video_window', 'Click on the shared screen to point'))
+        else:
+            self.video_view.clear_echo()
+
+    def _apply_view_cursor(self):
+        if self.pointer_mode:
+            self.video_view.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.video_view.unsetCursor()
+
+    def _SH_PointerButtonClicked(self):
+        if self.pointer_available():
+            self.set_pointer_mode(not self.pointer_mode)
+
+    def _SH_PointerClicked(self, nx, ny):
+        session = self._sip_session()
+        if session is None or not self.pointer_available():
+            return
+        manager = ScreenShareManager()
+        if not manager.peer_in_app(session):
+            self.toast.show_message(translate('video_window', '%s left Sylk, the pointer cannot be shown right now') % self._peer_name())
+            return
+        manager.send_pointer(session, nx, ny)
+
+    def _SH_RequestScreenTriggered(self):
+        session = self._sip_session()
+        if session is not None and ScreenShareManager().send_screen_request(session):
+            self.toast.show_message(translate('video_window', 'Asked %s to share the screen') % self._peer_name())
+
+    def _peer_name(self):
+        contact = self.blink_session.contact if self.blink_session is not None else None
+        return contact.name if contact is not None else ''
 
     def set_aspect_ratio(self, ratio):
         self.aspect_ratio = ratio
@@ -1597,7 +1788,7 @@ class VideoWindow(QWidget):
         self.swapped = False
         self.my_video_view.hide()
         self.my_video_view.producer = None
-        self.video_view.mirror = True
+        self.video_view.mirror = not local_is_screen()
         self.video_view.producer = self.local_producer
         self.log('Preview: camera %s in the main view' % self.describe_camera())
         self.status_label.set_status(translate('video_window', 'Connecting...'))
@@ -1617,7 +1808,7 @@ class VideoWindow(QWidget):
         # The camera moves to the thumbnail before it leaves the main view: with no renderer
         # left on it the SDK stops it, and starting it again soon after makes libv4l2 fail
         # with "error setting pixformat: Device or resource busy".
-        self.my_video_view.mirror = True
+        self.my_video_view.mirror = not local_is_screen()
         self.my_video_view.producer = self.local_producer
         self.video_view.producer = None
         if not self.received_video:
@@ -1632,8 +1823,8 @@ class VideoWindow(QWidget):
             self._main_session_list()[1].show_video(self.blink_session.items.audio, remote, local, self.undock)
             return
         main, thumb = (local, remote) if self.swapped else (remote, local)
-        self.video_view.mirror = self.swapped
-        self.my_video_view.mirror = not self.swapped
+        self.video_view.mirror = self.swapped and not local_is_screen()
+        self.my_video_view.mirror = not self.swapped and not local_is_screen()
         self.video_view.producer = main
         self.my_video_view.producer = thumb
         self.my_video_view.set_placeholder(translate('video_window', 'Starting camera...') if not self.swapped else translate('video_window', 'Waiting for remote video...'))
@@ -1722,6 +1913,7 @@ class VideoWindow(QWidget):
         if not self.connected or self._remote_producer is None:
             return
         self.swapped = not self.swapped
+        self.update_pointer_button()
         ActivityLog().info('[video] %s' % ('Video swapped: local camera in the main view' if self.swapped else 'Video restored: remote in the main view'))
         self.video_view.producer = None
         self.my_video_view.producer = None
@@ -1780,7 +1972,8 @@ class VideoWindow(QWidget):
                 pass
         notification_center = NotificationCenter()
         for kw in (dict(sender=self.blink_session), dict(name='CFGSettingsObjectDidChange', sender=SIPSimpleSettings()),
-                   dict(name='VideoStreamRemoteFormatDidChange'), dict(name='VideoStreamReceivedKeyFrame'), dict(name='VideoDeviceDidChangeCamera')):
+                   dict(name='VideoStreamRemoteFormatDidChange'), dict(name='VideoStreamReceivedKeyFrame'), dict(name='VideoDeviceDidChangeCamera'),
+                   *(dict(name=name) for name in SCREEN_SHARE_NOTIFICATIONS)):
             try:
                 notification_center.discard_observer(ObserverWeakrefProxy(self), **kw)
             except Exception:
@@ -1885,15 +2078,42 @@ class VideoWindow(QWidget):
         if self.docked:
             self._main_session_list()[1].video_camera_changed(new_camera)
             return
+        mirror = not local_is_screen()
         if not self.connected:
+            self.video_view.mirror = mirror
             self.video_view.producer = new_camera
         elif self.swapped:
+            self.video_view.mirror = mirror
             self.video_view.producer = new_camera
         else:
+            self.my_video_view.mirror = mirror
             self.my_video_view.producer = new_camera
             self.my_video_view.set_placeholder(translate('video_window', 'Starting camera...'))
             self.my_video_view.layout_in_parent()
         self.watchdog_timer.start()
+
+    def _NH_BlinkScreenPointerDidChange(self, notification):
+        if notification.sender is self._sip_session():
+            self.update_pointer_button()
+
+    def _NH_BlinkScreenPointerGotAck(self, notification):
+        if notification.sender is self._sip_session() and self.pointer_mode:
+            self.video_view.show_echo(notification.data.x, notification.data.y)
+
+    def _NH_BlinkScreenShareRequestDidResolve(self, notification):
+        if notification.sender is not self._sip_session():
+            return
+        if notification.data.result == 'accepted':
+            text = translate('video_window', '%s accepted, waiting for the screen...')
+        elif notification.data.result == 'rejected':
+            text = translate('video_window', '%s declined to share the screen')
+        else:
+            text = translate('video_window', '%s did not respond to the screen request')
+        self.toast.show_message(text % self._peer_name())
+
+    def _NH_BlinkScreenShareNotice(self, notification):
+        if notification.sender is self._sip_session():
+            self.toast.show_message(notification.data.text, seconds=10)
 
 
 @implementer(IObserver)

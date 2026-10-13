@@ -14,7 +14,7 @@ import sys
 from functools import lru_cache
 
 
-__all__ = ['can_view_screens', 'can_share_my_screen', 'screen_sharing_server_problem', 'log_screen_sharing_support']
+__all__ = ['can_view_screens', 'can_share_my_screen', 'screen_sharing_server_problem', 'log_screen_sharing_support', 'vnc_screen_sharing_offered']
 
 
 @lru_cache(maxsize=None)
@@ -42,6 +42,17 @@ def screen_sharing_server_problem():
     if shutil.which('x11vnc') is None:
         return 'x11vnc is not installed'
     return None
+
+
+# Starting a VNC screen sharing session (over MSRP) is not offered for now:
+# screens are shared in video calls ("My screen" in the video window's Camera
+# menu, screen_share.py) until it is decided what becomes of VNC. Incoming VNC
+# offers are still handled. True puts the buttons and menu items back.
+VNC_SCREEN_SHARING_OFFERED = False
+
+
+def vnc_screen_sharing_offered():
+    return VNC_SCREEN_SHARING_OFFERED
 
 
 def can_view_screens():

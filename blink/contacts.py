@@ -58,7 +58,7 @@ from blink.contact_repair import merge_plan, repair_plan, server_conference_uri
 from blink.group_kinds import BLOCKED, CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_plan, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
-from blink.screensharing.support import can_share_my_screen, can_view_screens
+from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.resources import ApplicationData, Resources, IconManager, themed_icon
 from blink.avatars import avatar_icon, circular_icon
 from blink.sessions import SessionManager, StreamDescription
@@ -6301,21 +6301,22 @@ class ContactListView(QListView):
                     call_item.triggered.connect(partial(self._AH_SendFiles, uri))
                     call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu(translate('contact_list', 'Request Screen'))
-                call_submenu.setEnabled(not conference and can_view_screens())
-                for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
-                    call_item = QAction(uri_text, self)
-                    call_item.triggered.connect(partial(self._AH_RequestScreen, uri))
-                    call_submenu.addAction(call_item)
+                if vnc_screen_sharing_offered():
+                    call_submenu = menu.addMenu(translate('contact_list', 'Request Screen'))
+                    call_submenu.setEnabled(not conference and can_view_screens())
+                    for uri in contact.uris:
+                        uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                        call_item = QAction(uri_text, self)
+                        call_item.triggered.connect(partial(self._AH_RequestScreen, uri))
+                        call_submenu.addAction(call_item)
 
-                call_submenu = menu.addMenu(translate('contact_list', 'Share My Screen'))
-                call_submenu.setEnabled(not conference and can_share_my_screen())
-                for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
-                    call_item = QAction(uri_text, self)
-                    call_item.triggered.connect(partial(self._AH_ShareMyScreen, uri))
-                    call_submenu.addAction(call_item)
+                    call_submenu = menu.addMenu(translate('contact_list', 'Share My Screen'))
+                    call_submenu.setEnabled(not conference and can_share_my_screen())
+                    for uri in contact.uris:
+                        uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                        call_item = QAction(uri_text, self)
+                        call_item.triggered.connect(partial(self._AH_ShareMyScreen, uri))
+                        call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Start MSRP Chat'))
                 for uri in contact.uris:
@@ -6329,8 +6330,9 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.start_audio_call)
                 menu.addAction(self.actions.start_video_call)
                 menu.addAction(self.actions.send_files)
-                menu.addAction(self.actions.request_screen)
-                menu.addAction(self.actions.share_my_screen)
+                if vnc_screen_sharing_offered():
+                    menu.addAction(self.actions.request_screen)
+                    menu.addAction(self.actions.share_my_screen)
                 menu.addAction(self.actions.start_chat_session)
 
                 self.actions.start_audio_call.setEnabled(can_call)
@@ -6879,8 +6881,9 @@ class ContactSearchListView(QListView):
             menu.addAction(self.actions.start_chat_session)
             menu.addAction(self.actions.send_sms)
             menu.addAction(self.actions.send_files)
-            menu.addAction(self.actions.request_screen)
-            menu.addAction(self.actions.share_my_screen)
+            if vnc_screen_sharing_offered():
+                menu.addAction(self.actions.request_screen)
+                menu.addAction(self.actions.share_my_screen)
             menu.addAction(self.actions.transfer_call)
             menu.addSeparator()
             if contact.type == 'bonjour':
@@ -7243,8 +7246,9 @@ class ContactDetailView(QListView):
         menu.addAction(self.actions.start_audio_call)
         menu.addAction(self.actions.start_video_call)
         menu.addAction(self.actions.send_files)
-        menu.addAction(self.actions.request_screen)
-        menu.addAction(self.actions.share_my_screen)
+        if vnc_screen_sharing_offered():
+            menu.addAction(self.actions.request_screen)
+            menu.addAction(self.actions.share_my_screen)
         menu.addAction(self.actions.transfer_call)
         menu.addAction(self.actions.start_chat_session)
         menu.addSeparator()
