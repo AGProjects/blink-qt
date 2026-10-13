@@ -780,6 +780,7 @@ class MessageManager(object, metaclass=Singleton):
         self.pgp_requests = RequestList()
 
         self._removing_conversations = {}  # conversation key -> session, while the user removes it
+        self._announce_after_sync = set()  # accounts added anew whose journal cursor was restored: announced when the sync ends
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPEngineGotMessage')
@@ -796,6 +797,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
         notification_center.add_observer(self, name='BlinkMessageHistoryConversationDidRemove')
         notification_center.add_observer(self, name='BlinkJournalFirstSyncDidFinish')
+        notification_center.add_observer(self, name='BlinkJournalProgress')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
         KeyEscrowManager().start()
@@ -999,6 +1001,10 @@ class MessageManager(object, metaclass=Singleton):
             account.sms.history_synchronization_id = cursor
             account.save()
             ActivityLog().info(f'[journal] Journal cursor of {account.id} restored from {path}: {cursor}')
+            # the account was added anew on this device (its configuration is new): no first sync
+            # will follow, but it is a sign-in all the same, announced when this sync ends
+            if not account.sms.activation_announced:
+                self._announce_after_sync.add(account.id)
 
     journal_first_sync_marker = FIRST_SYNC_MARKER
     journal_progress_interval = 0.25        # seconds between progress updates while a page is read
@@ -2459,6 +2465,34 @@ class MessageManager(object, metaclass=Singleton):
         except KeyError:
             return
         self._fetch_public_keys_once(account)
+        self.announce_activation(account)
+
+    def _NH_BlinkJournalProgress(self, notification):
+        account = notification.sender
+        if notification.data.phase == 'done' and getattr(account, 'id', None) in self._announce_after_sync:
+            self._announce_after_sync.discard(account.id)
+            call_in_gui_thread(self.announce_activation, account)
+
+    def announce_activation(self, account):
+        """Tell the account's other devices that this one has joined: a plain-text note to
+        ourselves, which the journal replicates to every other device, as Sylk Mobile sends from
+        afterFirstSync: "Account activated on <user agent>". Once per account, after the first
+        sync, so it lands below the history this device has just read."""
+        if account is BonjourAccount() or not account.enabled or account.sms.activation_announced:
+            return
+        if not account.sms.enable_message_replication:
+            return      # no journal to carry it to the other devices
+        # recorded before sending: a send that fails is not retried, but a success that was not
+        # recorded would announce this device again at every start
+        account.sms.activation_announced = True
+        account.save()
+        text = f'Account activated on {SIPSimpleSettings().user_agent}'
+        ActivityLog().info(f'[Message with {account.id}] Announcing the activation of {account.id} to its other devices: {text}')
+        # through the conversation with ourselves, so it is stored here like any message we send
+        blink_session = self.create_message_session(str(account.uri), selected=False)
+        if blink_session is None:
+            return
+        self.send_message(account, blink_session.contact, text, 'text/plain')
 
     # The public keys of all the contacts, once per account after its first sync
 

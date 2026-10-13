@@ -87,6 +87,7 @@ class SMSSettingsExtension(SMSSettings):
     history_synchronization_id = Setting(type=str, default=None, nillable=True)
     history_synchronization_timestamp = RuntimeSetting(type=str, default=None, nillable=True)
     file_transfer_url = Setting(type=str, default=None, nillable=True)     # learned from the first incoming transfer (blink.file_transfer)
+    activation_announced = Setting(type=bool, default=False)    # "Account activated on ..." sent to our other devices (once)
 
 
 class SoundSettings(SettingsGroup):
