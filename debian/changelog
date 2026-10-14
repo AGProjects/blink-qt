@@ -1,21 +1,29 @@
-blink (7.0.3) unstable; urgency=medium
+blink (7.1.0) unstable; urgency=medium
 
-  * Fixes for the first time journal sync
-  * Decrypt older PGP messages in the background
-  * Decrypt non-decrypted message in view in real time
+  * Added Data import/export
+  * Added File transfers data management
+  * Refactored screen sharing (now compatible with Sylk mobile clients)
   * Show only valid cameras and screens
   * Added resolution menu to video calls
   * Fix for account delete
   * Fix setting tls_name at start
   * Re-encrypt private key after password was changed and succeeded
-  * Refactored screen sharing
   * Show PGP key id for contacts
   * Open message pane on enter rather than calling
   * Fix search contacts to include uris 
   * Refuse delete my own contact or my own uri from addressbook
-  * Added Data import/export
-  * Added File transfers data management
   * Prompt user about deleting messages for uris that exist in other contacts
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Wed, 14 Oct 2026 17:32:34 -0300
+
+blink (7.0.3) unstable; urgency=medium
+
+  * Fixes for the first time journal sync
+  * Fixed overwriting PGP key if server was not yet queried
+  * Decrypt older PGP messages in the background
+  * Decrypt non-decrypted message in view in real time
+  * Show the PGP key ids a message was encrypted with in message info panel
+
 
  -- Adrian Georgescu <ag@ag-projects.com>  Mon, 12 Oct 2026 11:04:46 -0300
 
