@@ -1648,7 +1648,7 @@ class VideoWindow(QWidget):
         import uuid
         from datetime import timezone
         from blink.file_transfer import transfer_folder
-        from blink.history import MessageHistory, conversation_key
+        from blink.history import MessageHistory, session_conversation_key
         from blink.messages import MessageManager
         from blink.resources import ApplicationData
         session = self.blink_session
@@ -1657,7 +1657,7 @@ class VideoWindow(QWidget):
             return
         party_uri = str(session.contact_uri.uri)
         display_name = session.contact.name if session.contact is not None else ''
-        key = conversation_key(party_uri, account)
+        key = session_conversation_key(session)     # a Bonjour neighbour: its instance id, not today's address
         transfer_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         # a neutral name: it goes to the server and into the file list of every device

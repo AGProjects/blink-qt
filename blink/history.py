@@ -605,6 +605,26 @@ def conversation_key(raw_uri, account=None):
     return canonical_uri(text, account) or text
 
 
+def session_conversation_key(session, account=None):
+    """The key the conversation of a session or transfer is filed under.
+
+    A Bonjour neighbour is its instance id, never the transport address it has on
+    the network today (that changes with every start of the other side); anyone
+    else is conversation_key of the address.
+    """
+    contact = getattr(session, 'contact', None)
+    contact_uri = getattr(session, 'contact_uri', None)
+    instance_id = bare_instance_id(getattr(session, 'remote_instance_id', None))
+    if not instance_id and getattr(contact, 'type', None) == 'bonjour':
+        instance_id = bare_instance_id(getattr(contact.settings, 'id', None))
+    if not instance_id and contact_uri is not None:
+        instance_id = placeholder_instance_id(contact_uri.uri)
+    if instance_id and is_instance_id(instance_id):
+        return instance_id
+    address = str(contact_uri.uri) if contact_uri is not None else ''
+    return conversation_key(address, account if account is not None else getattr(session, 'account', None))
+
+
 class DownloadHistory(object, metaclass=Singleton):
     __version__ = 1
     phone_number_re = re.compile(r'^(?P<number>(0|00|\+)[1-9]\d{7,14})@')
@@ -1638,6 +1658,60 @@ class MessageHistory(object, metaclass=Singleton):
         ActivityLog().info(f'[db] Conversations filed under their canonical key: {conversations} keys changed, {moved} messages moved, {duplicates} duplicates dropped')
         if conversations:
             self.get_unread_messages()
+
+    @run_in_thread('db')
+    def refile_neighbour(self, address, instance_id):
+        """File what the Bonjour account has under a neighbour's transport address under its
+        instance id, with the files of those messages: the address is only where the
+        neighbour was reached, the instance id is who it is."""
+        old_key = conversation_key(address, None)
+        new_key = bare_instance_id(instance_id)
+        if not old_key or not is_instance_id(new_key) or old_key == new_key or is_instance_id(old_key):
+            return
+        table = Message.sqlmeta.table
+        where = f'remote_uri = {self.db.sqlrepr(old_key)} and account_id = {self.db.sqlrepr(BONJOUR_ACCOUNT_ID)}'
+        try:
+            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            if not count:
+                return
+            self.db.queryAll(f'update or ignore {table} set remote_uri = {self.db.sqlrepr(new_key)} where {where}')
+            left = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+            self.db.queryAll(f'delete from {table} where {where}')
+            self.db.queryAll(f'update or ignore {DownloadedFiles.sqlmeta.table} set remote_uri = {self.db.sqlrepr(new_key)} where {where}')
+            self.db.queryAll(f'delete from {DownloadedFiles.sqlmeta.table} where {where}')
+            pending = PendingRemoval.sqlmeta.table
+            self.db.queryAll(f'update {pending} set remote_uri = {self.db.sqlrepr(new_key)} where {where}')
+        except Exception as e:
+            ActivityLog().error(f'[db] Filing the conversation at {old_key} under neighbour {new_key} failed: {e!r}')
+            return
+        moved_files = self._move_transfer_folders(BONJOUR_ACCOUNT_ID, old_key, new_key)
+        ActivityLog().info(f'[db] Bonjour conversation at {old_key} filed under neighbour {new_key}: {count - left} messages'
+                           + (f', {left} duplicates dropped' if left else '') + (f', {moved_files} file folders moved' if moved_files else ''))
+        ConversationPreviews().invalidate([old_key, new_key])
+        self.get_unread_messages()
+
+    @staticmethod
+    def _move_transfer_folders(account_id, old_key, new_key):
+        """Move file_transfers/<account>/<old key>/<id>/ to .../<new key>/<id>/; the number moved."""
+        from blink.file_transfer import safe_component
+        root = os.path.join(ApplicationData.get('file_transfers'), safe_component(account_id))
+        source = os.path.join(root, safe_component(old_key))
+        target = os.path.join(root, safe_component(new_key))
+        if not os.path.isdir(source):
+            return 0
+        moved = 0
+        try:
+            os.makedirs(target, exist_ok=True)
+            for name in os.listdir(source):
+                if os.path.exists(os.path.join(target, name)):
+                    continue
+                os.rename(os.path.join(source, name), os.path.join(target, name))
+                moved += 1
+            if not os.listdir(source):
+                os.rmdir(source)
+        except OSError as e:
+            ActivityLog().error(f'[db] Moving the files of {old_key} to {new_key} failed: {e}')
+        return moved
 
     @run_in_thread('db')
     def purge_conversations(self, keys, reason=''):
@@ -2903,7 +2977,12 @@ class MessageHistory(object, metaclass=Singleton):
             results.append((display_name, uri))
 
         log.debug(f"== Contacts fetched: {len(list(result))}")
-        notification_center.post_notification('BlinkMessageHistoryAllContactsDidSucceed', data=NotificationData(contacts=results))
+        # conversations of the Bonjour account exist on this device only: never filed in the shared Messages group
+        try:
+            bonjour_keys = {row[0] for row in self.db.queryAll(f"select distinct remote_uri from messages where account_id = {self.db.sqlrepr(BONJOUR_ACCOUNT_ID)}")}
+        except Exception:
+            bonjour_keys = set()
+        notification_center.post_notification('BlinkMessageHistoryAllContactsDidSucceed', data=NotificationData(contacts=results, bonjour_keys=bonjour_keys))
 
     @run_in_thread('db')
     def remove(self, account):

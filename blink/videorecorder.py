@@ -171,13 +171,13 @@ class VideoCallRecorder(object):
             return 'no conversation to file the recording in'
 
         from blink.file_transfer import transfer_folder
-        from blink.history import conversation_key
+        from blink.history import session_conversation_key
         remote_identity = session.sip_session.remote_identity.uri
         user = remote_identity.user.decode() if isinstance(remote_identity.user, bytes) else remote_identity.user
         host = remote_identity.host.decode() if isinstance(remote_identity.host, bytes) else remote_identity.host
         started = datetime.now(timezone.utc)
         party_uri = str(session.contact_uri.uri)
-        key = conversation_key(party_uri, account)
+        key = session_conversation_key(session)     # a Bonjour neighbour: its instance id, not today's address
         transfer_id = str(uuid.uuid4())
         directory = transfer_folder(ApplicationData.get('file_transfers'), account.id, key, transfer_id)
         name = 'sylk-call-recording-%s-%s@%s-%s.mp4' % (started.astimezone().strftime('%Y%m%d-%H%M%S'), user, host, session.sip_session.direction)

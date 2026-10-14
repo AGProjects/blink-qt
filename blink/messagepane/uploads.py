@@ -122,9 +122,9 @@ class Uploads(QObject):
         import mimetypes
         import os
         from sipsimple.account import AccountManager
-        from blink.history import conversation_key
+        from blink.history import session_conversation_key
         path = transfer.file_selector.name
-        key = conversation_key(str(transfer.contact_uri.uri), AccountManager().default_account)
+        key = session_conversation_key(transfer, AccountManager().default_account)
         self.uploads[transfer.id] = SimpleNamespace(
             id=transfer.id, key=key, transfer=transfer, path=path, name=os.path.basename(path),
             size=transfer.file_selector.size or (os.path.getsize(path) if os.path.exists(path) else None),
@@ -137,7 +137,7 @@ class Uploads(QObject):
         from blink.messages import MessageManager
         MessageManager().note_own_upload(transfer.id)
         contact = getattr(transfer, 'contact', None)
-        MessageHistory().add_own_upload(transfer.id, conversation_key(str(transfer.contact_uri.uri), transfer.account), transfer.account,
+        MessageHistory().add_own_upload(transfer.id, session_conversation_key(transfer), transfer.account,
                                         str(transfer.contact_uri.uri), getattr(contact, 'name', '') or '', upload.name, upload.size, upload.type,
                                         upload.timestamp.replace(tzinfo=None))
         self.changed.emit(key, transfer.id)

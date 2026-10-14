@@ -914,7 +914,7 @@ class BlinkSession(BlinkSessionBase):
         audio_stream = self.streams.get('audio')
         if audio_stream is not None and not self.recording:
             from blink.file_transfer import transfer_folder
-            from blink.history import conversation_key
+            from blink.history import conversation_key, session_conversation_key
             direction = self.sip_session.direction
             remote_identity = self.sip_session.remote_identity.uri
             remote = "%s@%s" % (remote_identity.user.decode() if isinstance(remote_identity.user, bytes) else remote_identity.user,
@@ -922,7 +922,7 @@ class BlinkSession(BlinkSessionBase):
             started = datetime.now(timezone.utc)
             filename = "sylk-call-recording-%s-%s-%s.wav" % (started.astimezone().strftime("%Y%m%d-%H%M%S"), remote, direction)
             party_uri = str(self.contact_uri.uri) if self.contact_uri is not None else remote
-            key = conversation_key(party_uri, self.account)
+            key = session_conversation_key(self) if self.contact_uri is not None else conversation_key(party_uri, self.account)
             transfer_id = str(uuid.uuid4())
             directory = transfer_folder(ApplicationData.get('file_transfers'), self.account.id, key, transfer_id)
             path = os.path.join(directory, filename)
@@ -4589,6 +4589,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         except KeyError:
             self.account = account_manager.default_account
         self.contact, self.contact_uri = URIUtils.find_contact(contact_uri, display_name=contact_name)
+        self.remote_instance_id = BlinkSession._instance_id(self.contact, self.contact_uri)
         if self.direction == 'outgoing':
             self._uri = self._normalize_uri(contact_uri)
 
@@ -4609,6 +4610,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.account = session.account
         self.contact = contact
         self.contact_uri = contact_uri
+        self.remote_instance_id = BlinkSession._instance_id(contact, contact_uri)
         self.sip_session = session
         self.stream = stream
 
@@ -4627,8 +4629,8 @@ class BlinkFileTransfer(BlinkSessionBase):
         without touching it, and deleting the message deletes only its copy. The encrypted .asc is
         made next to the copy."""
         from blink.file_transfer import transfer_filename, transfer_folder
-        from blink.history import conversation_key
-        key = conversation_key(str(self.contact_uri.uri), self.account)
+        from blink.history import session_conversation_key
+        key = session_conversation_key(self)
         directory = transfer_folder(ApplicationData.get('file_transfers'), str(self.account.id), key, self.id)
         target = os.path.join(directory, transfer_filename(os.path.basename(filename)))
         if os.path.realpath(filename) == os.path.realpath(target):
@@ -4651,6 +4653,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.account = account
         self.contact = contact
         self.contact_uri = contact_uri
+        self.remote_instance_id = BlinkSession._instance_id(contact, contact_uri)
 
         self._uri = self._normalize_uri(contact_uri.uri)
 
@@ -4696,6 +4699,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.account = account
         self.contact = contact
         self.contact_uri = contact_uri
+        self.remote_instance_id = BlinkSession._instance_id(contact, contact_uri)
         self._hash = hash
         self._uri = self._normalize_uri(contact_uri.uri)
 

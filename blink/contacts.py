@@ -1473,11 +1473,17 @@ class MessagesGroupFiler(object, metaclass=Singleton):
             call_later(self.settle_delay, self._request_conversations)
 
     def _NH_BlinkMessageHistoryAllContactsDidSucceed(self, notification):
+        # a Bonjour conversation stays on this device: the Messages group is shared with the other devices
+        local = getattr(notification.data, 'bonjour_keys', None) or set()
         for display_name, uri in notification.data.contacts:
+            if uri in local:
+                continue
             self.history_pending.setdefault(str(uri), display_name or None)
         self._flush()
 
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
+        if notification.sender is BonjourAccount():
+            return      # a Bonjour conversation stays on this device, out of the shared Messages group
         if getattr(notification.data, 'from_history', False):
             self.history_pending.setdefault(str(notification.data.remote_uri), None)
         else:
@@ -2978,6 +2984,9 @@ class BonjourNeighboursManager(object, metaclass=Singleton):
         neighbour, record = notification.data.neighbour, notification.data.record
         contact_id = record.id or neighbour
         contact_uri = BonjourNeighbourURI(neighbour, record.uri)
+        if is_instance_id(contact_id):
+            from blink.history import MessageHistory
+            MessageHistory().refile_neighbour(str(record.uri), contact_id)
         try:
             contact = self.contacts[contact_id]
         except KeyError:
