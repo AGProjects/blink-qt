@@ -23,9 +23,9 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.accounts import AddAccountDialog
-from blink.camera_formats import resolution_support
+from blink.camera_formats import resolution_support, usable_cameras
 from blink.configuration.settings import H264_LEVELS, BlinkSettings
-from blink.screen_pointer import is_screen_device
+from blink.screen_pointer import is_screen_device, screen_index
 from blink.screen_share import ScreenShareManager
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
@@ -713,11 +713,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_camera_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.video_camera_button.insertSeparator(1)
         self.video_camera_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
-        for device in SIPApplication.engine.video_devices:
-            if is_screen_device(device):
-                continue        # the screen is shared from a call's video window, it is no default camera
+        devices = SIPApplication.engine.video_devices
+        cameras = usable_cameras(devices)
+        screens = sorted((device for device in devices if is_screen_device(device)), key=screen_index)
+        for device in cameras:
             self.video_camera_button.addItem(device, device)
         self.video_camera_button.addItem(translate('preferences_window', 'None'), None)
+        if screens:
+            # every screen the SDK has a device for (one per monitor; where the desktop is
+            # asked which monitor, as on Wayland, there is one and the desktop's picker shows)
+            self.video_camera_button.insertSeparator(self.video_camera_button.count())
+            self.video_camera_button.setItemData(self.video_camera_button.count() - 1, Separator)
+            for device in screens:
+                self.video_camera_button.addItem(device, device)
         self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
         self.load_video_resolutions()
 
@@ -1702,9 +1710,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     # Video devices signal handlers
     def _SH_VideoCameraButtonActivated(self, index):
         device = self.video_camera_button.itemData(index)
-        settings = SIPSimpleSettings()
-        settings.video.device = device
-        settings.save()
+        manager = ScreenShareManager()
+        if is_screen_device(device):
+            # through screen sharing: the desktop may have to be asked for the screen first,
+            # and the camera comes back when sharing stops
+            if not manager.share_screen(device):
+                self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(SIPSimpleSettings().video.device))
+            return
+        if manager.sharing:
+            manager.stop_sharing(device)
+        else:
+            settings = SIPSimpleSettings()
+            settings.video.device = device
+            settings.save()
         self.load_video_resolutions(adjust=True)
 
     def _SH_VideoResolutionButtonActivated(self, index):

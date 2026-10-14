@@ -21,13 +21,12 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.session import IllegalStateError
 
 from blink.aboutpanel import AboutPanel
-from blink.camera_formats import log_camera_formats
+from blink.camera_formats import log_camera_formats, usable_cameras
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
 from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI, conversation_uri
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
-from blink.screen_pointer import is_screen_device
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.launcher import LauncherBadge
 from blink.logging import ActivityLog
@@ -674,9 +673,9 @@ class MainWindow(base_class, ui_class):
 
         self.video_camera_menu.addSeparator()
 
-        for device in SIPApplication.engine.video_devices:
-            if is_screen_device(device):
-                continue        # the screen is shared from a call's video window, it is no default camera
+        # the screen is shared from a call's video window, it is no default camera; the SDK's
+        # test devices and nodes that deliver no picture are no cameras (camera_formats.py)
+        for device in usable_cameras(SIPApplication.engine.video_devices):
             action = action_map[device] = self.video_camera_menu.addAction(device)
             action.setData(device)
             action.setCheckable(True)

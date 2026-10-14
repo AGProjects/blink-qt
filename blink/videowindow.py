@@ -46,7 +46,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog
 from blink import screen_pointer
 from blink.resources import Resources
-from blink.camera_formats import resolution_support
+from blink.camera_formats import resolution_support, usable_cameras
 from blink.screen_share import ScreenShareManager
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.video import VideoSurface
@@ -1728,7 +1728,8 @@ class VideoWindow(QWidget):
 
         menu.addSeparator()
         try:
-            cameras = [device for device in SIPApplication.engine.video_devices if device not in (None, 'system_default')]
+            devices = SIPApplication.engine.video_devices
+            cameras = usable_cameras(devices) + [device for device in devices if screen_pointer.is_screen_device(device)]
         except AttributeError:
             cameras = []
         settings = SIPSimpleSettings()

@@ -349,6 +349,7 @@ class ScreenShareManager(object, metaclass=Singleton):
         self.device_before_share = None     # settings.video.device to put back
         self.device_at_call_start = None    # settings.video.device when the first of the current calls started
         self.pointer_screen_logged = None   # the screen pointers were last drawn on, for the log
+        self.wanted_screen = None           # the screen device asked for by share_screen()
         self.saved_token = None
         self.unwanted_ready = False         # a picked screen nobody wants, seen at the last poll
         self.poll_timer = QTimer()
@@ -433,13 +434,15 @@ class ScreenShareManager(object, metaclass=Singleton):
 
     # sharing our screen
 
-    def share_screen(self):
+    def share_screen(self, device=None):
         """Send the screen instead of the camera. On Linux the desktop asks
         which monitor first (or not, with a restore token): the device is
         selected once it answers. False when the screen cannot be shared."""
         devices = _screen_devices()
         if not devices:
             return False
+        # which screen, when there are several devices for it (else the desktop asks)
+        self.wanted_screen = device if device in devices else devices[0]
         current = SIPSimpleSettings().video.device
         if not SP.is_screen_device(current) and not self.capture_wanted:
             self.device_before_share = current
@@ -448,8 +451,8 @@ class ScreenShareManager(object, metaclass=Singleton):
         if state == 'unavailable':
             # the device opens by itself (or falls back to a camera)
             self.capture_wanted = True
-            log('sharing the screen, video switched to %s' % devices[0])
-            _select_device(devices[0])
+            log('sharing the screen, video switched to %s' % self.wanted_screen)
+            _select_device(self.wanted_screen)
             self.poll_timer.start()
             return True
         if state == 'capturing' or _local_on_screen():
@@ -572,8 +575,9 @@ class ScreenShareManager(object, metaclass=Singleton):
             if self.capture_wanted and not _local_on_screen():
                 devices = _screen_devices()
                 if devices:
-                    log('the desktop gave us a screen, video switched to %s' % devices[0])
-                    _select_device(devices[0])
+                    screen = self.wanted_screen if self.wanted_screen in devices else devices[0]
+                    log('the desktop gave us a screen, video switched to %s' % screen)
+                    _select_device(screen)
             elif not self.capture_wanted and not _local_on_screen():
                 # ready also for a moment while the SDK reopens the device (a new
                 # size, say): only a screen nobody wanted twice in a row goes
