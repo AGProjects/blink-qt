@@ -55,7 +55,6 @@ from blink.logging import ActivityLog, MessagingTrace as message_log
 from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
-from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessioninfo import SessionInfoPanel
 from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
@@ -4447,6 +4446,8 @@ class EmbeddedVNCViewerHandler(ExternalVNCViewerHandler):
 
     @run_in_gui_thread
     def _start_vnc_viewer(self):
+        # the RFB extension is no longer built; only reached when one is present (can_view_screens())
+        from blink.screensharing import ScreensharingWindow, VNCClient, ServerDefault
         settings = BlinkSettings()
         notification_center = NotificationCenter()
         host, port = self.address

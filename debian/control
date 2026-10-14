@@ -6,16 +6,13 @@ Uploaders: Tijmen de Mes <tijmen@ag-projects.com>
 Build-Depends: debhelper (>= 12),
                dh-python,
                python3-setuptools,
-               python3-all-dev,
-               python3-all-dbg,
-               cython3 | cython3-legacy,
-               libvncserver-dev
+               python3-all
 Standards-Version: 4.5.0
 Homepage: http://icanblink.com
 
 Package: blink
-Architecture: any
-Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
+Architecture: all
+Depends: ${python3:Depends}, ${misc:Depends},
          libavahi-compat-libdnssd1,
          python3-application,
          python3-eventlib,
@@ -41,8 +38,7 @@ Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends},
          python3-sipsimple (>=5.6.1),
          python3-sqlobject,
          python3-twisted,
-         python3-zope.interface,
-         x11vnc
+         python3-zope.interface
 Recommends: gstreamer1.0-plugins-ugly,
             python3-pyqt6.qtpdf,
             python3-pyqt6.qtpositioning,

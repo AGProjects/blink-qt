@@ -2,8 +2,7 @@
 
 import os
 
-from setuptools import setup, Extension
-from Cython.Build import cythonize
+from setuptools import setup
 
 
 class PackageInfo(object):
@@ -50,7 +49,8 @@ setup(
     ],
 
     packages=find_packages('blink'),
-    ext_modules=cythonize([Extension(name="blink.screensharing._rfb", sources=["blink/screensharing/_rfb.pyx"], libraries=["vncclient"])]),
+    # blink/screensharing/_rfb.pyx (the VNC viewer, libvncclient) is not built: screens are
+    # shared in video calls (docs/screen-sharing-migration.md)
     data_files=list_resources('resources', destination_directory='share/blink'),
     scripts=['bin/blink']
 )

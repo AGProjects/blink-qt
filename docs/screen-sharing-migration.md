@@ -1,6 +1,6 @@
 # Blink Qt — screen sharing as a video device
 
-Status as of 2026-10-13: implemented (portal + PipeWire only, decision 1 below), with the remote pointer and the screen request handshake of Blink for macOS and Sylk Mobile. See "Implementation" at the end.
+Status as of 2026-10-13: implemented (portal + PipeWire only, decision 1 below), with the remote pointer and the screen request handshake of Blink for macOS and Sylk Mobile. VNC desktop sharing is phased out: its code stays, but it is no longer built or depended on. See "Implementation" and "VNC phase-out" at the end.
 
 ## Why
 
@@ -61,7 +61,7 @@ Blink Qt:
 - Little or nothing: the device appears in the camera list on its own
 - Fall back to the camera on `PJMEDIA_EVID_NOTREADY`
 - Store the portal restore token
-- Keep `x11vnc` and VNC desktop sharing for remote control on X11; screen-as-video is the way to share on Wayland
+- Phase out `x11vnc`/VNC desktop sharing (see "VNC phase-out"); screen-as-video replaces it
 
 Runtime: PipeWire and a portal backend (`xdg-desktop-portal-gnome`, `-kde` or `-wlr`), which the desktop already provides.
 
@@ -91,5 +91,18 @@ Tested in a container against PipeWire with a synthetic video node and a stand-i
 - `blink/screen_share.py`, `ScreenShareManager`: capabilities at call start, `start`/`stop` when our video is/stops being the screen, the request handshake (a prompt when asked; accepting shares the screen), pointers drawn on the shared monitor with a click-through overlay window and acked, the desktop's answer polled while sharing. The restore token and the camera to go back to are kept in QSettings. The camera comes back when no call with video is left, when sharing is stopped from the desktop, or when a camera is picked. Capabilities are not sent to phone numbers and conferences.
 - Video window: "My screen" in the Camera menu shares the screen (after the desktop's picker), "Request Screen" asks the other party for theirs, a Pointer button shows while the other party shares a screen it draws pointers on (click the picture to point; Esc leaves pointer mode), the acked click is echoed with a green ring. The local picture is not mirrored while it is the screen. The screen is not offered as a default camera in Preferences or the main window's Video menu.
 - The screen is sent at 1280x720 and 1.5 Mbps while it is shared, cameras at the video settings: selecting "My screen" also sets the capture resolution, and the calls going on reopen their encoder at the new size without renegotiating (`VideoStream.set_encoder_size()`, patch `53_vid_stream_set_enc_size.patch`); the other side gets a keyframe at the new size. Going back to a camera restores both.
-- The VNC entry points (main window screen button, contact and call menus, MSRP sessions window) are hidden behind `VNC_SCREEN_SHARING_OFFERED` in `blink/screensharing/support.py`; incoming VNC offers are still handled.
-- `x11vnc`/VNC desktop sharing over MSRP stays as it was (remote control, X11 only).
+- When our video becomes the screen, the video window goes into the drawer under the call (as for the message pane), out of the way of what is being shared.
+- Multiple monitors: the monitor the desktop shares is matched to a `QScreen` (`_shared_qscreen()`) to draw the pointers on, from exact to loose because XWayland with scaling can give the desktop's logical coordinates and Qt's differently: position, position in device pixels, logical or pixel size, captured frame size, aspect ratio, then the primary screen. How it was found is logged with the list of screens.
+- Camera menu → Resolution: the sizes the camera can deliver (`blink/camera_formats.py`, from the formats the SDK probes per device; all of them when the SDK cannot say), with the highest frame rate of each, applied to the calls going on at once. Disabled while the screen is shared ("Resolution (screen: 720p)").
+- Preferences: the Screen Sharing page (VNC viewer scale / full screen / view only) is hidden; its page index is kept so the other sections keep their pages.
+- The VNC entry points (main window screen button, contact and call menus, MSRP sessions window) are hidden behind `VNC_SCREEN_SHARING_OFFERED` in `blink/screensharing/support.py`.
+
+## VNC phase-out
+
+VNC desktop sharing over MSRP (the `_rfb` Cython viewer on libvncclient, `x11vnc` as server) is no longer built and nothing depends on it. The code stays in `blink/screensharing/` and `blink/sessions.py`.
+
+- `setup.py`: no `ext_modules`, no Cython; `blink/screensharing/_rfb.pyx` is not compiled.
+- `debian/control`: `Architecture: all` (no compiled code left), Build-Depends without `cython3`, `libvncserver-dev`, `python3-all-dev`, `python3-all-dbg` (now `python3-all`); Depends without `x11vnc` and `${shlibs:Depends}`. `INSTALL` follows.
+- `blink/screensharing/__init__.py` loads `VNCClient`, `ScreensharingWindow`, … on first use, so `blink.screensharing.support` imports without `_rfb`. `sessions.py` imports the viewer only when a viewer session starts.
+- Without `_rfb`, `can_view_screens()` is false: incoming offers of a remote screen are declined (logged at info level as "the RFB client is not built"). An incoming request for my screen is still accepted on an X11 session where `x11vnc` happens to be installed.
+- To bring it back: put the extension back in `setup.py` (`Extension("blink.screensharing._rfb", ["blink/screensharing/_rfb.pyx"], libraries=["vncclient"])` with `cythonize`), the build and runtime dependencies in `debian/control`, and set `VNC_SCREEN_SHARING_OFFERED = True`.

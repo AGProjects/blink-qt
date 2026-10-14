@@ -36,7 +36,6 @@ Install the runtime dependencies:
  * python3-sqlobject
  * python3-twisted
  * python3-zope.interface
- * x11vnc
 
 Optional:
 
@@ -53,7 +52,6 @@ https://github.com/AGProjects/python3-sipsimple/blob/master/docs/Install.linux
 
 After installing the above dependencies, install Blink system wide using:
 
-python3 setup.py build_ext
 sudo python3 setup.py install
 
 
@@ -65,13 +63,9 @@ Install the building dependencies:
   * debhelper
   * dh-python
   * python3-setuptools
-  * python3-all-dev
-  * python3-all-dbg
-  * cython3 (or cython3-legacy)
-  * build-essential
+  * python3-all
   * devscripts
   * equivs (for mk-build-deps, used by makedeb.sh)
-  * libvncserver-dev
 
 Create a clean distribution file:
 
