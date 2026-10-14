@@ -38,7 +38,18 @@ if [ "$mode" = "rebuild" ]; then
     exit 0
 fi
 
-sudo mk-build-deps --install --root-cmd sudo --remove debian/control
+# mk-build-deps needs equivs (and devscripts for mk-build-deps/debuild)
+missing=""
+for pkg in equivs devscripts; do
+    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "ok installed" || missing="$missing $pkg"
+done
+if [ -n "$missing" ]; then
+    sudo apt-get update
+    sudo apt-get install -y --no-install-recommends $missing
+fi
+
+sudo mk-build-deps --install --root-cmd sudo --remove \
+    --tool 'apt-get -y --no-install-recommends' debian/control
 
 rm -rf dist build
 
