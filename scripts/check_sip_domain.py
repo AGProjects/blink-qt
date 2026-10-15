@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check the SIP infrastructure of a domain, the way a client finds and uses it.
 
+    check_sip_domain.py                 (the domain of Blink's default account)
     check_sip_domain.py sylk.link
     check_sip_domain.py sylk.link -a ag@sylk.link
     check_sip_domain.py example.com -a alice@example.com -p secret
@@ -45,8 +46,13 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.storage import FileStorage
 from sipsimple.threading.green import run_in_green_thread
 
-sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)))
-from blink.sip_domain_check import DomainInspector, TextReport, system_ca_file, text   # noqa: E402
+# blink.sip_domain_check stands alone; it is loaded by path because importing it as part of the
+# blink package would run blink/__init__.py, which imports the whole GUI and its .ui resources
+import importlib.util   # noqa: E402
+_spec = importlib.util.spec_from_file_location('sip_domain_check', os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'blink', 'sip_domain_check.py'))
+_sip_domain_check = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_sip_domain_check)
+DomainInspector, TextReport, system_ca_file, text = _sip_domain_check.DomainInspector, _sip_domain_check.TextReport, _sip_domain_check.system_ca_file, _sip_domain_check.text
 
 
 # Output
@@ -62,16 +68,35 @@ section, ok, fail, note = REPORT.section, REPORT.ok, REPORT.fail, REPORT.note
 
 # Blink's accounts
 
-def blink_accounts(config_directory):
+def _blink_config(config_directory):
     path = os.path.join(os.path.expanduser(config_directory), 'config')
     if not os.path.exists(path):
         return {}
     try:
-        accounts = FileBackend(path).load().get('Accounts') or {}
+        return FileBackend(path).load() or {}
     except Exception as e:
         out(f'Cannot read {path}: {e}')
         return {}
+
+
+def blink_accounts(config_directory):
+    accounts = _blink_config(config_directory).get('Accounts') or {}
     return {key: value for key, value in accounts.items() if '@' in key and isinstance(value, dict)}
+
+
+def blink_default_account(config_directory):
+    """The id of Blink's default SIP account: the one set as default when it is a SIP account,
+    else the first enabled one. None when Blink has no SIP account."""
+    config = _blink_config(config_directory)
+    accounts = blink_accounts(config_directory)
+    default = config.get('default_account')
+    for value in config.values():
+        if default is None and isinstance(value, dict):
+            default = value.get('default_account')
+    if isinstance(default, str) and default in accounts:
+        return default
+    enabled = [key for key, value in sorted(accounts.items()) if str(value.get('enabled', 'true')).lower() not in ('false', '0', 'no') and not key.endswith('@local')]
+    return enabled[0] if enabled else None
 
 
 # The checks
@@ -232,7 +257,7 @@ class DomainCheck(object):
 
 def main():
     description = 'Checks the SIP servers of a domain: DNS (NAPTR, SRV, A), the TLS certificate of every server, then one registration.'
-    parser = OptionParser(usage='%prog [options] domain', description=description)
+    parser = OptionParser(usage='%prog [options] [domain]', description=description + " Without a domain, the domain of Blink's default account.")
     parser.add_option('-a', '--account', dest='account', help='the account to register (default: the first of the domain in Blink)', metavar='USER@DOMAIN')
     parser.add_option('-p', '--password', dest='password', help='its password (default: from Blink, else asked)')
     parser.add_option('-c', '--config-directory', dest='config_directory', default='~/.blink', help="Blink's data directory (default ~/.blink)")
@@ -240,6 +265,14 @@ def main():
     parser.add_option('-t', '--timeout', type='int', dest='timeout', default=30, help='seconds to wait for the registration (default 30)')
     parser.add_option('-n', '--no-register', action='store_true', dest='no_register', default=False, help='only check DNS and TLS')
     options, args = parser.parse_args()
+    if not args:
+        account_id = options.account or blink_default_account(options.config_directory)
+        if account_id is None:
+            out(f'No domain given and no SIP account in {os.path.join(options.config_directory, "config")}')
+            parser.print_help()
+            return 2
+        out(f'Using account {account_id}')
+        args = [account_id]
     if len(args) != 1:
         parser.print_help()
         return 2
