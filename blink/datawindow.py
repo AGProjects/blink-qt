@@ -22,7 +22,7 @@ import uuid
 from collections import Counter, deque
 import time
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import partial
 
 from application.notification import IObserver, NotificationCenter
@@ -30,9 +30,9 @@ from application.python import Null
 from zope.interface import implementer
 
 from PyQt6.QtCore import Qt, QSettings, QTimer
-from PyQt6.QtGui import QFont, QFontDatabase
-from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPlainTextEdit, QProgressBar,
-                             QPushButton, QSplitter, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+from PyQt6.QtGui import QFont, QFontDatabase, QPalette
+from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPlainTextEdit, QProgressBar,
+                             QPushButton, QSpinBox, QSplitter, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from sipsimple.account import AccountManager, BonjourAccount
 from sipsimple.configuration.settings import SIPSimpleSettings
@@ -41,7 +41,8 @@ from sipsimple.threading import run_in_thread
 from blink.contact_mangler import mangled_account_label, mangled_text, mangled_uri
 from blink.data_manage import (with_related, CATEGORY_LABELS, ENCRYPTED, bulk_delete_payload, REMOVE_BATCH, JournalRemoveError, JournalRemoveRefused, JournalRemoveUnsupported, action_label,
                                aggregate_days, build_rows, count_by, remove_from_journal, row_label, select, type_label,
-                               DOWNLOADABLE, FAILED, FILE_KINDS, build_file_rows, scan_transfer_storage, status_label)
+                               DOWNLOADABLE, FAILED, FILE_KINDS, build_file_rows, scan_transfer_storage, status_label,
+                               COMPACTION_RULES, JournalScanError, compaction_content_types, compaction_ids, compaction_rule, contact_breakdown, purge_journal, scan_journal)
 from blink.history import MessageHistory
 from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
@@ -738,6 +739,360 @@ class ManagePanel(QWidget):
         self.refresh(keep_status=True)
 
 
+class CompactJournalPanel(QWidget):
+    """Compact journal: remove from the account's journal on the server the entries that stopped
+    being worth downloading, rule by rule (blink.data_manage.COMPACTION_RULES). The journal is read
+    once (Count), each rule tells how many of its entries are older than its age, and Compact
+    removes those of the rules ticked. Nothing on any device is changed."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.account_id = None
+        self.entries = None         # the journal as read by the last Count, for account_id
+        self.counted = frozenset()  # the names of the rules that Count read the journal for
+        self.contact = None         # the contact chosen in the breakdown (None: all of them)
+        self.busy = False
+        self.cancelled = False
+        self.status_text = ''
+        self.rule_widgets = {}      # rule name: (check box, days spin box, count label)
+        self._build()
+        self.refresh_controls()
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        layout.addLayout(form)
+        self.account_box = QComboBox(self)
+        self.account_box.activated.connect(self._SH_AccountChanged)
+        form.addRow(translate('data_window', 'Account'), self.account_box)
+
+        intro = QLabel(translate('data_window', 'The journal on the server keeps every entry of the account: it is what a new device downloads to start, '
+                                                'and what a device that was offline downloads to catch up. Compacting removes from it the entries that '
+                                                'stopped being worth that download. Nothing is changed on any device: the devices that have them keep '
+                                                'what they made of them. Count reads the journal first; nothing is removed before Compact.'), self)
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        rules = QGridLayout()
+        rules.setColumnStretch(3, 1)
+        rules.setVerticalSpacing(4)
+        for number, rule in enumerate(COMPACTION_RULES):
+            check = QCheckBox(translate('data_window', rule.title), self)
+            check.setChecked(True)
+            check.clicked.connect(lambda *args: self.refresh_controls())
+            days = QSpinBox(self)
+            days.setRange(0, 3650)
+            days.setValue(rule.age.days)
+            days.setPrefix(translate('data_window', 'older than '))
+            days.setSuffix(translate('data_window', ' days'))
+            days.setSpecialValueText(translate('data_window', 'of any age'))
+            days.valueChanged.connect(lambda *args: self.refresh_controls())
+            count = QLabel(self)
+            description = QLabel(translate('data_window', rule.description), self)
+            description.setWordWrap(True)
+            palette = description.palette()     # the theme's placeholder color: dimmed, readable in a dark theme too
+            palette.setColor(QPalette.ColorRole.WindowText, palette.color(QPalette.ColorRole.PlaceholderText))
+            description.setPalette(palette)
+            description.setContentsMargins(24, 0, 0, 8)
+            rules.addWidget(check, number * 2, 0)
+            rules.addWidget(days, number * 2, 1)
+            rules.addWidget(count, number * 2, 2)
+            rules.addWidget(description, number * 2 + 1, 0, 1, 4)
+            self.rule_widgets[rule.name] = (check, days, count)
+        layout.addLayout(rules)
+
+        # what the rules ticked remove, contact by contact: choosing one compacts only that contact
+        self.breakdown = QTreeWidget(self)
+        self.breakdown.setRootIsDecorated(False)
+        self.breakdown.setUniformRowHeights(True)
+        self.breakdown.setAlternatingRowColors(True)
+        self.breakdown.setHeaderLabels([translate('data_window', 'Contact')] + [translate('data_window', rule.title) for rule in COMPACTION_RULES]
+                                       + [translate('data_window', 'Total')])
+        header = self.breakdown.header()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in range(1, len(COMPACTION_RULES) + 2):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        self.breakdown.setToolTip(translate('data_window', 'Choose a contact to compact only its entries'))
+        self.breakdown.currentItemChanged.connect(self._SH_BreakdownItemChanged)
+        layout.addWidget(self.breakdown, 1)
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+        self.status = QLabel(self)
+        self.status.setWordWrap(True)
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status)
+
+        buttons = QHBoxLayout()
+        self.count_button = QPushButton(translate('data_window', 'Count'), self)
+        self.count_button.setToolTip(translate('data_window', 'Read the journal on the server and count what each rule would remove'))
+        self.count_button.clicked.connect(self._SH_CountClicked)
+        buttons.addWidget(self.count_button)
+        buttons.addStretch(1)
+        self.stop_button = QPushButton(translate('data_window', 'Stop'), self)
+        self.stop_button.clicked.connect(self._SH_StopClicked)
+        buttons.addWidget(self.stop_button)
+        self.compact_button = QPushButton(translate('data_window', 'Compact'), self)
+        self.compact_button.clicked.connect(self._SH_CompactClicked)
+        buttons.addWidget(self.compact_button)
+        layout.addLayout(buttons)
+
+    # -- state -------------------------------------------------------------------
+
+    def _age(self, rule):
+        return timedelta(days=self.rule_widgets[rule.name][1].value())
+
+    def _ticked(self):
+        return [rule for rule in COMPACTION_RULES if self.rule_widgets[rule.name][0].isChecked()]
+
+    def _matches(self):
+        """{rule name: [ids]} of the rules ticked that the last Count read the journal for: a rule
+        ticked since has no count yet, and Compact leaves it out until Count is pressed again."""
+        if self.entries is None:
+            return {}
+        return {rule.name: compaction_ids(self.entries, rule, self._age(rule), contact=self.contact) for rule in self._ticked() if rule.name in self.counted}
+
+    def _fill_breakdown(self):
+        """The contacts with something to remove, the most first, under All contacts; the chosen one stays chosen."""
+        self.breakdown.blockSignals(True)
+        self.breakdown.clear()
+        rules = [(rule, self._age(rule)) for rule in self._ticked() if rule.name in self.counted] if self.entries is not None else []
+        rows = contact_breakdown(self.entries, rules) if rules else []
+        shown = {rule.name for rule, age in rules}
+        current = None
+        if rows:
+            totals = {name: sum(per_rule.get(name, 0) for contact, per_rule, total in rows) for name in shown}
+            everyone = QTreeWidgetItem([translate('data_window', 'All contacts (%d)') % len(rows)]
+                                       + [str(totals[rule.name]) if rule.name in shown else '' for rule in COMPACTION_RULES]
+                                       + [str(sum(total for contact, per_rule, total in rows))])
+            everyone.setData(0, Qt.ItemDataRole.UserRole, None)
+            font = QFont(everyone.font(0))
+            font.setBold(True)
+            for column in range(len(COMPACTION_RULES) + 2):
+                everyone.setFont(column, font)
+            self.breakdown.addTopLevelItem(everyone)
+            current = everyone
+            for contact, per_rule, total in rows:
+                item = QTreeWidgetItem([mangled_uri(contact) if contact else translate('data_window', '(no contact)')]
+                                       + [str(per_rule.get(rule.name, 0)) if rule.name in shown else '' for rule in COMPACTION_RULES] + [str(total)])
+                item.setData(0, Qt.ItemDataRole.UserRole, contact)
+                for column in range(1, len(COMPACTION_RULES) + 2):
+                    item.setTextAlignment(column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.breakdown.addTopLevelItem(item)
+                if contact == self.contact:
+                    current = item
+            for column in range(1, len(COMPACTION_RULES) + 2):
+                everyone.setTextAlignment(column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if current is not None:
+            self.breakdown.setCurrentItem(current)
+        self.contact = current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
+        self.breakdown.blockSignals(False)
+
+    def _SH_BreakdownItemChanged(self, current, previous):
+        self.contact = current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
+        self._refresh_counts()
+
+    def refresh_accounts(self):
+        if self.busy:
+            return
+        accounts = [account.id for account in AccountManager().get_accounts() if account is not BonjourAccount() and _journal_of(account.id) is not None]
+        self.account_box.blockSignals(True)
+        self.account_box.clear()
+        for account_id in accounts:
+            self.account_box.addItem(mangled_account_label(str(account_id)), str(account_id))
+        if self.account_id not in [str(account_id) for account_id in accounts]:
+            self.account_id = str(accounts[0]) if accounts else None
+            self.entries = None
+        if self.account_id is not None:
+            self.account_box.setCurrentIndex(self.account_box.findData(self.account_id))
+        self.account_box.blockSignals(False)
+        self.refresh_controls()
+
+    def refresh_controls(self):
+        journal = self.account_id is not None
+        self.account_box.setEnabled(not self.busy)
+        self.count_button.setEnabled(journal and not self.busy and bool(self._ticked()))
+        self.stop_button.setVisible(self.busy)
+        self.stop_button.setEnabled(self.busy and not self.cancelled)
+        self.breakdown.setEnabled(not self.busy)
+        self._fill_breakdown()
+        self._refresh_counts()
+        if not journal:
+            self.status.setText(translate('data_window', 'No account has a journal: it comes with a SylkServer account that synchronized once.'))
+        elif self.status_text:
+            self.status.setText(self.status_text)
+        elif self.entries is None:
+            self.status.setText(translate('data_window', 'Press Count to read the journal of %s') % mangled_account_label(self.account_id))
+        else:
+            self.status.setText(translate('data_window', 'The journal holds %d entries of the types of the rules counted') % len(self.entries))
+
+    def _refresh_counts(self):
+        """Each rule's count and the Compact button, for the contact chosen (all of them when none is)."""
+        journal = self.account_id is not None
+        matches = self._matches()
+        total = len({message_id for ids in matches.values() for message_id in ids})
+        for rule in COMPACTION_RULES:
+            check, days, count = self.rule_widgets[rule.name]
+            check.setEnabled(not self.busy)
+            days.setEnabled(not self.busy)
+            if not check.isChecked():
+                count.setText('')
+            elif self.entries is None or rule.name not in self.counted:
+                count.setText(translate('data_window', 'press Count') if self.entries is not None else '')
+            else:
+                count.setText(translate('data_window', '%d entries') % len(matches.get(rule.name, ())))
+        self.compact_button.setEnabled(journal and not self.busy and total > 0)
+        self.compact_button.setText(translate('data_window', 'Compact (%d)') % total if total else translate('data_window', 'Compact'))
+
+    def _SH_AccountChanged(self, index):
+        self.account_id = self.account_box.itemData(index)
+        self.contact = None
+        self.entries = None
+        self.status_text = ''
+        self.refresh_controls()
+
+    def _SH_StopClicked(self):
+        self.cancelled = True
+        self.refresh_controls()
+
+    # -- reading the journal -------------------------------------------------------
+
+    def _SH_CountClicked(self):
+        journal = _journal_of(self.account_id) if self.account_id else None
+        if journal is None or self.busy:
+            return
+        self.busy = True
+        self.cancelled = False
+        self.entries = None
+        self.status_text = translate('data_window', 'Reading the journal on the server…')
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setVisible(True)
+        rules = self._ticked()
+        self.counted = frozenset()
+        self.refresh_controls()
+        self._scan(self.account_id, journal, rules)
+
+    @run_in_thread('data-manage')
+    def _scan(self, account_id, journal, rules):
+        verify = SIPSimpleSettings().tls.verify_server
+        error = None
+        entries = None
+        started = time.monotonic()
+        # only the content types of the rules ticked: the server sends nothing else (an older one sends all)
+        content_types = compaction_content_types(rules)
+        stats = {}
+        _log(f'Reading the journal of {account_id} for compacting ({", ".join(rule.name for rule in rules)}), '
+             f'only the content types {", ".join(sorted(content_types))}')
+        try:
+            entries = scan_journal(journal[0], journal[1], verify=verify, stop=lambda: self.cancelled, content_types=content_types, stats=stats,
+                                   progress=lambda pages, count: self._scan_progress(pages, count))
+        except JournalRemoveRefused:
+            error = translate('data_window', 'The server refused the API token of the account; try again once the account has a new token.')
+        except JournalScanError as e:
+            error = translate('data_window', 'Reading the journal failed: %s') % e
+        if stats.get('first_url'):
+            _log(f'Journal request of {account_id}: GET {stats["first_url"]}')
+        if entries is not None:
+            filtered = ('filtered by the server' if stats.get('server_filtered') else
+                        f'the server does not filter by content type: {stats.get("received", 0)} entries received, {len(entries)} kept')
+            _log(f'Read {len(entries)} journal entries of {account_id} in {stats.get("pages", 0)} pages, {time.monotonic() - started:.1f}s ({filtered})'
+                 + (' (stopped)' if self.cancelled else ''))
+        self._scanned(account_id, entries, error, frozenset(rule.name for rule in rules))
+
+    @run_in_gui_thread
+    def _scan_progress(self, pages, count):
+        if self.busy:
+            self.status.setText(translate('data_window', 'Reading the journal on the server: %d pages, %d entries') % (pages, count))
+
+    @run_in_gui_thread
+    def _scanned(self, account_id, entries, error, counted):
+        self.busy = False
+        self.progress_bar.setVisible(False)
+        if account_id == self.account_id:
+            self.entries = entries if not self.cancelled else None
+            self.counted = counted if self.entries is not None else frozenset()
+        self.status_text = error or (translate('data_window', 'Stopped') if self.cancelled else '')
+        self.cancelled = False
+        self.refresh_controls()
+
+    # -- compacting ---------------------------------------------------------------
+
+    def _SH_CompactClicked(self):
+        journal = _journal_of(self.account_id) if self.account_id else None
+        matches = self._matches()
+        ids = list(dict.fromkeys(message_id for found in matches.values() for message_id in found))
+        if journal is None or self.busy or not ids:
+            return
+        lines = []
+        for rule in COMPACTION_RULES:
+            if matches.get(rule.name):
+                age = self._age(rule)
+                when = translate('data_window', 'older than %d days') % age.days if age else translate('data_window', 'of any age')
+                lines.append(f'{translate("data_window", rule.title)} {when}: {len(matches[rule.name])}')
+        who = mangled_uri(self.contact) if self.contact else translate('data_window', 'all contacts')
+        text = (translate('data_window', 'Remove %d entries from the journal of %s on the server?') % (len(ids), mangled_account_label(self.account_id))
+                + '\n\n' + translate('data_window', 'Contact: %s') % who + '\n' + '\n'.join(lines) + '\n\n' + translate('data_window', 'This cannot be undone. Nothing is changed on any device.'))
+        if QMessageBox.question(self, translate('data_window', 'Compact journal'), text) != QMessageBox.StandardButton.Yes:
+            return
+        self.busy = True
+        self.cancelled = False
+        self.status_text = translate('data_window', 'Removing %d entries from the journal on the server…') % len(ids)
+        self.progress_bar.setRange(0, len(ids))
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        self.refresh_controls()
+        _log(f'Compacting the journal of {self.account_id} ({self.contact or "all contacts"}): ' + ', '.join(f'{name} {len(found)} older than {self._age(compaction_rule(name)).days} days'
+                                                                       for name, found in matches.items() if found))
+        self._compact(self.account_id, journal, ids)
+
+    @run_in_thread('data-manage')
+    def _compact(self, account_id, journal, ids):
+        verify = SIPSimpleSettings().tls.verify_server
+        removed = requested = 0
+        error = None
+        started = time.monotonic()
+        progress = {'removed': 0, 'requested': 0}
+
+        def report(done, removed, total):
+            progress.update(removed=removed, requested=done)
+            self._compact_progress(done, removed, total)
+        try:
+            removed, requested = purge_journal(journal[0], journal[1], ids, verify=verify, stop=lambda: self.cancelled, progress=report)
+        except JournalRemoveUnsupported:
+            error = translate('data_window', 'The server cannot remove journal entries in bulk (SylkServer needs updating).')
+        except JournalRemoveRefused:
+            error = translate('data_window', 'The server refused the API token of the account; try again once the account has a new token.')
+        except JournalRemoveError as e:
+            error = translate('data_window', 'Removing from the server failed: %s') % e
+        if error is not None:
+            removed, requested = progress['removed'], progress['requested']
+        _log(f'Compacted the journal of {account_id}: {removed} of {len(ids)} entries removed in {time.monotonic() - started:.1f}s'
+             + (f' ({error})' if error else ' (stopped)' if self.cancelled and requested < len(ids) else ''))
+        self._compacted(account_id, removed, requested, len(ids), error)
+
+    @run_in_gui_thread
+    def _compact_progress(self, done, removed, total):
+        if self.busy:
+            self.progress_bar.setValue(done)
+            self.status.setText(translate('data_window', 'Removing from the journal on the server: %d of %d done, %d removed') % (done, total, removed))
+
+    @run_in_gui_thread
+    def _compacted(self, account_id, removed, requested, total, error):
+        self.busy = False
+        self.progress_bar.setVisible(False)
+        result = translate('data_window', 'Removed %d of %d entries from the journal') % (removed, total)
+        if requested > removed:
+            result += translate('data_window', ' (%d were no longer in it)') % (requested - removed)
+        if self.cancelled and requested < total:
+            result += translate('data_window', ', stopped')
+        self.cancelled = False
+        self.status_text = result + (f'. {error}' if error else '') + '. ' + translate('data_window', 'Press Count to read it again.')
+        if account_id == self.account_id:
+            self.entries = None     # what was read no longer is the journal
+        self.refresh_controls()
+
+
 @implementer(IObserver)
 class FileTransfersPanel(QWidget):
     """The files of file transfer messages that are on the server and not on this computer, drilled
@@ -1347,6 +1702,8 @@ class DataWindow(QWidget):
         self.tabs.addTab(self.manage_panel, translate('data_window', 'Local messages'))
         self.files_panel = FileTransfersPanel(self.tabs)
         self.tabs.addTab(self.files_panel, translate('data_window', 'File transfers on server'))
+        self.compact_panel = CompactJournalPanel(self.tabs)
+        self.tabs.addTab(self.compact_panel, translate('data_window', 'Compact journal'))
         from blink.data_devices import ExportPanel, ImportPanel
         self.import_panel = ImportPanel(self.tabs)
         self.tabs.addTab(self.import_panel, translate('data_window', 'Import from device'))
@@ -1375,6 +1732,8 @@ class DataWindow(QWidget):
     def _SH_TabChanged(self, index):
         if self.tabs.widget(index) is self.export_panel:
             self.export_panel.refresh_accounts()
+        if self.tabs.widget(index) is self.compact_panel:
+            self.compact_panel.refresh_accounts()
         # the storage is listed when the tab is looked at, not every time the window opens
         if self.tabs.widget(index) is self.files_panel and not self.files_panel.busy and not self.files_panel.loading:
             self.files_panel.refresh(keep_status=True)

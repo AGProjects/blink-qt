@@ -31,7 +31,9 @@ from blink.message_envelopes import LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE
 __all__ = ['with_related', 'period_bounds', 'bulk_delete_payload', 'bulk_delete_criteria', 'criteria_matches_action', 'criteria_label', 'BULK_DELETE_CATEGORIES',
            'Row', 'ENCRYPTED', 'classify', 'type_label', 'action_label', 'row_label', 'build_rows', 'select', 'count_by', 'aggregate_days',
            'FileRow', 'FILE_KINDS', 'ON_SERVER', 'FAILED', 'NO_KEY', 'DOWNLOADABLE', 'status_label', 'scan_transfer_storage', 'build_file_rows',
-           'REMOVE_BATCH', 'PROGRESS_EVERY', 'JournalRemoveError', 'JournalRemoveUnsupported', 'JournalRemoveRefused', 'journal_remove_url', 'remove_from_journal']
+           'REMOVE_BATCH', 'PROGRESS_EVERY', 'JournalRemoveError', 'JournalRemoveUnsupported', 'JournalRemoveRefused', 'journal_remove_url', 'remove_from_journal',
+           'JournalEntry', 'JournalScanError', 'journal_page_url', 'scan_journal', 'journal_summary', 'purge_journal', 'parse_age', 'JOURNAL_SINCE_YEARS',
+           'CompactionRule', 'COMPACTION_RULES', 'compaction_rule', 'compaction_ids', 'compaction_entries', 'compaction_content_types', 'contact_breakdown']
 
 
 CATEGORY_LABELS = {'text': 'Text', 'image': 'Images', 'audio': 'Audio', 'video': 'Videos', 'other': 'Other files', 'call': 'Calls',
@@ -242,6 +244,235 @@ def remove_from_journal(history_url, token, message_ids, verify=True, timeout=(1
     if final is None:
         raise JournalRemoveError(f'{url} answered without a list of removed ids')
     return {str(message_id) for message_id in final['removed']}
+
+
+# Compacting the journal on the server
+#
+# The journal keeps every entry of the account for years: what a new device downloads to start, and
+# what a device that was offline downloads to catch up. Some entries stop being worth that download
+# once they are old, and some are kept nowhere once applied (delivery and read receipts are applied
+# to the message they are about), so they cannot be chosen in the Local messages tab. Compacting
+# walks the journal page by page as a sync does (GET <journal url>?since=... for the first page,
+# <journal url>/<last id> for each next one), picks the entries of the chosen rules older than
+# their age, and removes them with remove_from_journal. Nothing is changed on any device: the
+# devices that have the entries keep what they made of them. Used by the Compact journal tab of
+# the Data window and by scripts/compact_journal.py.
+
+JOURNAL_SINCE_YEARS = 5     # how far back the walk starts, as a first sync asks (MessageManager.journal_since_years)
+
+JournalEntry = namedtuple('JournalEntry', 'message_id timestamp content_type action contact')
+
+CompactionRule = namedtuple('CompactionRule', 'name title content_types actions age description')
+
+IMDN_JOURNAL_CONTENT_TYPE = 'message/imdn'
+
+COMPACTION_RULES = (
+    CompactionRule('receipts', 'Delivery and read receipts', frozenset((IMDN_JOURNAL_CONTENT_TYPE,)), None, timedelta(days=30),
+                   'Every delivery and read receipt (message/imdn) is an entry of its own. A device that has '
+                   'synchronized applied it to the state of its message and keeps nothing else of it. '
+                   'Removed, a device that downloads the journal later (a new one) no longer learns '
+                   'that those older messages were delivered or read.'),
+    CompactionRule('location-tracks', 'Location tracks', frozenset((LOCATION_CONTENT_TYPE,)), frozenset(('location_update', 'meeting_update')), timedelta(days=7),
+                   'Every position sent while a location is shared is an entry of its own (location_update, '
+                   'meeting_update). Removed, the start and the end of each share stay: a device that downloads '
+                   'the journal later shows those older shares without their track. Positions whose action '
+                   'cannot be read without decrypting are left alone.'),
+)
+
+
+def compaction_rule(name):
+    return next((rule for rule in COMPACTION_RULES if rule.name == name), None)
+
+
+class JournalScanError(Exception):
+    pass
+
+
+def journal_page_url(history_url, cursor=None, since=None, content_types=None):
+    """The journal page after `cursor`, or the first one from `since` (a datetime) on; with
+    content_types, only the entries of those types (SylkServer's content_type argument; an older
+    server ignores it and sends all of them)."""
+    from urllib.parse import quote, urlencode, urljoin, urlsplit, urlunsplit
+    base = str(history_url)
+    arguments = []
+    if cursor:
+        url = urljoin(f'{base.rstrip("/")}/', str(cursor))
+    else:
+        url = base
+        if since is not None:
+            arguments.append(('since', _utc_iso(since)))
+    arguments += [('content_type', content_type) for content_type in sorted(content_types or ())]
+    scheme, netloc, path, _, fragment = urlsplit(url)
+    return urlunsplit((scheme, netloc, quote(path), urlencode(arguments, safe=':/'), fragment))
+
+
+def _entry_time(value):
+    """A journal timestamp as an aware UTC datetime, or None."""
+    if not value:
+        return None
+    text = str(value).strip().replace('Z', '+00:00')
+    try:
+        when = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return when.replace(tzinfo=timezone.utc) if when.tzinfo is None else when.astimezone(timezone.utc)
+
+
+def _entry_contact(value):
+    """The other party of an entry as one spelling for all its entries: lower case, without sip:."""
+    text = str(value or '').strip().lower()
+    for scheme in ('sips:', 'sip:'):
+        if text.startswith(scheme):
+            text = text[len(scheme):]
+    return text
+
+
+def _entry_action(content_type, message):
+    """The action of a location entry, read from its cleartext envelope (nothing is decrypted); '' else."""
+    if content_type != LOCATION_CONTENT_TYPE:
+        return ''
+    try:
+        from blink.location import storage_fields
+        return str(storage_fields(message.get('content') or '', message.get('metadata')).get('related_action') or '')
+    except Exception:
+        return ''
+
+
+def compaction_content_types(rules=COMPACTION_RULES):
+    """The content types the rules look at: all a compaction needs to read of the journal."""
+    return frozenset(content_type for rule in rules for content_type in rule.content_types)
+
+
+def scan_journal(history_url, token, since=None, verify=True, timeout=(15, 60), progress=None, stop=None, max_pages=100000, content_types=None, stats=None):
+    """Every entry of the account's journal from `since` (default JOURNAL_SINCE_YEARS ago) on, as
+    JournalEntry; with content_types only those of these types (asked of the server, and checked here
+    for a server that does not know the argument); progress(pages, entries) after each page; stop() returning True ends the walk early
+    (what was read so far is returned). Raises JournalRemoveRefused for a refused token, JournalScanError else.
+    stats, a dict, is filled with what the walk did: first_url, pages, received (entries the server
+    sent), kept, and server_filtered (False when the server sent types not asked for: it does not
+    know the content_type argument)."""
+    if since is None:
+        since = datetime.now(timezone.utc) - timedelta(days=365 * JOURNAL_SINCE_YEARS)
+    headers = {'Authorization': f'Apikey {token}'}
+    entries = []
+    cursor = None
+    wanted = {str(content_type).lower() for content_type in content_types} if content_types else None
+    stats = stats if stats is not None else {}
+    stats.update(first_url=journal_page_url(history_url, None, since, content_types), pages=0, received=0, kept=0, server_filtered=True)
+    for pages in range(1, max_pages + 1):
+        if stop is not None and stop():
+            break
+        url = journal_page_url(history_url, cursor, since, content_types)
+        try:
+            response = requests.get(url, headers=headers, timeout=timeout, verify=verify)
+        except requests.RequestException as e:
+            raise JournalScanError(f'cannot reach {url}: {e}')
+        if response.status_code == 401:
+            raise JournalRemoveRefused('the server refused the API token (HTTP 401)')
+        if response.status_code != 200:
+            raise JournalScanError(f'HTTP {response.status_code} from {url}')
+        try:
+            data = response.json()
+        except ValueError:
+            raise JournalScanError(f'{url} did not answer JSON')
+        messages = data.get('messages') if isinstance(data, dict) else None
+        if not messages:
+            break
+        stats['pages'] = pages
+        stats['received'] += len(messages)
+        for message in messages:
+            if isinstance(message, dict) and message.get('message_id'):
+                content_type = str(message.get('content_type') or '').strip().lower() or '(none)'
+                entries.append(JournalEntry(str(message['message_id']), _entry_time(message.get('timestamp')), content_type, _entry_action(content_type, message),
+                                            _entry_contact(message.get('contact'))))
+        if progress is not None:
+            progress(pages, len(entries))
+        if wanted is not None:
+            if any(entry.content_type not in wanted for entry in entries):
+                stats['server_filtered'] = False
+                entries = [entry for entry in entries if entry.content_type in wanted]
+        stats['kept'] = len(entries)
+        last = messages[-1].get('message_id') if isinstance(messages[-1], dict) else None
+        if not last or last == cursor:
+            break
+        cursor = last
+    return entries
+
+
+def parse_age(text):
+    """'30d', '12w', '6m', '1y' (or a number of days) as a timedelta; '0' or 'all' for none."""
+    text = str(text).strip().lower()
+    if text in ('', '0', 'all'):
+        return timedelta(0)
+    match = re.fullmatch(r'(\d+)\s*([dwmy]?)', text)
+    if not match:
+        raise ValueError(f'not an age: {text!r} (use 30d, 12w, 6m or 1y)')
+    number, unit = int(match.group(1)), match.group(2) or 'd'
+    return timedelta(days=number * {'d': 1, 'w': 7, 'm': 30, 'y': 365}[unit])
+
+
+def compaction_entries(entries, rule, older_than=None, now=None, contact=None):
+    """The entries a rule removes: of its content types (and actions), older than `older_than`
+    (default the rule's age; 0: all of them), of one contact when given. An entry without a
+    readable timestamp is left alone unless all are asked for."""
+    older_than = rule.age if older_than is None else older_than
+    cutoff = (now or datetime.now(timezone.utc)) - older_than if older_than else None
+    contact = _entry_contact(contact) if contact else None
+    return [entry for entry in entries
+            if entry.content_type in rule.content_types and (rule.actions is None or entry.action in rule.actions)
+            and (cutoff is None or (entry.timestamp is not None and entry.timestamp < cutoff))
+            and (contact is None or entry.contact == contact)]
+
+
+def compaction_ids(entries, rule, older_than=None, now=None, contact=None):
+    """The ids of the entries a rule removes (compaction_entries)."""
+    return [entry.message_id for entry in compaction_entries(entries, rule, older_than, now, contact)]
+
+
+def contact_breakdown(entries, rules, now=None):
+    """What each rule removes, contact by contact: rules is [(rule, older_than)]; returns
+    [(contact, {rule name: count}, total)], the contact with the most first."""
+    now = now or datetime.now(timezone.utc)
+    counts = {}
+    for rule, older_than in rules:
+        for entry in compaction_entries(entries, rule, older_than, now):
+            per_rule = counts.setdefault(entry.contact, {})
+            per_rule[rule.name] = per_rule.get(rule.name, 0) + 1
+    return sorted(((contact, per_rule, sum(per_rule.values())) for contact, per_rule in counts.items()), key=lambda item: (-item[2], item[0]))
+
+
+def journal_summary(entries, older_than=timedelta(0), now=None):
+    """[(content type, entries, of them older than `older_than`, oldest, newest)], the most entries first."""
+    cutoff = (now or datetime.now(timezone.utc)) - older_than if older_than else None
+    summary = {}
+    for entry in entries:
+        total, old, oldest, newest = summary.get(entry.content_type, (0, 0, None, None))
+        when = entry.timestamp
+        if cutoff is None or (when is not None and when < cutoff):
+            old += 1
+        if when is not None:
+            oldest = when if oldest is None or when < oldest else oldest
+            newest = when if newest is None or when > newest else newest
+        summary[entry.content_type] = (total + 1, old, oldest, newest)
+    return sorted(((kind,) + values for kind, values in summary.items()), key=lambda item: (-item[1], item[0]))
+
+
+def purge_journal(history_url, token, message_ids, verify=True, progress=None, stop=None, request_id=None):
+    """Remove these ids from the journal, REMOVE_BATCH per request; returns (removed, requested).
+    progress(done, removed, total) after each batch; stop() returning True ends it between batches.
+    JournalRemoveError (or a subclass) is raised as remove_from_journal raises it."""
+    message_ids = list(dict.fromkeys(str(message_id) for message_id in message_ids if message_id))
+    request_id = request_id or str(uuid.uuid4())
+    removed = done = 0
+    for start in range(0, len(message_ids), REMOVE_BATCH):
+        if stop is not None and stop():
+            break
+        batch = message_ids[start:start + REMOVE_BATCH]
+        removed += len(remove_from_journal(history_url, token, batch, verify=verify, request_id=request_id))
+        done += len(batch)
+        if progress is not None:
+            progress(done, removed, len(message_ids))
+    return removed, done
 
 
 # Bulk delete on the other devices
