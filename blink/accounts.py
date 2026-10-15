@@ -7,7 +7,7 @@ import urllib.request, urllib.parse, urllib.error
 
 from PyQt6 import uic, sip
 from PyQt6.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel, QUrl, QUrlQuery
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtNetwork import QAuthenticator
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -31,6 +31,7 @@ from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.resources import ApplicationData, IconManager, Resources
 from blink.sessions import SessionManager, StreamDescription
+from blink.widgets.color import is_dark_theme
 from blink.widgets.labels import Status
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, translate
 
@@ -55,15 +56,33 @@ def apply_tls_name_exception(account):
     return tls_name
 
 class IconDescriptor(object):
-    def __init__(self, filename):
+    """An icon loaded once per theme. dark_colors maps colours in the SVG, chosen for a light
+    background, to the ones used under a dark theme."""
+
+    def __init__(self, filename, dark_colors=None):
         self.filename = filename
-        self.icon = None
+        self.dark_colors = dark_colors or {}
+        self.icons = {}
 
     def __get__(self, instance, owner):
-        if self.icon is None:
-            self.icon = QIcon(self.filename)
-            self.icon.filename = self.filename
-        return self.icon
+        dark = bool(self.dark_colors) and is_dark_theme()
+        try:
+            return self.icons[dark]
+        except KeyError:
+            pass
+        if dark:
+            with open(self.filename, encoding='utf-8') as svg_file:
+                data = svg_file.read()
+            for light_value, dark_value in self.dark_colors.items():
+                data = data.replace(light_value, dark_value)
+            pixmap = QPixmap()
+            pixmap.loadFromData(data.encode('utf-8'), 'SVG')
+            icon = QIcon(pixmap)
+        else:
+            icon = QIcon(self.filename)
+        icon.filename = self.filename
+        self.icons[dark] = icon
+        return icon
 
     def __set__(self, obj, value):
         raise AttributeError("attribute cannot be set")
@@ -73,9 +92,9 @@ class IconDescriptor(object):
 
 
 class AccountInfo(object):
-    active_icon = IconDescriptor(Resources.get('icons/circle-dot.svg'))
+    active_icon = IconDescriptor(Resources.get('icons/circle-dot.svg'), dark_colors={'#272727': '#e8e8e8'})
     inactive_icon = IconDescriptor(Resources.get('icons/circle-grey.svg'))
-    activity_icon = IconDescriptor(Resources.get('icons/circle-progress.svg'))
+    activity_icon = IconDescriptor(Resources.get('icons/circle-progress.svg'), dark_colors={'#272727': '#e8e8e8'})
 
     def __init__(self, account):
         self.account = account

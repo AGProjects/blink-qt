@@ -15,7 +15,7 @@ from application.python.decorator import decorator, preserve_signature
 from math import fmod, isnan
 
 
-__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin', 'is_dark_theme', 'secondary_text_color', 'follow_theme', 'apply_theme_change', 'dark_palette', 'light_palette', 'color_scheme', 'PortalColorScheme']
+__all__ = ['ColorScheme', 'ColorUtils', 'ColorHelperMixin', 'is_dark_theme', 'secondary_text_color', 'readable_text_color', 'follow_theme', 'apply_theme_change', 'dark_palette', 'light_palette', 'color_scheme', 'PortalColorScheme']
 
 
 # Objects that draw with colours or images chosen for the theme at the time they were made.
@@ -167,6 +167,20 @@ def apply_theme_change():
 def is_dark_theme():
     """Whether the application palette is a dark one (light text on a dark window)."""
     return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+
+def readable_text_color(color):
+    """A text colour chosen for a light background, made readable on the current theme. Under a
+    dark theme black and greys become the theme's text colour and dark colours keep their hue but
+    are lightened; under a light theme the colour is returned unchanged."""
+    color = QColor(color)
+    if not is_dark_theme():
+        return color
+    if color.hslSaturation() < 30:
+        return QApplication.palette().color(QPalette.ColorRole.WindowText)
+    if color.lightness() < 170:
+        color = QColor.fromHsl(color.hslHue(), color.hslSaturation(), 170, color.alpha())
+    return color
 
 
 def secondary_text_color(palette, color_group=QPalette.ColorGroup.Normal):

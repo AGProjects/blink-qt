@@ -3,16 +3,49 @@ import os
 from datetime import timedelta
 
 from PyQt6.QtCore import Qt, QEvent
-from PyQt6.QtGui import QAction, QBrush, QColor, QFontMetrics, QIcon, QLinearGradient, QPainter, QPalette, QPen
+from PyQt6.QtGui import QAction, QBrush, QColor, QFontMetrics, QIcon, QLinearGradient, QPainter, QPalette, QPen, QPixmap
 from PyQt6.QtWidgets import QFileDialog, QLabel, QMenu
 
 from application.python.types import MarkerType
 
 from sipsimple.configuration.datatypes import Path
 
-from blink.resources import IconManager
+from blink.resources import IconManager, Resources
 from blink.util import translate
-from blink.widgets.color import ColorHelperMixin
+from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme, readable_text_color
+
+
+# The 12px lock icons have dark outlines drawn for a light background; under a dark theme the
+# outlines and fills are swapped for lighter ones of the same hue so the locks stand out.
+_dark_lock_colors = {
+    'grey':   {'#333333': '#c8c8c8', '#545454': '#9a9a9a'},
+    'green':  {'#008000': '#6ee66e', '#00c000': '#2ecc40'},
+    'blue':   {'#0055aa': '#8cc4ff', '#0076ee': '#3d9bff'},
+    'orange': {'#aa5500': '#ffbb70', '#ee7600': '#ff8c1a'},
+}
+_lock_pixmaps = {}
+
+
+def lock_pixmap(color):
+    """The 12px lock icon of the given colour (grey, green, blue or orange) for the current theme."""
+    dark = is_dark_theme()
+    key = color, dark
+    try:
+        return _lock_pixmaps[key]
+    except KeyError:
+        pass
+    filename = Resources.get('icons/lock-%s-12.svg' % color)
+    if dark:
+        with open(filename, encoding='utf-8') as svg_file:
+            data = svg_file.read()
+        for light_value, dark_value in _dark_lock_colors[color].items():
+            data = data.replace(light_value, dark_value)
+        pixmap = QPixmap()
+        pixmap.loadFromData(data.encode('utf-8'), 'SVG')
+    else:
+        pixmap = QPixmap(filename)
+    _lock_pixmaps[key] = pixmap
+    return pixmap
 from blink.widgets.util import QtDynamicProperty, ContextMenuActions
 
 
@@ -243,6 +276,10 @@ class StatusLabel(QLabel):
     def __init__(self, parent=None):
         super(StatusLabel, self).__init__(parent)
         self.value = None
+        follow_theme(self)
+
+    def apply_theme(self):
+        self.value = self.value  # the status colour is adjusted to the theme
 
     def _get_value(self):
         return self.__dict__['value']
@@ -250,7 +287,7 @@ class StatusLabel(QLabel):
     def _set_value(self, value):
         self.__dict__['value'] = value
         if value is not None:
-            color = QColor(value.color)
+            color = readable_text_color(value.color)
             palette = self.palette()
             palette.setColor(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText, color)
             palette.setColor(QPalette.ColorGroup.Active, QPalette.ColorRole.Text, color)

@@ -13,8 +13,9 @@ from blink.configuration.datatypes import GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.resources import Resources
 from blink.util import run_in_gui_thread, translate
+from blink.widgets.color import follow_theme, is_dark_theme, readable_text_color
 from blink.widgets.graph import Graph
-from blink.widgets.labels import ElidedLabel
+from blink.widgets.labels import ElidedLabel, lock_pixmap
 
 
 __all__ = ['SessionInfoPanel']
@@ -41,9 +42,6 @@ class SessionInfoPanel(base_class, ui_class):
         self.pixmaps.direct_connection = QPixmap(Resources.get('icons/connection-direct.svg'))
         self.pixmaps.relay_connection = QPixmap(Resources.get('icons/connection-relay.svg'))
         self.pixmaps.unknown_connection = QPixmap(Resources.get('icons/connection-unknown.svg'))
-        self.pixmaps.grey_lock = QPixmap(Resources.get('icons/lock-grey-12.svg'))
-        self.pixmaps.green_lock = QPixmap(Resources.get('icons/lock-green-12.svg'))
-        self.pixmaps.orange_lock = QPixmap(Resources.get('icons/lock-orange-12.svg'))
 
         self.audio_latency_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
         self.video_latency_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0), enabled=False)
@@ -94,10 +92,51 @@ class SessionInfoPanel(base_class, ui_class):
 
         self._apply_settings(scale=True)
 
+        # the .ui file is drawn for a light theme: keep its colours to derive the dark ones from
+        self._ui_style_sheets = {widget: widget.styleSheet() for widget in (self.info_panel_container_widget, self.latency_label, self.latency_graph,
+                                                                           self.packet_loss_label, self.packet_loss_graph, self.traffic_label, self.traffic_graph)}
+        self._ui_status_palette = QPalette(self.status_value_label.palette())
+        self._graph_colors = {graph: (graph.color, graph.over_boundary_color) for graph in (self.audio_latency_graph, self.video_latency_graph, self.audio_packet_loss_graph,
+                                                                                         self.video_packet_loss_graph, self.incoming_traffic_graph, self.outgoing_traffic_graph)}
+        self.apply_theme()
+        follow_theme(self)
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange', sender=BlinkSettings())
 
         self.blink_session = None
+
+    _dark_style_replacements = [('rgba(0, 0, 0, 10)', 'rgba(255, 255, 255, 14)'),
+                                ('rgba(0, 0, 0, 50)', 'rgba(255, 255, 255, 45)'),
+                                ('rgba(0, 0, 0, 60)', 'rgba(255, 255, 255, 22)'),
+                                ('#f8f8f8', '#1e1e1e'),
+                                ('#606060', '#6a6a6a')]
+
+    def apply_theme(self):
+        dark = is_dark_theme()
+        self.pixmaps.grey_lock = lock_pixmap('grey')
+        self.pixmaps.green_lock = lock_pixmap('green')
+        self.pixmaps.orange_lock = lock_pixmap('orange')
+        for label in (self.chat_encryption_label, self.screen_encryption_label, self.audio_encryption_label, self.video_encryption_label):
+            label.setPixmap(self.pixmaps.grey_lock)
+        if self.__dict__.get('blink_session') is not None:
+            self.update_info(elements={'media'})
+        for widget, style_sheet in self._ui_style_sheets.items():
+            if dark:
+                for light_value, dark_value in self._dark_style_replacements:
+                    style_sheet = style_sheet.replace(light_value, dark_value)
+            widget.setStyleSheet(style_sheet)
+        # an ended call's error is shown in the AlternateBase colour, dark red in the .ui file
+        palette = QPalette(self._ui_status_palette)
+        for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+            palette.setColor(color_group, QPalette.ColorRole.AlternateBase, readable_text_color(self._ui_status_palette.color(color_group, QPalette.ColorRole.AlternateBase)))
+        self.status_value_label.setPalette(palette)
+        for graph, (color, over_boundary_color) in self._graph_colors.items():
+            graph.color = readable_text_color(color) if dark else color
+            graph.over_boundary_color = readable_text_color(over_boundary_color) if dark else over_boundary_color
+        for graph_widget in (self.latency_graph, self.packet_loss_graph, self.traffic_graph):
+            graph_widget.update()
+        self._SH_TrafficGraphUpdated()
 
     def _get_blink_session(self):
         return self.__dict__['blink_session']
@@ -373,7 +412,9 @@ class SessionInfoPanel(base_class, ui_class):
         else:
             incoming_traffic = TrafficNormalizer.normalize(self.incoming_traffic_graph.last_value * 8, bits_per_second=True)
             outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value * 8, bits_per_second=True)
-        self.traffic_label.setText(translate('chat_window', """<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">%s</span> %s <span style="font-family: sans-serif; color: #0064d7;">%s</span> %s</p>""") % ("↓", incoming_traffic, "↑", outgoing_traffic))
+        incoming_color = readable_text_color('#d70000').name()
+        outgoing_color = readable_text_color('#0064d7').name()
+        self.traffic_label.setText(translate('chat_window', """<p>Traffic: <span style="font-family: sans-serif; color: %s;">%s</span> %s <span style="font-family: sans-serif; color: %s;">%s</span> %s</p>""") % (incoming_color, "↓", incoming_traffic, outgoing_color, "↑", outgoing_traffic))
 
     @run_in_gui_thread
     def handle_notification(self, notification):

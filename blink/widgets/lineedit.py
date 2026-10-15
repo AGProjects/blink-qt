@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QAbstractButton, QToolButton, QLineEdit, QBoxLayout,
 
 from blink.resources import Resources
 from blink.util import translate
+from blink.widgets.color import is_dark_theme
 from blink.widgets.util import QtDynamicProperty
 
 
@@ -233,12 +234,29 @@ class SearchIcon(QWidget):
         else:
             self.icon = None
 
+        self._tinted_icon = None  # (color, pixmap): the loupe recoloured for a dark theme
+
+    def _themed_icon(self):
+        # the loupe is drawn dark for a light background; under a dark theme it takes the placeholder text colour
+        if self.icon is None or not is_dark_theme():
+            return self.icon
+        color = self.palette().color(QPalette.ColorRole.PlaceholderText)
+        if self._tinted_icon is None or self._tinted_icon[0] != color:
+            pixmap = QPixmap(self.icon)
+            painter = QPainter(pixmap)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(pixmap.rect(), color)
+            painter.end()
+            self._tinted_icon = color, pixmap
+        return self._tinted_icon[1]
+
     def paintEvent(self, event):
         painter = QPainter(self)
-        if self.icon is not None:
-            x = int((self.width() - self.icon.width()) / 2)
-            y = int((self.height() - self.icon.height()) / 2)
-            painter.drawPixmap(x, y, self.icon)
+        icon = self._themed_icon()
+        if icon is not None:
+            x = int((self.width() - icon.width()) / 2)
+            y = int((self.height() - icon.height()) / 2)
+            painter.drawPixmap(x, y, icon)
 
 
 class ClearButton(QAbstractButton):

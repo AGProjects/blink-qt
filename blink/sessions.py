@@ -59,8 +59,8 @@ from blink.screensharing.support import can_share_my_screen, can_view_screens, v
 from blink.sessioninfo import SessionInfoPanel
 from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
-from blink.widgets.labels import Status, StateColor
-from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key, follow_theme, is_dark_theme, secondary_text_color
+from blink.widgets.labels import Status, StateColor, lock_pixmap
+from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key, follow_theme, is_dark_theme, readable_text_color, secondary_text_color
 from blink.widgets.util import ContextMenuActions, FontScaledSize, QtDynamicProperty, badge_font
 from blink.widgets.zrtp import ZRTPWidget
 from blink.streams.message import MessageStream
@@ -1762,6 +1762,46 @@ class Bottom(metaclass=MarkerType): pass
 ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
 
 
+def audio_tile_colors():
+    """Colours of an audio call tile: the left band for each state, the body, and the borders.
+    The text inside the tile is drawn with the theme's text colour, so the body follows the theme."""
+    colors = Container()
+    if is_dark_theme():
+        palette = QApplication.palette()
+        colors.body = ColorUtils.mix(palette.color(QPalette.ColorRole.Base), palette.color(QPalette.ColorRole.WindowText), 0.08)
+        colors.band_selected = QColor('#2f6fa8')
+        colors.band_conference = QColor('#2f8a3a')
+        colors.band_normal = QColor('#606060')
+        colors.border = QColor('#555555')
+        colors.border_selected = QColor('#8a8a8a')
+        colors.outer_selected = QColor('#4a90e0')
+        colors.outer_conference = QColor('#3fae4a')
+        colors.outer_drop = QColor('#e8508a')
+        colors.dragged_body = colors.body
+        colors.dragged_border = QColor('#808080')
+    else:
+        colors.body = QColor('#ffffff')
+        colors.band_selected = QColor('#75c0ff')
+        colors.band_conference = QColor('#95ff95')
+        colors.band_normal = QColor('#d0d0d0')
+        colors.border = QColor('#b0b0b0')
+        colors.border_selected = QColor('#606060')
+        colors.outer_selected = QColor('#3075c0')
+        colors.outer_conference = QColor('#309030')
+        colors.outer_drop = QColor('#dc3169')
+        colors.dragged_body = QColor('#f8f8f8')
+        colors.dragged_border = QColor('#808080')
+    return colors
+
+
+def _tile_background(band, body):
+    background = QLinearGradient(0, 0, 10, 0)
+    background.setColorAt(0.00, band)
+    background.setColorAt(0.99, band)
+    background.setColorAt(1.00, body)
+    return QBrush(background)
+
+
 class AudioSessionWidget(base_class, ui_class):
     def __init__(self, session, parent=None):
         super(AudioSessionWidget, self).__init__(parent)
@@ -1806,29 +1846,56 @@ class AudioSessionWidget(base_class, ui_class):
         self.srtp_label.hovered = False
         self.srtp_label.installEventFilter(self)
 
+        self._ui_label_palettes = {label: QPalette(label.palette()) for label in (self.latency_label, self.packet_loss_label)}
+        self.apply_theme(initial=True)
+        follow_theme(self)
+
+    _theme_pixmaps = {}  # is_dark_theme() -> the lock pixmaps for that theme, shared by all tiles
+
+    @property
+    def pixmaps(self):
+        dark = is_dark_theme()
         try:
-            self.pixmaps
-        except AttributeError:
-            self.__class__.pixmaps = Container()
-            self.pixmaps.blue_lock = QPixmap(Resources.get('icons/lock-blue-12.svg'))
-            self.pixmaps.grey_lock = QPixmap(Resources.get('icons/lock-grey-12.svg'))
-            self.pixmaps.green_lock = QPixmap(Resources.get('icons/lock-green-12.svg'))
-            self.pixmaps.orange_lock = QPixmap(Resources.get('icons/lock-orange-12.svg'))
+            return self._theme_pixmaps[dark]
+        except KeyError:
+            pass
 
-            def blended_pixmap(pixmap, color):
-                blended_pixmap = QPixmap(pixmap)
-                painter = QPainter(blended_pixmap)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
-                painter.fillRect(blended_pixmap.rect(), color)
-                painter.end()
-                return blended_pixmap
+        def blended_pixmap(pixmap, color):
+            blended_pixmap = QPixmap(pixmap)
+            painter = QPainter(blended_pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
+            painter.fillRect(blended_pixmap.rect(), color)
+            painter.end()
+            return blended_pixmap
 
-            color = QColor(255, 255, 255, 64)
-            self.pixmaps.light_blue_lock = blended_pixmap(self.pixmaps.blue_lock, color)
-            self.pixmaps.light_grey_lock = blended_pixmap(self.pixmaps.grey_lock, color)
-            self.pixmaps.light_green_lock = blended_pixmap(self.pixmaps.green_lock, color)
-            self.pixmaps.light_orange_lock = blended_pixmap(self.pixmaps.orange_lock, color)
+        pixmaps = Container()
+        for name in ('blue', 'grey', 'green', 'orange'):
+            setattr(pixmaps, name + '_lock', lock_pixmap(name))
+        # hovered: a lighter lock on a light tile, a darker one on a dark tile
+        color = QColor(0, 0, 0, 72) if dark else QColor(255, 255, 255, 64)
+        for name in ('blue', 'grey', 'green', 'orange'):
+            setattr(pixmaps, 'light_%s_lock' % name, blended_pixmap(getattr(pixmaps, name + '_lock'), color))
+        self._theme_pixmaps[dark] = pixmaps
+        return pixmaps
+
+    def apply_theme(self, initial=False):
+        self.tls_label.setPixmap(self.pixmaps.blue_lock)
+        if initial:
+            self.srtp_label.setPixmap(self.pixmaps.orange_lock if self.srtp_label.isEnabled() else self.pixmaps.grey_lock)
+        else:
+            self.update_rtp_encryption_icon()
+        # the latency and packet loss warnings are dark red in the .ui file, too dark on a dark tile
+        for label, ui_palette in self._ui_label_palettes.items():
+            palette = QPalette(ui_palette)
+            if is_dark_theme():
+                for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+                    for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text):
+                        palette.setColor(color_group, role, readable_text_color(ui_palette.color(color_group, role)))
+                for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text):
+                    palette.setColor(QPalette.ColorGroup.Disabled, role, secondary_text_color(QApplication.palette(), QPalette.ColorGroup.Disabled))
+            label.setPalette(palette)
+        self.update()
 
     def _get_selected(self):
         return self.__dict__['selected']
@@ -1925,30 +1992,19 @@ class AudioSessionWidget(base_class, ui_class):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         rect = self.rect()
+        colors = audio_tile_colors()
 
         # draw inner rect and border
         #
         if self.selected:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#75c0ff'))
-            background.setColorAt(0.99, QColor('#75c0ff'))
-            background.setColorAt(1.00, QColor('#ffffff'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#606060' if self.position_in_conference is None else '#b0b0b0')), 2.0))
+            painter.setBrush(_tile_background(colors.band_selected, colors.body))
+            painter.setPen(QPen(QBrush(colors.border_selected if self.position_in_conference is None else colors.border), 2.0))
         elif self.position_in_conference is not None:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#95ff95'))
-            background.setColorAt(0.99, QColor('#95ff95'))
-            background.setColorAt(1.00, QColor('#ffffff'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
+            painter.setBrush(_tile_background(colors.band_conference, colors.body))
+            painter.setPen(QPen(QBrush(colors.border), 2.0))
         else:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#d0d0d0'))
-            background.setColorAt(0.99, QColor('#d0d0d0'))
-            background.setColorAt(1.00, QColor('#ffffff'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#b0b0b0')), 2.0))
+            painter.setBrush(_tile_background(colors.band_normal, colors.body))
+            painter.setPen(QPen(QBrush(colors.border), 2.0))
         painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 3, 3)
 
         # for conferences extend the left marker over the whole conference
@@ -1968,9 +2024,9 @@ class AudioSessionWidget(base_class, ui_class):
         if self.selected or self.drop_indicator:
             painter.setBrush(Qt.BrushStyle.NoBrush)
             if self.drop_indicator:
-                painter.setPen(QPen(QBrush(QColor('#dc3169')), 2.0))
+                painter.setPen(QPen(QBrush(colors.outer_drop), 2.0))
             elif self.selected:
-                painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0))  # or #2070c0 (next best look) or gray: #606060
+                painter.setPen(QPen(QBrush(colors.outer_selected), 2.0))
 
             if self.position_in_conference is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
@@ -1986,7 +2042,7 @@ class AudioSessionWidget(base_class, ui_class):
                 painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
         elif self.position_in_conference is not None:
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0))  # or 237523, #2b8f2b
+            painter.setPen(QPen(QBrush(colors.outer_conference), 2.0))
             if self.position_in_conference is Top:
                 painter.drawRoundedRect(rect.adjusted(2, 2, -2, 5), 3, 3)
             elif self.position_in_conference is Middle:
@@ -2021,27 +2077,16 @@ class DraggedAudioSessionWidget(base_class, ui_class):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        colors = audio_tile_colors()
         if self.in_conference:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#95ff95'))
-            background.setColorAt(0.99, QColor('#95ff95'))
-            background.setColorAt(1.00, QColor('#f8f8f8'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#309030')), 2.0))
+            painter.setBrush(_tile_background(colors.band_conference, colors.dragged_body))
+            painter.setPen(QPen(QBrush(colors.outer_conference), 2.0))
         elif self.selected:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#75c0ff'))
-            background.setColorAt(0.99, QColor('#75c0ff'))
-            background.setColorAt(1.00, QColor('#f8f8f8'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#3075c0')), 2.0))
+            painter.setBrush(_tile_background(colors.band_selected, colors.dragged_body))
+            painter.setPen(QPen(QBrush(colors.outer_selected), 2.0))
         else:
-            background = QLinearGradient(0, 0, 10, 0)
-            background.setColorAt(0.00, QColor('#d0d0d0'))
-            background.setColorAt(0.99, QColor('#d0d0d0'))
-            background.setColorAt(1.00, QColor('#f8f8f8'))
-            painter.setBrush(QBrush(background))
-            painter.setPen(QPen(QBrush(QColor('#808080')), 2.0))
+            painter.setBrush(_tile_background(colors.band_normal, colors.dragged_body))
+            painter.setPen(QPen(QBrush(colors.dragged_border), 2.0))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
         painter.end()
         super(DraggedAudioSessionWidget, self).paintEvent(event)
@@ -6692,6 +6737,31 @@ class IncomingDialogBase(QDialog):
 
     slot = None
 
+    def _init_theme(self):
+        # the .ui files draw a light panel (#f8f8f8 frame, #444444/#7f7f7f labels); keep them to derive the dark look
+        self._ui_frame_style_sheet = self.frame.styleSheet()
+        self._ui_label_palettes = {label: QPalette(label.palette()) for label in self.findChildren(QLabel) if label.testAttribute(Qt.WidgetAttribute.WA_SetPalette)}
+        self.apply_theme()
+        follow_theme(self)
+
+    def apply_theme(self):
+        dark = is_dark_theme()
+        style_sheet = self._ui_frame_style_sheet
+        if dark:
+            palette = QApplication.palette()
+            background = ColorUtils.mix(palette.color(QPalette.ColorRole.Window), palette.color(QPalette.ColorRole.WindowText), 0.06)
+            style_sheet = style_sheet.replace('#f8f8f8', background.name()).replace('#545454', '#7a7a7a')
+        self.frame.setStyleSheet(style_sheet)
+        for label, ui_palette in self._ui_label_palettes.items():
+            palette = QPalette(ui_palette)
+            if dark:
+                application_palette = QApplication.palette()
+                for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+                    color = secondary_text_color(application_palette, color_group)
+                    for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text):
+                        palette.setColor(color_group, role, color)
+            label.setPalette(palette)
+
     def showEvent(self, event):
         if not event.spontaneous():
             self.slot = slot = self._slots.reserve()
@@ -6738,6 +6808,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
+        self._init_theme()
         default_font_size = self.uri_label.fontInfo().pointSizeF()
         name_font_size = limit(default_font_size + 3, max=14)
         note_font_size = limit(default_font_size - 1, max=9)
@@ -6980,6 +7051,7 @@ class IncomingFileTransferDialog(IncomingDialogBase, ui_class):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
+        self._init_theme()
         default_font_size = self.uri_label.fontInfo().pointSizeF()
         name_font_size = limit(default_font_size + 3, max=14)
         font = self.username_label.font()
@@ -7064,6 +7136,7 @@ class IncomingCallTransferDialog(IncomingDialogBase, ui_class):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         with Resources.directory:
             self.setupUi(self)
+        self._init_theme()
         default_font_size = self.uri_label.fontInfo().pointSizeF()
         name_font_size = limit(default_font_size + 3, max=14)
         font = self.username_label.font()
