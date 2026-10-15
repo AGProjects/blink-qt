@@ -60,6 +60,7 @@ from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e16
 from blink.logging import ActivityLog
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.resources import ApplicationData, Resources, IconManager, themed_icon
+from blink.account_storage import AccountStorage, contact_picture, storage_account, valid_name
 from blink.avatars import avatar_icon, circular_icon
 from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
@@ -904,6 +905,8 @@ class ContactTrash(object):
             for contact in contacts:
                 ActivityLog().info(f'[trash] Contact {contact.name or contact.id} deleted permanently')
                 contact.delete()       # HistoryManager erases the history no other contact claims
+        for contact in contacts:
+            AccountStorage().remove_avatar(contact.id)      # best effort, the garbage collection covers a failure
         for key in kept:
             ActivityLog().info(f'[trash] Keeping the conversation with {key}: another contact lists it')
             history.restore_conversation(key)
@@ -4152,8 +4155,7 @@ class Contact(object):
             return self.__dict__['icon']
         except KeyError:
             if self.type == 'addressbook':
-                icon_manager = IconManager()
-                icon = circular_icon(icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id)) or self.generated_icon
+                icon = circular_icon(contact_picture(self.settings)) or self.generated_icon
             elif self.type == 'google':
                 icon_manager = IconManager()
                 icon = circular_icon(icon_manager.get(self.settings.id)) or self.generated_icon
@@ -4204,12 +4206,17 @@ class Contact(object):
         handler(notification)
 
     def _NH_AddressbookContactDidChange(self, notification):
-        if {'icon', 'alternate_icon', 'name', 'organization', 'uris', 'uris.default'}.intersection(notification.data.modified):
+        if {'icon', 'alternate_icon', 'avatar_pending', 'name', 'organization', 'uris', 'uris.default'}.intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDidChange', sender=self)
 
     def _NH_VirtualContactDidChange(self, notification):
+        self.__dict__.pop('icon', None)
+        self.__dict__.pop('pixmap', None)
+        notification.center.post_notification('BlinkContactDidChange', sender=self)
+
+    def _NH_BlinkContactAvatarDidChange(self, notification):
         self.__dict__.pop('icon', None)
         self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDidChange', sender=self)
@@ -4334,8 +4341,7 @@ class ContactDetail(object):
             return self.__dict__['icon']
         except KeyError:
             if self.type == 'addressbook':
-                icon_manager = IconManager()
-                icon = circular_icon(icon_manager.get(self.settings.id + '_alt') or icon_manager.get(self.settings.id)) or self.generated_icon
+                icon = circular_icon(contact_picture(self.settings)) or self.generated_icon
             elif self.type == 'google':
                 icon_manager = IconManager()
                 icon = circular_icon(icon_manager.get(self.settings.id)) or self.generated_icon
@@ -4386,12 +4392,17 @@ class ContactDetail(object):
         handler(notification)
 
     def _NH_AddressbookContactDidChange(self, notification):
-        if {'icon', 'alternate_icon', 'name', 'organization', 'uris', 'uris.default'}.intersection(notification.data.modified):
+        if {'icon', 'alternate_icon', 'avatar_pending', 'name', 'organization', 'uris', 'uris.default'}.intersection(notification.data.modified):
             self.__dict__.pop('icon', None)
             self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
 
     def _NH_VirtualContactDidChange(self, notification):
+        self.__dict__.pop('icon', None)
+        self.__dict__.pop('pixmap', None)
+        notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
+
+    def _NH_BlinkContactAvatarDidChange(self, notification):
         self.__dict__.pop('icon', None)
         self.__dict__.pop('pixmap', None)
         notification.center.post_notification('BlinkContactDetailDidChange', sender=self)
@@ -8234,16 +8245,28 @@ class ContactEditorDialog(base_class, ui_class):
             contact.auto_answer = False
         contact.auto_download_media = self.auto_download_media.isChecked()     # shared: replicated to the other devices
 
+        # only an explicit action in the picture well changes the picture: a presence icon on
+        # show is never uploaded (docs/CONTACT-AVATARS.md, Contact editor)
+        avatar_action = None
+        storage = storage_account() is not None and valid_name(contact.id)
         if self.icon_selector.filename is self.icon_selector.NotSelected:
             pass
         elif self.icon_selector.filename is None:
             icon_manager.remove(contact.id + '_alt')
             contact.alternate_icon = None
+            if storage:
+                contact.avatar_pending = False
+                contact.avatar_delete_pending = True     # cleared once the DELETE has succeeded
+                avatar_action = 'remove'
         else:
             icon_descriptor = IconDescriptor(FileURL(self.icon_selector.filename), str(int(os.stat(self.icon_selector.filename).st_mtime)))
             if contact.alternate_icon != icon_descriptor:
                 icon_manager.store_file(contact.id + '_alt', icon_descriptor.url.path)
                 contact.alternate_icon = icon_descriptor
+                if storage:
+                    contact.avatar_pending = True        # shown from the local file until the upload succeeds
+                    contact.avatar_delete_pending = False
+                    avatar_action = 'upload'
 
         modified_settings = [contact]
         added = [group for group in self.selected_groups if group not in self.original_groups]
@@ -8262,6 +8285,10 @@ class ContactEditorDialog(base_class, ui_class):
         if added or removed:
             ActivityLog().info(f"[contacts] {contact.name}: added to {', '.join(group.name for group in added) or 'no group'}, removed from {', '.join(group.name for group in removed) or 'no group'}")
         contact_model._atomic_update(save=modified_settings)
+        if avatar_action == 'upload':
+            AccountStorage().upload_avatar(contact, reason='set in the contact editor')
+        elif avatar_action == 'remove':
+            AccountStorage().remove_avatar(contact)
 
         self._reset_groups()
         self.contact_uri_model.reset()
@@ -8301,8 +8328,11 @@ class ContactEditorDialog(base_class, ui_class):
             self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
         if modified_attributes.intersection(('uris', 'uris.default')):
             self.contact_uri_model.update_from_contact(contact)
-        if 'icon' in modified_attributes:
+        if modified_attributes.intersection(('icon', 'alternate_icon', 'avatar_pending')):
             self.icon_selector.update_from_contact(contact)
+
+    def _NH_BlinkContactAvatarDidChange(self, notification):
+        self.icon_selector.update_from_contact(notification.sender)
 
 
 del ui_class, base_class

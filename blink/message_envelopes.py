@@ -28,7 +28,7 @@ __all__ = ['TEXT_CONTENT_TYPES', 'PGP_PUBLIC_KEY_CONTENT_TYPE', 'PGP_PRIVATE_KEY
            'ADDRESSBOOK_UPDATE_CONTENT_TYPE', 'DATA_EXPORT_CONTENT_TYPE', 'CONTACT_UPDATE_CONTENT_TYPE',
            'API_TOKEN_CONTENT_TYPE', 'API_PGP_KEY_LOOKUP_CONTENT_TYPE', 'API_MESSAGE_REMOVE_CONTENT_TYPE',
            'API_CONVERSATION_READ_CONTENT_TYPE', 'API_CONVERSATION_REMOVE_CONTENT_TYPE',
-           'MESSAGES_BULK_DELETE_CONTENT_TYPE', 'API_MESSAGES_BULK_DELETE_CONTENT_TYPE',
+           'MESSAGES_BULK_DELETE_CONTENT_TYPE', 'API_MESSAGES_BULK_DELETE_CONTENT_TYPE', 'STORAGE_CHANGED_CONTENT_TYPE',
            'MESSAGE_CATEGORIES', 'REPLY_ACTION', 'LABEL_ACTION', 'PEAKS_ACTION', 'CALL_RECORDING_ACTION',
            'html2txt', 'is_pgp_armoured', 'is_pure_emoji',
            'file_transfer_envelope', 'file_transfer_category', 'file_transfer_summary', 'recording_title',
@@ -74,6 +74,8 @@ DATA_EXPORT_CONTENT_TYPE = 'application/sylk-data-export'
 CONTACT_UPDATE_CONTENT_TYPE = 'application/sylk-contact-update'
 # A deletion by criteria made in the Data manager of one device, for the others (docs/messaging/messages-bulk-delete.md)
 MESSAGES_BULK_DELETE_CONTENT_TYPE = 'application/sylk-messages-bulk-delete'
+# An object of the account storage changed (docs/CONTACT-AVATARS.md); never journalled, never shown
+STORAGE_CHANGED_CONTENT_TYPE = 'application/sylk-storage-changed'
 
 # Requests to the server, sent without CPIM
 API_TOKEN_CONTENT_TYPE = 'application/sylk-api-token'

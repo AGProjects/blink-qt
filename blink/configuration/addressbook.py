@@ -57,6 +57,12 @@ class ContactExtension(ContactExtension):
     no_mediaproxy = Setting(type=bool, default=False)
     public_key = Setting(type=str, default=None, nillable=True)
     public_key_checksum = Setting(type=str, default=None, nillable=True)
+    # The picture lives in the SylkServer account storage as avatars/<contact id>
+    # (blink.account_storage); nothing about it is in XCAP. These remember work this
+    # device still owes the server: a picture set here not uploaded yet, a removed one
+    # whose DELETE has not succeeded yet.
+    avatar_pending = Setting(type=bool, default=False)
+    avatar_delete_pending = Setting(type=bool, default=False)
 
 
 class ContactURIExtension(ContactURIExtension):

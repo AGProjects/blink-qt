@@ -17,7 +17,7 @@ from collections import Counter, OrderedDict, defaultdict
 from blink.message_envelopes import (ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, CONTACT_UPDATE_CONTENT_TYPE, CONVERSATION_READ_CONTENT_TYPE,
                                      CONVERSATION_REMOVE_CONTENT_TYPE, DATA_EXPORT_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPE, LOCATION_CONTENT_TYPE,
                                      MESSAGE_REMOVE_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE, METADATA_CONTENT_TYPE, PGP_PRIVATE_KEY_CONTENT_TYPE, PGP_PUBLIC_KEY_CONTENT_TYPE,
-                                     RCS_FILE_TRANSFER_CONTENT_TYPE)
+                                     RCS_FILE_TRANSFER_CONTENT_TYPE, STORAGE_CHANGED_CONTENT_TYPE)
 
 
 __all__ = ['journal_action', 'parse_payload', 'JournalCache', 'JournalStats', 'SeenMessageIds', 'OwnMarkers', 'IGNORED_CONTENT_TYPES', 'KNOWN_INERT_CONTENT_TYPES', 'MAX_PAGE_ATTEMPTS',
@@ -29,7 +29,7 @@ ISCOMPOSING_CONTENT_TYPE = 'application/im-iscomposing+xml'
 
 # Entries that are not history: they are acted on live or not at all.
 IGNORED_CONTENT_TYPES = frozenset((ADDRESSBOOK_UPDATE_CONTENT_TYPE, DATA_EXPORT_CONTENT_TYPE, CONTACT_UPDATE_CONTENT_TYPE,
-                                   ISCOMPOSING_CONTENT_TYPE, PGP_PRIVATE_KEY_CONTENT_TYPE))
+                                   ISCOMPOSING_CONTENT_TYPE, PGP_PRIVATE_KEY_CONTENT_TYPE, STORAGE_CHANGED_CONTENT_TYPE))
 
 # Stored as they are for now and handled by their own patches; anything else
 # stored inert is a type this version does not know (the UNHANDLED line).
@@ -68,7 +68,7 @@ def journal_action(content_type):
     'file_transfer'        store a Sylk file transfer
     'call_record'          a call another of the user's devices took part in, merged by Call-ID
     'text'                 store a text message
-    'ignored'              not history (address book, data export, contact update, typing, private key)
+    'ignored'              not history (address book, data export, contact update, typing, private key, storage change)
     'inert'                anything else: stored as it is, never unread (locations, metadata
                            companions and types this version does not know)
     """

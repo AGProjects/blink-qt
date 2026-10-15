@@ -122,22 +122,41 @@ class IconSelector(QLabel):
     del _get_filename, _set_filename
 
     def init_with_contact(self, contact):
+        # the picture the contact list shows (blink.account_storage.contact_picture); what is left
+        # once the picture is removed is the icon the contact publishes with its presence
         if contact is None:
             self.icon = self.contact_icon = None
+            self.setToolTip('')
         else:
-            icon_manager = IconManager()
-            self.contact_icon = icon_manager.get(contact.id)
-            self.icon = icon_manager.get(contact.id + '_alt') or self.contact_icon
+            from blink.account_storage import contact_picture
+            self.contact_icon = IconManager().get(contact.id)
+            self.icon = contact_picture(contact)
             if contact.alternate_icon is not None:
                 self.last_icon_directory = os.path.dirname(contact.alternate_icon.url.path)
+            self._update_tooltip(contact)
         self.filename = self.NotSelected
 
     def update_from_contact(self, contact):
-        icon_manager = IconManager()
-        if self.icon is self.contact_icon:
-            self.icon = self.contact_icon = icon_manager.get(contact.id)
+        from blink.account_storage import contact_picture
+        self.contact_icon = IconManager().get(contact.id)
+        if self.filename is self.NotSelected:       # nothing chosen in the editor: follow the contact
+            self.icon = contact_picture(contact)
+        self._update_tooltip(contact)
+
+    def _update_tooltip(self, contact):
+        """Which device uploaded the stored picture, and when."""
+        from blink.account_storage import AccountStorage
+        info = AccountStorage().avatar_info(contact)
+        if info is None:
+            self.setToolTip('')
+            return
+        device, modified = info
+        if modified:
+            import datetime
+            when = datetime.datetime.fromtimestamp(int(modified) / 1000).strftime('%Y-%m-%d %H:%M')
+            self.setToolTip(translate('icon_selector', 'Picture uploaded by %s on %s') % (device, when))
         else:
-            self.contact_icon = icon_manager.get(contact.id)
+            self.setToolTip(translate('icon_selector', 'Picture uploaded by %s') % device)
 
     def event(self, event):
         if event.type() == QEvent.Type.DynamicPropertyChange and event.propertyName() == 'icon_size':

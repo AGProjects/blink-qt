@@ -273,6 +273,8 @@ class Blink(QApplication, metaclass=QSingleton):
         RTPLog().start()        # the RTP Media tab of the logs window and logs/rtp_trace.txt
         from blink.sylk_discovery import SylkServerDiscovery
         SylkServerDiscovery().start()   # the domains' SylkServer settings (DNS TXT _sylkserver.<domain>), cached
+        from blink.account_storage import AccountStorage
+        AccountStorage().start()        # contact avatars in the SylkServer account storage (docs/CONTACT-AVATARS.md)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
 
         notification_center = NotificationCenter()

@@ -754,7 +754,8 @@ class MessageManager(object, metaclass=Singleton):
                                  'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove', 'application/sylk-api'}
 
     # what the journal ignores and nothing below handles live
-    __not_history_content_types__ = {'application/sylk-addressbook-update', 'application/sylk-data-export', 'application/sylk-contact-update'}
+    __not_history_content_types__ = {'application/sylk-addressbook-update', 'application/sylk-data-export', 'application/sylk-contact-update',
+                                     'application/sylk-storage-changed'}
 
     own_message_ids_size = 1000
     seen_message_ids_size = 10000
@@ -2012,6 +2013,13 @@ class MessageManager(object, metaclass=Singleton):
             disposition = None
             message_id = str(uuid.uuid4())
             metadata = None
+
+        if content_type.lower() == 'application/sylk-storage-changed':
+            # an object of our account storage changed (a contact avatar): acted on, never stored, shown or counted
+            if account is not BonjourAccount():
+                from blink.account_storage import AccountStorage
+                AccountStorage().handle_changed(account, body)
+            return
 
         encryption = self.check_encryption(content_type, body)
         enc_text = f'{encryption} encrypted ' if encryption else ''
