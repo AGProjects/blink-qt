@@ -6767,9 +6767,8 @@ class IncomingDialogBase(QDialog):
             self.slot = slot = self._slots.reserve()
 
             blink = QApplication.instance()
-            # We can also display on the main window screen if desired ... -- Tijmen
-            # screen = blink.screenAt(blink.main_window.pos())
-            screen = blink.primaryScreen()
+            # on the screen the main window is on (the last one it was on while hidden), where the user works
+            screen = blink.main_window.screen() or blink.primaryScreen()
             screen_geometry = screen.geometry()
             available_geometry = screen.availableGeometry()
             window_frame_size = blink.main_window.frameSize() - blink.main_window.size()
@@ -6787,10 +6786,10 @@ class IncomingDialogBase(QDialog):
             else:
                 y = int(screen_geometry.center().y() - slot * total_height / 2)
 
-            if available_geometry.top() <= y <= available_geometry.bottom() - total_height:
-                self.setGeometry(x, y, width, height)
-            else:
-                self.resize(width, height)
+            if not available_geometry.top() <= y <= available_geometry.bottom() - total_height:
+                # no free slot left on that screen: stack in its middle rather than let the window manager pick a screen
+                y = int(limit(screen_geometry.center().y() - total_height / 2, min=available_geometry.top(), max=available_geometry.bottom() - total_height))
+            self.setGeometry(x, y, width, height)
 
     def hideEvent(self, event):
         if not event.spontaneous():
