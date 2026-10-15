@@ -6829,6 +6829,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self.screensharing_stream.hidden.connect(self.screensharing_label.hide)
         self.screensharing_stream.shown.connect(self.screensharing_label.show)
         self.auto_answer_label.setText(translate('incoming_dialog', 'Auto-answer is inactive'))
+        self.auto_answer_label.setEnabled(False)
         self.auto_answer_interval = None
         self._auto_answer_timer = None
         self.passed_time = 0
@@ -6865,6 +6866,7 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self._auto_answer_timer.timeout.connect(self._update_auto_answer)
         self._auto_answer_timer.start()
         self.auto_answer_label.setText(translate('incoming_dialog', 'Auto answer in %d seconds') % interval)
+        self.auto_answer_label.setEnabled(True)
 
     def _update_auto_answer(self):
         self.passed_time = self.passed_time + 1
