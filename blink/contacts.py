@@ -4478,6 +4478,26 @@ def mangled_row(contact, name, info):
     return name, info, pixmap
 
 
+def contact_avatar_pixmap(contact, size, display_name=None):
+    """The contact's avatar as the contact list draws it, at size pixels: the picture in a circle
+    or the initials, the invented person's initials while contacts are mangled. display_name is
+    what the remote party calls itself, used for the initials of a caller not in the addressbook."""
+    from blink.contact_mangler import mangling_enabled
+    name = getattr(contact, 'name', None) or None
+    if not name and getattr(contact, 'type', None) == 'dummy':
+        name = (display_name or '').strip() or None
+    if mangling_enabled():
+        from blink.contact_mangler import mangled_name, mangled_uri
+        uri = getattr(contact, 'uri', None)
+        uri = str(getattr(uri, 'uri', None) or uri or '') or None
+        avatar_name = mangled_name(name, uri=uri) if name else mangled_uri(uri or '')
+        if avatar_name:
+            return avatar_icon(avatar_name).pixmap(size)
+    elif name and getattr(contact, 'type', None) == 'dummy':
+        return avatar_icon(name).pixmap(size)
+    return contact.icon.pixmap(size)
+
+
 class ContactWidget(base_class, ui_class):
     def __init__(self, parent=None):
         super(ContactWidget, self).__init__(parent)

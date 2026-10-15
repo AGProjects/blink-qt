@@ -6950,7 +6950,8 @@ class IncomingRequest(QObject):
             self._auto_answer_timer.timeout.connect(self._auto_answer)
             self._auto_answer_timer.start()
 
-        self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
+        from blink.contacts import contact_avatar_pixmap
+        self.dialog.user_icon.setPixmap(contact_avatar_pixmap(contact, 48, display_name=session.remote_identity.display_name))
         self.dialog.audio_stream.setVisible(self.audio_stream is not None)
         self.dialog.video_stream.setVisible(self.video_stream is not None)
         self.dialog.chat_stream.setVisible(self.chat_stream is not None)
@@ -7092,7 +7093,8 @@ class IncomingFileTransferRequest(QObject):
 
         self.dialog.uri_label.setText(contact_uri.uri)
         self.dialog.username_label.setText(contact.name)
-        self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
+        from blink.contacts import contact_avatar_pixmap
+        self.dialog.user_icon.setPixmap(contact_avatar_pixmap(contact, 48, display_name=session.remote_identity.display_name))
         filename = os.path.basename(self.stream.file_selector.name)
         size = self.stream.file_selector.size
         if size:
@@ -7171,7 +7173,8 @@ class IncomingCallTransferRequest(QObject):
 
         self.dialog.uri_label.setText(contact_uri.uri)
         self.dialog.username_label.setText(contact.name)
-        self.dialog.user_icon.setPixmap(contact.icon.pixmap(48))
+        from blink.contacts import contact_avatar_pixmap
+        self.dialog.user_icon.setPixmap(contact_avatar_pixmap(contact, 48))
         self.dialog.transfer_label.setText(translate('incoming_calltransfer_dialog', 'transfer requested by {}').format(blink_session.contact.name or blink_session.contact_uri.uri))
 
         self.dialog.finished.connect(self._SH_DialogFinished)
