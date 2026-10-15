@@ -4357,7 +4357,7 @@ def screen_sharing_stream_supported(stream):
     else:
         supported = can_view_screens()
     if not supported:
-        ActivityLog().info('[screen sharing] Declined a request to %s: not available on this system' % ('share my screen' if stream.handler.type == 'passive' else 'view a remote screen'))
+        ActivityLog().info('[screen sharing] Declined a request to %s: VNC screen sharing is obsolete' % ('share my screen' if stream.handler.type == 'passive' else 'view a remote screen'))
     return supported
 
 
