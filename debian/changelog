@@ -43,7 +43,7 @@ blink (7.0.2) unstable; urgency=medium
   * Added bonjour nicknames
   * Synchronize presence blocked policy document with Blocked group
   * Show presence note and last message per contact
-  * Show last message poer contact on all groups
+  * Show last message per contact on all groups
   * Turn off presence subscriptions if contact blocked remotely
 
  -- Adrian Georgescu <ag@ag-projects.com>  Sun, 11 Oct 2026 13:34:24 -0300
@@ -59,7 +59,7 @@ blink (7.0.1) unstable; urgency=medium
   * Fixes for message forwarding
   * Open local file in file manager
   * Fix display of url 
-  * Mak display ticks green color
+  * Make display ticks green color
   * Join Conference: do not autofocus the room field
   * Added data manager window
   * Added utility scripts folder
