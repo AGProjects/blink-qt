@@ -1,3 +1,11 @@
+blink (7.1.1) unstable; urgency=medium
+
+  * Refactor preferences
+  * Fix auto enable / disable settings depending on server support
+  * Added compact server journal to data manager
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Thu, 15 Oct 2026 06:57:22 -0300
+
 blink (7.1.0) unstable; urgency=medium
 
   * Added Data import/export
