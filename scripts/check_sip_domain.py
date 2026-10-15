@@ -24,10 +24,8 @@ The exit status is 0 when every check passed.
 """
 
 import os
-import re
 import shutil
 import signal
-import subprocess
 import sys
 import tempfile
 
@@ -44,47 +42,22 @@ from sipsimple.account import Account, AccountManager
 from sipsimple.application import SIPApplication
 from sipsimple.configuration.backend.file import FileBackend
 from sipsimple.configuration.settings import SIPSimpleSettings
-from sipsimple.core import SIPURI
 from sipsimple.storage import FileStorage
 from sipsimple.threading.green import run_in_green_thread
 
-
-SYSTEM_CA_FILES = ('/etc/ssl/certs/ca-certificates.crt', '/etc/pki/tls/certs/ca-bundle.crt', '/etc/ssl/cert.pem')
-NAPTR_SERVICES = {'SIPS+D2T': 'tls', 'SIP+D2T': 'tcp', 'SIP+D2U': 'udp'}
-SRV_SERVICES = (('_sips._tcp', 'tls'), ('_sip._tcp', 'tcp'), ('_sip._udp', 'udp'))
-DEFAULT_PORTS = {'tls': 5061, 'tcp': 5060, 'udp': 5060}
-# the name the servers of sylk.link (and other domains they serve) carry in their certificate:
-# when a server presents it, it is the name verified (as Blink's tls_name_exceptions)
-SHARED_TLS_NAME = 'sip2sip.info'
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)))
+from blink.sip_domain_check import DomainInspector, TextReport, system_ca_file, text   # noqa: E402
 
 
 # Output
 
-def out(text=''):
-    sys.stdout.write(text + '\n')
+def out(line=''):
+    sys.stdout.write(line + '\n')
     sys.stdout.flush()
 
 
-def section(title):
-    out()
-    out(title)
-    out('=' * len(title))
-
-
-def ok(text):
-    out(f'  [ OK ] {text}')
-
-
-def fail(text):
-    out(f'  [FAIL] {text}')
-
-
-def note(text):
-    out(f'  [ -- ] {text}')
-
-
-def text(value):
-    return value.decode(errors='replace') if isinstance(value, bytes) else str(value)
+REPORT = TextReport(out)
+section, ok, fail, note = REPORT.section, REPORT.ok, REPORT.fail, REPORT.note
 
 
 # Blink's accounts
@@ -112,13 +85,10 @@ class DomainCheck(object):
         self.application = SIPApplication()
         self.directory = tempfile.mkdtemp(prefix='check_sip_domain-')
         self.done = Event()
-        self.failures = 0
         self.account = None
         self.credentials = None         # (account id, username, password)
-        self.tls_targets = []           # [(hostname, port)]
-        self.addresses = {}             # hostname: [addresses]
         self.tls_name = options.tls_name            # None: sip2sip.info when presented, else each server's own name
-        self.presented_tls_name = None              # sip2sip.info when a server presented it
+        self.inspector = None
 
     def run(self):
         log.level.current = log.level.WARNING
@@ -138,7 +108,7 @@ class DomainCheck(object):
                 thread.join(10)
         finally:
             shutil.rmtree(self.directory, ignore_errors=True)
-        return self.failures
+        return REPORT.failures
 
     def _find_credentials(self):
         options = self.options
@@ -175,7 +145,7 @@ class DomainCheck(object):
         settings.sip.tcp_port = 0
         settings.sip.tls_port = 0
         settings.tls.verify_server = True
-        settings.tls.ca_list = next((path for path in SYSTEM_CA_FILES if os.path.exists(path)), None)
+        settings.tls.ca_list = system_ca_file()
         certificate = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, 'resources', 'tls', 'default.crt')
         settings.tls.certificate = os.path.normpath(certificate) if os.path.exists(certificate) else None
         settings.audio.input_device = None
@@ -187,194 +157,13 @@ class DomainCheck(object):
         self.check()
 
     def check(self):
-        try:
-            self.check_dns()
-            self.check_routes()
-            self.check_tls()
-        except Exception as e:
-            self.failures += 1
-            fail(f'Unexpected error: {e!r}')
+        # DNS, routes and TLS (blink.sip_domain_check), in this green thread
+        self.inspector = DomainInspector(self.domain, REPORT, tls_name=self.tls_name, ca_file=SIPSimpleSettings().tls.ca_list)
+        self.inspector.check()
         if self.options.no_register:
             self.application.stop()
         else:
             self.register()
-
-    # 1. DNS
-
-    def _resolve(self, name, kind):
-        from sipsimple.lookup import DNSResolver
-        import dns.resolver
-        resolver = DNSResolver()
-        resolver.timeout = 3
-        resolver.lifetime = 10
-        try:
-            return list(resolver.resolve(name, kind))
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            return []
-
-    def check_dns(self):
-        section(f'DNS records of {self.domain}')
-        srv_names = []          # [(srv name, transport)]
-        try:
-            naptrs = self._resolve(self.domain, 'NAPTR')
-        except Exception as e:
-            naptrs = []
-            fail(f'NAPTR lookup failed: {e}')
-        sip_naptrs = [record for record in naptrs if text(record.service).upper() in NAPTR_SERVICES]
-        if sip_naptrs:
-            out(f'  NAPTR {self.domain}')
-            for record in sorted(sip_naptrs, key=lambda r: (r.order, r.preference)):
-                service = text(record.service).upper()
-                replacement = str(record.replacement).rstrip('.')
-                out(f'    order {record.order:<3} pref {record.preference:<3} {service:<9} ({NAPTR_SERVICES[service]})  -> {replacement}')
-                srv_names.append((replacement, NAPTR_SERVICES[service]))
-        else:
-            note('No SIP NAPTR records: trying the SRV records directly')
-            srv_names = [(f'{prefix}.{self.domain}', transport) for prefix, transport in SRV_SERVICES]
-
-        hosts = {}              # hostname: [addresses]
-        found_srv = False
-        for name, transport in srv_names:
-            try:
-                srvs = self._resolve(name, 'SRV')
-            except Exception as e:
-                fail(f'SRV lookup of {name} failed: {e}')
-                continue
-            if not srvs:
-                note(f'No SRV records for {name}')
-                continue
-            found_srv = True
-            out(f'  SRV {name} ({transport})')
-            for record in sorted(srvs, key=lambda r: (r.priority, -r.weight)):
-                target = str(record.target).rstrip('.')
-                out(f'    priority {record.priority:<3} weight {record.weight:<4} port {record.port:<5} -> {target}')
-                hosts.setdefault(target, None)
-                if transport == 'tls' and (target, record.port) not in self.tls_targets:
-                    self.tls_targets.append((target, record.port))
-        if not found_srv:
-            note(f'No SRV records: {self.domain} itself, on the default ports')
-            hosts[self.domain] = None
-            if not sip_naptrs:
-                self.tls_targets.append((self.domain, DEFAULT_PORTS['tls']))
-
-        for host in hosts:
-            try:
-                addresses = [record.address for record in self._resolve(host, 'A')]
-            except Exception as e:
-                addresses = []
-                fail(f'A lookup of {host} failed: {e}')
-            hosts[host] = addresses
-            if addresses:
-                out(f'  A {host}: {", ".join(addresses)}')
-            else:
-                self.failures += 1
-                fail(f'{host} has no A records')
-        self.addresses = hosts
-        if not any(hosts.values()):
-            self.failures += 1
-            fail(f'No SIP server address found for {self.domain}')
-
-    # 1b. what the SDK does with them
-
-    def check_routes(self):
-        from sipsimple.lookup import DNSLookup
-        section('Routes the SDK would try, in order (RFC 3263)')
-        settings = SIPSimpleSettings()
-        try:
-            routes = DNSLookup().lookup_sip_proxy(SIPURI(host=self.domain), settings.sip.transport_list, tls_name=self.tls_name or self.domain).wait()
-        except Exception as e:
-            self.failures += 1
-            fail(f'Lookup failed: {e}')
-            return
-        for number, route in enumerate(routes, 1):
-            out(f'  {number:>2}. {route.address}:{route.port};transport={route.transport}')
-
-    # 2. TLS
-
-    def check_tls(self):
-        if not self.tls_targets:
-            section('TLS')
-            note(f'{self.domain} offers no TLS transport')
-            return
-        section('TLS servers')
-        ca_file = SIPSimpleSettings().tls.ca_list
-        if self.tls_name:
-            note(f'Certificates are verified for {self.tls_name}')
-        for hostname, port in self.tls_targets:
-            for address in self.addresses.get(hostname) or ():
-                out(f'  {hostname} ({address}) port {port}')
-                self._check_tls_server(hostname, address, port, ca_file)
-
-    def _check_tls_server(self, hostname, address, port, ca_file):
-        # the chain is verified by openssl, the name here: which name to expect depends on the certificate
-        command = ['openssl', 's_client', '-connect', f'{address}:{port}', '-servername', self.tls_name or hostname,
-                   '-verify_return_error', '-showcerts']
-        if ca_file:
-            command += ['-CAfile', str(ca_file)]
-        try:
-            result = subprocess.run(command, input=b'', capture_output=True, timeout=15)
-        except FileNotFoundError:
-            self.failures += 1
-            fail('openssl is not installed')
-            return
-        except subprocess.TimeoutExpired:
-            self.failures += 1
-            fail('No TLS answer in 15 seconds')
-            return
-        output = text(result.stdout) + text(result.stderr)
-        verify = re.search(r'Verify return code: (\d+) \(([^)]*)\)', output)
-        certificate = re.search(r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----', output, re.S)
-        if certificate is None:
-            self.failures += 1
-            reason = next((line.strip() for line in output.splitlines() if 'error' in line.lower()), 'no certificate received')
-            fail(f'TLS connection failed: {reason}')
-            return
-        details = subprocess.run(['openssl', 'x509', '-noout', '-subject', '-issuer', '-enddate', '-ext', 'subjectAltName'],
-                                 input=certificate.group(0).encode(), capture_output=True, timeout=10)
-        names = []
-        for line in text(details.stdout).splitlines():
-            line = line.strip()
-            if line.startswith('subject='):
-                out(f'         Subject: {line[8:].strip()}')
-                common_name = re.search(r'CN\s*=\s*([^,/]+)', line)
-                if common_name and common_name.group(1).strip() not in names:
-                    names.append(common_name.group(1).strip())
-            elif line.startswith('issuer='):
-                out(f'         Issuer:  {line[7:].strip()}')
-            elif line.startswith('notAfter='):
-                out(f'         Expires: {line[9:].strip()}')
-            elif 'DNS:' in line:
-                names += [name.strip()[4:] for name in line.split(',') if name.strip().startswith('DNS:') and name.strip()[4:] not in names]
-                out(f"         Names:   {', '.join(name.strip()[4:] for name in line.split(',') if name.strip().startswith('DNS:'))}")
-
-        def matches(name):
-            name = name.lower()
-            return any(name == pattern.lower() or (pattern.startswith('*.') and name.endswith(pattern[1:].lower()) and name.count('.') == pattern.count('.'))
-                       for pattern in names)
-
-        # the name to verify: given, else sip2sip.info when the server presents it (sylk.link and
-        # other domains served by the sip2sip.info servers), else the server's own name
-        if self.tls_name:
-            expected = self.tls_name
-        elif matches(SHARED_TLS_NAME):
-            expected = SHARED_TLS_NAME
-            self.presented_tls_name = SHARED_TLS_NAME
-        else:
-            expected = hostname
-        chain_ok = verify is not None and verify.group(1) == '0'
-        if chain_ok and matches(expected):
-            ok(f'Certificate verified for {expected}')
-        elif not chain_ok:
-            self.failures += 1
-            fail(f"Certificate not verified: {verify.group(2) if verify else 'unknown error'}")
-        else:
-            self.failures += 1
-            fail(f'Certificate valid but not for {expected}')
-        if expected == hostname and hostname != self.domain:
-            if matches(self.domain):
-                ok(f'The SIP domain {self.domain} is in the certificate')
-            else:
-                note(f'The SIP domain {self.domain} is not in the certificate (RFC 5922 clients verify it; this one verifies {hostname})')
 
     # 3. Registration
 
@@ -391,8 +180,9 @@ class DomainCheck(object):
         if username:
             account.auth.username = username
         account.sip.register = True
-        if self.tls_name or self.presented_tls_name:
-            account.sip.tls_name = self.tls_name or self.presented_tls_name
+        presented_tls_name = self.inspector.presented_tls_name if self.inspector is not None else None
+        if self.tls_name or presented_tls_name:
+            account.sip.tls_name = self.tls_name or presented_tls_name
         account.sip.register_interval = 60
         account.message_summary.enabled = False
         account.presence.enabled = False
@@ -405,7 +195,6 @@ class DomainCheck(object):
         self._register_timer = reactor.callLater(self.options.timeout, self._registration_timeout)
 
     def _registration_timeout(self):
-        self.failures += 1
         fail(f'No registration answer in {self.options.timeout} seconds')
         self.application.stop()
 
@@ -418,7 +207,7 @@ class DomainCheck(object):
         data = notification.data
         if data.code >= 300:
             registrar = data.registrar
-            fail(f'{registrar.address}:{registrar.port};transport={registrar.transport} answered {data.code} {text(data.reason)}')
+            fail(f'{registrar.address}:{registrar.port};transport={registrar.transport} answered {data.code} {text(data.reason)}', count=False)
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
         data = notification.data
@@ -428,7 +217,6 @@ class DomainCheck(object):
         self.application.stop()
 
     def _NH_SIPAccountRegistrationDidFail(self, notification):
-        self.failures += 1
         fail(f'Registration failed: {text(notification.data.error)}')
         self._cancel_timer()
         self.application.stop()
@@ -439,7 +227,7 @@ class DomainCheck(object):
     def _NH_SIPEngineTransportGotCertificateError(self, notification):
         data = notification.data
         get = (lambda key: data.get(key)) if isinstance(data, dict) else (lambda key: getattr(data, key, None))
-        fail(f"SIP TLS certificate error from {get('remote_address')} (expected name {get('remote_hostname')}): {get('reason')}")
+        fail(f"SIP TLS certificate error from {get('remote_address')} (expected name {get('remote_hostname')}): {get('reason')}", count=False)
 
 
 def main():

@@ -798,7 +798,6 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryConversationDidRemove')
         notification_center.add_observer(self, name='BlinkJournalFirstSyncDidFinish')
         notification_center.add_observer(self, name='BlinkJournalProgress')
-        notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
         KeyEscrowManager().start()
 
@@ -999,6 +998,7 @@ class MessageManager(object, metaclass=Singleton):
             return
         if cursor:
             account.sms.history_synchronization_id = cursor
+            account.sms.history_synchronization_id_timestamp = None     # not in the copy
             account.save()
             ActivityLog().info(f'[journal] Journal cursor of {account.id} restored from {path}: {cursor}')
             # the account was added anew on this device (its configuration is new): no first sync
@@ -1074,12 +1074,6 @@ class MessageManager(object, metaclass=Singleton):
         moves only once a page is safely on disk, so an interruption costs at most
         the page in flight; a page is deleted only once it has been applied.
         """
-        if not account.sms.enable_history_synchronization:
-            if account.sms.history_synchronization_timestamp:
-                account.sms.history_synchronization_timestamp = None
-                account.save()
-            return
-
         if not account.sms.history_synchronization_token:
             JournalLog()(account.id, 'sync skipped', reason='no token', requested='yes')
             self._request_history_synchronization_token(account, 'no token')
@@ -1200,6 +1194,7 @@ class MessageManager(object, metaclass=Singleton):
             if not last_id:
                 break
             account.sms.history_synchronization_id = last_id
+            account.sms.history_synchronization_id_timestamp = messages[-1].get('timestamp') or None
             account.save()
             self._save_journal_cursor(account, last_id)
         else:
@@ -1822,20 +1817,11 @@ class MessageManager(object, metaclass=Singleton):
         request.dialog.hide()
         self.pgp_requests.remove(request)
 
-    def _NH_CFGSettingsObjectDidChange(self, notification):
-        if not isinstance(notification.sender, Account):
-            return
-        modified = notification.data.modified
-        if 'sms.enable_history_synchronization' in modified:
-            self._sync_messages(notification.sender, 'history synchronization enabled')
-        elif 'sms.enable_message_replication' in modified and notification.sender.sms.enable_message_replication:
-            self._sync_messages(notification.sender, 'replication enabled')
-
     def _NH_SylkServerConfigurationDidChange(self, notification):
         # a domain found to run SylkServer: its accounts that wanted a token and did not ask for one
         for account in AccountManager().get_accounts():
             if (account is not BonjourAccount() and account.enabled and account.id.domain == notification.data.domain
-                    and account.id in self._token_not_asked and account.sms.enable_history_synchronization and not account.sms.history_synchronization_token):
+                    and account.id in self._token_not_asked and not account.sms.history_synchronization_token):
                 self._request_history_synchronization_token(account, 'SylkServer found')
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
@@ -2004,11 +1990,6 @@ class MessageManager(object, metaclass=Singleton):
 
         if instance_id and instance_id.startswith('urn:uuid:'):
             instance_id = instance_id[9:]
-
-        if x_replicated_message is not Null:
-            if not account.sms.enable_message_replication:
-                log.debug(f'Skipping replicated message for account {account.id}')
-                return
 
         cpim_message = None
         if content_type == "message/cpim":
@@ -2480,8 +2461,6 @@ class MessageManager(object, metaclass=Singleton):
         sync, so it lands below the history this device has just read."""
         if account is BonjourAccount() or not account.enabled or account.sms.activation_announced:
             return
-        if not account.sms.enable_message_replication:
-            return      # no journal to carry it to the other devices
         # recorded before sending: a send that fails is not retried, but a success that was not
         # recorded would announce this device again at every start
         account.sms.activation_announced = True
@@ -2802,8 +2781,6 @@ class MessageManager(object, metaclass=Singleton):
         account = session.account
         if account is BonjourAccount():
             return  # no server behind a link-local network
-        if not account.sms.enable_message_replication:
-            return  # no other devices to tell
         contact = str(session.contact.uri.uri)
         content = conversation_read_envelope(contact, this_device_id())
         self._own_conversation_reads.note(canonical_uri(contact, account))
@@ -2841,9 +2818,6 @@ class MessageManager(object, metaclass=Singleton):
         the server keeps it in the journal and sends it to every device, this one included (skipped
         by its device id)."""
         if account is BonjourAccount() or not account.enabled:
-            return False
-        if not account.sms.enable_message_replication:
-            ActivityLog().info(f'[data] Bulk delete not announced: {account.id} does not replicate messages to other devices')
             return False
         from blink.contacts import URIUtils
         from blink.data_manage import criteria_label
@@ -2978,7 +2952,7 @@ class MessageManager(object, metaclass=Singleton):
             return
         from blink.contacts import URIUtils
         for account in AccountManager().get_accounts():
-            if account is BonjourAccount() or not account.enabled or not account.sms.enable_message_replication:
+            if account is BonjourAccount() or not account.enabled:
                 continue
             for key in keys:
                 if key == str(account.id).lower():

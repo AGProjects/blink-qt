@@ -834,6 +834,19 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             log.warning(f'Cannot store the user agent of {kind} {message_id}: {e!r}')
 
+    @run_in_thread('db')
+    def message_timestamp(self, message_id, callback):
+        """Give callback, in the GUI thread, the stored timestamp of a message (aware, UTC), or None
+        when history does not hold it (a journal entry that is not a message, or one removed for good)."""
+        timestamp = None
+        try:
+            row = next(iter(Message.selectBy(message_id=str(message_id)).limit(1)), None)
+            if row is not None and row.timestamp is not None:
+                timestamp = row.timestamp.replace(tzinfo=timezone.utc)
+        except Exception as e:
+            log.warning(f'Cannot read the timestamp of {message_id}: {e!r}')
+        call_in_gui_thread(callback, timestamp)
+
     def agents(self, message_id):
         """[(kind, user agent, relay, received at)] of a message, oldest first. In the db thread."""
         try:

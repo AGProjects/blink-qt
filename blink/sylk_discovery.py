@@ -246,9 +246,29 @@ class SylkServerDiscovery(object, metaclass=Singleton):
     def _apply(cls, account, configuration):
         """What of the domain's settings goes into the account, overwriting the user's (the server
         knows its infrastructure): conference.sipBridge as its Conference server, and the PSTN
-        rule replacePlus (pstn.rules, as mobile reads it, or a top-level rules) as its IDD prefix."""
+        rule replacePlus (pstn.rules, as mobile reads it, or a top-level rules) as its IDD prefix.
+        A SylkServer account always encrypts its messages with OpenPGP (sms.enable_pgp, not shown
+        in the preferences for it) and sends them in a CPIM envelope, which SylkServer requires
+        (sms.use_cpim, shown checked and locked). Its address book is always stored with XCAP
+        (xcap.enabled) and it does not subscribe to xcap-diff (xcap.xcap_diff: the SDK's XCAPManager
+        stops the subscription as soon as it is turned off); neither is shown in the preferences for it."""
         if not configuration:
             return
+        for group, attribute, value, what in (('sms', 'enable_pgp', True, 'OpenPGP message encryption'),
+                                              ('sms', 'use_cpim', True, 'the CPIM envelope'),
+                                              ('xcap', 'enabled', True, 'XCAP storage'),
+                                              ('xcap', 'xcap_diff', False, 'the xcap-diff subscription')):
+            settings = getattr(account, group)
+            if getattr(settings, attribute) == value:
+                continue
+            action = 'turn on' if value else 'turn off'
+            try:
+                setattr(settings, attribute, value)
+                account.save()
+            except Exception as e:
+                ActivityLog().warning(f'[sylkserver] Cannot {action} {what} for {account.id}: {e}')
+            else:
+                ActivityLog().info(f'[sylkserver] {what[0].upper() + what[1:]} turned {"on" if value else "off"} for {account.id} ({account.id.domain} runs SylkServer)')
         conference = configuration.get('conference')
         bridge = conference.get('sipBridge') if isinstance(conference, dict) else None
         if isinstance(bridge, str) and bridge.strip():

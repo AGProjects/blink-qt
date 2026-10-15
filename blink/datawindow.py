@@ -120,13 +120,10 @@ def _journal_of(account_id):
 
 def _replicating_account(account_id):
     """The account, when its other devices can be told about a deletion: a SylkServer account (it has a
-    journal) that replicates messages. Bonjour and other accounts only delete on this computer."""
+    journal). Bonjour and other accounts only delete on this computer."""
     if _journal_of(account_id) is None:
         return None
-    account = AccountManager().get_account(account_id)
-    if not account.sms.enable_message_replication:
-        return None
-    return account
+    return AccountManager().get_account(account_id)
 
 
 def _log(text):

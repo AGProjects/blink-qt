@@ -1,12 +1,16 @@
 
+import html
 import os
 import re
 import urllib.parse
 
+from datetime import timezone
+from dateutil.tz import tzlocal
+
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QEvent, QRegularExpression
 from PyQt6.QtGui import QRegularExpressionValidator, QValidator, QActionGroup
-from PyQt6.QtWidgets import QApplication, QButtonGroup, QFileDialog, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
+from PyQt6.QtWidgets import QApplication, QButtonGroup, QDialog, QDialogButtonBox, QFileDialog, QTextBrowser, QVBoxLayout, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -21,16 +25,19 @@ from sipsimple.configuration import DefaultValue
 from sipsimple.configuration.datatypes import MSRPRelayAddress, Path, PortRange, SIPProxyAddress, STUNServerAddress, STUNServerAddressList, VideoResolution
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
+from sipsimple.threading.green import run_in_green_thread
+from sipsimple.util import ISOTimestamp
 
 from blink.accounts import AddAccountDialog
 from blink.camera_formats import resolution_support, usable_cameras
 from blink.configuration.settings import H264_LEVELS, BlinkSettings
+from blink.sip_domain_check import DomainInspector, HtmlReport, RelayInspector, system_ca_file
 from blink.screen_pointer import is_screen_device, screen_index
 from blink.screen_share import ScreenShareManager
 from blink.resources import ApplicationData, Resources
 from blink.logging import LogManager
 from blink.pstn_normalize import pstn_apply_leading_zero_rule
-from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, translate
+from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread, translate
 
 
 __all__ = ['PreferencesWindow', 'AccountListView', 'SIPPortEditor']
@@ -41,6 +48,100 @@ SHOW_DEVELOPER_SETTINGS = False
 
 
 class LanguageError(Exception): pass
+
+
+class DNSInformationDialog(QDialog):
+    """What scripts/check_sip_domain.py finds for the domain of an account, without the registration:
+    the NAPTR, SRV and A records, the routes the SDK would try and the TLS certificate of every server
+    (the Servers tab); or, with nat_traversal 'msrp' or 'stun', the MSRP relay or the STUN servers (the NAT
+    Traversal tab).
+    Drawn as the message info panel draws a message (blink.messagepane.info). All text can be selected."""
+
+    def __init__(self, account, parent=None, nat_traversal=None):
+        super().__init__(parent)
+        self.account = account
+        self.domain = account.id.domain
+        self.nat_traversal = nat_traversal
+        self.closed = False
+        self.report = None
+        self.running = False
+        self.render_pending = False
+        self.setWindowTitle(translate('preferences_window', 'DNS Information for %s') % self.domain)
+        self.setModal(True)
+        self.resize(640, 640)
+        self.browser = QTextBrowser(self)
+        self.browser.setOpenLinks(False)
+        self.browser.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
+        self.refresh_button = self.buttons.addButton(translate('preferences_window', 'Refresh'), QDialogButtonBox.ButtonRole.ActionRole)
+        self.buttons.rejected.connect(self.reject)
+        self.refresh_button.clicked.connect(self.start)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.browser)
+        layout.addWidget(self.buttons)
+
+    def start(self):
+        self.refresh_button.setEnabled(False)
+        self.running = True
+        report = self.report = HtmlReport(changed=lambda: call_in_gui_thread(self._changed, report))
+        self._render()
+        self._check(report, self._inspector(report))
+
+    def _inspector(self, report):
+        account = self.account
+        if not self.nat_traversal:
+            return DomainInspector(self.domain, report, tls_name=account.sip.tls_name or None, ca_file=system_ca_file())
+        relay = account.nat_traversal.msrp_relay
+        msrp_relay = (relay.host, relay.port, relay.transport) if relay is not None and relay.host else None
+        stun_servers = [(server.host, server.port) for server in account.nat_traversal.stun_server_list or ()]
+        return RelayInspector(self.domain, report, msrp_relay=msrp_relay, stun_servers=stun_servers, ca_file=system_ca_file(), parts=(self.nat_traversal,))
+
+    @run_in_green_thread
+    def _check(self, report, inspector):
+        # the SDK's resolver needs the reactor's hub: the lookups in a green thread, openssl outside it
+        inspector.check_lookups()
+        self._check_certificates(inspector, report)
+
+    @run_in_thread('sip-domain-check')
+    def _check_certificates(self, inspector, report):
+        inspector.check_certificates()
+        call_in_gui_thread(self._finished, report)
+
+    def _changed(self, report):
+        # many findings arrive at once: drawn once for all of them, when the event loop is free
+        if self.closed or report is not self.report or self.render_pending:
+            return
+        self.render_pending = True
+        call_later(0, self._render)
+
+    def _render(self):
+        self.render_pending = False
+        if self.closed or self.report is None:
+            return
+        scrollbar = self.browser.verticalScrollBar()
+        position = scrollbar.value()
+        body = self.report.html()
+        if self.running:
+            looking = html.escape(translate('preferences_window', 'Looking up %s...') % self.domain)
+            body += f'<p style="color:gray;margin-top:14px">{looking}</p>'
+        self.browser.setHtml(body)
+        scrollbar.setValue(position)
+
+    def _finished(self, report):
+        if self.closed or report is not self.report:
+            return
+        self.running = False
+        report.section(translate('preferences_window', 'Result'))
+        if report.failures:
+            report.fail(translate('preferences_window', '%d check(s) failed') % report.failures, count=False)
+        else:
+            report.ok(translate('preferences_window', 'All checks passed'))
+        self.refresh_button.setEnabled(True)
+        self._render()
+
+    def done(self, result):
+        self.closed = True      # a check still running finds nobody to tell
+        super().done(result)
 
 
 class Language(object):
@@ -300,11 +401,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Account server settings
         self.always_use_my_proxy_button.clicked.connect(self._SH_AlwaysUseMyProxyButtonClicked)
         self.outbound_proxy_host_editor.editingFinished.connect(self._SH_OutboundProxyHostEditorEditingFinished)
+        self.outbound_proxy_host_editor.textChanged.connect(self._update_outbound_proxy_fields)
         self.outbound_proxy_port.valueChanged[int].connect(self._SH_OutboundProxyPortValueChanged)
         self.outbound_proxy_transport_button.activated[int].connect(self._SH_OutboundProxyTransportButtonActivated)
         self.auth_username_editor.editingFinished.connect(self._SH_AuthUsernameEditorEditingFinished)
         self.always_use_my_msrp_relay_button.clicked.connect(self._SH_AlwaysUseMyMSRPRelayButtonClicked)
         self.msrp_relay_host_editor.editingFinished.connect(self._SH_MSRPRelayHostEditorEditingFinished)
+        self.msrp_relay_host_editor.textChanged.connect(self._update_msrp_relay_fields)
         self.stun_server_list_editor.editingFinished.connect(self._SH_StunServerListEditorEditingFinished)
         self.msrp_relay_port.valueChanged[int].connect(self._SH_MSRPRelayPortValueChanged)
         self.msrp_relay_transport_button.activated[int].connect(self._SH_MSRPRelayTransportButtonActivated)
@@ -313,6 +416,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.server_tools_url_editor.editingFinished.connect(self._SH_ServerToolsURLEditorEditingFinished)
         self.conference_server_editor.editingFinished.connect(self._SH_ConferenceServerEditorEditingFinished)
         self.enable_xcap_button.clicked.connect(self._SH_EnableXcapButtonClicked)
+        self.xcap_diff_button.clicked.connect(self._SH_XCAPDiffButtonClicked)
 
         # Account NAT traversal settings
         self.use_ice_button.clicked.connect(self._SH_UseICEButtonClicked)
@@ -323,6 +427,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.publish_interval.valueChanged[int].connect(self._SH_PublishIntervalValueChanged)
         self.subscribe_interval.valueChanged[int].connect(self._SH_SubscribeIntervalValueChanged)
         self.reregister_button.clicked.connect(self._SH_ReregisterButtonClicked)
+        self.dns_information_button.clicked.connect(self._SH_DNSInformationButtonClicked)
+        self.msrp_dns_information_button.clicked.connect(self._SH_MSRPDNSInformationButtonClicked)
+        self.stun_dns_information_button.clicked.connect(self._SH_STUNDNSInformationButtonClicked)
         self.idd_prefix_button.activated[int].connect(self._SH_IDDPrefixButtonActivated)
         self.prefix_button.activated[int].connect(self._SH_PrefixButtonActivated)
         self.replace_leading_zero_editor.textChanged.connect(self._update_pstn_example_label)
@@ -334,9 +441,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.message_iscomposing_enabled_button.clicked.connect(self._SH_EnableMessageIsComposingButtonClicked)
         self.message_imdn_enabled_button.clicked.connect(self._SH_EnableMessageIMDNButtonClicked)
         self.message_pgp_enabled_button.clicked.connect(self._SH_EnablePGPButtonClicked)
-        self.message_replication_button.clicked.connect(self._SH_MessageReplicationButtonClicked)
-        self.message_synchronization_button.clicked.connect(self._SH_MessageSynchronizationButtonClicked)
-        self.history_url_editor.editingFinished.connect(self._SH_HistoryUrlEditorEditingFinshed)
         self.last_id_editor.editingFinished.connect(self._SH_LastIdEditorEditingFinished)
 
         # Audio devices
@@ -524,6 +628,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         text_width = max(font_metrics.size(Qt.TextFlag.TextSingleLine, label.text()).width() for label in labels) + 15
         self.outbound_proxy_label.setMinimumWidth(text_width)
         self.msrp_transport_label.setMinimumWidth(text_width)
+        # the outbound proxy's port and transport keep their place when hidden: the columns stay as they are
+        for widget in (self.outbound_proxy_port_label, self.outbound_proxy_port, self.outbound_proxy_transport_label, self.outbound_proxy_transport_button,
+                       self.msrp_relay_port_label, self.msrp_relay_port, self.msrp_relay_transport_label, self.msrp_relay_transport_button):
+            policy = widget.sizePolicy()
+            policy.setRetainSizeWhenHidden(True)
+            widget.setSizePolicy(policy)
 
         # account advanced tab
         font_metrics = self.register_interval_label.fontMetrics()  # we assume all labels have the same font
@@ -554,7 +664,6 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.audio_sample_rate_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
             self.unavailable_message_button.setStyleSheet("""QComboBox { padding: 4px 4px 4px 4px; }""")
 
-        self.history_url_editor.setValidator(WebURLValidator(self))
 
     def eventFilter(self, watched, event):
         if watched is self.camera_preview:
@@ -916,15 +1025,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 selected_account_info.registration_state = None
                 selected_account_info.registrar = None
 
-            if selected_account_info.registration_state:
-                if selected_account_info.registration_state == 'succeeded' and selected_account_info.registrar is not None:
-                    self.account_registration_label.setText(translate('preferences_window', 'Registered at %s') % selected_account_info.registrar)
-                else:
-                    self.account_registration_label.setText(translate('preferences_window', 'Registration %s') % selected_account_info.registration_state.title())
-            else:
-                self.account_registration_label.setText(translate('preferences_window', 'Not Registered'))
+            self._show_registration(selected_account_info)
         else:
             self.account_registration_label.setText('')
+            self.registrar_value_label.setText('')
 
         # Media tab
         with blocked_qt_signals(self.account_audio_codecs_list):
@@ -964,6 +1068,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.always_use_my_proxy_button.setChecked(account.sip.always_use_my_proxy)
             outbound_proxy = account.sip.outbound_proxy or UnspecifiedOutboundProxy
             self.outbound_proxy_host_editor.setText(outbound_proxy.host)
+            self._update_outbound_proxy_fields()
             if account.nat_traversal.stun_server_list:
                 stun_server_list = ", ".join('%s:%s' % (s.host, s.port) for s in account.nat_traversal.stun_server_list)
             else:
@@ -978,14 +1083,14 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self.always_use_my_msrp_relay_button.setChecked(account.nat_traversal.use_msrp_relay_for_outbound)
             msrp_relay = account.nat_traversal.msrp_relay or UnspecifiedMSRPRelay
             self.msrp_relay_host_editor.setText(msrp_relay.host)
+            self._update_msrp_relay_fields()
             with blocked_qt_signals(self.msrp_relay_port):
                 self.msrp_relay_port.setValue(msrp_relay.port)
             self.msrp_relay_transport_button.setCurrentIndex(self.msrp_relay_transport_button.findText(msrp_relay.transport.upper()))
 
             self.enable_xcap_button.setChecked(account.xcap.enabled)
             self._show_mangled(self.voicemail_uri_editor, account.message_summary.voicemail_uri, 'text', account)
-            if not account.xcap.enabled:
-                self.xcap_root_editor.setEnabled(False)
+            self.xcap_root_editor.setEnabled(account.xcap.enabled)
             self.xcap_root_editor.setText(account.xcap.xcap_root or '')
             self._show_discovered_xcap_root(account)
             self._show_discovered_voicemail_uri(account)
@@ -1022,27 +1127,64 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.replace_leading_zero_editor.setText(account.pstn.replace_leading_zero or '')
             self._update_pstn_example_label()
 
-            # Messages tab: history and replication only where the domain runs SylkServer
+            # Servers tab, Messaging section: history and replication only where the domain runs SylkServer
             self._show_history_section(account)
-            self.message_replication_button.setChecked(account.sms.enable_message_replication)
-            self.message_synchronization_button.setChecked(account.sms.enable_history_synchronization)
-            self.history_url_editor.setEnabled(account.sms.enable_history_synchronization)
             self._show_mangled(self.history_url_editor, account.sms.history_synchronization_url, 'text', account)
-            self.last_id_editor.setEnabled(account.sms.enable_history_synchronization)
-            self.last_id_editor.setText(account.sms.history_synchronization_id)
+            self._show_journal_cursor(account)
         else:
             self.account_auto_answer.setText(translate('preferences_window', 'Auto answer from all neighbours'))
 
             self._show_history_section(account)
 
     def _show_history_section(self, account):
-        """The Messages tab's History and synchronization section (and replication): SylkServer's,
+        """The Servers tab's Messaging section (history synchronization and replication): SylkServer's,
         shown only when the account's domain runs it (SylkServerDiscovery)."""
         from blink.sylk_discovery import has_sylkserver
         visible = has_sylkserver(account)
-        for widget in (self.message_replication_button, self.message_synchronization_button, self.history_url_editor, self.history_url_label,
-                       self.last_id_editor, self.last_id_label, self.history_label, self.history_line):
+        for widget in (self.history_url_editor, self.history_url_label, self.last_id_editor, self.last_id_label, self.last_id_timestamp_label,
+                       self.history_label, self.history_line):
             widget.setVisible(visible)
+        if account is not None and account is not BonjourAccount():
+            self._show_xcap_diff(account)
+        # with SylkServer messages are always encrypted with OpenPGP and sent in a CPIM envelope,
+        # which SylkServer requires (SylkServerDiscovery turns both on)
+        self.message_pgp_enabled_button.setVisible(not visible)
+        self.message_cpim_enabled_button.setEnabled(not visible)
+        self.message_cpim_enabled_button.setToolTip(translate('preferences_window', 'Required by SylkServer') if visible else '')
+        if visible:
+            self.message_cpim_enabled_button.setChecked(True)
+            self.message_imdn_enabled_button.setEnabled(True)
+
+    def _show_journal_cursor(self, account):
+        """The journal cursor and, below it, the journal timestamp of the entry it points at."""
+        self.last_id_editor.setText(account.sms.history_synchronization_id or '')
+        timestamp = account.sms.history_synchronization_id_timestamp
+        if account.sms.history_synchronization_id and timestamp:
+            try:
+                when = ISOTimestamp(timestamp).replace(tzinfo=timezone.utc).astimezone(tzlocal())
+            except (TypeError, ValueError):
+                text = timestamp
+            else:
+                text = when.strftime('%Y-%m-%d %H:%M:%S %Z')
+        elif account.sms.history_synchronization_id:
+            text = translate('preferences_window', 'Timestamp not known')
+            self._look_up_journal_cursor(account)
+        else:
+            text = ''
+        self.last_id_timestamp_label.setText(text)
+
+    def _look_up_journal_cursor(self, account):
+        """A cursor without its timestamp (restored from journal/<account>/cursor, entered by hand, or
+        from before the timestamp was kept): the message it points at, if history holds it, has it."""
+        from blink.history import MessageHistory
+        cursor = account.sms.history_synchronization_id
+
+        def found(timestamp):
+            if timestamp is None or account.sms.history_synchronization_id != cursor or account.sms.history_synchronization_id_timestamp:
+                return
+            account.sms.history_synchronization_id_timestamp = timestamp.isoformat()
+            account.save()      # CFGSettingsObjectDidChange shows it
+        MessageHistory().message_timestamp(cursor, found)
 
     def _NH_SylkServerConfigurationDidChange(self, notification):
         account = self.selected_account
@@ -1120,6 +1262,22 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             self._update_logs_size_label()
         self.pages.setCurrentIndex(action.index)
 
+    def _show_registration(self, account_info):
+        """The registration of the selected account: one line on the Account tab, and as
+        Registered at: <registrar> at the end of the SIP section of the Servers tab."""
+        state, registrar = account_info.registration_state, account_info.registrar
+        if state == 'succeeded' and registrar is not None:
+            self.account_registration_label.setText(translate('preferences_window', 'Registered at %s') % registrar)
+            self.registrar_value_label.setText(str(registrar))
+        elif state:
+            text = translate('preferences_window', 'Registration %s') % state.title()
+            self.account_registration_label.setText(text)
+            self.registrar_value_label.setText(text)
+        else:
+            text = translate('preferences_window', 'Not Registered')
+            self.account_registration_label.setText(text)
+            self.registrar_value_label.setText(text)
+
     def _NH_SIPRegistrationInfoDidChange(self, notification):
         self.refresh_account_registration_widgets(notification.sender)
 
@@ -1154,7 +1312,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.password_editor.hide()
             else:
                 if tab_widget.indexOf(self.server_settings_tab) == -1:
-                    tab_widget.insertTab(1, self.server_settings_tab, translate('preferences_window', "Server"))     # after Account
+                    tab_widget.insertTab(1, self.server_settings_tab, translate('preferences_window', "Servers"))     # after Account
                 if tab_widget.indexOf(self.network_tab) == -1:
                     tab_widget.addTab(self.network_tab, translate('preferences_window', "NAT Traversal"))
                 if tab_widget.indexOf(self.advanced_tab) == -1:
@@ -1162,7 +1320,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.password_label.show()
                 self.password_editor.show()
                 self.voicemail_uri_editor.inactiveText = translate('preferences_window', "Discovered by subscribing to %s") % selected_account.id
-                self.xcap_root_editor.inactiveText = translate('preferences_window', "Taken from the DNS TXT record for xcap.%s") % selected_account.id.domain
+                self.xcap_root_editor.inactiveText = translate('preferences_window', "Discovered from the DNS TXT record for xcap.%s") % selected_account.id.domain
             self.load_account_settings(selected_account)
 
     def _SH_AccountListDataChanged(self, topLeft, bottomRight):
@@ -1173,11 +1331,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         else:
             account_info = self.account_list.model().data(topLeft, Qt.ItemDataRole.UserRole)
             selected_account_info = self.account_list.model().data(selected_index, Qt.ItemDataRole.UserRole)
-            if selected_account_info is account_info:
-                if account_info.registration_state:
-                    self.account_registration_label.setText(translate('preferences_window', 'Registration %s') % account_info.registration_state.title())
-                else:
-                    self.account_registration_label.setText(translate('preferences_window', 'Not Registered'))
+            if selected_account_info is account_info and account_info.account is not BonjourAccount():
+                self._show_registration(account_info)
 
     def _SH_DeleteAccountButtonClicked(self):
         model = self.account_list.model()
@@ -1333,6 +1488,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account.sip.always_use_my_proxy = checked
         account.save()
 
+    def _update_outbound_proxy_fields(self, *args):
+        """Port and transport only for an outbound proxy that is set: without one the proxy is
+        discovered from DNS. Hidden, they keep their place (retainSizeWhenHidden), so nothing moves."""
+        visible = bool(self.outbound_proxy_host_editor.text().strip())
+        for widget in (self.outbound_proxy_port_label, self.outbound_proxy_port, self.outbound_proxy_transport_label, self.outbound_proxy_transport_button):
+            widget.setVisible(visible)
+
+    def _update_msrp_relay_fields(self, *args):
+        """Port and transport only for an MSRP relay that is set (as for the outbound proxy)."""
+        visible = bool(self.msrp_relay_host_editor.text().strip())
+        for widget in (self.msrp_relay_port_label, self.msrp_relay_port, self.msrp_relay_transport_label, self.msrp_relay_transport_button):
+            widget.setVisible(visible)
+
     def _SH_OutboundProxyHostEditorEditingFinished(self):
         account = self.selected_account
         outbound_proxy = self.account_outbound_proxy
@@ -1459,6 +1627,26 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.xcap_root_editor.setEnabled(checked)
         account.save()
         self._show_discovered_xcap_root(account)
+        self._show_xcap_diff(account)
+
+    def _SH_XCAPDiffButtonClicked(self, checked):
+        account = self.selected_account
+        account.xcap.xcap_diff = checked
+        account.save()      # the SDK's XCAPManager starts or stops the subscription
+
+    def _show_xcap_diff(self, account):
+        """Enable XCAP storage and Subscribe to xcap-diff: neither shown with SylkServer, whose address
+        book is always stored with XCAP, without xcap-diff (SylkServerDiscovery sets both).
+        Subscribe to xcap-diff with XCAP storage only."""
+        from blink.sylk_discovery import has_sylkserver
+        sylkserver = has_sylkserver(account)
+        self.enable_xcap_button.setVisible(not sylkserver)
+        self.xcap_diff_button.setVisible(not sylkserver)
+        if sylkserver:
+            self.enable_xcap_button.setChecked(account.xcap.enabled)
+            self.xcap_root_editor.setEnabled(account.xcap.enabled)
+        self.xcap_diff_button.setChecked(account.xcap.xcap_diff and not sylkserver)
+        self.xcap_diff_button.setEnabled(account.xcap.enabled)
 
     def _show_discovered_xcap_root(self, account):
         """Under XCAP Root URL: the root in use when it was discovered (DNS TXT xcap.<domain>), not typed in."""
@@ -1522,6 +1710,24 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account = self.selected_account
         account.sip.subscribe_interval = value
         account.save()
+
+    def _SH_DNSInformationButtonClicked(self):
+        self._show_dns_information()
+
+    def _SH_MSRPDNSInformationButtonClicked(self):
+        self._show_dns_information(nat_traversal='msrp')
+
+    def _SH_STUNDNSInformationButtonClicked(self):
+        self._show_dns_information(nat_traversal='stun')
+
+    def _show_dns_information(self, nat_traversal=None):
+        account = self.selected_account
+        if account is None or account is BonjourAccount():
+            return
+        dialog = DNSInformationDialog(account, self, nat_traversal=nat_traversal)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.open()
+        dialog.start()
 
     def _SH_ReregisterButtonClicked(self):
         account = self.selected_account
@@ -1609,28 +1815,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         account.sms.enable_pgp = checked
         account.save()
 
-    def _SH_MessageReplicationButtonClicked(self, checked):
-        account = self.selected_account
-        account.sms.enable_message_replication = checked
-        account.save()
-
-    def _SH_MessageSynchronizationButtonClicked(self, checked):
-        account = self.selected_account
-        account.sms.enable_history_synchronization = checked
-        account.save()
-
-    def _SH_HistoryUrlEditorEditingFinshed(self):
-        account = self.selected_account
-        history_url = self._edited_text(self.history_url_editor) or None
-        if account.sms.history_synchronization_url != history_url:
-            account.sms.history_synchronization_url = history_url
-            account.save()
-
     def _SH_LastIdEditorEditingFinished(self):
         account = self.selected_account
         last_id = self.last_id_editor.text() or None
         if account.sms.history_synchronization_id != last_id:
             account.sms.history_synchronization_id = last_id
+            account.sms.history_synchronization_id_timestamp = None    # entered by hand: its timestamp is not known
             account.save()
 
     # Audio devices signal handlers
@@ -2018,16 +2208,15 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.reset_account_audio_codecs_button.setEnabled(account.rtp.audio_codec_list is not None)
             if 'rtp.video_codec_list' in notification.data.modified:
                 self.reset_account_video_codecs_button.setEnabled(account.rtp.video_codec_list is not None)
+            if {'xcap.xcap_diff', 'xcap.enabled'} & set(notification.data.modified) and account is not BonjourAccount():
+                self._show_xcap_diff(account)
             if 'sms.history_synchronization_url' in notification.data.modified:
                 if not account.sms.history_synchronization_url:
                     account.sms.history_synchronization_token = None
-                    account.sms.enable_history_synchronization = False
                     account.save()
-                else:
-                    self._show_mangled(self.history_url_editor, account.sms.history_synchronization_url, 'text', account)
-            if 'sms.history_synchronization_token' in notification.data.modified:
-                if account.sms.history_synchronization_token:
-                    self.last_id_editor.setText(account.sms.history_synchronization_id)
+                self._show_mangled(self.history_url_editor, account.sms.history_synchronization_url, 'text', account)
+            if {'sms.history_synchronization_id', 'sms.history_synchronization_id_timestamp'} & set(notification.data.modified):
+                self._show_journal_cursor(account)
 
 
 del ui_class, base_class
