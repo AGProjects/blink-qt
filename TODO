@@ -1,35 +1,9 @@
-Screen sharing
---------------
-
- - Switch to audio panel whenever call stats
- - Don't bring up chat window when screen sharing session starts 
-
-
-Bonjour messaging
------------------
-
-- Only use one contact for Bonjour, prefferably TLS, then TCP and finally UDP
-- Update Bonjour network ip:port in Chat window if remote client changes them
-- Remove unused options from Bonjour messages preferences panel
+Add setting to turn off MSRP by default
 
 
 Old entries
------------
 
-- Device switching window when detected at runtime
-- Dial SIP URIs from the system
-- Desktop notifications
-- History browser
-- External Alert URL handler
-- Answering machine
-- Have the icon selection on the account state button's menu
-- Explore the scaledContents attribute for the IconSelector label
-- fix dialed uri (% encode them to avoid errors)
-- handle http:// urls using QDesktopServices from QtGui
-- remove objects from the ID mapping when deleted, as they can't be resurrected
-- add "Remove from group" context menu entry
-- review presence code, _NH_CFGObjectSettingsDidChange logic on publisher.
-  should we publish if xcap is disabled?
+- Add Answering machine
 - store url, etag & hash in IconDescriptor
 - re-evaluate what to do about missing icons. maybe have a blink://no-icon
   url when the icon is deleted
