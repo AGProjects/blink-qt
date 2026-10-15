@@ -8019,6 +8019,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.name_editor.setText('')
         self.organization_editor.setText('')
         self.icon_selector.init_with_contact(None)
+        self.icon_selector.avatar_name = sip_address
         self.presence.setChecked(True)
         self.presence_policy.setChecked(True)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData('messages'))   # new contacts default to messages
@@ -8037,6 +8038,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.name_editor.setText(contact.name)
         self.organization_editor.setText(contact.organization or '')
         self.icon_selector.init_with_contact(contact)
+        self.icon_selector.avatar_name = contact.name or self._default_address(contact)
         self.presence.setChecked(contact.presence.subscribe)
         self.presence_policy.setChecked(contact.presence.policy == 'allow')
         self.auto_answer.setChecked(contact.auto_answer)
@@ -8146,6 +8148,20 @@ class ContactEditorDialog(base_class, ui_class):
 
     def _SH_NameEditorTextChanged(self, text):
         self.accept_button.setEnabled(text != '')
+        # the initials follow the name being typed, as the contact list will show them
+        if text.strip():
+            self.icon_selector.avatar_name = text
+        elif self.edited_contact is not None:
+            self.icon_selector.avatar_name = self._default_address(self.edited_contact)
+
+    @staticmethod
+    def _default_address(contact):
+        """The address the contact list draws the initials from when the contact has no name."""
+        try:
+            uri = contact.uris.default or next(iter(contact.uris))
+        except StopIteration:
+            return ''
+        return str(getattr(uri, 'uri', None) or '')
 
     def _SH_Accepted(self):
         if self.edited_contact is not None:

@@ -10,6 +10,7 @@ from application.python.types import MarkerType
 
 from sipsimple.configuration.datatypes import Path
 
+from blink.avatars import avatar_icon, circular_icon
 from blink.resources import IconManager, Resources
 from blink.util import translate
 from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme, readable_text_color
@@ -66,6 +67,7 @@ class IconSelector(QLabel):
         self.icon_size = 48
         self.default_icon = None
         self.contact_icon = None
+        self.avatar_name = ''  # the initials avatar is drawn from it when there is no picture
         self.icon = None
         self.filename = self.NotSelected
         self.last_icon_directory = Path('~').normalized
@@ -75,11 +77,33 @@ class IconSelector(QLabel):
 
     def _set_icon(self, icon):
         self.__dict__['icon'] = icon
-        icon = icon or self.default_icon or QIcon()
-        self.setPixmap(icon.pixmap(self.icon_size))
+        self.setPixmap(self.displayed_icon.pixmap(self.icon_size))
 
     icon = property(_get_icon, _set_icon)
     del _get_icon, _set_icon
+
+    def _get_avatar_name(self):
+        return self.__dict__['avatar_name']
+
+    def _set_avatar_name(self, name):
+        name = (name or '').strip()
+        if self.__dict__.get('avatar_name') == name:
+            return
+        self.__dict__['avatar_name'] = name
+        if 'icon' in self.__dict__ and self.icon is None:
+            self.setPixmap(self.displayed_icon.pixmap(self.icon_size))
+
+    avatar_name = property(_get_avatar_name, _set_avatar_name)
+    del _get_avatar_name, _set_avatar_name
+
+    @property
+    def displayed_icon(self):
+        """The icon as the contact list draws it: a picture cropped to a circle, else the initials avatar."""
+        if self.icon is not None:
+            return circular_icon(self.icon)
+        if self.avatar_name:
+            return avatar_icon(self.avatar_name)
+        return self.default_icon or QIcon()
 
     def _get_filename(self):
         return self.__dict__['filename']
@@ -122,13 +146,11 @@ class IconSelector(QLabel):
         return super(IconSelector, self).event(event)
 
     def enterEvent(self, event):
-        icon = self.icon or self.default_icon or QIcon()
-        self.setPixmap(icon.pixmap(self.icon_size, mode=QIcon.Mode.Selected))
+        self.setPixmap(self.displayed_icon.pixmap(self.icon_size, mode=QIcon.Mode.Selected))
         super(IconSelector, self).enterEvent(event)
 
     def leaveEvent(self, event):
-        icon = self.icon or self.default_icon or QIcon()
-        self.setPixmap(icon.pixmap(self.icon_size, mode=QIcon.Mode.Normal))
+        self.setPixmap(self.displayed_icon.pixmap(self.icon_size, mode=QIcon.Mode.Normal))
         super(IconSelector, self).leaveEvent(event)
 
     def mouseReleaseEvent(self, event):
