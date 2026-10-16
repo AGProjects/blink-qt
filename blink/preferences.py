@@ -1146,6 +1146,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             widget.setVisible(visible)
         if account is not None and account is not BonjourAccount():
             self._show_xcap_diff(account)
+        self._show_conference_server(account)      # also unlocks it for Bonjour / no account
         # with SylkServer messages are always encrypted with OpenPGP and sent in a CPIM envelope,
         # which SylkServer requires (SylkServerDiscovery turns both on)
         self.message_pgp_enabled_button.setVisible(not visible)
@@ -1154,6 +1155,16 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if visible:
             self.message_cpim_enabled_button.setChecked(True)
             self.message_imdn_enabled_button.setEnabled(True)
+
+    def _show_conference_server(self, account):
+        """Conference server: read only when the domain publishes one (conference.sipBridge, which
+        SylkServerDiscovery writes into the account). As Blink for macOS."""
+        from blink.sylk_discovery import conference_server
+        server = conference_server(account)
+        self.conference_server_editor.setReadOnly(bool(server))
+        self.conference_server_editor.setToolTip(translate('preferences_window', 'Set by SylkServer') if server else '')
+        if server:
+            self.conference_server_editor.setText(server)
 
     def _show_journal_cursor(self, account):
         """The journal cursor and, below it, the journal timestamp of the entry it points at."""

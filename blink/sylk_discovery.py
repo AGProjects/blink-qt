@@ -39,7 +39,7 @@ from blink.resources import ApplicationData
 from blink.util import call_in_gui_thread, run_in_gui_thread
 
 
-__all__ = ['SylkServerDiscovery', 'has_sylkserver', 'server_http_url']
+__all__ = ['SylkServerDiscovery', 'conference_server', 'has_sylkserver', 'server_http_url']
 
 
 cache_folder = 'sylkserver'                 # <data>/sylkserver/<domain>/configuration.json
@@ -59,6 +59,24 @@ def has_sylkserver(account):
         return bool(SylkServerDiscovery().configuration(account.id.domain))
     except Exception:
         return False
+
+
+def _conference_bridge(configuration):
+    """conference.sipBridge of a configuration, lower case, or None."""
+    conference = (configuration or {}).get('conference')
+    bridge = conference.get('sipBridge') if isinstance(conference, dict) else None
+    return bridge.strip().lower() if isinstance(bridge, str) and bridge.strip() else None
+
+
+def conference_server(account):
+    """The conference server the account's domain publishes (conference.sipBridge), or None:
+    when there is one it is the account's Conference server and cannot be changed."""
+    if account is None or account is BonjourAccount():
+        return None
+    try:
+        return _conference_bridge(SylkServerDiscovery().configuration(account.id.domain))
+    except Exception:
+        return None
 
 
 def server_http_url(account):
@@ -269,10 +287,9 @@ class SylkServerDiscovery(object, metaclass=Singleton):
                 ActivityLog().warning(f'[sylkserver] Cannot {action} {what} for {account.id}: {e}')
             else:
                 ActivityLog().info(f'[sylkserver] {what[0].upper() + what[1:]} turned {"on" if value else "off"} for {account.id} ({account.id.domain} runs SylkServer)')
-        conference = configuration.get('conference')
-        bridge = conference.get('sipBridge') if isinstance(conference, dict) else None
-        if isinstance(bridge, str) and bridge.strip():
-            cls._set(account, 'server.conference_server', bridge.strip().lower(), 'conference.sipBridge', 'Conference server')
+        bridge = _conference_bridge(configuration)
+        if bridge:
+            cls._set(account, 'server.conference_server', bridge, 'conference.sipBridge', 'Conference server')
         pstn = configuration.get('pstn')
         rules = pstn.get('rules') if isinstance(pstn, dict) else None
         if not isinstance(rules, dict):

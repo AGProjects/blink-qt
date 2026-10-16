@@ -326,7 +326,8 @@ class DomainInspector(object):
             reason = next((line.strip() for line in output.splitlines() if 'error' in line.lower()), 'no certificate received')
             report.fail(f'TLS connection failed: {reason}')
             return
-        details = subprocess.run(['openssl', 'x509', '-noout', '-subject', '-issuer', '-enddate', '-ext', 'subjectAltName'],
+        # -text, not -ext subjectAltName: LibreSSL (macOS) has no -ext
+        details = subprocess.run(['openssl', 'x509', '-noout', '-subject', '-issuer', '-enddate', '-text'],
                                  input=certificate.group(0).encode(), capture_output=True, timeout=10)
         names = []
         for line in text(details.stdout).splitlines():
