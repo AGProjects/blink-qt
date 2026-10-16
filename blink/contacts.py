@@ -7966,6 +7966,37 @@ def is_read_only_group(group_settings):
     return is_messages_group(group_settings) or is_group(group_settings, CALLS) or is_group(group_settings, TEL)
 
 
+def kind_group_changes(contact, old_addresses):
+    """The Tel and Conference memberships a user edit of `contact`'s addresses implies, as
+    (groups to join, groups to leave). Membership of a kinded group says what the contact
+    IS (a phone number, a conference room), so it follows the addresses both ways here:
+    joined when the edit brings the first such address, left when it takes the last one
+    away. Only on an explicit edit: the background pass (ContactRepair.file_into_kind_groups)
+    only adds, since pstn_e164 depends on the dial rules, which may differ between devices.
+    A deleted or blocked contact is left where it is (macOS ContactListModel.editContact)."""
+    if is_deleted_contact(contact):
+        return [], []
+    blocked = blocked_group()
+    if blocked is not None and contact.id in {member.id for member in blocked.contacts}:
+        return [], []
+    account = AccountManager().default_account
+    new_addresses = [str(uri.uri) for uri in contact.uris]
+    join, leave = [], []
+    for identity, test in ((TEL, lambda address: pstn_e164(address, account)),
+                           (CONFERENCE, lambda address: is_conference_uri(address, account))):
+        had = any(test(address) for address in old_addresses)
+        has = any(test(address) for address in new_addresses)
+        if has:
+            group = CallsGroupFiler().ensure_group(identity, None)
+            if group is not None and contact.id not in {member.id for member in group.contacts}:
+                join.append(group)
+        elif had:
+            group = find_group(list(addressbook.AddressbookManager().get_groups()), identity)
+            if group is not None and contact.id in {member.id for member in group.contacts}:
+                leave.append(group)
+    return join, leave
+
+
 def is_selectable_group(group_settings):
     """Whether the contact editor lists this group: the ones the user files people into,
     plus the read-only ones, which the contact is shown in and so would look lost if left
@@ -8220,6 +8251,7 @@ class ContactEditorDialog(base_class, ui_class):
             self.target_group = None
             return
 
+        old_addresses = [str(uri.uri) for uri in contact.uris]     # Tel and Conference follow the edit (kind_group_changes)
         for id in set(contact.uris.ids()).difference(item.id for item in self.contact_uri_model.items):
             contact.uris.remove(contact.uris[id])
         for item in (item for item in self.contact_uri_model.items if item.uri and item.uri not in refused):
@@ -8272,7 +8304,13 @@ class ContactEditorDialog(base_class, ui_class):
         added = [group for group in self.selected_groups if group not in self.original_groups]
         # a read-only group is never left by hand: Deselect All and the menu both keep them
         removed = [group for group in self.original_groups if group not in self.selected_groups and not is_read_only_group(group)]
-        if added and self.edited_contact is None:
+        try:
+            with addressbook_origin.reason('file-into-kind-group'):
+                kind_join, kind_leave = kind_group_changes(contact, old_addresses)
+        except Exception as e:
+            ActivityLog().warning(f'[contacts] {contact.name}: cannot work out Tel and Conference membership: {e!r}')
+            kind_join, kind_leave = [], []
+        if (added or kind_join) and self.edited_contact is None:
             publish_contact_for_groups(contact)
         for group in added:
             if contact.id not in {member.id for member in group.contacts}:
@@ -8284,6 +8322,18 @@ class ContactEditorDialog(base_class, ui_class):
                 modified_settings.append(group)
         if added or removed:
             ActivityLog().info(f"[contacts] {contact.name}: added to {', '.join(group.name for group in added) or 'no group'}, removed from {', '.join(group.name for group in removed) or 'no group'}")
+        for group in kind_join:
+            if contact.id not in {member.id for member in group.contacts}:
+                group.contacts.add(contact)
+                if group not in modified_settings:
+                    modified_settings.append(group)
+        for group in kind_leave:
+            if contact.id in {member.id for member in group.contacts}:
+                group.contacts.remove(contact)
+                if group not in modified_settings:
+                    modified_settings.append(group)
+        if kind_join or kind_leave:
+            ActivityLog().info(f"[contacts] {contact.name}: by its addresses, filed into {', '.join(group.name for group in kind_join) or 'no group'}, taken out of {', '.join(group.name for group in kind_leave) or 'no group'}")
         contact_model._atomic_update(save=modified_settings)
         if avatar_action == 'upload':
             AccountStorage().upload_avatar(contact, reason='set in the contact editor')
