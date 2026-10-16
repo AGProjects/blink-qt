@@ -412,7 +412,10 @@ class OutgoingMessage(object):
         self.content = content
         self.id = id if id is not None else str(uuid.uuid4())
         self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
-        self.sip_uri = SIPURI.parse('sip:%s' % self.uri)
+        address = str(self.uri)
+        if '@' not in address and isinstance(account, Account):
+            address += '@' + account.id.domain      # a number or bare user (conversation key '+318008185'): at the account's domain, as a session does
+        self.sip_uri = SIPURI.parse('sip:%s' % address)
         self.session = session
         self.contact = contact
         self.is_secure = False
@@ -557,7 +560,9 @@ class OutgoingMessage(object):
 
     def _NH_DNSLookupTrace(self, notification):
         if notification.data.error and notification.data.query_type == 'A':
-            reason = dns_error_map.get(notification.data.error.__class__, '')
+            # isinstance, not the exact class: dnspython raises subclasses (LifetimeTimeout for Timeout)
+            error = notification.data.error
+            reason = next((text for kind, text in dns_error_map.items() if isinstance(error, kind)), '') or str(error)
             self.dns_failed_reason = reason
 
     def _NH_DNSLookupDidSucceed(self, notification):
@@ -595,7 +600,9 @@ class OutgoingMessage(object):
             return
 
         reason = self.dns_failed_reason or notification.data.error
-        originator = 'local' if 'no DNS' in self.dns_failed_reason else 'remote'
+        # local (sent again later): no name server answered, or the lookup timed out; the SDK says
+        # so in originator. remote (not sent again): the name does not exist or has no SIP records
+        originator = getattr(notification.data, 'originator', None) or ('local' if 'no DNS' in str(reason) or 'Timeout' in str(reason) else 'remote')
 
         log.info(f'DNS lookup for message {self.id} failed {originator}ly: {reason}')
 
@@ -2658,51 +2665,63 @@ class MessageManager(object, metaclass=Singleton):
     def _NH_BlinkMessageHistoryFailedLocalFound(self, notification):
         log.info('Resending unsent messages...')
         messages = notification.data.messages
-        created_views = set()
+        created_views = {}      # uri -> the session made for it in this loop, for its other messages
+        sent = failed = 0
         for message in messages:
-            from blink.contacts import URIUtils
-            contact, contact_uri = URIUtils.find_contact(message.remote_uri)
-
-            if placeholder_instance_id(contact_uri.uri):
-                continue  # a Bonjour neighbour who is away: retried when it is back
-
-            if contact_uri.uri in created_views:
-                # creation of message views take time, so we need to skip duplicates here
-                continue
-
-            session_manager = SessionManager()
-            account = AccountManager().get_account(message.account_id)
-
-            instance_id = contact_instance_id(contact, contact_uri)
-
             try:
-                blink_session = next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
+                if self._resend_unsent(message, created_views):
+                    sent += 1
+            except Exception as e:
+                # one message that cannot be sent (a bad address, a gone account) must not keep the others back
+                failed += 1
+                ActivityLog().error(f'[Message with {message.remote_uri}] Unsent message {message.message_id} cannot be sent again: {e!r}')
+        if sent or failed:
+            ActivityLog().info(f'[Message] Sending again {sent} unsent messages' + (f', {failed} could not be' if failed else ''))
+
+    def _resend_unsent(self, message, created_views):
+        """Send one unsent (failed-local) message from history again. True if it was handed to be sent."""
+        from blink.contacts import URIUtils
+        contact, contact_uri = URIUtils.find_contact(message.remote_uri)
+
+        if placeholder_instance_id(contact_uri.uri):
+            return False  # a Bonjour neighbour who is away: retried when it is back
+
+        session_manager = SessionManager()
+        account = AccountManager().get_account(message.account_id)
+
+        instance_id = contact_instance_id(contact, contact_uri)
+
+        try:
+            # a view made in this loop for an earlier message of this contact may not be in
+            # self.sessions yet: use it rather than making a second one
+            blink_session = created_views.get(contact_uri.uri) or next(session for session in self.sessions if session.contact_uri.uri == contact_uri.uri or (instance_id and instance_id == session.remote_instance_id))
+        except StopIteration:
+            log.info(f"Create message view from history for {contact_uri.uri} with instance_id {instance_id}")
+            ActivityLog().info(f'[Message with {instance_id or contact_uri.uri}] Conversation opened from message history for account {account.id}')
+            try:
+                ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
             except StopIteration:
-                log.info(f"Create message view from history for {contact_uri.uri} with instance_id {instance_id}")
-                ActivityLog().info(f'[Message with {instance_id or contact_uri.uri}] Conversation opened from message history for account {account.id}')
-                created_views.add(contact_uri.uri)
-                try:
-                    ab_contact = next(contact for contact in AddressbookManager().get_contacts() if contact_uri.uri in (addr.uri for addr in contact.uris))
-                except StopIteration:
-                    pass
-                else:
-                    contact.settings.name = ab_contact.name
-                blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+                pass
             else:
-                if blink_session.fake_streams.get('messages') is None:
-                    stream = StreamDescription('messages')
-                    blink_session.fake_streams.extend([stream.create_stream()])
-                    blink_session._delete_when_done = False
-                    if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
-                        blink_session.fake_streams.get('messages').enable_pgp()
-                    NotificationCenter().post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
-
-                if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
+                contact.settings.name = ab_contact.name
+            blink_session = session_manager.create_session(contact, contact_uri, [StreamDescription('messages')], account=account, connect=False)
+            created_views[contact_uri.uri] = blink_session
+        else:
+            if blink_session.fake_streams.get('messages') is None:
+                stream = StreamDescription('messages')
+                blink_session.fake_streams.extend([stream.create_stream()])
+                blink_session._delete_when_done = False
+                if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
                     blink_session.fake_streams.get('messages').enable_pgp()
+                NotificationCenter().post_notification('BlinkSessionWillAddStream', sender=blink_session, data=NotificationData(stream=stream))
 
-            timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
-            outgoing_message = OutgoingMessage(account, contact, message.content, message.content_type, timestamp=timestamp, id=message.message_id, session=blink_session)
-            self._send_message(outgoing_message)
+            if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
+                blink_session.fake_streams.get('messages').enable_pgp()
+
+        timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
+        outgoing_message = OutgoingMessage(account, contact, message.content, message.content_type, timestamp=timestamp, id=message.message_id, session=blink_session)
+        self._send_message(outgoing_message)
+        return True
 
     def generate_private_key(self, account):
         if account is None:

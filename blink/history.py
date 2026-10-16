@@ -1431,10 +1431,15 @@ class MessageHistory(object, metaclass=Singleton):
             return
         JournalLog()(account_id, 'unread', conversations=conversations, messages=messages)
 
+    # Rows with no category that still count as a new message in a conversation: a location
+    # request asks the other party for something, so it moves the conversation up the list
+    # (its stop and meet-up answers are breadcrumbs of something already said: they do not)
+    __ordering_sql__ = (f"(category is not null or (content_type = '{LOCATION_CONTENT_TYPE}' and related_action = 'location_request'))")
+
     def last_message_times(self, accounts=None, include_calls=False, remote_uri=None):
         """{conversation key: newest message time} for ordering conversations."""
         query = (f'select remote_uri, max(timestamp) from {Message.sqlmeta.table}'
-                 f' where {NOT_DELETED_SQL} and category is not null' + ('' if include_calls else " and category != 'call'")
+                 f' where {NOT_DELETED_SQL} and {self.__ordering_sql__}' + ('' if include_calls else " and (category is null or category != 'call')")
                  + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri) + ' group by remote_uri')
         return {str(remote_uri): str(newest) for remote_uri, newest in self.db.queryAll(query) if remote_uri and newest}
 
@@ -1448,7 +1453,7 @@ class MessageHistory(object, metaclass=Singleton):
     def last_message_accounts(self, accounts=None, remote_uri=None):
         """{conversation key: account id of its newest message}, the account a conversation continues on."""
         table = Message.sqlmeta.table
-        where = f' where {NOT_DELETED_SQL} and category is not null' + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri)
+        where = f' where {NOT_DELETED_SQL} and {self.__ordering_sql__}' + self._shown_accounts_sql(accounts) + self._in_sql('remote_uri', remote_uri)
         query = (f'select m.remote_uri, m.account_id from {table} m'
                  f' join (select remote_uri, max(timestamp) as newest from {table}{where} group by remote_uri) latest'
                  f' on m.remote_uri = latest.remote_uri and m.timestamp = latest.newest'
@@ -2317,15 +2322,37 @@ class MessageHistory(object, metaclass=Singleton):
 
         return f"{table} IN ({','.join([repr(account) for account in enabled_accounts])})"
 
+    __stale_pending_checked__ = False
+    # unsent messages are sent again only while they are this recent: an older one is history
+    # (rows imported from the journal or left by old versions), sending it now would surprise
+    retry_window = timedelta(hours=24)
+
     @run_in_thread('db')
     def _retry_failed_messages(self):
         if host.default_ip is None:
             return
 
-        messages = Message.selectBy(state='failed-local')
-        if len(list(messages)) > 0:
-            log.debug(f"==  {len(list(messages))} failed local messages from history")
-            NotificationCenter().post_notification('BlinkMessageHistoryFailedLocalFound', data=NotificationData(messages=list(messages)))
+        table = Message.sqlmeta.table
+        cutoff = self.db.sqlrepr(self._storage_time(datetime.now(timezone.utc) - self.retry_window))
+        if not MessageHistory.__stale_pending_checked__:
+            # once per run, before anything is sent: a recent outgoing message still pending was
+            # being sent by an earlier run that ended (quit, crash) before it was sent or failed;
+            # nothing here is sending it, so it is unsent like a failed-local one and is sent again
+            MessageHistory.__stale_pending_checked__ = True
+            where = (f"state = 'pending' and direction = 'outgoing' and {NOT_DELETED_SQL} and timestamp > {cutoff}"
+                     f" and content_type not in ('text/pgp-public-key', 'text/pgp-private-key')")
+            try:
+                count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+                if count:
+                    self.db.queryAll(f"update {table} set state = 'failed-local' where {where}")
+                    ActivityLog().info(f'[db] {count} outgoing messages left pending by an earlier run will be sent again')
+            except Exception as e:
+                ActivityLog().error(f'[db] Cannot find the messages left pending by an earlier run: {e!r}')
+
+        messages = list(Message.select(f"state = 'failed-local' and {NOT_DELETED_SQL} and timestamp > {cutoff}", orderBy=['timestamp', 'id']))
+        if messages:
+            log.debug(f"==  {len(messages)} failed local messages from history (of the last {self.retry_window})")
+            NotificationCenter().post_notification('BlinkMessageHistoryFailedLocalFound', data=NotificationData(messages=messages))
 
     @classmethod
     @run_in_thread('db')
@@ -3114,7 +3141,7 @@ class ConversationPreviews(object, metaclass=Singleton):
         self._keys = {}             # account id: (path, mtime, PGPKey or None)
         self._undecryptable = set()
         notification_center = NotificationCenter()
-        for name in ('SIPApplicationDidStart', 'BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryAllContactsDidSucceed',
+        for name in ('SIPApplicationDidStart', 'BlinkMessageHistoryMessageDidStore', 'BlinkMessageHistoryMessageDidRemove', 'BlinkMessageHistoryAllContactsDidSucceed',
                      'BlinkMessageHistoryConversationDidRemove', 'BlinkMessageDidDecrypt', 'BlinkMessageWillDelete',
                      'BlinkGotHistoryMessageUpdate', 'BlinkMessageHistoryCallHistoryDidStore', 'BlinkGotHistoryCallRecord',
                      'BlinkMessageHistoryCallRecordDidStore', 'BlinkJournalProgress', 'BlinkJournalDidApply'):
