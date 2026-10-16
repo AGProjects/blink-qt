@@ -177,9 +177,19 @@ def _uploads_for(keys):
     return [upload for key in keys for upload in uploads.for_key(key)]
 
 
+_LOCATION_CONTENT_TYPE = 'application/sylk-location-sharing'
+
+
 def is_renderable(row):
-    """Rows the transcript draws: what history classified (keys, tokens and the like stay out)."""
-    return row.category is not None
+    """Rows the transcript draws: what history classified (keys, tokens and the like stay out),
+    and the coordinate-free location signals (a request, a stop, a meet-up answer or end),
+    drawn as centred notes (blink.messagepane.format.location_note)."""
+    if row.category is not None:
+        return True
+    if str(row.content_type or '').lower() != _LOCATION_CONTENT_TYPE:
+        return False
+    from blink.location import SIGNAL_ACTIONS
+    return row.related_action in SIGNAL_ACTIONS
 
 
 @implementer(IObserver)

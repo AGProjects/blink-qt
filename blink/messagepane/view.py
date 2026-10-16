@@ -345,8 +345,7 @@ class TranscriptView(QListView):
                 menu.addAction(translate('message_pane', 'Forward…'), lambda: self.actionRequested.emit('forward', item))
         menu.addSeparator()
         menu.addAction(translate('message_pane', 'Info…'), lambda: self.actionRequested.emit('info', item))
-        delete = menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
-        delete.setEnabled(bubble_kind(item) != 'note' or item.category is not None)
+        menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
         menu.exec(global_position)
 
     def _react(self, item, emoji, where):

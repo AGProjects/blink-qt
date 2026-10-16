@@ -7,7 +7,7 @@ import re
 from html.parser import HTMLParser
 
 
-__all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note',
+__all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note', 'location_note',
            'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason', 'format_size', 'waveform_bars', 'format_clock']
 
 
@@ -53,8 +53,37 @@ def file_name(content):
     return ''
 
 
+_LOCATION_CONTENT_TYPE = 'application/sylk-location-sharing'
+
+
+def location_note(item):
+    """The centred note of a coordinate-free location signal (a request, a stop, a meet-up
+    answer or end), or None for any other row. Such rows have no category (nothing to browse)
+    and no map of their own: the note is all the timeline shows of them."""
+    if str(getattr(item, 'content_type', '') or '').lower() != _LOCATION_CONTENT_TYPE:
+        return None
+    from blink.location import SIGNAL_ACTIONS, location_envelope, row_metadata, system_note
+    action = getattr(item, 'related_action', None)
+    if action is not None and action not in SIGNAL_ACTIONS:
+        return None
+    try:
+        metadata = row_metadata(getattr(item, 'metadata', None), action, getattr(item, 'related_msg_id', None))
+        envelope = location_envelope(item.content, metadata) or {}
+    except Exception:
+        envelope = {}
+    payload = dict(envelope)
+    payload['action'] = action or envelope.get('action')
+    if payload['action'] not in SIGNAL_ACTIONS:
+        return None
+    name = getattr(item, 'display_name', '') or _SCHEME.sub('', str(getattr(item, 'remote_uri', '') or '')).split('@')[0]
+    return system_note(payload, name, getattr(item, 'direction', None))
+
+
 def plain_summary(item):
     """One line for a row until it has a bubble of its own: the text, or what kind of message it is."""
+    note = location_note(item) if item.category is None else None
+    if note is not None:
+        return note
     content = item.content if isinstance(item.content, str) else (item.content or b'').decode('utf-8', 'replace')
     if item.category == 'text':
         if '-----BEGIN PGP MESSAGE-----' in content:
@@ -98,7 +127,7 @@ def bubble_kind(item):
     """How a row is drawn: 'text' (a bubble with the body), 'encrypted' (a bubble saying so),
     'note' (a centred line), or 'summary' (a bubble with what kind of message it is)."""
     if item.category != 'text':
-        return 'summary'
+        return 'note' if item.category is None and location_note(item) is not None else 'summary'
     content = item.content if isinstance(item.content, str) else (item.content or b'').decode('utf-8', 'replace')
     if '-----BEGIN PGP MESSAGE-----' in content:
         return 'encrypted'
