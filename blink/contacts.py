@@ -8048,6 +8048,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.groups_menu.aboutToShow.connect(self._SH_GroupsMenuAboutToShow)
         self.groups_button.setMenu(self.groups_menu)
         self.name_editor.textChanged.connect(self._SH_NameEditorTextChanged)
+        self.presence.clicked.connect(self._SH_PresenceClicked)     # user clicks only: setChecked() on open/update must not touch the policy
         self.accepted.connect(self._SH_Accepted)
         self.rejected.connect(self._SH_Rejected)
         self.rejected.connect(self.contact_uri_model.reset)
@@ -8207,6 +8208,11 @@ class ContactEditorDialog(base_class, ui_class):
         self.selected_groups.append(group)
         ActivityLog().info(f'[contacts] Created group {name} from the contact editor')
         self._update_groups_button()
+
+    def _SH_PresenceClicked(self, checked):
+        # subscribing implies letting them see us back; unsubscribing withdraws it too.
+        # Allow stays independently uncheckable afterwards.
+        self.presence_policy.setChecked(checked)
 
     def _SH_NameEditorTextChanged(self, text):
         self.accept_button.setEnabled(text != '')
