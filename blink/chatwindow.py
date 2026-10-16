@@ -13,12 +13,12 @@ from html import escape as html_escape
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QObject, QFileInfo, pyqtSlot
-from PyQt6.QtGui import QAction, QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
+from PyQt6.QtGui import QFont, QAction, QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineScript
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton, QPlainTextEdit
+from PyQt6.QtWidgets import QApplication, QSplitter, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton, QPlainTextEdit, QWidget, QSizePolicy
 from PyQt6.QtWidgets import QFileDialog, QFileIconProvider
 from PyQt6.QtWidgets import QMessageBox
 
@@ -56,7 +56,8 @@ from blink.configuration.datatypes import File, FileURL, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
 from blink.history import HistoryManager
-from blink.logging import MessagingTrace as log
+from blink.logging import ActivityLog, MessagingTrace as log
+from blink.hidpi import svg_pixmap, sharpen_ui_pixmaps
 from blink.message_envelopes import CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, call_needs_attention, call_record, call_summary, legacy_call_record, this_device_id
 from blink.messages import MessageManager, BlinkMessage
 from blink.resources import ApplicationData, IconManager, Resources
@@ -329,6 +330,12 @@ class ChatEvent(ChatNotification):
         self.direction = direction
         self.id = str(uuid.uuid4()) if id is None else id
         self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
+
+
+def conference_takes_files(blink_session):
+    """Files go to a conference room over MSRP while we are in it: a room that is not running
+    does not exist on the server (a file transfer to it gets 404). Not a conference: True."""
+    return not blink_session.is_conference or str(blink_session.state or '').startswith('connected')
 
 
 class ChatStatus(ChatNotification):
@@ -1263,6 +1270,9 @@ class ChatWidget(base_class, ui_class):
     def _DH_Files(self, urls):
         session_manager = SessionManager()
         blink_session = self.session.blink_session
+        if not conference_takes_files(blink_session):
+            self.add_message(ChatStatus(translate('chat_window', 'Join the conference to share files: the room exists only while someone is in it')))
+            return
 
         file_descriptors  = [FileDescriptor(url.toLocalFile()) for url in urls]
         image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
@@ -1280,10 +1290,10 @@ class ChatWidget(base_class, ui_class):
         #         self.add_message(ChatFile(content, sender, 'outgoing'))
 
         for image in image_descriptors:
-            session_manager.send_file(blink_session.contact, blink_session.contact_uri, image.filename, account=blink_session.account)
+            session_manager.send_file(blink_session.contact, blink_session.contact_uri, image.filename, account=blink_session.account, route='msrp')  # the MSRP chat window: MSRP only
 
         for descriptor in other_descriptors:
-            session_manager.send_file(blink_session.contact, blink_session.contact_uri, descriptor.filename, account=blink_session.account)
+            session_manager.send_file(blink_session.contact, blink_session.contact_uri, descriptor.filename, account=blink_session.account, route='msrp')
 
     def _DH_Text(self, text):
         match = self.image_data_re.match(text)
@@ -1587,6 +1597,67 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def apply_theme(self):
         self.session_widget.setPalette(QPalette() if is_dark_theme() else self._session_widget_palette)
+        self._tint_panel_buttons()
+
+    def _tint_panel_buttons(self):
+        """The info/participants/files buttons of the left panel. Their SVGs are thin white glyphs made
+        for the old dark panel (the 'i' an SVG text element), invisible on a light theme: draw bold
+        glyphs in a colour that contrasts with the theme, at the 12px the button's frame leaves."""
+        color = QColor('#d8d8d8') if is_dark_theme() else QColor('#303030')
+        size = 48   # drawn large, scaled down to the icon size
+        icon_size = QSize(12, 12)
+
+        def canvas():
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            return pixmap, painter
+
+        def info():
+            pixmap, painter = canvas()
+            painter.drawEllipse(QRectF(size * 0.37, size * 0.02, size * 0.26, size * 0.26))     # the dot
+            painter.drawRoundedRect(QRectF(size * 0.38, size * 0.36, size * 0.24, size * 0.62), size * 0.05, size * 0.05)   # the stem
+            painter.end()
+            return QIcon(pixmap)
+
+        def files():
+            pixmap, painter = canvas()
+            # an arrow down into a tray: transferred files
+            painter.drawRect(QRectF(size * 0.40, size * 0.02, size * 0.20, size * 0.38))
+            painter.drawPolygon(QPolygonF([QPointF(size * 0.18, size * 0.36), QPointF(size * 0.82, size * 0.36), QPointF(size * 0.50, size * 0.68)]))
+            pen = QPen(color, size * 0.12, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPolyline(QPolygonF([QPointF(size * 0.08, size * 0.62), QPointF(size * 0.08, size * 0.92), QPointF(size * 0.92, size * 0.92), QPointF(size * 0.92, size * 0.62)]))
+            painter.end()
+            return QIcon(pixmap)
+
+        def participants():
+            pixmap, painter = canvas()
+            # two people: heads and shoulders
+            for x, scale in ((0.32, 0.9), (0.66, 1.0)):
+                head = size * 0.20 * scale
+                painter.drawEllipse(QPointF(size * x, size * 0.30), head, head)
+                painter.drawChord(QRectF(size * x - size * 0.28 * scale, size * 0.56, size * 0.56 * scale, size * 0.76), 0, 180 * 16)
+            painter.end()
+            return QIcon(pixmap)
+
+        info_icon = info()
+        files_icon = files()
+        participants_icon = participants()
+        for button in (self.participants_panel_info_button, self.files_panel_info_button,
+                       self.participants_panel_files_button, self.info_panel_files_button,
+                       self.files_panel_participants_button, self.info_panel_participants_button):
+            button.setIconSize(icon_size)
+        for button in (self.participants_panel_info_button, self.files_panel_info_button):
+            button.setIcon(info_icon)
+        for button in (self.participants_panel_files_button, self.info_panel_files_button):
+            button.setIcon(files_icon)
+        for button in (self.files_panel_participants_button, self.info_panel_participants_button):
+            button.setIcon(participants_icon)
 
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)
@@ -1617,6 +1688,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.hold_button.clicked.connect(self._SH_HoldButtonClicked)
         self.record_button.clicked.connect(self._SH_RecordButtonClicked)
         self.control_button.clicked.connect(self._SH_ControlButtonClicked)
+        self.connect_audio_button.clicked.connect(self._SH_ConnectAudioButtonClicked)
+        self.connect_chat_button.clicked.connect(lambda: self._AH_Connect())
+        self.hangup_button.clicked.connect(lambda: self._AH_Disconnect())
         self.participants_panel_info_button.clicked.connect(self._SH_InfoButtonClicked)
         self.participants_panel_files_button.clicked.connect(self._SH_FilesButtonClicked)
         self.files_panel_info_button.clicked.connect(self._SH_InfoButtonClicked)
@@ -1627,6 +1701,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.packet_loss_graph.updated.connect(self._SH_PacketLossGraphUpdated)
         self.traffic_graph.updated.connect(self._SH_TrafficGraphUpdated)
         self.session_model.sessionAdded.connect(self._SH_SessionModelSessionAdded)
+        self.session_model.sessionAdded.connect(lambda session: self._save_conference_tiles())
+        self.session_model.sessionAdded.connect(lambda session: self._update_back_to_sessions())
+        self.session_model.sessionRemoved.connect(lambda session: self._update_back_to_sessions())
+        self.session_model.dataChanged.connect(lambda *args: self._update_back_to_sessions())     # a tile connected or ended
+        self.session_model.sessionRemoved.connect(lambda session: self._save_conference_tiles())
+        self.session_model.rowsMoved.connect(lambda *args: self._save_conference_tiles())
         self.session_model.sessionRemoved.connect(self._SH_SessionModelSessionRemoved)
         self.session_model.sessionAboutToBeRemoved.connect(self._SH_SessionModelSessionAboutToBeRemoved)
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
@@ -1652,6 +1732,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPApplicationDidStart')
+        notification_center.add_observer(self, name='SIPApplicationWillEnd')
         notification_center.add_observer(self, name='BlinkSessionNewIncoming')
         notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
         notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
@@ -1713,14 +1794,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.pixmaps = Container()
 
-        self.pixmaps.direct_connection = QPixmap(Resources.get('icons/connection-direct.svg'))
-        self.pixmaps.relay_connection = QPixmap(Resources.get('icons/connection-relay.svg'))
-        self.pixmaps.unknown_connection = QPixmap(Resources.get('icons/connection-unknown.svg'))
+        self.pixmaps.direct_connection = svg_pixmap(Resources.get('icons/connection-direct.svg'))
+        self.pixmaps.relay_connection = svg_pixmap(Resources.get('icons/connection-relay.svg'))
+        self.pixmaps.unknown_connection = svg_pixmap(Resources.get('icons/connection-unknown.svg'))
 
-        self.pixmaps.blue_lock = QPixmap(Resources.get('icons/lock-blue-12.svg'))
-        self.pixmaps.grey_lock = QPixmap(Resources.get('icons/lock-grey-12.svg'))
-        self.pixmaps.green_lock = QPixmap(Resources.get('icons/lock-green-12.svg'))
-        self.pixmaps.orange_lock = QPixmap(Resources.get('icons/lock-orange-12.svg'))
+        self.pixmaps.blue_lock = svg_pixmap(Resources.get('icons/lock-blue-12.svg'))
+        self.pixmaps.grey_lock = svg_pixmap(Resources.get('icons/lock-grey-12.svg'))
+        self.pixmaps.green_lock = svg_pixmap(Resources.get('icons/lock-green-12.svg'))
+        self.pixmaps.orange_lock = svg_pixmap(Resources.get('icons/lock-orange-12.svg'))
 
         def blended_pixmap(pixmap, color):
             blended_pixmap = QPixmap(pixmap)
@@ -1752,6 +1833,50 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.record_button.setIcon(svg_icon(Resources.get('icons/record.svg'), Resources.get('icons/recording.svg')))
 
         self.control_button.setIcon(self.control_icon)
+        sharpen_ui_pixmaps(self, 'chat_window.ui')
+
+        # an expanded session (the list collapsed onto it): a bar back to all the sessions, as the audio drawer has
+        self.back_to_sessions_button = QToolButton(self.session_panel)
+        self.back_to_sessions_button.setObjectName('back_to_sessions_button')
+        self.back_to_sessions_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.back_to_sessions_button.setAutoRaise(True)
+        self.back_to_sessions_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.back_to_sessions_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.back_to_sessions_button.setToolTip(translate('chat_window', 'Back to the list of chats'))
+        self.back_to_sessions_button.setStyleSheet('QToolButton { text-align: left; padding: 3px 6px; border: none; border-bottom: 1px solid palette(mid); }'
+                                                   'QToolButton:hover { background: palette(midlight); }')
+        self.back_to_sessions_button.clicked.connect(lambda: self._EH_ShowSessions())
+        self.session_panel_layout.insertWidget(0, self.back_to_sessions_button)
+        self.session_list.raise_()      # the list covers the panel, the bar included
+        self.no_sessions_label.raise_()
+
+        # connect buttons on the bottom bar, shown while the session is not connected (the wheel's
+        # menu is for a connected session)
+        def connect_button(name, icon, text, tooltip):
+            button = QToolButton(self.toolbar_widget)
+            button.setObjectName(name)
+            button.setIcon(QIcon(Resources.get(icon)))
+            button.setText(text)
+            button.setToolTip(tooltip)
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            button.setMinimumHeight(self.control_button.minimumHeight() or 24)
+            button.setIconSize(QSize(16, 16))
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.hide()
+            return button
+        self.connect_audio_button = connect_button('connect_audio_button', 'icons/handset.svg', translate('chat_window', 'Audio'), translate('chat_window', 'Connect with audio and chat'))
+        self.connect_chat_button = connect_button('connect_chat_button', 'icons/chat.svg', translate('chat_window', 'Chat'), translate('chat_window', 'Connect with chat'))
+        # in their place while connecting, connected or disconnecting: where the session is
+        self.connection_status_label = QLabel(self.toolbar_widget)
+        self.connection_status_label.setObjectName('connection_status_label')
+        self.connection_status_label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
+        self.connection_status_label.hide()
+        position = self.toolbar_layout.indexOf(self.record_button) + 1
+        self.toolbar_layout.insertWidget(position, self.connect_audio_button)
+        self.toolbar_layout.insertWidget(position + 1, self.connect_chat_button)
+        self.toolbar_layout.insertWidget(position + 2, self.connection_status_label)
+        self.hangup_button = connect_button('hangup_button', 'icons/handset12-red.svg', translate('chat_window', 'Hang up'), translate('chat_window', 'End the session'))
+        self.toolbar_layout.insertWidget(position + 3, self.hangup_button)
 
         self.control_menu = QMenu(self.control_button)
         self.control_button.setMenu(self.control_menu)
@@ -1783,6 +1908,28 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.slide_direction = self.session_details.Automatic
         self.session_details.animationDuration = 300
         self.session_details.animationEasingCurve = QEasingCurve.Type.OutCirc
+
+        # As the drawer of Blink for macOS: the participants of a conference and the files transferred
+        # in one column, one above the other; no switching between them, the column as a whole is
+        # expanded or collapsed. A session that is not a conference shows only the files.
+        self.session_details.removeWidget(self.participants_panel)
+        self.session_details.removeWidget(self.files_panel)
+        self.details_splitter = QSplitter(Qt.Orientation.Vertical, self.session_details)
+        self.details_splitter.setObjectName('details_splitter')
+        self.details_splitter.setChildrenCollapsible(False)
+        self.details_splitter.setHandleWidth(5)
+        self.details_splitter.addWidget(self.participants_panel)
+        self.details_splitter.addWidget(self.files_panel)
+        self.files_panel.show()     # the stack hid whichever page was not current
+        self.details_splitter.setStretchFactor(0, 3)
+        self.details_splitter.setStretchFactor(1, 2)
+        self.session_details.addWidget(self.details_splitter)
+        # what a conference shows before it is connected: nothing (no info panel, no lists yet)
+        self.details_placeholder = QWidget(self.session_details)
+        self.details_placeholder.setObjectName('details_placeholder')
+        self.session_details.addWidget(self.details_placeholder)
+        self.participants_panel_files_button.hide()     # both are in view, nothing to switch to
+        self.files_panel_participants_button.hide()
 
         self.audio_latency_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
         self.video_latency_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0), enabled=False)     # disable for now
@@ -1857,6 +2004,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self._update_panel_buttons()
                 if ('audio' not in new_session.blink_session.streams and 'video' not in new_session.blink_session.streams):
                     self._SH_FilesButtonClicked(True)
+                self._show_conference_participants(new_session)
                 self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
                 # TODO: somehow the placeholder does not get changed inside ChatInputText class -adi
                 if new_session.blink_session.info.streams.messages and new_session.blink_session.info.streams.messages.encryption:
@@ -1868,7 +2016,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     selected_session = property(_get_selected_session, _set_selected_session)
     del _get_selected_session, _set_selected_session
 
+    def _update_back_to_sessions(self):
+        tiles = [item for item in self.session_model.sessions if self._shows_session(item.blink_session)]
+        connected = sum(1 for item in tiles if str(item.blink_session.state or '').startswith('connected'))
+        self.back_to_sessions_button.setText('\u2039  ' + (translate('chat_window', 'All chats (%d \u00b7 %d connected)') % (len(tiles), connected)))
+
     def _update_widgets_for_session(self):
+        self._update_back_to_sessions()
         session = self.selected_session
         widget = session.widget
         # session widget
@@ -1891,16 +2045,77 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.hold_button.setChecked(session.blink_session.local_hold)
         self.record_button.setVisible('audio' in session.blink_session.streams)
         self.record_button.setChecked(session.blink_session.recording)
+        self._update_window_title()
+
+    default_window_title = 'Chat sessions (MSRP)'
+
+    def _update_window_title(self):
+        """The selected session in the title: its URI, preceded by the name of its addressbook
+        contact when there is one with a display name of its own (not the user part or the URI)."""
+        session = self.selected_session
+        if session is None or session.blink_session.contact_uri is None:
+            self.setWindowTitle(translate('chat_window', self.default_window_title))
+            return
+        blink_session = session.blink_session
+        uri = str(blink_session.contact_uri.uri)
+        if uri.startswith(('sip:', 'sips:')):
+            uri = uri.partition(':')[2]
+        contact = blink_session.contact
+        name = (getattr(contact, 'name', None) or '').strip()
+        has_name = getattr(contact, 'type', None) not in (None, 'dummy') and name and name not in (uri, uri.partition('@')[0])
+        room = session.conference_room
+        if room is not None:
+            title = translate('chat_window', 'Conference room %s') % room + (f' - {name}' if has_name and name != room else '')
+        else:
+            title = f'{name} <{uri}>' if has_name else uri
+        self.setWindowTitle(title)
+
+    @staticmethod
+    def _connection_status(blink_session):
+        state = str(blink_session.state or '')
+        if state == 'connecting/dns_lookup' or state == 'connecting':
+            return translate('chat_window', 'Connecting...')
+        if state == 'connecting/ringing':
+            return translate('chat_window', 'Ringing...')
+        if state == 'connecting/early_media':
+            return translate('chat_window', 'Early media...')
+        if state.startswith('connecting'):
+            return translate('chat_window', 'Starting...')
+        if state == 'connected/sent_proposal':
+            return translate('chat_window', 'Adding media...')
+        if state == 'connected/received_proposal':
+            return translate('chat_window', 'Media proposal...')
+        if state.startswith('connected'):
+            media = ', '.join(sorted(blink_session.streams.types)) or translate('chat_window', 'no media')
+            return translate('chat_window', 'Connected: %s') % media
+        if state == 'ending':
+            return translate('chat_window', 'Disconnecting...')
+        return state
 
     def _update_control_menu(self):
         menu = self.control_menu
         menu.hide()
         if not self.selected_session:
+            self.connect_audio_button.hide()
+            self.connect_chat_button.hide()
+            self.connection_status_label.hide()
+            self.hangup_button.hide()
             return
 
         blink_session = self.selected_session.blink_session
         state = blink_session.state
         messages_info = blink_session.info.streams.messages
+        idle = str(state or '') in ('', 'initialized', 'ended', 'deleted')
+        self.connect_audio_button.setVisible(idle)
+        self.connect_chat_button.setVisible(idle)
+        connected = str(state or '').startswith('connected')
+        self.connection_status_label.setVisible(not idle and not connected)     # while connecting or disconnecting only
+        self.hangup_button.setVisible(connected)
+        if not idle and not connected:
+            self.connection_status_label.setText(self._connection_status(blink_session))
+        self.control_button.setVisible(not idle)     # the wheel: a connected session's menu (or cancel, while connecting)
+        if idle:
+            return
         if state == 'connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
             self.control_button.setMenu(None)
             self.control_button.setIcon(self.cancel_icon)
@@ -1914,20 +2129,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             menu.addSeparator()
             menu.addAction(self.control_button.actions.send_files)
             menu.addAction(self.control_button.actions.show_transferred_files)
-            if state not in ('connecting/*', 'connected/*'):
-                if messages_info.encryption != 'OTR':
-                    if self.selected_session.chat_widget.otr_timer.isActive():
-                        menu.addAction(self.control_button.actions.enable_otr_progress)
-                    else:
-                        if messages_info.encryption != 'OpenPGP':
-                            menu.addAction(self.control_button.actions.enable_otr)
-                else:
-                    if messages_info.encryption != 'OpenPGP':
-                        menu.addAction(self.control_button.actions.disable_otr)
-                menu.addAction(self.control_button.actions.connect_with_audio)
-                menu.addAction(self.control_button.actions.connect_with_video)
-                menu.addAction(self.control_button.actions.connect_with_msrp)
-            else:
+            if True:    # only a connected session gets here (idle ones have the connect buttons)
                 if state == 'connected':
                     stream_types = blink_session.streams.types
                     if 'chat' not in stream_types:
@@ -1945,11 +2147,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
                         menu.addAction(self.control_button.actions.remove_audio)
                     if 'video' not in stream_types:
-                        menu.addAction(self.control_button.actions.add_video)
+                        if not blink_session.is_conference:     # no SIP video in conferences
+                            menu.addAction(self.control_button.actions.add_video)
                     elif stream_types != {'video'}:
                         menu.addAction(self.control_button.actions.remove_video)
                     if 'screen-sharing' not in stream_types:
-                        if not blink_session.remote_focus and vnc_screen_sharing_offered():  # no screen sharing with a conference
+                        if not blink_session.is_conference and vnc_screen_sharing_offered():  # no screen sharing with a conference
                             menu.addAction(self.control_button.actions.request_screen)
                             menu.addAction(self.control_button.actions.share_my_screen)
                             self.control_button.actions.request_screen.setEnabled(can_view_screens())
@@ -1960,7 +2163,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         menu.addAction(self.control_button.actions.add_chat)
                     elif stream_types != {'chat'}:
                         menu.addAction(self.control_button.actions.remove_chat)
-                    menu.addAction(self.control_button.actions.disconnect)
+                    # Disconnect is the Hang up button on the bar, next to the connect buttons
 
             if state != 'connected':
                 menu.addSeparator()
@@ -1968,13 +2171,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.control_button.setMenu(menu)
 
     def _update_panel_buttons(self):
-        self.info_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
-        if self.selected_session.blink_session.remote_focus:
+        self.info_panel_participants_button.setVisible(self.selected_session.blink_session.is_conference)
+        if self.selected_session.blink_session.is_conference:
             self.info_panel_files_button.setVisible(len(self.selected_session.blink_session.server_conference.shared_files) == 0)
-            self.participants_panel_files_button.setVisible(len(self.selected_session.blink_session.server_conference.shared_files) == 0)
         else:
             self.info_panel_files_button.setVisible(True)
-        self.files_panel_participants_button.setVisible(self.selected_session.blink_session.remote_focus)
+        self.files_panel_participants_button.hide()
+        self.participants_panel_files_button.hide()
 
     def _update_session_info_panel(self, elements=set(), update_visibility=False):
         blink_session = self.selected_session.blink_session
@@ -2210,6 +2413,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def show(self):
         self._hide_message_only_sessions()
+        if self.session_model.rowCount() and not self.has_visible_sessions():
+            # only message conversations (the message pane's): nothing to show in this window
+            self.hide()
+            return
         super(ChatWindow, self).show()
         self.raise_()
         self.activateWindow()
@@ -2243,9 +2450,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         if self.selected_session.active_panel != self.info_panel:
             if self.sliding_panels:
-                self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
+                self._slide_details(self.info_panel, direction=self.slide_direction)
             else:
-                self.session_details.setCurrentWidget(self.info_panel)
+                self._set_details(self.info_panel)
             self.selected_session.active_panel = self.info_panel
 
     def show_with_messages(self):
@@ -2429,6 +2636,70 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.tab_widget.addTab(self.dummy_tab, "Dummy")
         self.tab_widget.setCurrentWidget(self.dummy_tab)
 
+        QTimer.singleShot(3000, self._restore_conference_tiles)     # once the accounts and the addressbook are in
+
+    # The tiles are remembered, conferences and one to one MSRP chats alike: the window opens with
+    # those it had, newest on top; a tile goes only when closed (its x).
+    settings_key = 'chat_window/conference_tiles'
+
+    def _NH_SIPApplicationWillEnd(self, notification):
+        self._quitting = True       # sessions ending and going away on quit are not closed tiles
+
+    def _save_conference_tiles(self):
+        if getattr(self, '_restoring_tiles', False) or getattr(self, '_quitting', False):
+            return
+        tiles = []
+        for item in self.session_model.sessions:
+            blink_session = item.blink_session
+            if blink_session.contact_uri is None or not self._shows_session(blink_session):
+                continue    # a SIP message conversation (the message pane's) is not a tile here
+            account = getattr(blink_session.account, 'id', None)
+            tiles.append({'uri': str(blink_session.contact_uri.uri), 'account': str(account) if account else None})
+        QSettings().setValue(self.settings_key, json.dumps(tiles))
+
+    def _restore_conference_tiles(self):
+        try:
+            tiles = json.loads(QSettings().value(self.settings_key) or '[]')
+        except (TypeError, ValueError):
+            tiles = []
+        if not tiles:
+            return
+        from blink.contacts import URIUtils
+        account_manager = AccountManager()
+        present = {str(item.blink_session.contact_uri.uri).lower() for item in self.session_model.sessions
+                   if item.blink_session.contact_uri is not None and self._shows_session(item.blink_session)}
+        hidden = {str(item.blink_session.contact_uri.uri).lower(): item for item in self.session_model.sessions
+                  if item.blink_session.contact_uri is not None and not self._shows_session(item.blink_session)}
+        self._restoring_tiles = True
+        restored = 0
+        try:
+            for tile in reversed(tiles):        # the bottom one first: each newer one goes on top
+                uri = tile.get('uri')
+                if not uri or uri.lower() in present:
+                    continue
+                if uri.lower() in hidden:
+                    # its session is here already, as a message conversation: it is the tile again
+                    hidden[uri.lower()].msrp_tile = True
+                    present.add(uri.lower())
+                    restored += 1
+                    continue
+                try:
+                    account = account_manager.get_account(tile['account']) if tile.get('account') else account_manager.default_account
+                except KeyError:
+                    account = account_manager.default_account
+                if account is None or not account.enabled:
+                    continue
+                contact, contact_uri = URIUtils.find_contact(uri)
+                SessionManager().create_session(contact, contact_uri, [StreamDescription('chat')], account=account, connect=False)
+                present.add(uri.lower())
+                restored += 1
+        finally:
+            self._restoring_tiles = False
+        self._hide_message_only_sessions()      # the rows of tiles made visible again
+        self._save_conference_tiles()
+        if restored:
+            ActivityLog().info(f'[ui] Chat window: {restored} tiles restored')
+
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
         blink_settings = BlinkSettings()
@@ -2454,6 +2725,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.show()
 
     def _NH_BlinkSessionNewOutgoing(self, notification):
+        if getattr(self, '_restoring_tiles', False):
+            return      # the remembered tiles come back without opening the window
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             if self.session_model.rowCount():
                 call_later(.5, self._NH_BlinkSessionIsSelected, notification)
@@ -2488,15 +2761,24 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.show()
 
     def _shows_session(self, session):
-        """Whether this window is where a session is shown: MSRP chat, video and screen sharing.
-        A conversation of SIP messages only is shown in the main window's message pane."""
+        """Whether this window is where a session is shown: a conference (connected or not, so its
+        tile stays to switch to and reconnect), MSRP chat and screen sharing. A conversation of SIP
+        messages only is shown in the main window's message pane."""
+        if getattr(session, 'is_conference', False):
+            return True
+        item = getattr(getattr(session, 'items', None), 'chat', None)
+        if getattr(item, 'msrp_tile', False):
+            return True         # had MSRP chat here once: its tile stays (ended or not) until closed
         types = set()
         for attribute in ('streams', 'stream_descriptions'):
             try:
                 types.update(getattr(session, attribute).types)
             except AttributeError:
                 pass
-        return bool(types & self.__streamtypes__)
+        shown = bool(types & self.__streamtypes__)
+        if shown and item is not None:
+            item.msrp_tile = True
+        return shown
 
     def _NH_BlinkSessionIsSelected(self, notification):
         session = notification.sender
@@ -2519,26 +2801,81 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         # even if we use this, we also need to listen for BlinkSessionDidRemoveStream as that transition doesn't change the state at all -Dan
         self._update_control_menu()
         self._update_panel_buttons()
+        self._update_window_title()  # remote_focus is only known once connected
+        if self.selected_session is not None and self.selected_session.blink_session is notification.sender:
+            self._show_conference_participants(self.selected_session)
         self._update_session_info_panel(elements={'status'}, update_visibility=True)
 
     def _NH_BlinkSessionDidEnd(self, notification):
+        if not self.session_list.isVisibleTo(self) and self.isVisible():
+            self._EH_ShowSessions()     # an ended session is not expanded: back to the list
         if self.selected_session.active_panel is not self.info_panel:
             if self.sliding_panels:
-                self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
+                self._slide_details(self.info_panel, direction=self.slide_direction)
             else:
-                self.session_details.setCurrentWidget(self.info_panel)
+                self._set_details(self.info_panel)
             self.selected_session.active_panel = self.info_panel
 
     def _NH_BlinkSessionInfoUpdated(self, notification):
         self._update_session_info_panel(elements=notification.data.elements)
 
     def _NH_BlinkSessionWillAddParticipant(self, notification):
-        if len(notification.sender.server_conference.participants) == 1 and self.selected_session.active_panel is not self.participants_panel:
-            if self.sliding_panels:
-                self.session_details.slideInWidget(self.participants_panel, direction=self.slide_direction)
-            else:
-                self.session_details.setCurrentWidget(self.participants_panel)
-            self.selected_session.active_panel = self.participants_panel
+        if self.selected_session is not None and self.selected_session.blink_session is notification.sender:
+            self._update_panel_buttons()
+            self._show_conference_participants(self.selected_session)
+
+    def _details_page(self, panel):
+        """The participants and the files share one page; the participants only for a conference.
+        A conference never shows the info panel here (it is in the audio drawer): an empty page until
+        it is connected, then its participants and files."""
+        session = self.selected_session
+        conference = session is not None and session.blink_session.is_conference
+        if conference:
+            if not str(session.blink_session.state or '').startswith('connected'):
+                return self.details_placeholder
+            panel = self.participants_panel
+        if panel in (self.participants_panel, self.files_panel):
+            self.participants_panel.setVisible(conference)
+            self.files_panel.setVisible(True)
+            self.files_panel_info_button.setVisible(not conference)     # one info button per column
+            return self.details_splitter
+        return panel
+
+    def _slide_details(self, panel, direction=None):
+        page = self._details_page(panel)
+        if direction is None:
+            self.session_details.slideInWidget(page)
+        else:
+            self.session_details.slideInWidget(page, direction=direction)
+
+    def _set_details(self, panel):
+        self.session_details.setCurrentWidget(self._details_page(panel))
+
+    def _show_conference_participants(self, session):
+        """A conference shows its participants in the left panel, like the drawer of Blink for macOS
+        (the session info lives in the audio drawer now): switch to them from the info panel as soon
+        as the session is known to be a conference; the list fills as conference-info arrives."""
+        blink_session = session.blink_session
+        if not blink_session.is_conference:
+            return
+        if not str(blink_session.state or '').startswith('connected'):
+            return  # the column appears once the conference is connected (from BlinkSessionDidChangeState)
+        if session is self.selected_session:
+            self.participants_panel.setVisible(True)
+            self.files_panel.setVisible(True)
+            self.files_panel_info_button.hide()
+            if self.session_list.isVisibleTo(self) and sum(1 for item in self.session_model.sessions if self._shows_session(item.blink_session)) < 2:
+                self.session_list.hide()    # the session list covers the panel; kept when there are sessions to switch between
+        if session.active_panel is not self.info_panel and (session is not self.selected_session or self.session_details.currentWidget() is self.details_splitter):
+            return  # already in view
+        if self.sliding_panels:
+            self._slide_details(self.participants_panel, direction=self.slide_direction)
+        else:
+            self._set_details(self.participants_panel)
+        session.active_panel = self.participants_panel
+        if not getattr(session, 'conference_participants_shown', False):
+            session.conference_participants_shown = True
+            ActivityLog().info(f'[conference] Showing the {len(blink_session.server_conference.participants)} participants of {blink_session.uri} in the chat window')
 
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
@@ -3148,7 +3485,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if account_manager.has_account(uri):
             account = account_manager.get_account(uri)
             sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
-        elif blink_session.remote_focus:
+        elif blink_session.is_conference:
             contact, contact_uri = URIUtils.find_contact(uri)
             sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
         else:
@@ -3299,24 +3636,35 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if not self.selected_session:
             return
 
+        # the session info lives in the audio drawer: show it under the call in the main window
+        audio_item = self.selected_session.blink_session.items.audio
+        if audio_item is not None:
+            QApplication.instance().main_window.toggle_call_info(audio_item)
+            return
+
+        # no call in the audio drawer (chat only): the info panel here
         if self.sliding_panels:
-            self.session_details.slideInWidget(self.info_panel, direction=self.slide_direction)
+            self._slide_details(self.info_panel, direction=self.slide_direction)
         else:
-            self.session_details.setCurrentWidget(self.info_panel)
+            self._set_details(self.info_panel)
 
 
     def _SH_FilesButtonClicked(self, checked):
+        if self.selected_session is None:
+            return
         if self.sliding_panels:
-            self.session_details.slideInWidget(self.files_panel, direction=self.slide_direction)
+            self._slide_details(self.files_panel, direction=self.slide_direction)
         else:
-            self.session_details.setCurrentWidget(self.files_panel)
+            self._set_details(self.files_panel)
         self.selected_session.active_panel = self.files_panel
 
     def _SH_ParticipantsButtonClicked(self, checked):
+        if self.selected_session is None:
+            return
         if self.sliding_panels:
-            self.session_details.slideInWidget(self.participants_panel, direction=self.slide_direction)
+            self._slide_details(self.participants_panel, direction=self.slide_direction)
         else:
-            self.session_details.setCurrentWidget(self.participants_panel)
+            self._set_details(self.participants_panel)
         self.selected_session.active_panel = self.participants_panel
 
     def _SH_LatencyGraphUpdated(self):
@@ -3368,7 +3716,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.no_sessions_label.hide()
         selection_model = self.session_list.selectionModel()
         # allow user select the contact
-        if 'chat' in session.blink_session.streams:
+        if 'chat' in session.blink_session.streams or session.blink_session.is_conference:
+            # a room opened from the contact list is selected, connected or not
             selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         self.session_list.animation.setStartValue(self.session_widget.geometry())
@@ -3392,6 +3741,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if not self.session_model.sessions:
             self.close()
             self.no_sessions_label.show()
+        elif not self.has_visible_sessions():
+            self.hide()     # what is left are message conversations, shown in the message pane
+            self.no_sessions_label.show()
         elif not self.session_list.isVisibleTo(self):
             if self.session_list.animation:
                 self.session_list.animation.setDirection(QPropertyAnimation.Direction.Forward)
@@ -3408,20 +3760,36 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         #print("-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()]))
+        previous = self.selected_session
         self.selected_session = selected[0].topLeft().data(Qt.ItemDataRole.UserRole) if selected else None
         if self.selected_session is not None:
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
-            self.session_details.setCurrentWidget(self.selected_session.active_panel)
+            self._set_details(self.selected_session.active_panel)
             self.participants_list.setModel(self.selected_session.participants_model)
             self.files_list.setModel(self.selected_session.files_model)
             self.control_button.setEnabled(True)
             if not self.isMinimized():
                 self.confirm_read_messages(self.selected_session)
         else:
+            if self.session_model.sessions:
+                ActivityLog().info(f'[ui] Chat window: no session selected ({len(self.session_model.sessions)} sessions, {sum(1 for item in self.session_model.sessions if self._shows_session(item.blink_session))} shown here)')
+            if previous is not None and previous in self.session_model.sessions and self._shows_session(previous.blink_session):
+                # the selection was lost while the session is still here (a message only conversation
+                # being added, a row hidden): select it again rather than leave the window blank
+                QTimer.singleShot(0, lambda: self._reselect_session(previous))
             self.tab_widget.setCurrentWidget(self.dummy_tab)
-            self.session_details.setCurrentWidget(self.info_panel)
+            self._set_details(self.info_panel)
             self.participants_list.setModel(None)
             self.control_button.setEnabled(False)
+            self._update_window_title()
+
+    def _reselect_session(self, session):
+        if self.selected_session is not None or session not in self.session_model.sessions:
+            return
+        model = self.session_model
+        index = model.index(model.sessions.index(session))
+        self.session_list.selectionModel().select(index, self.session_list.selectionModel().SelectionFlag.ClearAndSelect)
+        ActivityLog().info(f'[ui] Chat window: selected {session.blink_session.uri} again')
 
     def _SH_OTRWidgetNameChanged(self):
         stream = self.selected_session.chat_stream or self.selected_session.messages_stream or Null
@@ -3439,8 +3807,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         stream = self.selected_session.blink_session.streams.get(self.zrtp_widget.stream_type, Null)
         stream.encryption.zrtp.verified = self.zrtp_widget.peer_verified
 
+    @staticmethod
+    def _log_action(action, blink_session):
+        uri = blink_session.contact_uri.uri if blink_session.contact_uri is not None else '?'
+        account = getattr(blink_session.account, 'id', '?')
+        ActivityLog().info(f'[chat window] {action} {uri} (account {account}, state {blink_session.state or "new"})')
+
     def _AH_Connect(self):
         blink_session = self.selected_session.blink_session
+        self._log_action('Connect with chat:', blink_session)
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=[StreamDescription('chat')], reinitialize=True)
         blink_session.connect()
 
@@ -3460,6 +3835,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if QMessageBox.warning(self, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             MessageManager().remove_conversation(blink_session)
             log.info('Remove conversation from account %s with %s' % (blink_session.account.id, blink_session.contact_uri))
+
+    def _SH_ConnectAudioButtonClicked(self):
+        # audio with the chat: this window shows sessions that have chat (audio alone lives in the audio drawer)
+        if self.selected_session is None:
+            return
+        blink_session = self.selected_session.blink_session
+        self._log_action('Connect with audio and chat:', blink_session)
+        blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri,
+                                    stream_descriptions=[StreamDescription('audio'), StreamDescription('chat')], reinitialize=True)
+        blink_session.connect()
 
     def _AH_ConnectWithAudio(self):
         stream_descriptions = [StreamDescription('audio')]
@@ -3485,6 +3870,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session.connect()
 
     def _AH_Disconnect(self):
+        self._log_action('Hang up', self.selected_session.blink_session)
         self.selected_session.end()
 
     def _AH_AddAudio(self):
@@ -3525,10 +3911,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _AH_SendFiles(self, uri=None):
         session_manager = SessionManager()
+        if not conference_takes_files(self.selected_session.blink_session):
+            self.selected_session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Join the conference to share files: the room exists only while someone is in it')))
+            return
         contact = self.selected_session.blink_session.contact
         selected_uri = uri or contact.uri
         for filename in QFileDialog.getOpenFileNames(self, translate('chat_window', 'Select File(s)'), session_manager.send_file_directory, 'Any file (*.*)')[0]:
-            session_manager.send_file(contact, selected_uri, filename)
+            session_manager.send_file(contact, selected_uri, filename, account=self.selected_session.blink_session.account, route='msrp')  # MSRP only here
 
     def _AH_EnableOTR(self, action):
         self.selected_session.chat_widget.start_otr_timer()
@@ -3545,6 +3934,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _EH_CloseSession(self):
         if self.selected_session is not None:
+            self._log_action('Close the tile of', self.selected_session.blink_session)
             self.selected_session.end(delete=True)
 
     def _EH_ShowSessions(self):
@@ -3553,6 +3943,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.animation.setEndValue(self.session_panel.rect())
         self.session_list.scrollToTop()
         self.session_list.show()
+        self.session_list.raise_()
         self.session_list.animation.start()
 
     def _EH_ChatEncryptionLabelClicked(self):

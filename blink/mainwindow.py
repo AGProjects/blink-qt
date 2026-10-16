@@ -1962,6 +1962,10 @@ class MainWindow(base_class, ui_class):
         from blink.messagepane.uploads import is_http_upload
         if is_http_upload(notification.sender):
             return          # sent over HTTP: shown in the message pane, the window is for MSRP transfers
+        from blink.pstn_normalize import is_conference_uri
+        contact_uri = getattr(notification.sender, 'contact_uri', None)
+        if contact_uri is not None and is_conference_uri(str(contact_uri.uri), getattr(notification.sender, 'account', None)):
+            return          # to a conference: its tile is in the files pane of the chat window
         self.filetransfer_window.show(activate=QApplication.activeWindow() is not None)
 
 

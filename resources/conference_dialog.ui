@@ -157,7 +157,7 @@
         </size>
        </property>
        <property name="text">
-        <string>Go</string>
+        <string>Join</string>
        </property>
       </widget>
      </item>

@@ -91,10 +91,36 @@ def is_messages_group(group_settings):
 
 
 def start_contact_conversation(contact, contact_uri):
-    """What double-click / Enter on a contact does: open its conversation in the message pane,
-    whatever the contact. Calls, video and the rest are started from their own buttons and menus
-    (a contact's preferred media is no longer used here, nor offered in the editor)."""
+    """What double-click / Enter on a contact does: open its conversation in the message pane.
+    A conference room is the exception: a room is session based (MSRP, RTP) and has no message
+    conversation, so its MSRP chat window opens, from where it is connected. Calls, video and the rest are started from their own buttons
+    and menus (a contact's preferred media is no longer used here, nor offered in the editor)."""
+    uri = getattr(contact_uri, 'uri', contact_uri)
+    if uri is not None and is_conference_uri(str(uri)):
+        _join_conference_chat(contact, contact_uri, str(uri))
+        return
     QApplication.instance().main_window.show_conversation_in_pane(contact, contact_uri)
+
+
+def _join_conference_chat(contact, contact_uri, uri):
+    def bare(text):
+        text = str(text or '').strip().lower()
+        return text.partition(':')[2] if text.startswith(('sip:', 'sips:')) else text
+    session_manager = SessionManager()
+    for session in session_manager.sessions:
+        if session.contact_uri is None or bare(session.contact_uri.uri) != bare(uri):
+            continue
+        if session.state == 'deleted' or session.items.chat is None:
+            continue
+        # the room has its tile already (connected or not): promote it to the top, select it, bring the window forward
+        NotificationCenter().post_notification('BlinkSessionShouldPromote', sender=session)
+        NotificationCenter().post_notification('BlinkSessionIsSelected', sender=session)
+        return
+    if isinstance(contact_uri, str):
+        contact_uri = next((item for item in getattr(contact, 'uris', ()) if bare(item.uri) == bare(contact_uri)), contact.uri)
+    ActivityLog().info(f'[conference] Opening the chat window for {bare(uri)} (double click on the contact)')
+    # the MSRP window opens with the room; it is connected from there (Start MSRP chat / audio call)
+    session_manager.create_session(contact, contact_uri, [StreamDescription('chat')], connect=False)
 
 
 def is_fileable_key(key):
@@ -512,7 +538,36 @@ def blockable_contacts(items):
 def add_block_action(menu, contacts):
     if contacts:
         text = translate('contact_list', 'Block') if len(contacts) == 1 else translate('contact_list', 'Block %d Contacts') % len(contacts)
-        menu.addAction(text, lambda: block_contacts(contacts))
+        action = menu.addAction(text, lambda: block_contacts(contacts))
+        if any(is_conference_contact(contact) for contact in contacts):
+            # a conference room never calls or messages us: there is nothing to block
+            action.setEnabled(False)
+            action.setToolTip(translate('contact_list', 'A conference room cannot be blocked'))
+
+
+def close_session_tiles(contacts, why):
+    """Remove the chat window tiles (MSRP sessions) of contacts that are deleted or blocked:
+    the one thing besides the x on a tile that takes a tile away."""
+    from blink.conference import split_uri
+    keys, ids = set(), set()
+    for contact in contacts:
+        settings = getattr(contact, 'settings', contact)
+        ids.add(getattr(settings, 'id', None))
+        for uri in getattr(settings, 'uris', ()) or ():
+            keys.add(split_uri(str(getattr(uri, 'uri', uri))))
+    ids.discard(None)
+    closed = []
+    for session in list(SessionManager().sessions):
+        if session.items.chat is None or session.state == 'deleted':
+            continue
+        settings = getattr(session.contact, 'settings', None)
+        same_contact = getattr(settings, 'id', None) in ids
+        same_uri = session.contact_uri is not None and split_uri(str(session.contact_uri.uri)) in keys
+        if same_contact or same_uri:
+            closed.append(str(session.contact_uri.uri) if session.contact_uri is not None else '?')
+            session.end(delete=True)
+    if closed:
+        ActivityLog().info(f'[contacts] Closed {len(closed)} chat window tiles ({why}): ' + ', '.join(closed))
 
 
 def block_contacts(contacts):
@@ -523,6 +578,7 @@ def block_contacts(contacts):
     Conference by their addresses and into Messages by their conversations; Calls and the
     user's own groups do not get them back."""
     in_one_xcap_update('block', _block_contacts, contacts)
+    close_session_tiles(contacts, 'blocked')
 
 
 def in_one_xcap_update(why, function, *args):
@@ -776,6 +832,7 @@ class ContactTrash(object):
         contacts = refuse_own_contacts(None, contacts, soft=True)     # whoever calls: our own last contact stays
         if not contacts:
             return
+        close_session_tiles(contacts, 'deleted')
         spared = set() if shared_messages else set(cls.shared_keys(contacts))
         # in the file-io thread, as Block: the saves of Deleted and of every group the contact leaves
         # go to the server as one update. From the GUI thread each went on its own, and one could
@@ -874,6 +931,7 @@ class ContactTrash(object):
         contacts = refuse_own_contacts(None, contacts)      # whoever calls: our own last contact stays
         if not contacts:
             return
+        close_session_tiles(contacts, 'deleted')
         from blink.history import HistoryManager
         history = HistoryManager().message_history
         going = {contact.id for contact in contacts}
@@ -1594,11 +1652,19 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                 new_group = True
                 self.group_created = True
             members = set(group.contacts)
+            # a conference room belongs in the Conference group, never in Messages: take out any filed before
+            removed = [contact for contact in members if any(is_conference_uri(getattr(uri, 'uri', None)) for uri in getattr(contact, 'uris', ()))]
+            for contact in removed:
+                group.contacts.remove(contact)
+                members.discard(contact)
             deleted_ids = deleted_contact_ids()
             for key, display_name in keys.items():
                 # a room is kept under its bridge domain: Sylk Mobile's videoconference.X
                 # spelling would not match it and create a duplicate that repair then merges
                 key = server_conference_uri(key)
+                if is_conference_uri(key):
+                    skipped.append(key)         # a conference room: the Conference group has it, not Messages
+                    continue
                 if not is_fileable_key(key):
                     skipped.append(key)
                     continue
@@ -1631,8 +1697,10 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                     members.add(contact)
                     added.append(contact)
                     ContactTrash.leave_deleted(contact, 'a newer message brought the conversation back')
-            if new_group or added:
+            if new_group or added or removed:
                 group.save()
+        if removed:
+            activity.info(f'[contacts] Removed {len(removed)} conference rooms from the Messages group: ' + ', '.join(sorted(str(contact.name) for contact in removed)))
         if missing_only:
             activity.info(f'[contacts] History: {len(keys)} conversations, {known} with a contact in the addressbook '
                           + ('(filed into the Messages group made this run, if not there yet), ' if self.group_created else '(left as they are), ') +
@@ -4059,9 +4127,28 @@ class Contact(object):
             return self.settings.name
 
     @property
+    def conference_room(self):
+        """The room (user part) when this contact's address is a conference, else None."""
+        if self.type not in ('addressbook', 'dummy'):
+            return None
+        uri = getattr(self.uri, 'uri', None)
+        if not uri or not is_conference_uri(uri):
+            return None
+        text = str(uri)
+        if text.startswith(('sip:', 'sips:')):
+            text = text.partition(':')[2]
+        return text.partition('@')[0] or None
+
+    @property
     def display_name(self):
-        """The first line in the contact list: the name, then the organization in brackets."""
+        """The first line in the contact list: the name, then the organization in brackets.
+        A conference room reads 'Room <room>', with its name in brackets when it has one of its own."""
         name = self.name or ''
+        room = self.conference_room
+        if room is not None:
+            if not name or name.strip().lower() in (room.lower(), 'conference', 'conference call'):
+                return translate('contact_list', 'Room %s') % room
+            return translate('contact_list', 'Room %s (%s)') % (room, name)
         organization = (getattr(self.settings, 'organization', None) or '').strip() if self.type == 'addressbook' else ''
         if not organization or organization.lower() == name.lower():
             return name
@@ -6404,6 +6491,7 @@ class ContactListView(QListView):
             many_uris = len(contact.uris) > 1 and contact.type != 'bonjour'
             if many_uris and can_call:
                 call_submenu = menu.addMenu(translate('contact_list', 'Send Messages'))
+                call_submenu.setEnabled(not conference)    # a room is joined (MSRP, RTP), it has no messages
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -6418,6 +6506,7 @@ class ContactListView(QListView):
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Start Video Call'))
+                call_submenu.setEnabled(not conference)    # no SIP video in conferences
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -6466,9 +6555,9 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.start_chat_session)
 
                 self.actions.start_audio_call.setEnabled(can_call)
-                self.actions.start_video_call.setEnabled(can_call)
+                self.actions.start_video_call.setEnabled(can_call and not conference)     # no SIP video in conferences
                 self.actions.start_chat_session.setEnabled(can_call)
-                self.actions.send_sms.setEnabled(can_call)
+                self.actions.send_sms.setEnabled(can_call and not conference)     # a room is joined (MSRP, RTP), it has no messages
                 self.actions.send_files.setEnabled(can_call)
                 self.actions.request_screen.setEnabled(can_call and not conference and can_view_screens())
                 self.actions.share_my_screen.setEnabled(can_call and not conference and can_share_my_screen())
@@ -7031,11 +7120,11 @@ class ContactSearchListView(QListView):
             can_call = account_manager.default_account is not None and contact.uri is not None
             can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
             self.actions.start_audio_call.setEnabled(can_call)
-            self.actions.start_video_call.setEnabled(can_call)
+            self.actions.start_video_call.setEnabled(can_call and not is_conference_contact(contact))     # no SIP video in conferences
             self.actions.start_chat_session.setEnabled(can_call)
-            self.actions.send_sms.setEnabled(can_call)
-            self.actions.send_files.setEnabled(can_call)
             conference = is_conference_contact(contact)
+            self.actions.send_sms.setEnabled(can_call and not conference)     # a room is joined (MSRP, RTP), it has no messages
+            self.actions.send_files.setEnabled(can_call)
             self.actions.request_screen.setEnabled(can_call and not conference and can_view_screens())
             self.actions.share_my_screen.setEnabled(can_call and not conference and can_share_my_screen())
             self.actions.transfer_call.setEnabled(can_transfer)
@@ -7392,11 +7481,11 @@ class ContactDetailView(QListView):
         can_call = account_manager.default_account is not None and contact_has_uris
         can_transfer = contact_has_uris and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
         self.actions.start_audio_call.setEnabled(can_call)
-        self.actions.start_video_call.setEnabled(can_call)
+        self.actions.start_video_call.setEnabled(can_call and not is_conference_contact(model.contact))     # no SIP video in conferences
         self.actions.start_chat_session.setEnabled(can_call)
-        self.actions.send_sms.setEnabled(can_call)
-        self.actions.send_files.setEnabled(can_call)
         conference = is_conference_contact(model.contact)
+        self.actions.send_sms.setEnabled(can_call and not conference)     # a room is joined (MSRP, RTP), it has no messages
+        self.actions.send_files.setEnabled(can_call)
         self.actions.request_screen.setEnabled(can_call and not conference and can_view_screens())
         self.actions.share_my_screen.setEnabled(can_call and not conference and can_share_my_screen())
         self.actions.transfer_call.setEnabled(can_transfer)

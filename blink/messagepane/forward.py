@@ -2,7 +2,7 @@
 
 From a message's menu or the grid's ticked tiles. ForwardDialog offers the
 conversations with messages, newest first, then every other addressbook contact
-(the current conversation, deleted and blocked contacts left out), with a field
+(the current conversation, deleted and blocked contacts and conference rooms left out), with a field
 to narrow them by name or address; one or more are chosen. A text goes as a new text; a file as a new
 transfer of the file here, with its caption (a label companion) when it has
 one, so the other party gets it as if it was sent to them; a file not here yet
@@ -42,41 +42,60 @@ def forwardable(item):
 def recent_conversations(exclude=None):
     """[(key, name)] of everyone a message can be forwarded to: the conversations with
     messages, newest first, then every other addressbook contact by name (each of its
-    addresses), leaving out the conversation the messages come from and the contacts
-    in Deleted or Blocked."""
+    addresses), leaving out the conversation the messages come from, the contacts in
+    Deleted or Blocked, and conference rooms (a room is a session, not a conversation).
+    The name is the addressbook contact's, as in the contact list."""
     from blink.history import ConversationPreviews
     from blink.contacts import URIUtils, is_blocked_contact, is_deleted_contact
+    from blink.pstn_normalize import is_conference_uri
     times = dict(getattr(ConversationPreviews(), 'message_times', {}) or {})
-    keys = sorted((key for key in times if key and key != exclude and times[key] is not None), key=lambda key: times[key], reverse=True)
+    keys = sorted((key for key in times if key and key != exclude and times[key] is not None and not is_conference_uri(key)),
+                  key=lambda key: times[key], reverse=True)
     result, seen = [], set(keys)
     if exclude:
         seen.add(exclude)
-    for key in keys:
-        name = ''
-        try:
-            contact, _ = URIUtils.find_contact(key)
-            name = getattr(contact, 'name', '') or ''
-        except Exception:
-            pass
-        result.append((key, name if name and name != key else ''))
+
+    # the addressbook, by conversation key: names for the conversations, and the other contacts
+    named = {}          # key: name
+    others = []
     try:
         from sipsimple.account import AccountManager
         from sipsimple.addressbook import AddressbookManager
         from blink.history import conversation_key
         account = AccountManager().default_account
-        others = []
         for contact in AddressbookManager().get_contacts():
             if is_deleted_contact(contact) or is_blocked_contact(contact):
                 continue
+            name = (contact.name or '').strip()
             for contact_uri in contact.uris:
+                if is_conference_uri(str(contact_uri.uri)):
+                    continue
                 key = conversation_key(str(contact_uri.uri), account)
-                if key and key not in seen:
-                    seen.add(key)
-                    others.append((key, contact.name if contact.name and contact.name != key else ''))
-        others.sort(key=lambda pair: ((pair[1] or pair[0]).lower(), pair[0]))
-        result.extend(others)
+                if not key:
+                    continue
+                if name and name != key:
+                    named.setdefault(key, name)
+                others.append((key, name if name and name != key else ''))
     except Exception:
         pass
+
+    for key in keys:
+        name = named.get(key, '')
+        if not name:
+            try:
+                contact, _ = URIUtils.find_contact(key)
+                name = getattr(contact, 'display_name', None) or getattr(contact, 'name', '') or ''
+            except Exception:
+                pass
+        result.append((key, name if name and name != key else ''))
+
+    rest = []
+    for key, name in others:
+        if key not in seen:
+            seen.add(key)
+            rest.append((key, name))
+    rest.sort(key=lambda pair: ((pair[1] or pair[0]).lower(), pair[0]))
+    result.extend(rest)
     return result
 
 

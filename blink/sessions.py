@@ -57,11 +57,12 @@ from blink.configuration.settings import BlinkSettings
 from blink.resources import ApplicationData, Resources
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessioninfo import SessionInfoPanel
-from blink.util import call_later, run_in_gui_thread, translate, copy_transfer_file
+from blink.util import call_later, call_in_gui_thread, run_in_gui_thread, translate, copy_transfer_file
 from blink.widgets.buttons import LeftSegment, MiddleSegment, RightSegment
 from blink.widgets.labels import Status, StateColor, lock_pixmap
 from blink.widgets.color import ColorHelperMixin, ColorUtils, cache_result, background_color_key, follow_theme, is_dark_theme, readable_text_color, secondary_text_color
 from blink.widgets.util import ContextMenuActions, FontScaledSize, QtDynamicProperty, badge_font
+from blink.hidpi import render_widget, screen_ratio, sharpen_ui_pixmaps
 from blink.widgets.zrtp import ZRTPWidget
 from blink.streams.message import MessageStream
 from blink.pstn_normalize import pstn_dial_username
@@ -563,10 +564,27 @@ class BlinkSession(BlinkSessionBase):
         old_state = self.__dict__.get('state', None)
         new_state = self.__dict__['state'] = value
         if new_state != old_state:
+            if old_state is not None and self.items.chat is not None:
+                reason = getattr(new_state, 'reason', None)
+                uri = self.contact_uri.uri if self.contact_uri is not None else '?'
+                ActivityLog().info(f'[chat window] {uri}: {old_state} -> {new_state}' + (f' ({reason})' if reason else ''))
+            # any progress (DNS lookup, INVITE sent, ringing, ...) restarts the connect watchdog
+            self.__dict__['_watchdog_token'] = self.__dict__.get('_watchdog_token', 0) + 1
+            if str(new_state or '').startswith('connecting') and str(new_state) not in ('connecting/ringing', 'connecting/early_media'):
+                call_in_gui_thread(call_later, self.connect_timeout, self._connect_watchdog, self.__dict__['_watchdog_token'])
             NotificationCenter().post_notification('BlinkSessionDidChangeState', sender=self, data=NotificationData(old_state=old_state, new_state=new_state))
 
     state = property(_get_state, _set_state)
     del _get_state, _set_state
+
+    connect_timeout = 60    # seconds without progress while connecting (network down, DNS hanging) before giving up
+
+    def _connect_watchdog(self, token):
+        state = str(self.state or '')
+        if token != self.__dict__.get('_watchdog_token') or not state.startswith('connecting') or state in ('connecting/ringing', 'connecting/early_media'):
+            return      # it moved on since
+        ActivityLog().warning(f'[call] No progress connecting to {self.uri} for {self.connect_timeout}s ({self.state}): giving up' + (' [chat window]' if self.items.chat is not None else ''))
+        self.end()
 
     def _get_contact(self):
         return self.__dict__['contact']
@@ -672,6 +690,11 @@ class BlinkSession(BlinkSessionBase):
     def persistent(self):
         return not self._delete_when_done and not self._delete_requested
 
+    def _is_msrp_tile(self):
+        """An MSRP tile of the chat window: it stays (ended or not) until the user closes it, so a
+        call that reuses its session does not delete it when the call ends."""
+        return bool(getattr(self.items.chat, 'msrp_tile', False))
+
     @property
     def reusable(self):
         return self.persistent and self.state in (None, 'initialized', 'ended')
@@ -691,6 +714,21 @@ class BlinkSession(BlinkSessionBase):
     @property
     def remote_focus(self):
         return self.sip_session is not None and self.sip_session.remote_focus
+
+    @property
+    def is_conference(self):
+        """A conference: the remote party is a focus (isfocus in its Contact), or its domain is the
+        Conference server of an account (conference.sipBridge from SylkServer discovery, or set by
+        hand). The two are equivalent; the domain is known before the call connects."""
+        return self.remote_focus or (self.contact_uri is not None and _is_conference_address(self.contact_uri.uri, self.account))
+
+    @property
+    def conference_room(self):
+        """The room, the user part of the URI, of a conference."""
+        return self._uri_parts()[0] if self.is_conference else None
+
+    def _uri_parts(self):
+        return split_uri(self.contact_uri.uri) if self.contact_uri is not None else (None, None)
 
     def updateTimestamp(self, timestamp=None):
         if self.items.chat:
@@ -716,7 +754,7 @@ class BlinkSession(BlinkSessionBase):
             notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
             self._initialize(reinitialize=True)
         else:
-            self._delete_when_done = len(streams) == 1 and streams[0].type == 'audio'
+            self._delete_when_done = len(streams) == 1 and streams[0].type == 'audio' and not self._is_msrp_tile()
         self.direction = 'incoming'
         self.sip_session = sip_session
         self.account = sip_session.account
@@ -743,7 +781,7 @@ class BlinkSession(BlinkSessionBase):
             notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
             self._initialize(reinitialize=True)
         else:
-            self._delete_when_done = len(stream_descriptions) == 1 and stream_descriptions[0].type == 'audio'
+            self._delete_when_done = len(stream_descriptions) == 1 and stream_descriptions[0].type == 'audio' and not self._is_msrp_tile()
 
         self.direction = 'outgoing'
         self.account = account
@@ -776,7 +814,7 @@ class BlinkSession(BlinkSessionBase):
             notification_center.post_notification('BlinkSessionWillReinitialize', sender=self)
             self._initialize(reinitialize=True)
         else:
-            self._delete_when_done = len(streams) == 1 and streams[0].type == 'audio'
+            self._delete_when_done = len(streams) == 1 and streams[0].type == 'audio' and not self._is_msrp_tile()
         self.direction = 'outgoing'
         self.sip_session = sip_session
         self.account = sip_session.account
@@ -1507,13 +1545,35 @@ class ClientConference(object):
         self.audio_conference.unhold()
 
 
+from blink.conference import conference_domains, split_uri, remember_focus, is_conference_uri as _is_conference_address
+
+
+def is_conference_uri(uri, account=None):
+    """A conference room (blink.conference), or an address a session of this run has as focus."""
+    if _is_conference_address(uri, account):
+        return True
+    user, host = split_uri(uri)
+    for session in SessionManager().sessions:
+        if session.remote_focus and session.contact_uri is not None and split_uri(session.contact_uri.uri) == (user, host):
+            return True
+    return False
+
+
+def session_can_expand(item):
+    """Whether a chat window tile may be expanded (the list collapsed onto it): when connected."""
+    blink_session = getattr(item, 'blink_session', None)
+    return blink_session is not None and str(blink_session.state or '').startswith('connected')
+
+
 @implementer(IObserver)
 class ConferenceParticipant(object):
 
-    def __init__(self, contact, contact_uri):
+    def __init__(self, contact, contact_uri, uri=None):
         self.contact = contact
         self.contact_uri = contact_uri
-        self.uri = contact_uri.uri
+        # Keyed by the entity the conference server reports (sip: stripped), not by
+        # whatever URI the matching addressbook contact happens to store
+        self.uri = uri or contact_uri.uri
 
         self.active_media = set()
         self.display_name = None
@@ -1624,9 +1684,31 @@ class ServerConference(object):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _describe(self):
+        sip_session = self.sip_session
+        identity = getattr(sip_session, 'remote_identity', None)
+        uri = getattr(identity, 'uri', None)
+        if uri is not None:
+            user, host = uri.user, uri.host
+            user = user.decode(errors='replace') if isinstance(user, bytes) else user
+            host = host.decode(errors='replace') if isinstance(host, bytes) else host
+            party = f'{user}@{host}'
+        else:
+            party = str(getattr(self.session, 'uri', '?'))
+        call_id = getattr(getattr(sip_session, '_invitation', None), 'call_id', None)
+        call_id = call_id.decode(errors='replace') if isinstance(call_id, bytes) else call_id
+        account = getattr(getattr(sip_session, 'account', None), 'id', '?')
+        return party, f'account {account}' + (f', Call-ID {call_id}' if call_id else '')
+
     def _NH_BlinkSessionDidConnect(self, notification):
         self.sip_session = notification.sender.sip_session
         notification.center.add_observer(self, sender=self.sip_session)
+        self._got_conference_info = False
+        if self.sip_session.remote_focus:
+            party, info = self._describe()
+            ActivityLog().info(f'[conference] {party} is a conference focus (isfocus in its Contact), subscribing to its conference-info ({info})')
+            if self.session.contact_uri is not None:
+                remember_focus(self.session.contact_uri.uri, self.session.account)
 
     def _NH_BlinkSessionDidEnd(self, notification):
         if self.sip_session is not None:
@@ -1639,7 +1721,15 @@ class ServerConference(object):
         self.session = None
 
     def _NH_SIPSessionGotConferenceInfo(self, notification):
+        try:
+            self._handle_conference_info(notification)
+        except Exception:
+            party, info = self._describe()
+            ActivityLog().exception(f'[conference] Cannot apply the conference-info of {party} ({info})')
+
+    def _handle_conference_info(self, notification):
         from blink.contacts import URIUtils
+        conference_info = notification.data.conference_info
         users = dict((self.sip_prefix_re.sub('', str(user.entity)), user) for user in notification.data.conference_info.users)
 
         removed_participants = [participant for participant in self.participants.values() if participant.uri not in users and participant not in self.pending_additions]
@@ -1665,10 +1755,19 @@ class ServerConference(object):
         for participant in updated_participants:
             participant.update(users[participant.uri])
 
+        party, info = self._describe()
+        if not getattr(self, '_got_conference_info', False) or added_users or removed_participants:
+            self._got_conference_info = True
+            ActivityLog().info(f'[conference] Conference-info of {party}: version {conference_info.version}, state {conference_info.state}, '
+                               f'{len(users)} participants ({", ".join(sorted(users)) or "none"})'
+                               + (f', joined {", ".join(sorted(added_users))}' if added_users else '')
+                               + (f', left {", ".join(sorted(p.uri for p in removed_participants))}' if removed_participants else '')
+                               + f' ({info})')
+
         for uri in added_users:
             contact, contact_uri = URIUtils.find_contact(uri)
-            participant = ConferenceParticipant(contact, contact_uri)
-            participant.update(users[participant.uri])
+            participant = ConferenceParticipant(contact, contact_uri, uri=uri)
+            participant.update(users[uri])
             self.participants[participant.uri] = participant
             notification.center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
             notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
@@ -2098,9 +2197,15 @@ del ui_class, base_class
 @implementer(IObserver)
 class AudioSessionItem(object):
 
+    @property
+    def name(self):
+        room = self.blink_session.conference_room
+        if room is not None:
+            return translate('sessions', 'Room %s') % room
+        return self.blink_session.contact.name
+
     def __init__(self, session):
         assert session.items.audio is None
-        self.name = session.contact.name
         self.uri = session.uri
         self.blink_session = session
         self.blink_session.items.audio = self
@@ -2429,6 +2534,8 @@ class AudioSessionItem(object):
     def _NH_BlinkSessionDidConnect(self, notification):
         session = notification.sender
         self.tls = session.transport == 'tls'
+        if self.widget is not Null:
+            self.widget.address_label.setText(self.name)    # 'Room ...' once the remote turns out to be a focus
         if 'audio' in session.streams:
             self.media_connected = True
             self.widget.mute_button.setEnabled(True)
@@ -3611,7 +3718,7 @@ class ChatSessionIconLabel(QLabel):
 
     def event(self, event):
         if event.type() == QEvent.Type.DynamicPropertyChange and event.propertyName() in ('icon', 'selectedCompositionColor') and self.icon is not None:
-            self.pixmaps.standard = self.icon.pixmap(self.icon_size)
+            self.pixmaps.standard = self.icon.pixmap(QSize(self.icon_size, self.icon_size), screen_ratio())     # sharp on a scaled screen
             self.pixmaps.selected = QPixmap(self.pixmaps.standard)
             painter = QPainter(self.pixmaps.selected)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -3688,6 +3795,7 @@ class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
         with Resources.directory:
             self.setupUi(self)
         self.unread_label.setFont(badge_font(self.font()))
+        sharpen_ui_pixmaps(self, 'chat_session.ui')
         build_list_item_palettes(self)
         follow_theme(self)
         self.setBackgroundRole(QPalette.ColorRole.Window)
@@ -3801,7 +3909,14 @@ class ChatSessionItem(object):
         return '%s(%r)' % (self.__class__.__name__, self.blink_session)
 
     @property
+    def conference_room(self):
+        return self.blink_session.conference_room
+
+    @property
     def name(self):
+        room = self.conference_room
+        if room is not None:
+            return translate('sessions', 'Room %s') % room
         return self.blink_session.contact.name
 
     @property
@@ -3968,12 +4083,16 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
             arrow_rect = option.rect.adjusted(int(option.rect.width()-14), int(option.rect.height()/2), 0, 0)   # bottom half of the rightmost 14 pixels
             cross_rect = option.rect.adjusted(int(option.rect.width()-14), 0, 0, int(-option.rect.height()/2))  # top half of the rightmost 14 pixels
             if arrow_rect.contains(event.pos()):
+                if not session_can_expand(index.data(Qt.ItemDataRole.UserRole)):
+                    return True     # nothing to expand to before it is connected
                 session_list = self.parent()
                 session_list.animation.setDirection(QPropertyAnimation.Direction.Backward)
                 session_list.animation.start()
                 return True
             elif cross_rect.contains(event.pos()):
                 session = index.data(Qt.ItemDataRole.UserRole)
+                blink_session = session.blink_session
+                ActivityLog().info(f'[chat window] Close the tile of {blink_session.contact_uri.uri if blink_session.contact_uri is not None else "?"} (state {blink_session.state or "new"})')
                 session.end(delete=True)
                 return True
         return super(ChatSessionDelegate, self).editorEvent(event, model, option, index)
@@ -3989,7 +4108,7 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         session.widget.setFixedSize(option.rect.size())
 
         painter.save()
-        painter.drawPixmap(option.rect, session.widget.grab())
+        painter.drawPixmap(option.rect, render_widget(session.widget, option.rect.size(), painter.device().devicePixelRatioF()))
         if option.state & QStyle.StateFlag.State_MouseOver:
             self.drawSessionIndicators(session, option, painter, session.widget)
         if 0 and (option.state & QStyle.StateFlag.State_MouseOver):
@@ -4024,25 +4143,26 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
         pen = QPen(line_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         contrast_pen = QPen(contrast_color, pen_thickness, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
 
-        # draw the expansion indicator at the bottom (works best with a state_label of width 14)
-        arrow_rect = QRect(0, 0, 14, 14)
-        arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
-        arrow_rect.translate(option.rect.topLeft())
+        # draw the expansion indicator at the bottom (works best with a state_label of width 14), for a connected session
+        if session_can_expand(session):
+            arrow_rect = QRect(0, 0, 14, 14)
+            arrow_rect.moveBottomRight(widget.state_label.geometry().bottomRight())
+            arrow_rect.translate(option.rect.topLeft())
 
-        arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
-        arrow.translate(1, 1)
+            arrow = QPolygonF([QPointF(-3, -1.5), QPointF(0.5, 2.5), QPointF(4, -1.5)])
+            arrow.translate(1, 1)
 
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        painter.translate(arrow_rect.center())
-        painter.translate(0, +1)
-        painter.setPen(contrast_pen)
-        painter.drawPolyline(arrow)
-        painter.translate(0, -1)
-        painter.setPen(pen)
-        painter.drawPolyline(arrow)
-        painter.restore()
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            painter.translate(arrow_rect.center())
+            painter.translate(0, +1)
+            painter.setPen(contrast_pen)
+            painter.drawPolyline(arrow)
+            painter.translate(0, -1)
+            painter.setPen(pen)
+            painter.drawPolyline(arrow)
+            painter.restore()
 
         # draw the close indicator at the top (works best with a state_label of width 14)
         cross_rect = QRect(0, 0, 14, 14)
@@ -4088,6 +4208,9 @@ class ChatSessionModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkSessionNewOutgoing')
         notification_center.add_observer(self, name='BlinkSessionWasDeleted')
         notification_center.add_observer(self, name='ChatSessionItemDidChange')
+        notification_center.add_observer(self, name='BlinkSessionDidReinitializeForIncoming')
+        notification_center.add_observer(self, name='BlinkSessionDidReinitializeForOutgoing')
+        notification_center.add_observer(self, name='BlinkSessionShouldPromote')
 
     def flags(self, index):
         if index.isValid():
@@ -4152,6 +4275,26 @@ class ChatSessionModel(QAbstractListModel):
     def _NH_ChatSessionItemDidChange(self, notification):
         index = self.index(self.sessions.index(notification.sender))
         self.dataChanged.emit(index, index)
+
+    def _NH_BlinkSessionDidReinitializeForIncoming(self, notification):
+        self.moveToTop(notification.sender.items.chat)
+
+    _NH_BlinkSessionDidReinitializeForOutgoing = _NH_BlinkSessionDidReinitializeForIncoming
+    _NH_BlinkSessionShouldPromote = _NH_BlinkSessionDidReinitializeForIncoming
+
+    def moveToTop(self, session):
+        """A tile used again (reconnected) goes to the top, with the newest; the selection follows it.
+        Tiles leave the list only when closed (the x on the tile)."""
+        if session is None or session not in self.sessions:
+            return
+        session.timestamp = ISOTimestamp.now().replace(tzinfo=tzlocal())
+        position = self.sessions.index(session)
+        if position == 0:
+            return
+        self.beginMoveRows(QModelIndex(), position, position, QModelIndex(), 0)
+        del self.sessions[position]
+        self.sessions.insert(0, session)
+        self.endMoveRows()
 
     def _find_insertion_point(self, session):
         for position, item in enumerate(self.sessions):
@@ -4280,7 +4423,8 @@ class ChatSessionListView(QListView):
         self.context_menu.hide()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self.selectionModel().selection():
+        selected = self.selectionModel().selectedIndexes()
+        if event.key() == Qt.Key.Key_Escape and selected and session_can_expand(selected[0].data(Qt.ItemDataRole.UserRole)):
             self.animation.setDirection(QPropertyAnimation.Backward)
             self.animation.start()
         else:
@@ -4366,6 +4510,8 @@ class ChatSessionListView(QListView):
 
 
     def _SH_DoubleClicked(self, index):
+        if not session_can_expand(index.data(Qt.ItemDataRole.UserRole)):
+            return
         self.animation.setDirection(QPropertyAnimation.Direction.Backward)
         self.animation.start()
 
@@ -4582,6 +4728,7 @@ class _UploadBody(object):
         return chunk
 
 
+@implementer(IObserver)
 class BlinkFileTransfer(BlinkSessionBase):
 
     def __init__(self):
@@ -4689,7 +4836,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         ActivityLog().info(f'[transfer] Sending a copy of {filename}: {target}')
         return target
 
-    def init_outgoing(self, account, contact, contact_uri, filename, transfer_id=RandomID):
+    def init_outgoing(self, account, contact, contact_uri, filename, transfer_id=RandomID, route=None):
         assert self.state is None
         self.direction = 'outgoing'
 
@@ -4708,11 +4855,17 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         # Over HTTP when the account has a file transfer service, as Sylk Mobile and Blink for macOS
         # send files (mobile does not take MSRP); MSRP for Bonjour and accounts with no service.
-        if isinstance(account, Account):
+        # The MSRP chat window asks for MSRP explicitly; a conference (MSRP switch, focus) takes
+        # files over MSRP only, from wherever they are sent.
+        if route != 'msrp' and is_conference_uri(contact_uri.uri, account):
+            route = 'msrp'
+            ActivityLog().info(f'[transfer] {self._uri} is a conference: MSRP only')
+        if isinstance(account, Account) and route != 'msrp':
             from blink.messages import MessageManager
             self.upload_base = MessageManager().file_transfer_base_url(account)
         if self.upload_base:
             self.route = 'http'
+        ActivityLog().info(f'[transfer] Sending {os.path.basename(filename)} to {self._uri} over {self.route.upper()}' + (' (asked for by the chat window)' if route == 'msrp' else ''))
 
         self.state = 'initialized'
         notification_center = NotificationCenter()
@@ -5353,6 +5506,17 @@ class FileTransferItem(object):
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, self.transfer)
 
+    @property
+    def id(self):
+        return self.transfer.id
+
+    def __eq__(self, other):
+        if isinstance(other, (FileTransferItem, FileListItem)):
+            return self.id == other.id
+        return self.id == other
+
+    __hash__ = object.__hash__
+
     def retry(self):
         assert self.direction == 'outgoing' and self.ended and self.failed
         notification_center = NotificationCenter()
@@ -5525,7 +5689,7 @@ class FileTransferDelegate(QStyledItemDelegate):
             item.widget.state_indicator.show_cancel_button = False
 
         item.widget.setFixedSize(option.rect.size())
-        painter.drawPixmap(option.rect, item.widget.grab())
+        painter.drawPixmap(option.rect, render_widget(item.widget, option.rect.size(), painter.device().devicePixelRatioF()))
 
     def sizeHint(self, option, index):
         return index.data(Qt.ItemDataRole.SizeHintRole)
@@ -5908,10 +6072,11 @@ class FileListItem(object):
 @implementer(IObserver)
 class FileListModel(QAbstractListModel):
 
-    itemAboutToBeAdded = pyqtSignal(FileListItem)
-    itemAboutToBeRemoved = pyqtSignal(FileListItem)
-    itemAdded = pyqtSignal(FileListItem)
-    itemRemoved = pyqtSignal(FileListItem)
+    # FileListItem (shared files) or FileTransferItem (transfers in progress)
+    itemAboutToBeAdded = pyqtSignal(object)
+    itemAboutToBeRemoved = pyqtSignal(object)
+    itemAdded = pyqtSignal(object)
+    itemRemoved = pyqtSignal(object)
 
     def __init__(self, session, parent=None):
         super(FileListModel, self).__init__(parent)
@@ -5925,7 +6090,9 @@ class FileListModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkConversationWillRemove')
         notification_center.add_observer(self, name='SIPApplicationDidStart')
         notification_center.add_observer(self, name='HTTPFileTransferItemDidChange')
-        
+        notification_center.add_observer(self, name='BlinkFileTransferNewOutgoing')
+        notification_center.add_observer(self, name='FileTransferItemDidChange')
+
     @property
     def ended_items(self):
         return [item for item in self.items if item.ended]
@@ -6010,11 +6177,19 @@ class FileListModel(QAbstractListModel):
         if self.session != notification.sender:
             return
 
-        if self.session.remote_focus:
+        if self.session.is_conference:
+            # a conference shares files over MSRP only (conference-info resources)
             if notification.data.file.protocol == 'msrp':
-                self.addItem(FileListItem(notification.data.file, direction=notification.data.direction, conference_file=True))
+                file = notification.data.file
+                for item in self.items:
+                    if isinstance(item, FileTransferItem) and item.direction == 'outgoing' and not item.failed:
+                        if (file.hash and getattr(item.transfer, 'hash', None) and str(file.hash).lower().endswith(str(item.transfer.hash).lower().rpartition(':')[2])) or os.path.basename(item.filename) == file.name:
+                            return  # our own upload, already shown by its transfer tile
+                self.addItem(FileListItem(file, direction=notification.data.direction, conference_file=True))
             return
 
+        if any(item.id == notification.data.file.id for item in self.items):
+            return
         self.addItem(FileListItem(notification.data.file, direction=notification.data.direction))
 
     def _NH_BlinkSessionShouldDownloadFile(self, notification):
@@ -6037,13 +6212,21 @@ class FileListModel(QAbstractListModel):
             self.addItem(FileTransferItem(transfer))
 
     def _NH_BlinkFileTransferNewOutgoing(self, notification):
-        from blink.messagepane.uploads import is_http_upload
-        if is_http_upload(notification.sender):
+        transfer = notification.sender
+        if self.session is None or self.session.contact_uri is None or transfer.contact_uri is None:
+            return
+        if split_uri(transfer.contact_uri.uri) != split_uri(self.session.contact_uri.uri):
+            return          # another conversation's transfer
+        if transfer.route == 'http':
             return          # sent over HTTP: the message pane shows it (MSRP transfers only here)
-        self.addItem(FileTransferItem(notification.sender))
+        # a tile at once, showing the upload progress
+        self.addItem(FileTransferItem(transfer))
 
     def _NH_FileTransferItemDidChange(self, notification):
-        index = self.index(self.items.index(notification.sender))
+        try:
+            index = self.index(self.items.index(notification.sender))
+        except ValueError:
+            return
         self.dataChanged.emit(index, index)
 
     def _NH_BlinkConversationWillRemove(self, notification):
@@ -6069,6 +6252,8 @@ class FileListDelegate(QStyledItemDelegate):
     def editorEvent(self, event, model, option, index):
         if event.type() == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton and event.modifiers() == Qt.KeyboardModifier.NoModifier:
             item = index.data(Qt.ItemDataRole.UserRole)
+            if isinstance(item, FileTransferItem):
+                return super(FileListDelegate, self).editorEvent(event, model, option, index)
             if item.already_exists:
                 directory = SIPSimpleSettings().file_transfer.directory.normalized
                 link = copy_transfer_file(QUrl.fromLocalFile(item.decrypted_filename), directory)
@@ -6095,7 +6280,7 @@ class FileListDelegate(QStyledItemDelegate):
             item.widget.display_mode = item.widget.AlternateDisplayMode
 
         item.widget.setFixedSize(option.rect.size())
-        painter.drawPixmap(option.rect, item.widget.grab())
+        painter.drawPixmap(option.rect, render_widget(item.widget, option.rect.size(), painter.device().devicePixelRatioF()))
 
     def sizeHint(self, option, index):
         return index.data(Qt.ItemDataRole.SizeHintRole)
@@ -6129,6 +6314,19 @@ class FileListView(QListView, ColorHelperMixin):
         index = self.indexAt(event.pos())
         if index.isValid():
             item = index.data(Qt.ItemDataRole.UserRole)
+            if isinstance(item, FileTransferItem):
+                # a transfer in progress (or just done) from here: its own actions
+                if item.ended and not item.failed and item.filename:
+                    menu.addAction(translate('filelist_view', "Open"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(item.filename)))
+                if not item.ended:
+                    menu.addAction(translate('filelist_view', "Cancel"), item.end)
+                elif item.failed and item.direction == 'outgoing':
+                    menu.addAction(translate('filelist_view', "Retry"), item.retry)
+                menu.addAction(self.actions.open_downloads_folder)
+                if item.ended:
+                    menu.addAction(translate('filelist_view', "Remove From List"), lambda: self.model().removeItem(item.id))
+                menu.exec(self.mapToGlobal(event.pos()))
+                return
             menu.addAction(self.actions.open_file)
             if not item.downloading:
                 temporary_download_file = "%s.download" % item.filename
@@ -6301,6 +6499,7 @@ class FileListView(QListView, ColorHelperMixin):
 
 class ConferenceParticipantWidget(ChatSessionWidget):
     def update_content(self, participant):
+        self.unread_label.hide()    # a chat session badge, nothing to count for a participant
         self.setDisabled(participant.pending_request)
         self.name_label.setText(participant.name)
         self.info_label.setText(participant.info)
@@ -6317,7 +6516,7 @@ class ConferenceParticipantWidget(ChatSessionWidget):
 @implementer(IObserver)
 class ConferenceParticipantItem(object):
 
-    size_hint = QSize(200, 36)
+    size_hint = FontScaledSize(200, 36, lines=2, padding=4)   # the same as a chat session, or the icons get squeezed
 
     def __init__(self, participant):
         self.participant = participant
@@ -6402,7 +6601,7 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
         participant.widget.setFixedSize(option.rect.size())
 
         painter.save()
-        painter.drawPixmap(option.rect, participant.widget.grab())
+        painter.drawPixmap(option.rect, render_widget(participant.widget, option.rect.size(), painter.device().devicePixelRatioF()))
         if (option.state & QStyle.StateFlag.State_MouseOver) and participant.widget.isEnabled():
             self.drawRemoveIndicator(participant, option, painter, participant.widget)
         if 0 and (option.state & QStyle.StateFlag.State_MouseOver):
@@ -7631,6 +7830,11 @@ class SessionManager(object, metaclass=Singleton):
             else:
                 account = AccountManager().default_account
 
+        if any(stream.type == 'video' for stream in streams) and is_conference_uri(getattr(contact_uri, 'uri', contact_uri), account):
+            # no SIP video in conferences: audio (and whatever else was asked for) only
+            streams = [stream for stream in streams if stream.type != 'video'] or [StreamDescription('audio')]
+            ActivityLog().info(f'[conference] {getattr(contact_uri, "uri", contact_uri)} is a conference: no video, joining with {", ".join(stream.type for stream in streams)}')
+
         try:
             session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
             reinitialize = True
@@ -7650,7 +7854,9 @@ class SessionManager(object, metaclass=Singleton):
 
         return session
 
-    def send_file(self, contact, contact_uri, filename, transfer_id=RandomID, account=None):
+    def send_file(self, contact, contact_uri, filename, transfer_id=RandomID, account=None, route=None):
+        """route: 'msrp' to send over MSRP whatever the account offers (the MSRP chat window),
+        None to pick HTTP when the account has a file transfer service, else MSRP."""
         if account is None:
             if contact.type == 'bonjour':
                 account = BonjourAccount()
@@ -7660,7 +7866,7 @@ class SessionManager(object, metaclass=Singleton):
         self.send_file_directory = os.path.dirname(filename)
 
         transfer = BlinkFileTransfer()
-        transfer.init_outgoing(account, contact, contact_uri, filename, transfer_id)
+        transfer.init_outgoing(account, contact, contact_uri, filename, transfer_id, route=route)
         transfer.connect()
         return transfer
 

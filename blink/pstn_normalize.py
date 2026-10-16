@@ -367,43 +367,12 @@ def pstn_uri_spellings(uri, account=None, domain=None):
 ANONYMOUS_URI = 'anonymous@anonymous.invalid'
 
 
-# Conference bridges seen in the wild, plus whatever the account names.
-_CONFERENCE_DOMAIN_PREFIXES = ('conference.', 'videoconference.')
-_DEFAULT_CONFERENCE_DOMAIN = 'conference.sip2sip.info'
-
-
 def is_conference_uri(uri, account=None):
-    """Whether this address is a conference room rather than a person.
-
-    A room is not somebody to file in a call log: it is a place several people
-    were, its name is a number nobody dials twice, and a contact made from one
-    is junk that then replicates to every device.
-
-    Recognised by domain, the way sylk-mobile does it (_abIsConferenceUri):
-    the account's own conference server, the default bridge, and anything on a
-    'conference.' or 'videoconference.' domain.
-    """
-    if not uri:
-        return False
-    text = uri.decode() if isinstance(uri, bytes) else str(uri)
-    text = sip_prefix_pattern.sub("", text.strip()).lower()
-    if '@' not in text:
-        return False
-    domain = text.partition('@')[2].partition(':')[0]
-    if not domain:
-        return False
-
-    if domain == _DEFAULT_CONFERENCE_DOMAIN:
-        return True
-    if any(domain.startswith(prefix) for prefix in _CONFERENCE_DOMAIN_PREFIXES):
-        return True
-    try:
-        server = str(getattr(account.server, 'conference_server', '') or '').strip().lower()
-        if server and domain == server:
-            return True
-    except Exception:
-        pass
-    return False
+    """Whether this address is a conference room rather than a person: the one rule of
+    blink.conference (the Conference server setting of the accounts, or a domain seen as a
+    focus). A room is not somebody to file in a call log or in Messages."""
+    from blink.conference import is_conference_uri as conference_uri
+    return conference_uri(uri, account)
 
 
 def normalize_anonymous_uri(uri):
