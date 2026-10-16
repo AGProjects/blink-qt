@@ -76,6 +76,7 @@ from blink.configuration.settings import H264_LEVELS, BlinkSettings, SIPSimpleSe
 from blink.logging import ActivityLog, LogManager
 from blink.mainwindow import MainWindow
 from blink.presence import PresenceManager
+from blink.registration_watch import RegistrationWatch
 from blink.resources import ApplicationData, Resources
 from blink.server_call_history import ServerCallHistory
 from blink.sessions import SessionManager
@@ -171,7 +172,10 @@ class Blink(QApplication, metaclass=QSingleton):
         from PyQt6.QtGui import QImageReader
         if b'svg' not in [bytes(image_format) for image_format in QImageReader.supportedImageFormats()]:
             ActivityLog().error('[ui] Qt cannot read SVG images: most icons will be missing. Install qt6-svg-plugins (Debian 13 and later) or libqt6svg6')
+        from blink import dns_cache
+        dns_cache.install()     # last good DNS answers, used when the name servers do not answer
         self.registrar_addresses = {}
+        self.registration_watch = RegistrationWatch()     # says so when a registration gets no result at all
         self._tls_diagnosed = {}
         self._certificate_errors_logged = {}  # (server, reason) -> monotonic time of the last logged certificate error
         self._registrar_lookups = {}     # DNSLookup -> account, for logging where a failed registration was sent
@@ -591,12 +595,15 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def _NH_SIPAccountDidActivate(self, notification):
         ActivityLog().info('Account %s activated' % notification.sender.id)
+        self.registration_watch.arm(notification.sender)
 
     def _NH_SIPAccountDidDeactivate(self, notification):
         ActivityLog().info('Account %s deactivated' % notification.sender.id)
+        self.registration_watch.disarm(notification.sender)
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
         account = notification.sender
+        self.registration_watch.disarm(account)
         data = notification.data
         address = '%s:%s;transport=%s' % (data.registrar.address, data.registrar.port, data.registrar.transport)
         contact = str(data.contact_header.uri)
@@ -615,6 +622,7 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def _NH_SIPAccountRegistrationDidFail(self, notification):
         account = notification.sender
+        self.registration_watch.disarm(account)
         error = notification.data.error
         error = error.decode(errors='replace') if isinstance(error, bytes) else str(error)
         ActivityLog().warning('[register] Account %s failed to register: %s' % (account.id, error))
