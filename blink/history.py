@@ -1168,6 +1168,16 @@ class MessageHistory(object, metaclass=Singleton):
             return
         if rows or sidecars:
             history_info(account_id, f'Message {message_id} marked deleted: {rows} rows' + (f', {sidecars} sidecars' if sidecars else '') + (f' ({source})' if source else ''))
+            if rows:
+                # the conversation's last message (time on the contact row, its order, the preview
+                # line) may have been this one: say which conversations lost a message
+                try:
+                    db = Message._connection
+                    keys = [str(key) for (key,) in db.queryAll(f'select distinct remote_uri from {Message.sqlmeta.table} where message_id = {db.sqlrepr(str(message_id))}') if key]
+                except Exception:
+                    keys = [str(remote_uri)] if remote_uri else []
+                if keys:
+                    NotificationCenter().post_notification('BlinkMessageHistoryMessageDidRemove', data=NotificationData(message_id=str(message_id), remote_uris=keys))
             return
         try:
             stored = Message._connection.queryOne(f'select count(*) from {Message.sqlmeta.table} where message_id = {Message._connection.sqlrepr(str(message_id))}')[0]
@@ -3137,6 +3147,10 @@ class ConversationPreviews(object, metaclass=Singleton):
 
     def _NH_BlinkMessageHistoryConversationDidRemove(self, notification):
         self.invalidate([notification.data.contact])
+
+    def _NH_BlinkMessageHistoryMessageDidRemove(self, notification):
+        # a removed message may have been the last one: the row falls back to the one before it
+        self.invalidate(notification.data.remote_uris, live=True)
 
     def _NH_BlinkMessageHistoryCallHistoryDidStore(self, notification):
         self.invalidate([notification.data.message.remote_uri])
