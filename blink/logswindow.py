@@ -199,8 +199,10 @@ class LogsWindow(base_class, ui_class):
         self._apply_sip_filter()
 
     def _sip_matches(self, entry):
-        if self._sip_category is not None:
-            # with a category chosen, only the SIP messages of that category (no DNS lines)
+        if self._sip_category is not None and getattr(entry, 'direction', None) is not None:
+            # with a category chosen, only the SIP messages of that category; DNS lookups and
+            # registration diagnostics (lines without a direction) are always shown, they are
+            # what tells why nothing was sent
             categories = getattr(entry, 'categories', None)
             if not categories or self._sip_category not in categories:
                 return False
@@ -242,6 +244,7 @@ class LogsWindow(base_class, ui_class):
         if scroll and at_bottom:
             scrollbar.setValue(scrollbar.maximum())
 
+    @run_in_gui_thread
     def _NH_UILogMessage(self, notification):
         section = notification.data.section
         message = notification.data.message
