@@ -114,6 +114,11 @@ _TRAILING = '.,;:!?)]}\''
 
 def linkify(text):
     """Plain text as HTML: escaped, line breaks kept, web and mail addresses as links."""
+    return _link_addresses(text).replace('\r\n', '\n').replace('\n', '<br>')
+
+
+def _link_addresses(text):
+    """Escaped text with web and mail addresses as links; whitespace left as it is."""
     parts, last = [], 0
     for match in _URL_RE.finditer(text or ''):
         url = match.group(1)
@@ -131,7 +136,7 @@ def linkify(text):
         parts.append(f'<a href="{html.escape(href, quote=True)}">{html.escape(stripped)}</a>')
         last = end
     parts.append(html.escape((text or '')[last:]))
-    return ''.join(parts).replace('\r\n', '\n').replace('\n', '<br>')
+    return ''.join(parts)
 
 
 _ALLOWED_TAGS = {'a', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'br', 'p', 'div', 'span', 'code', 'pre',
@@ -182,8 +187,12 @@ class _Sanitizer(HTMLParser):
                 break
 
     def handle_data(self, data):
-        if not self.skip:
+        if self.skip:
+            return
+        if 'a' in self.open:        # already inside a link the peer made
             self.out.append(html.escape(data, quote=False))
+        else:                       # a bare address pasted as text (e.g. a span from a browser copy)
+            self.out.append(_link_addresses(data))
 
 
 def sanitize_html(body):

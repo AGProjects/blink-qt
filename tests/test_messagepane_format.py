@@ -64,6 +64,11 @@ class HTMLTests(unittest.TestCase):
                          '<p>hi <a>j</a> <a href="https://a.b">ok</a><b>bold</b></p>')
         self.assertEqual(fmt.sanitize_html('<style>p{}</style><i>x</i>'), '<i>x</i>')
 
+    def test_sanitize_links_bare_addresses(self):
+        self.assertEqual(fmt.sanitize_html('<span style="color: red">https://x.com/a?s=20</span>'),
+                         '<span><a href="https://x.com/a?s=20">https://x.com/a?s=20</a></span>')
+        self.assertEqual(fmt.sanitize_html('<a href="https://a.b">https://a.b</a>'), '<a href="https://a.b">https://a.b</a>')
+
 
 class KindTests(unittest.TestCase):
     def item(self, category, content, content_type='text/plain'):
