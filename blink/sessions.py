@@ -6949,6 +6949,14 @@ class IncomingRequest(QObject):
             self._auto_answer_timer.timeout.connect(self._auto_answer)
             self._auto_answer_timer.start()
 
+        # local no-answer guard: if the CANCEL / session failure never reaches us the panel would otherwise ring forever
+        self._timeout_timer = QTimer()
+        self._timeout_timer.setInterval(self.timeout * 1000)
+        self._timeout_timer.setSingleShot(True)
+        self._timeout_timer.timeout.connect(self._timed_out)
+        if self._auto_answer_timer is None:
+            self._timeout_timer.start()
+
         from blink.contacts import contact_avatar_pixmap
         self.dialog.user_icon.setPixmap(contact_avatar_pixmap(contact, 48, display_name=session.remote_identity.display_name))
         self.dialog.audio_stream.setVisible(self.audio_stream is not None)
@@ -7029,12 +7037,22 @@ class IncomingRequest(QObject):
     def stream_types(self):
         return {stream.type for stream in (self.audio_stream, self.video_stream, self.screensharing_stream, self.chat_stream) if stream is not None}
 
+    timeout = 60    # seconds an unanswered request (call or proposal) may ring before it's refused locally
+
     def _auto_answer(self):
         self._SH_DialogFinished(QDialog.DialogCode.Accepted)
+
+    def _timed_out(self):
+        if self not in SessionManager().incoming_requests:
+            return    # already removed (remote cancel, answered, ...): the dialog was hidden then
+        self.dialog.reject_mode = 'timeout'
+        self.dialog.reject()    # finished(Rejected) -> _SH_DialogFinished
 
     def _SH_DialogFinished(self, result):
         if self._auto_answer_timer and self._auto_answer_timer.isActive():
             self._auto_answer_timer.stop()
+        if self._timeout_timer.isActive():
+            self._timeout_timer.stop()
 
         self.finished.emit(self)
         if result == QDialog.DialogCode.Accepted:
@@ -7960,12 +7978,18 @@ class SessionManager(object, metaclass=Singleton):
             blink_session.init_incoming(incoming_request.session, accepted_streams, incoming_request.contact, incoming_request.contact_uri, reinitialize=reinitialize)
 
     def _SH_IncomingRequestRejected(self, incoming_request, mode):
-        if incoming_request.proposal:
-            incoming_request.session.reject_proposal(488)
-        elif mode == 'busy':
-            incoming_request.session.reject(486)
-        elif mode == 'reject':
-            incoming_request.session.reject(603)
+        try:
+            if incoming_request.proposal:
+                incoming_request.session.reject_proposal(488)
+            elif mode == 'busy':
+                incoming_request.session.reject(486)
+            elif mode == 'reject':
+                incoming_request.session.reject(603)
+            elif mode == 'timeout':
+                ActivityLog().info(f'[call] Incoming call from {incoming_request.session.remote_identity.uri} not answered in {incoming_request.timeout}s, refusing it')
+                incoming_request.session.reject(480)
+        except IllegalStateError:
+            pass    # the session ended meanwhile
 
     def _SH_IncomingFileTransferRequestAccepted(self, incoming_request):
         transfer = BlinkFileTransfer()
