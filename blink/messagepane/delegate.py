@@ -46,7 +46,7 @@ from PyQt6.QtGui import QAbstractTextDocumentLayout, QColor, QFont, QFontMetrics
 from PyQt6.QtWidgets import QStyle, QStyledItemDelegate
 
 from blink.contact_mangler import mangled_name
-from blink.messagepane.format import bubble_kind, day_label, delivery_mark, linkify, plain_summary, sanitize_html
+from blink.messagepane.format import bubble_kind, day_label, delivery_mark, linkify, own_location_request, plain_summary, sanitize_html
 from blink.widgets.color import is_dark_theme, secondary_text_color
 
 
@@ -935,6 +935,8 @@ class BubbleDelegate(QStyledItemDelegate):
             self._paint_download_button(painter, self.cancel_rect(layout, item, bubble), secondary)
         context = QAbstractTextDocumentLayout.PaintContext()
         if layout.kind == 'note':
+            if option.state & QStyle.StateFlag.State_MouseOver and own_location_request(item):
+                self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
             context.palette = self._text_palette(palette, secondary)
             painter.translate(self.text_origin(layout, bubble))
             layout.document.documentLayout().draw(painter, context)
@@ -1036,6 +1038,10 @@ class BubbleDelegate(QStyledItemDelegate):
     def actions_rect(self, layout, item, bubble):
         """Where the actions button of a bubble is: beside it, towards the middle, level with its top."""
         size = self.actions_size
+        if layout.kind == 'note':
+            # a centred note (an own location request): before its text, level with its middle
+            text_width = min(layout.document.idealWidth(), bubble.width())
+            return QRectF(bubble.center().x() - text_width / 2 - 6 - size, bubble.center().y() - size / 2, size, size)
         left = bubble.left() - 6 - size if item.outgoing else bubble.right() + 6
         return QRectF(left, bubble.top() + 2, size, size)
 
@@ -1045,7 +1051,7 @@ class BubbleDelegate(QStyledItemDelegate):
         if item is None:
             return False
         layout = self.layout(index, rect.width(), self.parent().font())
-        if layout.kind == 'note':
+        if layout.kind == 'note' and not own_location_request(item):
             return False
         return self.actions_rect(layout, item, self.bubble_rect(layout, item, QRectF(rect))).contains(QPointF(position))
 

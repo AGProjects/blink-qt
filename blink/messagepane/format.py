@@ -7,7 +7,7 @@ import re
 from html.parser import HTMLParser
 
 
-__all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note', 'location_note',
+__all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note', 'location_note', 'own_location_request',
            'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason', 'format_size', 'waveform_bars', 'format_clock']
 
 
@@ -77,6 +77,23 @@ def location_note(item):
         return None
     name = getattr(item, 'display_name', '') or _SCHEME.sub('', str(getattr(item, 'remote_uri', '') or '')).split('@')[0]
     return system_note(payload, name, getattr(item, 'direction', None))
+
+
+def own_location_request(item):
+    """Whether a row is a location request we sent: drawn as a note, but deleted like any
+    message of our own, and always for the other party too."""
+    if getattr(item, 'direction', None) != 'outgoing' or getattr(item, 'category', None) is not None:
+        return False
+    if str(getattr(item, 'content_type', '') or '').lower() != _LOCATION_CONTENT_TYPE:
+        return False
+    action = getattr(item, 'related_action', None)
+    if action is None:
+        from blink.location import location_envelope
+        try:
+            action = (location_envelope(item.content, getattr(item, 'metadata', None)) or {}).get('action')
+        except Exception:
+            return False
+    return action == 'location_request'
 
 
 def plain_summary(item):

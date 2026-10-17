@@ -985,12 +985,27 @@ class MessagePane(QWidget):
     def _delete_message(self, item):
         """Delete a message here, after asking; one's own message also for the other party
         when asked to (and possible: not a Bonjour neighbour, not a message never sent).
-        A file transfer takes its downloaded file with it."""
+        A file transfer takes its downloaded file with it. An own location request is
+        always deleted for the other party too (except with a Bonjour neighbour)."""
         from PyQt6.QtWidgets import QCheckBox, QMessageBox
         from blink.history import HistoryManager, MessageHistory
         from blink.messagepane.files import local_file
+        from blink.messagepane.format import own_location_request
         from blink.uris import BONJOUR_ACCOUNT_ID
         key = self.key
+        if own_location_request(item):
+            name = getattr(self.contact, 'name', '') or key
+            remote = item.account_id != BONJOUR_ACCOUNT_ID
+            text = translate('message_pane', 'Delete this location request? It is also deleted for %s.') % name if remote else translate('message_pane', 'Delete this location request?')
+            box = QMessageBox(QMessageBox.Icon.Question, translate('message_pane', 'Delete Location Request'), text, parent=self)
+            delete_button = box.addButton(translate('message_pane', 'Delete'), QMessageBox.ButtonRole.DestructiveRole)
+            box.addButton(QMessageBox.StandardButton.Cancel)
+            box.exec()
+            if box.clickedButton() is not delete_button:
+                return
+            ActivityLog().info(f'[Message with {key}] Deleted location request {item.id} from the message pane' + (', also for the other party' if remote else ''))
+            self._remove_message(item.id, item.account_id, remote, why='deleted here', remote_uri=item.remote_uri)
+            return
         is_file = local_file(item) is not None or item.category in ('image', 'audio', 'video', 'other')
         what = translate('message_pane', 'file') if is_file else translate('message_pane', 'message')
         box = QMessageBox(QMessageBox.Icon.Question, translate('message_pane', 'Delete %s') % what,
