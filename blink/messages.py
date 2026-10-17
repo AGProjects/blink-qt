@@ -1614,6 +1614,9 @@ class MessageManager(object, metaclass=Singleton):
         self._journal_store(account, message, history_message, message['contact'], state=message.get('state'))
         if content_type == LOCATION_CONTENT_TYPE:
             tick = location_storage_fields(history_message.content, history_message.metadata)
+            if (not first_sync and message['direction'] == 'incoming' and tick.get('related_action') == 'location_request'
+                    and 'positive-delivery' in (history_message.disposition or ())):
+                self._confirm_location_request(account, contact, history_message, open_only=True)
             return f'location {tick["related_action"]}' if tick else 'location (unreadable)'
         if content_type == METADATA_CONTENT_TYPE:
             link = metadata_link(history_message.content)
@@ -2268,6 +2271,8 @@ class MessageManager(object, metaclass=Singleton):
             known = content_type.lower() in KNOWN_INERT_CONTENT_TYPES
             link = metadata_link(body) if content_type.lower() == METADATA_CONTENT_TYPE else None
             tick = location_storage_fields(body, metadata) if content_type.lower() == LOCATION_CONTENT_TYPE else {}
+            if x_replicated_message is Null and tick.get('related_action') == 'location_request' and 'positive-delivery' in (disposition or ()):
+                self._confirm_location_request(account, contact, message)
             if link is not None:
                 what = f': {link[1]} for message {link[0]}'
             elif tick:
@@ -2989,6 +2994,20 @@ class MessageManager(object, metaclass=Singleton):
                 self._own_conversation_removes.note(canonical_uri(key, account))
                 contact, contact_uri = URIUtils.find_contact(account.uri)
                 self._send_message(OutgoingMessage(account, contact, content, 'application/sylk-api-conversation-remove', use_cpim=False, sessionless=True))
+
+    def _confirm_location_request(self, account, contact, message, open_only=False):
+        """Delivered, for a location request that asked for it: it is stored without opening a
+        conversation, so through the conversation when one is open, else straight to the proxy.
+        From the journal (open_only) only through an open conversation, as for a text."""
+        session = self._journal_session(contact)
+        if session is not None:
+            self.send_imdn_message(session, message.id, message.timestamp, 'delivered', account)
+            return
+        if open_only or account is BonjourAccount() or not account.sms.use_cpim or not account.sms.enable_imdn or host.default_ip is None:
+            return
+        content = IMDNDocument.create(message_id=message.id, datetime=message.timestamp, recipient_uri=contact.uri.uri,
+                                      notification=DeliveryNotification('delivered'))
+        self._send_message(OutgoingMessage(account, contact, content, IMDNDocument.content_type, sessionless=True))
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
         if host.default_ip is None:

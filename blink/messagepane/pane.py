@@ -502,6 +502,28 @@ class MessagePane(QWidget):
         # each address of the contact is a conversation of its own in history and on the other devices
         for key in self.view_key:
             self._read_conversation(key, [item for item in unread if (item.remote_uri or self.key) == key], badges.get(key, 0))
+        self._display_location_requests(model)
+
+    def _display_location_requests(self, model):
+        """A location request is never unread (it is a note, not counted), but it is seen as a
+        message is: confirm the display of the ones shown that asked for it and have not expired."""
+        from datetime import datetime, timedelta
+        from blink.location import REQUEST_LIFETIME_HOURS
+        from blink.messagepane.format import is_location_request
+        from blink.messages import MessageManager
+        oldest = datetime.now().astimezone() - timedelta(hours=REQUEST_LIFETIME_HOURS)
+        requests = [item for item in model.items if item.direction == 'incoming' and item.state != 'displayed' and item.id not in self._displayed_sent
+                    and 'display' in item.disposition and item.timestamp >= oldest and is_location_request(item)]
+        for item in requests:
+            key = item.remote_uri or self.key
+            try:
+                session = self._session_for(key)
+            except Exception as e:
+                log.warning(f'Cannot reach the conversation with {key} to confirm seeing location request {item.id}: {e!r}')
+                continue
+            self._displayed_sent.add(item.id)
+            ActivityLog().info(f'[Message with {key}] Location request {item.id} seen in the message pane: display confirmed')
+            MessageManager().send_imdn_message(session, item.id, ISOTimestamp(item.timestamp), 'displayed', self._account(item.account_id) or session.account)
 
     def _read_conversation(self, key, unread, badge):
         if not unread and not badge:

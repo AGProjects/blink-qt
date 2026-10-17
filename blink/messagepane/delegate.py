@@ -935,8 +935,11 @@ class BubbleDelegate(QStyledItemDelegate):
             self._paint_download_button(painter, self.cancel_rect(layout, item, bubble), secondary)
         context = QAbstractTextDocumentLayout.PaintContext()
         if layout.kind == 'note':
-            if option.state & QStyle.StateFlag.State_MouseOver and own_location_request(item):
-                self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
+            if own_location_request(item):
+                if option.state & QStyle.StateFlag.State_MouseOver:
+                    self._paint_actions_button(painter, self.actions_rect(layout, item, bubble), secondary)
+                if layout.mark:
+                    self._paint_note_mark(painter, layout, bubble, small, secondary)
             context.palette = self._text_palette(palette, secondary)
             painter.translate(self.text_origin(layout, bubble))
             layout.document.documentLayout().draw(painter, context)
@@ -1034,6 +1037,20 @@ class BubbleDelegate(QStyledItemDelegate):
         return icon
 
     actions_size = 22
+
+    def _paint_note_mark(self, painter, layout, bubble, small, secondary):
+        """The delivery mark of an own location request: after its centred text, level with its middle."""
+        metrics = QFontMetricsF(small)
+        text_width = min(layout.document.idealWidth(), bubble.width())
+        colour = {'displayed': QColor('#3fb950') if is_dark_theme() else QColor('#2e7d32'),
+                  'failed': QColor('#ff7b72') if is_dark_theme() else QColor('#c62828')}.get(layout.mark_kind, secondary)
+        painter.save()
+        painter.setFont(small)
+        painter.setPen(colour)
+        painter.drawText(QRectF(bubble.center().x() + text_width / 2 + 6, bubble.center().y() - metrics.height() / 2,
+                                metrics.horizontalAdvance(layout.mark) + 2, metrics.height()),
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.mark)
+        painter.restore()
 
     def actions_rect(self, layout, item, bubble):
         """Where the actions button of a bubble is: beside it, towards the middle, level with its top."""

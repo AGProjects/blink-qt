@@ -7,7 +7,7 @@ import re
 from html.parser import HTMLParser
 
 
-__all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note', 'location_note', 'own_location_request',
+__all__ = ['initials', 'avatar_colour', 'AVATAR_COLOURS', 'plain_summary', 'linkify', 'sanitize_html', 'bubble_kind', 'is_system_note', 'location_note', 'is_location_request', 'own_location_request',
            'TEXT_CONTENT_TYPES', 'day_label', 'delivery_mark', 'auto_fetch_reason', 'format_size', 'waveform_bars', 'format_clock']
 
 
@@ -79,10 +79,10 @@ def location_note(item):
     return system_note(payload, name, getattr(item, 'direction', None))
 
 
-def own_location_request(item):
-    """Whether a row is a location request we sent: drawn as a note, but deleted like any
-    message of our own, and always for the other party too."""
-    if getattr(item, 'direction', None) != 'outgoing' or getattr(item, 'category', None) is not None:
+def is_location_request(item):
+    """Whether a row is a location request (either way): a centred note that, unlike the other
+    location signals, takes delivery and display receipts as a message does."""
+    if getattr(item, 'category', None) is not None:
         return False
     if str(getattr(item, 'content_type', '') or '').lower() != _LOCATION_CONTENT_TYPE:
         return False
@@ -94,6 +94,12 @@ def own_location_request(item):
         except Exception:
             return False
     return action == 'location_request'
+
+
+def own_location_request(item):
+    """Whether a row is a location request we sent: drawn as a note with its delivery mark,
+    and deleted like any message of our own, always for the other party too."""
+    return getattr(item, 'direction', None) == 'outgoing' and is_location_request(item)
 
 
 def plain_summary(item):
