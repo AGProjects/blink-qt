@@ -1560,9 +1560,21 @@ def is_conference_uri(uri, account=None):
 
 
 def session_can_expand(item):
-    """Whether a chat window tile may be expanded (the list collapsed onto it): when connected."""
+    """Whether a chat window tile may be expanded (the list collapsed onto it): when connected, and a
+    conference also when it is not but files were exchanged in it (its files column is shown)."""
     blink_session = getattr(item, 'blink_session', None)
-    return blink_session is not None and str(blink_session.state or '').startswith('connected')
+    if blink_session is None:
+        return False
+    if str(blink_session.state or '').startswith('connected'):
+        return True
+    return conference_has_files(item)
+
+
+def conference_has_files(item):
+    """Whether a conference tile has files exchanged in the conference."""
+    blink_session = getattr(item, 'blink_session', None)
+    files_model = getattr(item, 'files_model', None)
+    return blink_session is not None and blink_session.is_conference and files_model is not None and files_model.rowCount() > 0
 
 
 @implementer(IObserver)
@@ -1779,14 +1791,23 @@ class ServerConference(object):
                 self.shared_files.append((file.hash, file.name))
                 sender = SIPURI.parse(file.sender)
                 file.contact, contact_uri = URIUtils.find_contact(sender)
+                # the same id every time the room tells of it (the files list, history and the folder agree),
+                # kept where a pull of it saves it: file_transfers/<account>/<room>/<id>/
+                from blink.file_transfer import transfer_filename, transfer_folder
+                from blink.history import msrp_room_file_id, session_conversation_key
+                room = session_conversation_key(self.session)
+                file_id = msrp_room_file_id(room, file.hash)
                 shared_file = File(file.name,
                                    file.size,
                                    file.contact,
                                    file.hash,
-                                   str(uuid.uuid4()),
+                                   file_id,
                                    protocol='msrp')
+                shared_file.name = shared_file.original_name = os.path.join(transfer_folder(ApplicationData.get('file_transfers'), str(self.session.account.id), room, file_id), transfer_filename(file.name))
+                shared_file.account = self.session.account
+                shared_file.sender_uri = self.sip_prefix_re.sub('', str(file.sender))
 
-                notification.center.post_notification('BlinkSessionDidShareFile', sender=self.session, data=NotificationData(file=shared_file, direction='incoming'))
+                notification.center.post_notification('BlinkSessionDidShareFile', sender=self.session, data=NotificationData(file=shared_file, direction='incoming', conference=True))
 
     def _NH_SIPConferenceDidNotAddParticipant(self, notification):
         uri = self.sip_prefix_re.sub('', str(notification.data.participant))
@@ -3898,6 +3919,9 @@ class ChatSessionItem(object):
         self.remote_composing_timer.timeout.connect(self._SH_RemoteComposingTimerTimeout)
         self.participants_model = ConferenceParticipantModel(blink_session)
         self.files_model = FileListModel(blink_session)
+        # the tile can be expanded once a conference has files (session_can_expand): draw its arrow
+        self.files_model.itemAdded.connect(self._SH_FilesChanged)
+        self.files_model.itemRemoved.connect(self._SH_FilesChanged)
         self.widget = ChatSessionWidget(None)
         self.widget.update_content(self)
         follow_theme(self)
@@ -3907,6 +3931,10 @@ class ChatSessionItem(object):
 
     def __repr__(self):
         return '%s(%r)' % (self.__class__.__name__, self.blink_session)
+
+    def _SH_FilesChanged(self, item):
+        if self.blink_session.is_conference:
+            NotificationCenter().post_notification('ChatSessionItemDidChange', sender=self)
 
     @property
     def conference_room(self):
@@ -4808,11 +4836,24 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         self.file_selector = stream.file_selector
         self.handler = stream.handler
+        try:
+            directory = self._transfer_folder()      # where a file over HTTP would be (blink.messagepane.files finds it)
+            makedirs(directory)
+            self.handler.save_directory = directory
+        except (AttributeError, OSError) as e:
+            ActivityLog().warning(f'[transfer] Cannot use the file transfer folder for {self.id}, saving in the default folder: {e}')
 
         self.state = 'connecting'
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferNewIncoming', sender=self)
         self.sip_session.accept([self.stream])
+
+    def _transfer_folder(self):
+        """Where a file of this transfer is kept, sent or received, as a file over HTTP is:
+        file_transfers/<account>/<peer>/<transfer id>/ (a conference: the room is the peer)."""
+        from blink.file_transfer import transfer_folder
+        from blink.history import session_conversation_key
+        return transfer_folder(ApplicationData.get('file_transfers'), str(self.account.id), session_conversation_key(self), self.id)
 
     def _own_copy(self, filename):
         """The file is sent from a copy of its own, in the message's folder (file_transfers/<account>/
@@ -4820,10 +4861,8 @@ class BlinkFileTransfer(BlinkSessionBase):
         file, or to the file of a message it was forwarded from, so either can be deleted or changed
         without touching it, and deleting the message deletes only its copy. The encrypted .asc is
         made next to the copy."""
-        from blink.file_transfer import transfer_filename, transfer_folder
-        from blink.history import session_conversation_key
-        key = session_conversation_key(self)
-        directory = transfer_folder(ApplicationData.get('file_transfers'), str(self.account.id), key, self.id)
+        from blink.file_transfer import transfer_filename
+        directory = self._transfer_folder()
         target = os.path.join(directory, transfer_filename(os.path.basename(filename)))
         if os.path.realpath(filename) == os.path.realpath(target):
             return filename         # a retry: already the copy
@@ -4871,7 +4910,8 @@ class BlinkFileTransfer(BlinkSessionBase):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferNewOutgoing', self)
 
-        if self._stat.st_size < (MAX_ENCRYPT_BYTES if self.route == 'http' else 26214400):
+        # PGP is for files sent over HTTP only, as for messages; MSRP files go as they are
+        if self.route == 'http' and self._stat.st_size < MAX_ENCRYPT_BYTES:
             stream = StreamDescription('messages')
             message_stream = stream.create_stream()
             message_stream.blink_session = self
@@ -5145,8 +5185,8 @@ class BlinkFileTransfer(BlinkSessionBase):
             self.stream = MediaStreamRegistry.FileTransferStream(self.file_selector, 'recvonly', transfer_id=self.id)
         self.handler = self.stream.handler
 
-        if not self.conference_file:
-            directory = ApplicationData.get(f'downloads/{self.id}')
+        if self.transfer_type == 'pull':
+            directory = self._transfer_folder()      # a conference's file too, under the room
             makedirs(directory)
             self.handler.save_directory = directory
 
@@ -5187,33 +5227,6 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.state = 'encrypted'
         self.connect()
 
-    def _NH_PGPFileDidDecrypt(self, notification):
-        if notification.sender is not self:
-            return
-
-        notification.center.remove_observer(self, name='PGPFileDidDecrypt')
-        notification.center.remove_observer(self, name='PGPFileDidNotDecrypt')
-
-        self.file_selector.name = notification.data.filename
-        notification.center.post_notification('BlinkFileTransferDidDecrypt',
-                                              sender=self,
-                                              data=NotificationData(reason='File decrypted', filename=notification.data.filename, must_open=notification.data.must_open, id=notification.data.id))
-        if not notification.data.must_open:
-            self._terminate(failure_reason=None)
-
-    def _NH_PGPFileDidNotDecrypt(self, notification):
-        if notification.sender is not self:
-            return
-
-        notification.center.remove_observer(self, name='PGPFileDidDecrypt')
-        notification.center.remove_observer(self, name='PGPFileDidNotDecrypt')
-
-        self.file_selector.name = notification.data.filename
-        notification.center.post_notification('BlinkFileTransferDidNotDecrypt',
-                                              sender=self,
-                                              data=NotificationData(reason='File not decrypted'))
-        self._terminate(failure_reason=notification.data.error)
-
     def _NH_MediaStreamDidInitialize(self, notification):
         notification.center.post_notification('BlinkFileTransferDidInitialize', sender=self)
 
@@ -5241,26 +5254,7 @@ class BlinkFileTransfer(BlinkSessionBase):
             self._terminate(failure_reason=failure_reason)
             return
 
-        if self.file_selector.name.endswith('.asc') and not notification.data.error:
-            stream = StreamDescription('messages')
-            message_stream = stream.create_stream()
-            message_stream.blink_session = self
-            if self.account.sms.enable_pgp and self.account.sms.private_key is not None and os.path.exists(self.account.sms.private_key.normalized):
-                message_stream.enable_pgp()
-
-            if message_stream.can_decrypt:
-                state = SessionState('decrypting')
-                state.reason = ''
-                state.error = None
-                self.state = state
-
-            notification_center = NotificationCenter()
-            notification_center.add_observer(self, name='PGPFileDidDecrypt')
-            notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
-
-            message_stream.decrypt_file(self.file_selector.name, self, id=self.id)
-            return
-
+        # no PGP over MSRP: the transport is TLS, there is no end to end encryption of files
         self._terminate(failure_reason=failure_reason)
 
 

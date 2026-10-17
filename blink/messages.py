@@ -56,7 +56,7 @@ from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.uris import bare_instance_id, canonical_uri, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 
-__all__ = ['MessageManager', 'BlinkMessage']
+__all__ = ['MessageManager', 'BlinkMessage', 'msrp_message_id', 'send_msrp_message']
 
 dns_error_map = {dns.resolver.NXDOMAIN: 'Domain not found in DNS',
                  dns.resolver.NoAnswer: 'DNS response contains no answer',
@@ -371,6 +371,38 @@ class BlinkMessage(MSRPChatMessage):
         self.is_secure = is_secure
         self.direction = direction
         self.metadata = metadata    # cleartext side-band (CPIM agp.Metadata, journal metadata): location v2, call records
+
+
+# MSRP chat messages are kept in history like SIP messages, by the same id on both ends: the
+# sender puts it in the CPIM imdn.Message-ID header (send_msrp_message), the receiver reads it
+# from there (msrp_message_id). The MSRP message-id is the same value, so delivery reports find
+# the row; it is at most 32 characters (RFC 4975), hence an uuid without dashes.
+
+def msrp_message_id(message):
+    """The id of a received MSRP chat message: its imdn.Message-ID, else one made from what it
+    is (sender, time, content), the same for everyone who asks (history and the MSRP window)."""
+    for header in getattr(message, 'additional_headers', None) or ():
+        if header.name == 'Message-ID' and header.value:
+            return str(header.value)
+    content = message.content if isinstance(message.content, bytes) else str(message.content or '').encode('utf-8', 'replace')
+    import hashlib
+    digest = hashlib.sha1(b'%s|%s|%s|' % (str(message.sender.uri if message.sender is not None else '').encode(), str(message.timestamp).encode(), str(message.content_type).encode()) + content).hexdigest()
+    return str(uuid.UUID(digest[:32]).hex)
+
+
+def send_msrp_message(chat_stream, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None):
+    """Send a chat message over MSRP with an id of ours (also its imdn.Message-ID when the stream
+    wraps it in CPIM; a header would force CPIM on a peer without it and fail), returned."""
+    from msrplib.session import contains_mime_type
+    from sipsimple.streams.msrp.chat import QueuedMessage
+    message_id = uuid.uuid4().hex
+    headers = [header for header in (additional_headers or ()) if header.name != 'Message-ID']
+    if getattr(chat_stream, 'cpim_enabled', False) and contains_mime_type(getattr(chat_stream, 'remote_accept_wrapped_types', None) or [], content_type):
+        headers.append(CPIMHeader('Message-ID', CPIMNamespace('urn:ietf:params:imdn', 'imdn'), message_id))
+    message = QueuedMessage(content, content_type, recipients=recipients, courtesy_recipients=courtesy_recipients, subject=subject, timestamp=timestamp,
+                            required=required, additional_headers=headers, id=message_id, notify_progress=True)
+    chat_stream._enqueue_message(message)
+    return message_id
 
 
 class OTRInternalMessage(BlinkMessage):

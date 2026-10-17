@@ -207,6 +207,7 @@ class MessagePane(QWidget):
         self.header.show()
         cached = view_key in self.models
         self.transcript.bubble_delegate.peer_avatar = self.header.avatar.draw
+        self._set_conference_mode(key)
         model = self._model(view_key, key)
         self._follow_model(model)
         self.transcript.setModel(model)
@@ -221,6 +222,26 @@ class MessagePane(QWidget):
         also = [other for other in view_key if other != key]
         ActivityLog().info(f'[Message with {key}] Conversation selected in the message pane ({uri.uri}, {how})' + (f', with the messages of {", ".join(also)}' if also else ''))
         self._update_auto_download_button()
+
+    def _set_conference_mode(self, key):
+        """A conference room's messages are the room's conversation but written by its participants:
+        each turn is one participant's, with their name and avatar (from the row's sender, the CPIM
+        From history keeps), not the room's."""
+        from blink.sessions import is_conference_uri
+        delegate = self.transcript.bubble_delegate
+        try:
+            conference = is_conference_uri(key)
+        except Exception:
+            conference = False
+        if conference == delegate.group_by_sender:
+            return
+        if conference:
+            from blink.messagepane.chat import SenderAvatars
+            self._participants = getattr(self, '_participants', None) or SenderAvatars()
+            delegate.sender_avatar, delegate.sender_name, delegate.group_by_sender = self._participants.draw, self._participants.name, True
+        else:
+            delegate.sender_avatar, delegate.sender_name, delegate.group_by_sender = None, None, False
+        delegate.clear_cache()
 
     @staticmethod
     def _contact_keys(contact, key):

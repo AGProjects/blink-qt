@@ -95,6 +95,7 @@ class HistoryManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkGotHistoryConversationRemove')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkHTTPFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkSessionDidShareFile')
         notification_center.add_observer(self, name='BlinkMessageContactsDidChange')
         notification_center.add_observer(self, name='MessageContactsManagerDidActivate')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
@@ -241,15 +242,38 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history.add_call_history_entry(entry, session, status=notification.data.code, failure_reason=notification.data.failure_reason)
 
     def _NH_ChatStreamGotMessage(self, notification):
+        """An MSRP chat message is kept like a SIP message (MessageHistory.add_from_session), by the id
+        both ends know it by (msrp_message_id); a picture sent inside it becomes a file of its own,
+        a file transfer row (save_inline_image). A conference's status lines are not kept; one of
+        our own messages the room plays back (another device of ours, or the room's backlog when
+        joining) is kept as outgoing, once."""
+        from blink.messages import msrp_message_id
         message = notification.data.message
-
-        if notification.sender.blink_session.remote_focus and self.sip_prefix_re.sub('', str(message.sender.uri)) not in notification.sender.blink_session.server_conference.participants:
-            return
+        blink_session = notification.sender.blink_session
 
         is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
-        if not is_status_message:
-            blink_message = BlinkMessage(**{slot: getattr(message, slot) for slot in message.__slots__})
-            self.message_history.add_from_session(notification.sender.blink_session, blink_message, 'incoming', 'delivered')
+        if is_status_message:
+            return
+        message_id = msrp_message_id(message)
+        content, content_type = message.content, message.content_type
+        if str(content_type).lower().startswith('image/'):
+            from blink.messagepane.chat import save_inline_image
+            import base64
+            try:
+                data = content if isinstance(content, bytes) else base64.b64decode(content.strip())
+            except (ValueError, TypeError):
+                return
+            content = save_inline_image(message_id, content_type, data)
+            if content is None:
+                return
+            content_type = FILE_TRANSFER_CONTENT_TYPE
+        elif isinstance(content, bytes):
+            content = content.decode('utf-8', 'replace')
+        sender = self.sip_prefix_re.sub('', str(message.sender.uri)) if message.sender is not None else ''
+        direction = 'outgoing' if blink_session.account is not None and sender == str(blink_session.account.id) else 'incoming'
+        blink_message = BlinkMessage(content, content_type, message.sender, message.recipients, message.courtesy_recipients, message.subject,
+                                     message.timestamp, message.required, message.additional_headers, id=message_id, direction=direction)
+        self.message_history.add_from_session(blink_session, blink_message, direction, 'delivered' if direction == 'incoming' else 'accepted')
 
     def _NH_ChatStreamWillSendMessage(self, notification):
         self.message_history.add_from_session(notification.sender, notification.data, 'outgoing')
@@ -398,6 +422,48 @@ class HistoryManager(object, metaclass=Singleton):
             if type(notification.sender) is not BlinkSession:
                 # this was a HTTP transfer
                 self.download_history.add(notification.sender)
+                self._store_msrp_transfer(notification.sender)
+
+    def _store_msrp_transfer(self, transfer):
+        """A file sent or received over MSRP is a message in history, as one over HTTP is: a file
+        transfer row (local only) whose file is in the transfer's folder. A pull fetched a file a
+        conference told of: its row was made then (_NH_BlinkSessionDidShareFile)."""
+        if getattr(transfer, 'route', 'msrp') != 'msrp' or getattr(transfer, 'transfer_type', 'push') != 'push' or transfer.account is None:
+            return
+        selector = transfer.file_selector
+        if selector is None or not selector.name:
+            return
+        key = session_conversation_key(transfer)
+        from blink.sessions import is_conference_uri
+        conference = transfer.contact_uri is not None and is_conference_uri(str(transfer.contact_uri.uri), transfer.account)
+        try:
+            size = os.path.getsize(selector.name)
+        except OSError:
+            size = selector.size
+        envelope = msrp_file_envelope(selector.name, size, getattr(selector, 'type', None), transfer.id, selector.hash, room=key if conference else None)
+        if transfer.direction == 'outgoing':
+            sender_uri, display_name = str(transfer.account.id), transfer.account.display_name or ''
+        else:
+            sender_uri = self.sip_prefix_re.sub('', str(transfer.contact_uri.uri)) if transfer.contact_uri is not None else key
+            display_name = getattr(transfer.contact, 'name', '') or ''
+        self.message_history.add_msrp_file(transfer.account, key, transfer.id, transfer.direction, envelope, sender_uri, display_name, selector.hash)
+
+    def _NH_BlinkSessionDidShareFile(self, notification):
+        """A file a conference room tells of (conference-info) is a message of the room in history,
+        once; one of ours (sent from here, or another device of ours) is outgoing."""
+        if not getattr(notification.data, 'conference', False):
+            return
+        file = notification.data.file
+        session = notification.sender
+        if session.account is None:
+            return
+        key = session_conversation_key(session)
+        sender_uri = getattr(file, 'sender_uri', '') or ''
+        direction = 'outgoing' if sender_uri == str(session.account.id) else 'incoming'
+        display_name = getattr(file.contact, 'name', '') or sender_uri
+        file_id = (own_room_upload_id(session, file.hash) if direction == 'outgoing' else None) or file.id
+        envelope = msrp_file_envelope(file.name, file.size, None, file_id, file.hash, room=key)
+        self.message_history.add_msrp_file(session.account, key, file_id, direction, envelope, sender_uri, display_name, file.hash)
 
     def _NH_BlinkHTTPFileTransferDidEnd(self, notification):
         self.download_history.add_file(notification.sender, notification.data.file)
@@ -623,6 +689,47 @@ def session_conversation_key(session, account=None):
         return instance_id
     address = str(contact_uri.uri) if contact_uri is not None else ''
     return conversation_key(address, account if account is not None else getattr(session, 'account', None))
+
+
+def msrp_hash(value):
+    """An MSRP file hash (sha-1:AB:CD:...) as lowercase hex, to compare hashes however they are spelled."""
+    return re.sub('[^0-9a-f]', '', str(value or '').lower().rpartition('sha-1:')[2] if 'sha-1:' in str(value or '').lower() else str(value or '').lower())
+
+
+def msrp_room_file_id(room, file_hash):
+    """The id of a file a conference room tells of (conference-info): the same every time it does,
+    for the files list, its row in history and its folder."""
+    return uuid.uuid5(uuid.NAMESPACE_URL, f'msrp-file:{room}:{msrp_hash(file_hash)}').hex
+
+
+def own_room_upload_id(blink_session, file_hash):
+    """The id of our own upload still going to this conference room with this hash, if the room tells
+    of the file before the transfer has ended: its row and bubble take the transfer's id (its file is there)."""
+    from blink.sessions import SessionManager
+    wanted = msrp_hash(file_hash)
+    if not wanted:
+        return None
+    room = session_conversation_key(blink_session)
+    for transfer in list(SessionManager().file_transfers):
+        selector = getattr(transfer, 'file_selector', None)
+        if (transfer.direction == 'outgoing' and getattr(transfer, 'transfer_type', 'push') == 'push' and selector is not None and selector.hash
+                and msrp_hash(selector.hash) == wanted and session_conversation_key(transfer) == room):
+            return transfer.id
+    return None
+
+
+def msrp_file_envelope(name, size, file_type, transfer_id, file_hash=None, room=None):
+    """The file transfer envelope of a file sent or received over MSRP: as one over HTTP, without
+    a url (the file is on this device only); a conference's carries the room and the hash it is
+    pulled by (blink.messagepane.fetch)."""
+    import mimetypes
+    envelope = {'filename': os.path.basename(str(name)), 'filesize': int(size or 0), 'transfer_id': str(transfer_id),
+                'filetype': file_type or mimetypes.guess_type(str(name))[0] or 'application/octet-stream', 'msrp': True}
+    if file_hash:
+        envelope['hash'] = str(file_hash)
+    if room:
+        envelope['room'] = str(room)
+    return json.dumps(envelope)
 
 
 class DownloadHistory(object, metaclass=Singleton):
@@ -2704,6 +2811,43 @@ class MessageHistory(object, metaclass=Singleton):
 
     @classmethod
     @run_in_thread('db')
+    def add_msrp_file(cls, account, remote_uri, message_id, direction, envelope, sender_uri, display_name, file_hash=None):
+        """The row of a file sent or received over MSRP (HistoryManager._store_msrp_transfer, and the
+        files a conference room tells of). Once per file: by its id, and in a conversation by its hash
+        (one's own upload to a room comes back in the room's conference-info under another id)."""
+        if file_hash:
+            wanted = msrp_hash(file_hash)
+            for row in Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.content_type == FILE_TRANSFER_CONTENT_TYPE)):
+                meta = file_transfer_envelope(row.content) or {}
+                if meta.get('msrp') and meta.get('hash') and msrp_hash(meta['hash']) == wanted:
+                    return
+        uri = sender_uri if str(sender_uri).startswith(('sip:', 'sips:')) else f'sip:{sender_uri}'
+        state = 'delivered' if direction == 'outgoing' else 'received'
+        optional_fields = {'state': state, 'read': cls._initial_read(direction, FILE_TRANSFER_CONTENT_TYPE, state), 'media_type': 'chat'}
+        optional_fields.update(cls._content_fields(FILE_TRANSFER_CONTENT_TYPE, envelope))
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+        try:
+            Message(remote_uri=remote_uri,
+                    display_name=display_name or '',
+                    uri=uri,
+                    content=envelope,
+                    content_type=FILE_TRANSFER_CONTENT_TYPE,
+                    message_id=str(message_id),
+                    account_id=str(account.id),
+                    direction=direction,
+                    timestamp=timestamp,
+                    decrypted='0',
+                    decryption_error='',
+                    disposition='',
+                    **optional_fields)
+        except dberrors.DuplicateEntryError:
+            return
+        log.info(f'MSRP file transfer {message_id} {"to" if direction == "outgoing" else "from"} {remote_uri} stored')
+        cls._revive_or_bury(str(message_id), remote_uri, timestamp)
+        NotificationCenter().post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=direction))
+
+    @classmethod
+    @run_in_thread('db')
     def add_from_session(cls, session, message, direction, state=None):
         if message.content.startswith('?OTRv'):
             return
@@ -2724,6 +2868,15 @@ class MessageHistory(object, metaclass=Singleton):
 
         if direction == 'outgoing':
             display_name = message.sender.display_name
+        elif getattr(session, 'remote_focus', False) or getattr(session, 'is_conference', False):
+            # a conference: the conversation is the room, the name is the participant's who wrote it
+            sender_uri = re.sub('^sips?:', '', str(message.sender.uri))
+            try:
+                contact = next(contact for contact in AddressbookManager().get_contacts() if sender_uri in (addr.uri for addr in contact.uris))
+            except StopIteration:
+                display_name = message.sender.display_name or ''
+            else:
+                display_name = message.sender.display_name or contact.name
         else:
             try:
                 contact = next(contact for contact in AddressbookManager().get_contacts() if remote_uri in (addr.uri for addr in contact.uris))
@@ -2744,6 +2897,7 @@ class MessageHistory(object, metaclass=Singleton):
         optional_fields.update(cls._content_fields(message.content_type, message.content))
         optional_fields.update(cls._related_fields(message.content_type, message.content, getattr(message, 'metadata', None)))
         if session.chat_type is not None:
+            optional_fields['media_type'] = 'chat'      # over MSRP, as Blink for macOS files it: it can not be removed at the other end
             chat_info = session.info.streams.chat
 
             if chat_info.encryption is not None and chat_info.transport == 'tls':

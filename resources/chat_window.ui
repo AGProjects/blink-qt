@@ -2211,91 +2211,12 @@ QToolButton:hover {
        <property name="tabPosition">
         <enum>QTabWidget::South</enum>
        </property>
-       <property name="currentIndex">
-        <number>0</number>
-       </property>
        <property name="documentMode">
         <bool>true</bool>
        </property>
        <property name="movable">
         <bool>true</bool>
        </property>
-       <widget class="QWidget" name="tab">
-        <attribute name="title">
-         <string>Page</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="tab_layout">
-         <property name="spacing">
-          <number>3</number>
-         </property>
-         <property name="leftMargin">
-          <number>0</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <property name="rightMargin">
-          <number>0</number>
-         </property>
-         <property name="bottomMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="ChatWebView" name="chat_view" native="true">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>64</height>
-            </size>
-           </property>
-           <property name="focusPolicy">
-            <enum>Qt::NoFocus</enum>
-           </property>
-           <property name="url" stdset="0">
-            <url>
-             <string>about:blank</string>
-            </url>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="ChatTextInput" name="chat_input">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>50</height>
-            </size>
-           </property>
-           <property name="styleSheet">
-            <string notr="true">QTextEdit {
-	margin: 4px 5px 4px 5px;
-	border: 1px inset palette(dark);
-	border-radius: 3px;
-}
-</string>
-           </property>
-           <property name="verticalScrollBarPolicy">
-            <enum>Qt::ScrollBarAlwaysOff</enum>
-           </property>
-           <property name="horizontalScrollBarPolicy">
-            <enum>Qt::ScrollBarAlwaysOff</enum>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
       </widget>
      </widget>
     </item>
@@ -2317,21 +2238,6 @@ QToolButton:hover {
    <class>ContactState</class>
    <extends>QLabel</extends>
    <header>blink.widgets.labels</header>
-  </customwidget>
-  <customwidget>
-   <class>QWebView</class>
-   <extends>QWidget</extends>
-   <header location="global">QtWebKitWidgets/QWebView</header>
-  </customwidget>
-  <customwidget>
-   <class>ChatTextInput</class>
-   <extends>QTextEdit</extends>
-   <header>blink.chatwindow</header>
-  </customwidget>
-  <customwidget>
-   <class>ChatWebView</class>
-   <extends>QWebView</extends>
-   <header>blink.chatwindow</header>
   </customwidget>
   <customwidget>
    <class>DurationLabel</class>
@@ -2362,7 +2268,6 @@ QToolButton:hover {
   </customwidget>
  </customwidgets>
  <tabstops>
-  <tabstop>chat_input</tabstop>
   <tabstop>control_button</tabstop>
   <tabstop>mute_button</tabstop>
   <tabstop>hold_button</tabstop>

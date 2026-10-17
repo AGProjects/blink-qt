@@ -104,6 +104,8 @@ def own_location_request(item):
 
 def plain_summary(item):
     """One line for a row until it has a bubble of its own: the text, or what kind of message it is."""
+    if getattr(item, 'note', False):
+        return ' '.join(str(item.content or '').split())       # a line the client writes itself (the MSRP window's status lines)
     note = location_note(item) if item.category is None else None
     if note is not None:
         return note
@@ -149,6 +151,8 @@ def is_system_note(text):
 def bubble_kind(item):
     """How a row is drawn: 'text' (a bubble with the body), 'encrypted' (a bubble saying so),
     'note' (a centred line), or 'summary' (a bubble with what kind of message it is)."""
+    if getattr(item, 'note', False):
+        return 'note'
     if item.category != 'text':
         return 'note' if item.category is None and location_note(item) is not None else 'summary'
     content = item.content if isinstance(item.content, str) else (item.content or b'').decode('utf-8', 'replace')

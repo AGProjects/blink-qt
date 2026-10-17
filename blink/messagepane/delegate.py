@@ -75,6 +75,9 @@ class BubbleDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.peer_avatar = None         # callable(painter, rect): draws the peer's avatar
+        self.sender_avatar = None       # callable(painter, rect, item): draws the avatar of a message's sender, before peer_avatar
+        self.sender_name = None         # callable(item): the name over a turn of a message's sender, instead of its display_name
+        self.group_by_sender = False    # a conference: a turn is one participant's (blink.messagepane.chat.sender_key)
         self.progress_of = None         # callable(message id) -> download fraction or None
         self._cache = {}
 
@@ -100,6 +103,10 @@ class BubbleDelegate(QStyledItemDelegate):
             return True
         if bubble_kind(previous) == 'note':
             return True
+        if self.group_by_sender:
+            from blink.messagepane.chat import sender_key
+            if sender_key(previous) != sender_key(item):
+                return True     # another participant of the conference
         if previous.timestamp.astimezone().date() != item.timestamp.astimezone().date():
             return True
         return item.timestamp - previous.timestamp > self.turn_interval
@@ -177,7 +184,10 @@ class BubbleDelegate(QStyledItemDelegate):
                 layout.kind = kind = 'audio'
             else:
                 layout.kind = kind = 'pdf' if image_path and image_path.lower().endswith('.pdf') and pdf_available() else 'file'
-        layout.name_text = mangled_name(item.display_name or '', uri=item.uri or item.remote_uri or None) if run_start and not item.outgoing and kind != 'note' else ''
+        if run_start and not item.outgoing and kind != 'note':
+            layout.name_text = self.sender_name(item) if self.sender_name is not None else mangled_name(item.display_name or '', uri=item.uri or item.remote_uri or None)
+        else:
+            layout.name_text = ''
         small = self._small_font(font)
         document = QTextDocument()
         document.setDocumentMargin(0)
@@ -951,9 +961,12 @@ class BubbleDelegate(QStyledItemDelegate):
             painter.setPen(secondary)
             name_rect = QRectF(bubble.left() + self.padding_h, bubble.top() - QFontMetricsF(small).height() - 2, max(bubble.width(), 240), QFontMetricsF(small).height())
             painter.drawText(name_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.name_text)
-        if layout.run_start and not item.outgoing and self.peer_avatar is not None:
+        if layout.run_start and not item.outgoing and (self.sender_avatar or self.peer_avatar) is not None:
             avatar = QRectF(rect.left() + self.margin, bubble.top(), self.avatar_size, self.avatar_size)
-            self.peer_avatar(painter, avatar)
+            if self.sender_avatar is not None:
+                self.sender_avatar(painter, avatar, item)
+            else:
+                self.peer_avatar(painter, avatar)
 
         fill, text_colour = self._colours(palette, item.outgoing)
         if layout.mark_kind == 'failed':
@@ -1090,6 +1103,10 @@ class BubbleDelegate(QStyledItemDelegate):
         from blink.messagepane.files import file_info
         if file_info(item) is None or self.file_path(item):
             return False
+        from blink.message_envelopes import file_transfer_envelope
+        meta = file_transfer_envelope(item.content) or {}
+        if meta.get('msrp') and not (meta.get('room') and meta.get('hash')):
+            return False        # came over MSRP one to one: nowhere to fetch it from
         return self.progress_of is None or self.progress_of(item.id) is None
 
     def download_at(self, index, rect, position):

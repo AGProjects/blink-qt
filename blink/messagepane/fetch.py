@@ -56,13 +56,21 @@ class AutoFetcher(QObject):
         self.requested = set()      # message ids asked for in this run
         self._progress = {}         # message id: fraction
         self._files = {}            # File: message id
+        self._pulls = {}            # message id: True, for a file pulled over MSRP (its transfer has the message id)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(self.delay)
         self._timer.timeout.connect(self._fetch_visible)
         notification_center = NotificationCenter()
-        for name in ('BlinkHTTPTransferProgress', 'BlinkHTTPTransferFailed', 'BlinkHTTPTransferCompleted', 'BlinkFileTransferDidEnd'):
+        for name in ('BlinkHTTPTransferProgress', 'BlinkHTTPTransferFailed', 'BlinkHTTPTransferCompleted', 'BlinkFileTransferDidEnd', 'BlinkFileTransferProgress'):
             notification_center.add_observer(self, name=name)
+
+    def close(self):
+        """Stop following transfers (the widget it fetched for is going away)."""
+        self._timer.stop()
+        notification_center = NotificationCenter()
+        for name in ('BlinkHTTPTransferProgress', 'BlinkHTTPTransferFailed', 'BlinkHTTPTransferCompleted', 'BlinkFileTransferDidEnd', 'BlinkFileTransferProgress'):
+            notification_center.discard_observer(self, name=name)
 
     def schedule(self, *args):
         self._timer.start()
@@ -95,6 +103,10 @@ class AutoFetcher(QObject):
     def fetch(self, item, automatic=False, force=False):
         """Download a message's file. automatic: only within the limits (and quietly)."""
         meta = file_transfer_envelope(item.content) if item.content else None
+        if meta and meta.get('msrp'):
+            if not automatic:
+                self._pull(item, meta)
+            return          # over MSRP: only when asked for, from the room that has it
         if not meta or not meta.get('url') or not meta.get('filename'):
             return
         if local_file(item):
@@ -143,6 +155,27 @@ class AutoFetcher(QObject):
         ActivityLog().info(f'[transfer] Fetching {os.path.basename(file.name)} ({size or "?"} bytes) of message {item.id}' + (' (in view)' if automatic else ''))
         SessionManager().get_file_from_url(session, file, force=force)
 
+    def _pull(self, item, meta):
+        """A file a conference room told of, fetched from the room over MSRP by its hash (into the
+        folder its row expects). A file of a one to one MSRP transfer is only where it was received."""
+        if local_file(item):
+            return
+        if not meta.get('hash') or not meta.get('room') or not meta.get('filename'):
+            ActivityLog().info(f'[transfer] The file of message {item.id} came over MSRP and is not on this device: it cannot be fetched')
+            return
+        account = self.pane._account(item.account_id)
+        if account is None:
+            return
+        from blink.contacts import URIUtils
+        from blink.sessions import SessionManager
+        contact, contact_uri = URIUtils.find_contact(meta['room'])
+        self.requested.add(item.id)
+        self._progress[item.id] = 0.0
+        self._pulls[item.id] = True
+        self.changed.emit(item.id)
+        ActivityLog().info(f'[transfer] Fetching {meta["filename"]} of message {item.id} from {meta["room"]} over MSRP')
+        SessionManager().get_file(contact, contact_uri, meta['filename'], meta['hash'], item.id, account=account, conference_file=True)
+
     # Progress
 
     @run_in_gui_thread
@@ -159,6 +192,17 @@ class AutoFetcher(QObject):
             return
         total = notification.data.total_bytes or 0
         fraction = min(1.0, notification.data.bytes / total) if total else None
+        if fraction is not None and int(fraction * 20) != int((self._progress.get(message_id) or 0) * 20):
+            self._progress[message_id] = fraction
+            self.changed.emit(message_id)
+
+    def _NH_BlinkFileTransferProgress(self, notification):
+        message_id = getattr(notification.sender, 'id', None)
+        if message_id not in self._pulls:
+            return
+        total = getattr(notification.data, 'total_bytes', None) or 0
+        done = getattr(notification.data, 'bytes', None) or 0
+        fraction = min(1.0, done / total) if total else None
         if fraction is not None and int(fraction * 20) != int((self._progress.get(message_id) or 0) * 20):
             self._progress[message_id] = fraction
             self.changed.emit(message_id)
@@ -188,6 +232,7 @@ class AutoFetcher(QObject):
                 self.changed.emit(message_id)
             return
         self._progress.pop(message_id, None)
+        self._pulls.pop(message_id, None)
         for file, known in list(self._files.items()):
             if known == message_id:
                 del self._files[file]

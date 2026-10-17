@@ -1,43 +1,27 @@
-
-import bisect
 import base64
-import locale
 import os
 import re
 import uuid
-import sys
 import json
 import platform
 
-from html import escape as html_escape
-
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QBuffer, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QSizeF, QTimer, QUrl, pyqtSignal, QObject, QFileInfo, pyqtSlot
-from PyQt6.QtGui import QFont, QAction, QBrush, QColor, QIcon, QImageReader, QKeyEvent, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextCharFormat, QTextCursor, QTextDocument
+from PyQt6.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QFont, QAction, QBrush, QColor, QIcon, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextDocument
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineScript
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QSplitter, QDialog, QDialogButtonBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QTextEdit, QToolButton, QPlainTextEdit, QWidget, QSizePolicy
-from PyQt6.QtWidgets import QFileDialog, QFileIconProvider
+from PyQt6.QtWidgets import QApplication, QSplitter, QCheckBox, QLabel, QListView, QMenu, QStyle, QStyleOption, QStylePainter, QToolButton, QVBoxLayout, QWidget, QSizePolicy
+from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtWidgets import QMessageBox
 
-from abc import ABCMeta, abstractmethod
 from application.notification import IObserver, NotificationCenter, ObserverWeakrefProxy, NotificationData
 from application.python import Null, limit
-from application.python.descriptor import WriteOnceAttribute
 from application.python.types import MarkerType
 from application.system import makedirs
-from collections.abc import MutableSet
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from dateutil.tz import tzlocal
-from functools import partial
 from itertools import count
-from lxml import etree, html
-from lxml.html.clean import autolink
 
-from weakref import proxy
 from zope.interface import implementer
 
 
@@ -52,18 +36,26 @@ from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
 from blink.accounts import AccountModel, ActiveAccountModel
-from blink.configuration.datatypes import File, FileURL, GraphTimeScale
+from blink.avatars import avatar_color, avatar_initials
+from blink.configuration.datatypes import File, GraphTimeScale
 from blink.configuration.settings import BlinkSettings
+from blink.contact_mangler import mangled_name, mangling_enabled
 from blink.contacts import URIUtils
 from blink.history import HistoryManager
 from blink.logging import ActivityLog, MessagingTrace as log
 from blink.hidpi import svg_pixmap, sharpen_ui_pixmaps
-from blink.message_envelopes import CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE, call_needs_attention, call_record, call_summary, legacy_call_record, this_device_id
-from blink.messages import MessageManager, BlinkMessage
-from blink.resources import ApplicationData, IconManager, Resources
+from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPE, file_transfer_category, file_transfer_envelope
+from blink.messagepane.chat import ChatItem, ChatTranscriptModel, SenderAvatars, save_inline_image
+from blink.messagepane.composer import Composer
+from blink.messagepane.fetch import AutoFetcher
+from blink.messagepane.files import local_file
+from blink.messagepane.header import contact_photo, draw_avatar
+from blink.messagepane.view import TranscriptView
+from blink.messages import MessageManager, BlinkMessage, msrp_message_id, send_msrp_message
+from blink.resources import IconManager, Resources
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
-from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, FileSizeFormatter, IncomingDialogBase, RequestList, BlinkFileTransfer
-from blink.util import run_in_gui_thread, call_later, translate, copy_transfer_file
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, BlinkFileTransfer, conference_has_files, session_can_expand
+from blink.util import run_in_gui_thread, call_later, translate
 from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme
 from blink.widgets.graph import Graph
 from blink.widgets.otr import OTRWidget
@@ -83,253 +75,23 @@ __all__ = ['ChatWindow']
 class Container(object): pass
 
 
-# Chat style classes
-#
-
-class ChatStyleError(Exception): pass
-
-
-class ChatHtmlTemplates(object):
-    def __init__(self, style_path):
-        try:
-            self.message = open(os.path.join(style_path, 'html/message.html')).read()
-            self.message_continuation = open(os.path.join(style_path, 'html/message_continuation.html')).read()
-            self.notification = open(os.path.join(style_path, 'html/notification.html')).read()
-            self.status = open(os.path.join(style_path, 'html/message_status.html')).read()
-        except (OSError, IOError):
-            raise ChatStyleError("missing or unreadable chat message html template files in %s" % os.path.join(style_path, 'html'))
-
-
-class ChatMessageStyle(object):
-    def __init__(self, name):
-        self.name = name
-        self.path = Resources.get('chat/styles/%s' % name)
-        try:
-            xml_tree = etree.parse(os.path.join(self.path, 'style.xml'), parser=etree.XMLParser(resolve_entities=False))
-        except (etree.ParseError, OSError, IOError):
-            self.info = {}
-        else:
-            self.info = dict((element.tag, element.text) for element in xml_tree.getroot())
-        try:
-            self.variants = tuple(sorted(name[:-len('.css')] for name in os.listdir(self.path) if name.endswith('.css')))
-        except (OSError, IOError):
-            self.variants = ()
-        if not self.variants:
-            raise ChatStyleError("chat style %s contains no variants" % name)
-        self.html = ChatHtmlTemplates(self.path)
-
-    @property
-    def default_variant(self):
-        default_variant = self.info.get('default_variant')
-        return default_variant if default_variant in self.variants else self.variants[0]
-
-    @property
-    def font_family(self):
-        return self.info.get('font_family', 'sans-serif')
-
-    @property
-    def font_size(self):
-        try:
-            return int(self.info['font_size'])
-        except (KeyError, ValueError):
-            return 11
-
-
 # Chat content classes
 #
+# What the window adds to a session's transcript. The transcript is drawn by the
+# message pane's TranscriptView and BubbleDelegate (blink.messagepane), so an MSRP
+# session looks like a conversation in the message pane: each of these becomes a
+# ChatItem (blink.messagepane.chat) when it is added.
 
-class Link(object):
-    __slots__ = 'prev', 'next', 'key', '__weakref__'
-
-
-class OrderedSet(MutableSet):
-    def __init__(self, iterable=None):
-        self.__hardroot = Link()  # sentinel node for doubly linked list
-        self.__root = root = proxy(self.__hardroot)
-        root.prev = root.next = root
-        self.__map = {}
-        if iterable is not None:
-            self |= iterable
-
-    def __len__(self):
-        return len(self.__map)
-
-    def __contains__(self, key):
-        return key in self.__map
-
-    def __iter__(self):
-        root = self.__root
-        curr = root.next
-        while curr is not root:
-            yield curr.key
-            curr = curr.next
-
-    def __reversed__(self):
-        root = self.__root
-        curr = root.prev
-        while curr is not root:
-            yield curr.key
-            curr = curr.prev
-
-    def __repr__(self):
-        return '%s(%r)' % (self.__class__.__name__, list(self))
-
-    def add(self, key):
-        if key not in self.__map:
-            self.__map[key] = link = Link()
-            root = self.__root
-            last = root.prev
-            link.prev, link.next, link.key = last, root, key
-            last.next = link
-            root.prev = proxy(link)
-
-    def discard(self, key):
-        if key in self.__map:
-            link = self.__map.pop(key)
-            link_prev = link.prev
-            link_next = link.next
-            link_prev.next = link_next
-            link_next.prev = link_prev
-
-    def clear(self):
-        root = self.__root
-        root.prev = root.next = root
-        self.__map.clear()
-
-
-class ChatContentBooleanOption(object):
-    """Adds/removes name from css classes based on option being True/False"""
-
-    def __init__(self, name):
-        self.name = name
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        return self.name in instance.__cssclasses__
-
-    def __set__(self, obj, value):
-        if value:
-            obj.__cssclasses__.add(self.name)
-        else:
-            obj.__cssclasses__.discard(self.name)
-
-    def __delete__(self, obj):
-        raise AttributeError('attribute cannot be deleted')
-
-
-class AnyValue(metaclass=MarkerType): pass
-
-
-class ChatContentStringAttribute(object):
-    """A string attribute that is also added as a css class"""
-
-    def __init__(self, name, allowed_values=AnyValue):
-        self.name = name
-        self.allowed_values = allowed_values
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        try:
-            return instance.__dict__[self.name]
-        except KeyError:
-            raise AttributeError("'{}' attribute is not set".format(self.name))
-
-    def __set__(self, obj, value):
-        if self.allowed_values is not AnyValue and value not in self.allowed_values:
-            raise ValueError("invalid value for '{}': '{}'".format(self.name, value))
-        old_value = obj.__dict__.get(self.name, None)
-        obj.__cssclasses__.discard(old_value)
-        if value is not None:
-            obj.__cssclasses__.add(value)
-        obj.__dict__[self.name] = value
-
-    def __delete__(self, obj):
-        raise AttributeError('attribute cannot be deleted')
-
-
-class ChatContent(object, metaclass=ABCMeta):
-    __cssclasses__ = ()
-
-    continuation_interval = timedelta(0, 5 * 60)  # 5 minutes
-
-    history = ChatContentBooleanOption('history')
-    focus = ChatContentBooleanOption('focus')
-    consecutive = ChatContentBooleanOption('consecutive')
-    mention = ChatContentBooleanOption('mention')  # keep it here? or keep it at all? -Dan
-
+class ChatContent(object):
     def __init__(self, message, history=False, focus=False):
-        self.__cssclasses__ = OrderedSet(self.__class__.__cssclasses__)
         self.message = message
         self.history = history
         self.focus = focus
         self.timestamp = datetime.now()
 
-    @property
-    def css_classes(self):
-        return ' '.join(self.__cssclasses__)
-
-    @property
-    def date(self):
-        language, encoding = locale.getlocale(locale.LC_TIME)
-        return self.timestamp.strftime('%d %b %Y')
-
-    @property
-    def time(self):
-        language, encoding = locale.getlocale(locale.LC_TIME)
-        return self.timestamp.strftime('%H:%M')
-
-    @property
-    def text_direction(self):
-        try:
-            return self.__dict__['text_direction']
-        except KeyError:
-            document = QTextDocument()
-            document.setHtml(self.message)
-            return self.__dict__.setdefault('text_direction', 'rtl' if document.firstBlock().textDirection() == Qt.LayoutDirection.RightToLeft else 'ltr')
-
-    def add_css_class(self, name):
-        self.__cssclasses__.add(name)
-
-    def is_related_to(self, other):
-        return type(self) is type(other) and self.history == other.history and timedelta(0) <= self.timestamp - other.timestamp <= self.continuation_interval
-
-    @abstractmethod
-    def to_html(self, style, **kw):
-        raise NotImplementedError
-
-
-class ChatMessageStatus(ChatContent):
-    __cssclasses__ = ('status-icon',)
-
-    def __init__(self, status, iconpath, id):
-        super(ChatMessageStatus, self).__init__(status)
-        self.status = status
-        self.iconpath = QUrl.fromLocalFile(iconpath).toString()
-        self.id = id
-
-    def to_html(self, style, **kw):
-        return style.html.status.format(message=self, **kw)
-
 
 class ChatNotification(ChatContent):
-    __cssclasses__ = ('event',)
-
-    def to_html(self, style, **kw):
-        return style.html.notification.format(message=self, **kw)
-
-
-class ChatEvent(ChatNotification):
-    __cssclasses__ = ('event',)
-
-    direction = ChatContentStringAttribute('direction', allowed_values=('incoming', 'outgoing'))
-
-    def __init__(self, message, direction='incoming', history=False, focus=False, id=None, timestamp=None):
-        super(ChatEvent, self).__init__(message, history, focus)
-        self.direction = direction
-        self.id = str(uuid.uuid4()) if id is None else id
-        self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
+    """A centred line in the transcript."""
 
 
 def conference_takes_files(blink_session):
@@ -339,51 +101,32 @@ def conference_takes_files(blink_session):
 
 
 class ChatStatus(ChatNotification):
-    __cssclasses__ = ('status',)
+    pass
 
 
 class ChatMessage(ChatContent):
-    __cssclasses__ = ('message',)
+    """A message: message is its body as it was sent (content_type says what it is)."""
 
-    direction = ChatContentStringAttribute('direction', allowed_values=('incoming', 'outgoing'))
-    autoreply = ChatContentBooleanOption('autoreply')
-
-    def __init__(self, message, sender, direction, history=False, focus=False, id=None, timestamp=None, account=None):
+    def __init__(self, message, sender, direction, history=False, focus=False, id=None, timestamp=None, account=None, content_type='text/plain'):
         super(ChatMessage, self).__init__(message, history, focus)
         self.sender = sender
         self.direction = direction
         self.id = str(uuid.uuid4()) if id is None else id
         self.status = ''
         self.account = account
+        self.content_type = content_type
         self.timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
 
-    def is_related_to(self, other):
-        return super(ChatMessage, self).is_related_to(other) and self.sender == other.sender and self.direction == other.direction
 
-    def to_html(self, style, **kw):
-        if self.consecutive:
-            return style.html.message_continuation.format(message=self, **kw)
-        else:
-            return style.html.message.format(message=self, **kw)
-
-
-class ChatFile(ChatMessage): pass
+class ChatFile(ChatMessage):
+    """A file: message is its file transfer envelope (application/sylk-file-transfer JSON or RCS XML)."""
 
 
 class ChatSender(object):
-    __colors__ = ["aqua", "aquamarine", "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue", "crimson", "cyan", "darkblue", "darkcyan",
-                  "darkgoldenrod", "darkgreen", "darkgrey", "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred", "darksalmon", "darkseagreen", "darkslateblue",
-                  "darkslategrey", "darkturquoise", "darkviolet", "deeppink", "deepskyblue", "dimgrey", "dodgerblue", "firebrick", "forestgreen", "fuchsia", "gold", "goldenrod", "green",
-                  "greenyellow", "grey", "hotpink", "indianred", "indigo", "lawngreen", "lightblue", "lightcoral", "lightgreen", "lightgrey", "lightpink", "lightsalmon", "lightseagreen",
-                  "lightskyblue", "lightslategrey", "lightsteelblue", "lime", "limegreen", "magenta", "maroon", "mediumaquamarine", "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen",
-                  "mediumslateblue", "mediumspringgreen", "mediumturquoise", "mediumvioletred", "midnightblue", "navy", "olive", "olivedrab", "orange", "orangered", "orchid", "palegreen",
-                  "paleturquoise", "palevioletred", "peru", "pink", "plum", "powderblue", "purple", "red", "rosybrown", "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "sienna",
-                  "silver", "skyblue", "slateblue", "slategrey", "springgreen", "steelblue", "tan", "teal", "thistle", "tomato", "turquoise", "violet", "yellowgreen"]
-
-    def __init__(self, name, uri, iconpath):
+    def __init__(self, name, uri, iconpath=None):
         self.name = name
         self.uri = uri
-        self.iconpath = QUrl.fromLocalFile(iconpath).toString()
+        self.iconpath = iconpath
 
     def __eq__(self, other):
         if not isinstance(other, ChatSender):
@@ -392,80 +135,6 @@ class ChatSender(object):
 
     def __ne__(self, other):
         return not (self == other)
-
-    @property
-    def color(self):
-        return self.__colors__[hash(self.uri) % len(self.__colors__)]
-
-
-class ChatWebPage(QWebEnginePage):
-    linkClicked = pyqtSignal(QUrl)
-
-    def __init__(self, parent=None):
-        super(ChatWebPage, self).__init__(parent)
-        disable_actions = {QWebEnginePage.WebAction.OpenLinkInNewBackgroundTab, QWebEnginePage.WebAction.OpenLinkInNewTab, QWebEnginePage.WebAction.OpenLinkInNewWindow,
-                           QWebEnginePage.WebAction.OpenLinkInThisWindow,
-                           QWebEnginePage.WebAction.DownloadLinkToDisk, QWebEnginePage.WebAction.DownloadImageToDisk, QWebEnginePage.WebAction.DownloadMediaToDisk,
-                           QWebEnginePage.WebAction.Back, QWebEnginePage.WebAction.Forward, QWebEnginePage.WebAction.Stop, QWebEnginePage.WebAction.Reload,
-                           QWebEnginePage.WebAction.SavePage, QWebEnginePage.WebAction.ViewSource}
-        for action in (self.action(action) for action in disable_actions):
-            action.setVisible(False)
-
-    def acceptNavigationRequest(self, url, navigation_type, is_main_frame):  # not sure if needed since we already disabled the corresponding actions. (can they be triggered otherwise?)
-        if navigation_type in (QWebEnginePage.NavigationType.NavigationTypeBackForward, QWebEnginePage.NavigationType.NavigationTypeReload):
-            return False
-        elif navigation_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
-            self.linkClicked.emit(url)
-            return False
-        return super(ChatWebPage, self).acceptNavigationRequest(url, navigation_type, is_main_frame)
-
-
-class ChatWebView(QWebEngineView):
-    sizeChanged = pyqtSignal()
-    messageDelete = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super(ChatWebView, self).__init__(parent)
-        palette = self.palette()
-        palette.setBrush(QPalette.ColorRole.Base, Qt.GlobalColor.transparent)
-        self.setPalette(palette)
-        self.setPage(ChatWebPage(self))
-        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
-        self.last_message_id = None
-
-    def contextMenuEvent(self, event):
-        menu = self.createStandardContextMenu()
-        self.id = None
-        if self.last_message_id is not None:
-            if self.last_message_id.startswith('text-'):
-                self.id = self.last_message_id[5:]
-                action = menu.addAction('Delete Message')
-                action.triggered.connect(self._SH_DeleteClicked)
-
-            if self.last_message_id.startswith('message-'):
-                self.id = self.last_message_id[8:]
-                action = menu.addAction('Delete Message')
-                action.triggered.connect(self._SH_DeleteClicked)
-
-        if any(action.isVisible() and not action.isSeparator() for action in menu.actions()):
-            menu.aboutToHide.connect(self._SH_AboutToHide)
-            menu.exec(event.globalPos())
-
-    def createWindow(self, window_type):
-        return None
-
-    def dragEnterEvent(self, event):
-        event.ignore()  # let the parent process DND
-
-    def resizeEvent(self, event):
-        super(ChatWebView, self).resizeEvent(event)
-        self.sizeChanged.emit()
-
-    def _SH_DeleteClicked(self):
-        self.messageDelete.emit(self.id)
-
-    def _SH_AboutToHide(self):
-        self.last_message_id = None
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_input_lock.ui'))
@@ -494,6 +163,8 @@ class ChatInputLock(base_class, ui_class):
         painter.setRenderHint(QStylePainter.RenderHint.Antialiasing, True)
         painter.drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option)
 
+del ui_class, base_class
+
 
 class LockType(object, metaclass=MarkerType):
     note_text = None
@@ -505,188 +176,68 @@ class EncryptionLock(LockType):
     button_text = 'Confirm'
 
 
-class QTextEdit(QTextEdit):
-    """QPlainTextEdit with placeholder text option.
-    Reimplemented from the C++ code used in Qt5.
-    """
-    def __init__(self, *args, **kwargs):
-        super(QTextEdit, self).__init__(*args, **kwargs)
+class ChatComposer(Composer):
+    """The message pane's composer, with the locks of an MSRP chat: while locked (the other party
+    ended the encryption) a note over the text asks to confirm before anything more is typed."""
 
-        self._placeholderText = ''
-        self._placeholderVisible = False
-        self.textChanged.connect(self.placeholderVisible)
-
-    def placeholderVisible(self):
-        """Return if the placeholder text is visible, and force update if required."""
-        placeholderCurrentlyVisible = self._placeholderVisible
-        self._placeholderVisible = self._placeholderText and self.document().isEmpty() and not self.hasFocus()
-        if self._placeholderVisible != placeholderCurrentlyVisible:
-            self.viewport().update()
-        return self._placeholderVisible
-
-    def placeholderText(self):
-        """Return text used as a placeholder."""
-        return self._placeholderText
-
-    def setPlaceholderText(self, text):
-        """Set text to use as a placeholder."""
-        self._placeholderText = text
-        if self.document().isEmpty():
-            self.viewport().update()
-
-    def paintEvent(self, event):
-        """Override the paint event to add the placeholder text."""
-        if self.placeholderVisible():
-            painter = QPainter(self.viewport())
-            colour = self.palette().text().color()
-            colour.setAlpha(128)
-            painter.setPen(colour)
-            painter.setClipRect(self.rect())
-            margin = self.document().documentMargin()
-            textRect = self.viewport().rect().adjusted(int(margin), int(margin), 0, 0)
-            painter.drawText(textRect, Qt.TextFlag.TextSingleLine | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.placeholderText())
-
-        super(QTextEdit, self).paintEvent(event)
-
-class ChatTextInput(QTextEdit):
-    textEntered = pyqtSignal(str)
     lockEngaged = pyqtSignal(object)
     lockReleased = pyqtSignal(object)
 
     def __init__(self, parent=None):
-        super(ChatTextInput, self).__init__(parent)
-        self.setTabStopDistance(22)
-        self.lock_widget = ChatInputLock(self)
+        super(ChatComposer, self).__init__(parent)
+        self.lock_widget = ChatInputLock(self.input_row)
         self.lock_widget.hide()
         self.lock_widget.confirm_button.clicked.connect(self._SH_LockWidgetConfirmButtonClicked)
-        self.document().documentLayout().documentSizeChanged.connect(self._SH_DocumentLayoutSizeChanged)
         self.lock_queue = deque()
-        self.history = []
-        self.history_index = 0  # negative indexes with 0 indicating the text being typed.
-        self.stashed_content = None
-        self.setPlaceholderText(translate('chat_window', 'Write a message'))
 
     @property
     def empty(self):
-        document = self.document()
-        last_block = document.lastBlock()
-        return document.characterCount() <= 1 and not last_block.textList()
+        return not self.text().strip()
 
     @property
     def locked(self):
         return bool(self.lock_queue)
 
-    def dragEnterEvent(self, event):
-        event.ignore()  # let the parent process DND
+    def setPlaceholderText(self, text):
+        self.edit.setPlaceholderText(text)
 
-    def keyPressEvent(self, event):
-        key, modifiers = event.key(), event.modifiers()
-        if self.isReadOnly():
-            event.ignore()
-        elif key in (Qt.Key.Key_Enter, Qt.Key.Key_Return) and modifiers == Qt.KeyboardModifier.NoModifier:
-            document = self.document()
-            last_block = document.lastBlock()
-            if document.characterCount() > 1 or last_block.textList():
-                text = self.toHtml()
-                if not self.history or self.history[-1] != text:
-                    self.history.append(text)
-                self.history_index = 0
-                self.stashed_content = None
-                if document.blockCount() > 1 and not last_block.text() and not last_block.textList():
-                    # prevent an extra empty line being added at the end of the text
-                    cursor = self.textCursor()
-                    cursor.movePosition(cursor.MoveOperation.End)
-                    cursor.deletePreviousChar()
-                text = self.toHtml()
-                self.clear()
-                self.textEntered.emit(text)
-            event.accept()
-        elif key == Qt.Key.Key_Up and modifiers == Qt.KeyboardModifier.ControlModifier:
-            try:
-                history_entry = self.history[self.history_index - 1]
-            except IndexError:
-                pass
-            else:
-                if self.history_index == 0:
-                    self.stashed_content = self.toHtml()
-                self.history_index -= 1
-                self.setHtml(history_entry)
-            event.accept()
-        elif key == Qt.Key.Key_Down and modifiers == Qt.KeyboardModifier.ControlModifier:
-            if self.history_index == 0:
-                pass
-            elif self.history_index == -1:
-                self.history_index = 0
-                self.setHtml(self.stashed_content)
-                self.stashed_content = None
-            else:
-                self.history_index += 1
-                self.setHtml(self.history[self.history_index])
-            event.accept()
-        else:
-            QTextEdit.keyPressEvent(self, event)
-
-    def _SH_DocumentLayoutSizeChanged(self, new_size):
-        self.setFixedHeight(int(min(new_size.height() + self.contentsMargins().top() + self.contentsMargins().bottom(), self.parent().height() / 2)))
-
-    def _SH_LockWidgetConfirmButtonClicked(self):
-        self.lockReleased.emit(self.lock_queue.popleft())
-        if self.locked:
-            lock_type = self.lock_queue[0]
-            self.lock_widget.note_label.setText(lock_type.note_text)
-            self.lock_widget.confirm_button.setText(lock_type.button_text)
-            self.lockEngaged.emit(lock_type)
-        else:
-            self.lock_widget.hide()
-            self.setReadOnly(False)
+    def setFocus(self, *args):
+        self.edit.setFocus(*args)
 
     def lock(self, lock_type):
         if lock_type in self.lock_queue:
             raise ValueError("already locked with {}".format(lock_type))
         if not self.locked:
-            self.lock_widget.note_label.setText(lock_type.note_text)
-            self.lock_widget.confirm_button.setText(lock_type.button_text)
+            self._show_lock(lock_type)
+            self.lock_widget.setGeometry(self.input_row.contentsRect())
             self.lock_widget.show()
-            self.setReadOnly(True)
+            self.lock_widget.raise_()
+            self.edit.setReadOnly(True)
             self.lockEngaged.emit(lock_type)
         self.lock_queue.append(lock_type)
 
     def reset_locks(self):
-        self.setReadOnly(False)
+        self.edit.setReadOnly(False)
         self.lock_widget.hide()
         self.lock_queue.clear()
 
-    def clear(self):
-        super(ChatTextInput, self).clear()
-        self.setCurrentCharFormat(QTextCharFormat())  # clear() doesn't clear the text formatting, only the content
+    def _show_lock(self, lock_type):
+        self.lock_widget.note_label.setText(lock_type.note_text)
+        self.lock_widget.confirm_button.setText(lock_type.button_text)
 
-    def setHtml(self, text):
-        super(ChatTextInput, self).setHtml(text)
-        cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        self.setTextCursor(cursor)
+    def _SH_LockWidgetConfirmButtonClicked(self):
+        self.lockReleased.emit(self.lock_queue.popleft())
+        if self.locked:
+            lock_type = self.lock_queue[0]
+            self._show_lock(lock_type)
+            self.lockEngaged.emit(lock_type)
+        else:
+            self.lock_widget.hide()
+            self.edit.setReadOnly(False)
 
-
-class FileIcon(object):
-    def __new__(cls, filename):
-        icon = QFileIconProvider().icon(QFileInfo(filename))
-        image = icon.pixmap(32)
-        image_buffer = QBuffer()
-        image_format = 'png' if image.hasAlphaChannel() else 'jpeg'
-        image.save(image_buffer, image_format)
-        image_data = image_buffer.data()
-        instance = super(FileIcon, cls).__new__(cls)
-        instance.__dict__['data'] = image_data
-        instance.__dict__['type'] = 'image/{}'.format(image_format)
-        return instance
-
-    @property
-    def data(self):
-        return self.__dict__['data']
-
-    @property
-    def type(self):
-        return self.__dict__['type']
+    def _send(self):
+        if not self.locked:
+            super(ChatComposer, self)._send()
 
 
 class IconDescriptor(object):
@@ -707,429 +258,160 @@ class IconDescriptor(object):
         raise AttributeError("attribute cannot be deleted")
 
 
-class AudioDescriptor(object):
-    def __new__(cls, filename):
-        basename = os.path.basename(filename)
-        if basename.startswith('sylk-audio-recording'):
-            instance = super(AudioDescriptor, cls).__new__(cls)
-        else:
-            instance = None
-        return instance
-
-
-class Thumbnail(object):
-    def __new__(cls, filename):
-        image_reader = QImageReader(filename)
-        if image_reader.canRead() and image_reader.size().isValid():
-            if image_reader.supportsAnimation() and image_reader.imageCount() > 1:
-                image_format = str(image_reader.format())
-                image_data = image_reader.device().read()
-            else:
-                file_format = str(image_reader.format())
-                file_size = image_reader.device().size()
-                image_size = image_reader.size()
-                if image_size.height() > 720:
-                    image_reader.setScaledSize(image_size * 720 / image_size.height())
-                image = QPixmap.fromImageReader(image_reader)
-                image_buffer = QBuffer()
-                image_format = 'png' if image.hasAlphaChannel() or (file_format in {'png', 'tiff', 'ico'} and file_size <= 100 * 1024) else 'jpeg'
-                image.save(image_buffer, image_format)
-                image_data = image_buffer.data()
-            instance = super(Thumbnail, cls).__new__(cls)
-            instance.__dict__['data'] = image_data
-            instance.__dict__['type'] = 'image/{}'.format(image_format)
-        else:
-            instance = None
-        return instance
-
-    @property
-    def data(self):
-        return self.__dict__['data']
-
-    @property
-    def type(self):
-        return self.__dict__['type']
-
-
-class FileDescriptor(object):
-    filename  = WriteOnceAttribute()
-    thumbnail = WriteOnceAttribute()
-
-    def __init__(self, filename):
-        self.filename = filename
-        self.thumbnail = Thumbnail(filename)
-
-    def __hash__(self):
-        return hash(self.filename)
-
-    def __eq__(self, other):
-        if isinstance(other, FileDescriptor):
-            return self.filename == other.filename
-        return NotImplemented
-
-    def __ne__(self, other):
-        return not (self == other)
-
-    def __repr__(self):
-        return 'FileDescriptor({})'.format(self.filename)
-
-    @property
-    def fileurl(self):
-        return QUrl.fromLocalFile(self.filename).toString()
-
-
-class ChatJSInterface(QObject):
-    contextMenuEvent = pyqtSignal(str)
-    js_file = open(Resources.get('chat/js_helper_functions.js')).read()
-
-    def __init__(self, page, parent=None):
-        super(ChatJSInterface, self).__init__(parent)
-        self.page = page
-        self.loaded = False
-        self._js_operations_queue = deque()
-        self.channel = QWebChannel()
-        self.channel.registerObject('chat', self)
-        self.page.setWebChannel(self.channel)
-        # self.page.profile().scripts().insert(self._get_script())
-
-    # Somehow the script gets inserted in every page, for now we load it from html
-    def _get_script(self):
-        script = QWebEngineScript()
-        script.setSourceCode(self.js_file)
-        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
-        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
-        script.setRunsOnSubFrames(True)
-        return script
-
-    @pyqtSlot(bool)
-    def _JH_LoadFinished(self, ok):
-        if ok:
-            self.loaded = True
-            self._run_js()
-
-    def _js_operation(self, operation):
-        self._js_operations_queue.append(operation)
-        self._run_js()
-
-    def _run_js(self):
-        if not self.loaded:
-            return
-        while self._js_operations_queue:
-            operation = self._js_operations_queue.popleft()
-            if isinstance(operation, tuple):
-                self.page.runJavaScript(*operation)
-            else:
-                self.page.runJavaScript(operation)
-
-    def append_element(self, query, content):
-        content = json.dumps(content)
-        self._js_operation(f"appendElement('{query}', {content})")
-
-    def update_element(self, query, content):
-        content = json.dumps(content)
-        self._js_operation(f"updateElement('{query}', {content})")
-
-    def replace_element(self, query, content):
-        content = json.dumps(content)
-        self._js_operation(f"replaceElement('{query}', {content})")
-
-    def remove_element(self, query):
-        self._js_operation(f"removeElement('{query}')")
-
-    def empty_element(self, query):
-        self._js_operation(f"emptyElement('{query}')")
-
-    def previous_sibling(self, query, content):
-        content = json.dumps(content)
-        self._js_operation(f"previousSibling('{query}', {content})")
-
-    def insert_as_parent(self, query, content, new_consecutive):
-        content = json.dumps(content)
-        new_consecutive = json.dumps(new_consecutive)
-        self._js_operation(f"insertAsParent('{query}', {content}, {new_consecutive})")
-
-    def prepend_outside_element(self, query, content):
-        content = json.dumps(content)
-        self._js_operation(f"prependOutside('{query}', {content})")
-
-    def append_outside_element(self, query, content):
-        content = json.dumps(content)
-        self._js_operation(f"appendOutside('{query}', {content})")
-
-    def set_style_property_element(self, query, property, value):
-        self._js_operation(f"styleElement('{query}', '{property}', '{value}')")
-
-    def get_height_element(self, query, callback):
-        self._js_operation((f"getHeightElement('{query}')", callback))
-
-    def scroll_to_bottom(self):
-        self._js_operation('scrollToBottom()')
-
-    def append_message_to_chat(self, content, id=None):
-        content = json.dumps(content)
-        self._js_operation(f"appendMessageToChat({content})")
-        if id:
-            self.add_context_menu(id)
-
-    def add_context_menu(self, id):
-        if id is not None:
-            self._js_operation(f"addContextMenuToElement('#message-{id}')")
-
-    @pyqtSlot(str)
-    def handleContextMenuEvent(self, id):
-        if id != '':
-            self.contextMenuEvent.emit(id)
-
-
-ui_class, base_class = uic.loadUiType(Resources.get('delete_message_dialog.ui'))
-
-
-class DeleteMessageDialog(IncomingDialogBase, ui_class):
-    def __init__(self, parent=None):
-        super(DeleteMessageDialog, self).__init__(parent)
-
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        with Resources.directory:
-            self.setupUi(self)
-
-        self.delete_button = self.dialog_button_box.addButton(translate("delete_message_dialog", "Delete"), QDialogButtonBox.ButtonRole.AcceptRole)
-        self.delete_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
-        self.delete_button.setStyleSheet("""
-                                         border-color: #800000;
-                                         color: #800000;
-                                         """)
-        self.slot = None
-
-    def show(self, activate=True):
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
-        super(DeleteMessageDialog, self).show()
-
-
-class DeleteMessageRequest(QObject):
-    finished = pyqtSignal(object)
-    accepted = pyqtSignal(object)
-    rejected = pyqtSignal(object)
-    priority = 5
-
-    template = open(Resources.get('chat/template.html')).read()
-
-    def __init__(self, dialog, session, account, id, messages):
-        super(DeleteMessageRequest, self).__init__()
-        self.session = session
-        self.account = account
-        self.dialog = dialog
-        self.id = id
-        self.dialog.finished.connect(self._SH_DialogFinished)
-
-        blink_settings = BlinkSettings()
-        self.style = ChatMessageStyle(blink_settings.chat_window.style)
-        self.style_variant = blink_settings.chat_window.style_variant or self.style.default_variant
-        self.font_family = blink_settings.chat_window.font or self.style.font_family
-        self.font_size = blink_settings.chat_window.font_size or self.style.font_size
-        self.user_icons = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
-        self.dialog.message_view.setHtml(self.template.format(base_url=FileURL(self.style.path) + '/', style_url=self.style_variant + '.css', font_family=self.font_family, font_size=self.font_size), baseUrl=QUrl.fromLocalFile(os.path.abspath(sys.argv[0])))
-        self.chat_js = ChatJSInterface(self.dialog.message_view.page())
-
-        self.dialog.message_view.last_message = None
-
-        def add_message(message):
-            if message.direction == 'outgoing':
-                replace = self.dialog.delete_both_checkbox.text().replace('__REMOTE_PARTY__', self.session.contact.name)
-                self.dialog.delete_both_checkbox.setText(replace)
-            else:
-                self.dialog.delete_both_checkbox.hide()
-                self.dialog.delete_both_checkbox.setEnabled(False)
-
-            if isinstance(message, ChatFile):
-                replace1 = self.dialog.delete_message_dialog_text.text().replace('message', translate('delete_message_dialog', 'file'))
-                replace2 = self.dialog.delete_message_dialog_title.text().replace('message', translate('delete_message_dialog', 'file'))
-                self.dialog.delete_message_dialog_text.setText(replace1)
-                self.dialog.delete_message_dialog_title.setText(replace2)
-
-            message.consecutive = False
-            message.history = False
-            if message.is_related_to(self.dialog.message_view.last_message):
-                message.consecutive = True
-                html_message = message.to_html(self.style, user_icons=self.user_icons)
-                self.chat_js.replace_element('#insert', html_message)
-            else:
-                html_message = message.to_html(self.style, user_icons=self.user_icons)
-                self.chat_js.append_message_to_chat(html_message)
-            self.dialog.message_view.last_message = message
-
-        for message in messages:
-            add_message(message)
-
-    def __eq__(self, other):
-        return self is other
-
-    def __ne__(self, other):
-        return self is not other
-
-    def __lt__(self, other):
-        return self.priority < other.priority
-
-    def __le__(self, other):
-        return self.priority <= other.priority
-
-    def __gt__(self, other):
-        return self.priority > other.priority
-
-    def __ge__(self, other):
-        return self.priority >= other.priority
-
-    def _SH_DialogFinished(self, result):
-        self.finished.emit(self)
-        if result == QDialog.DialogCode.Accepted:
-            self.accepted.emit(self)
-        elif result == QDialog.DialogCode.Rejected:
-            self.rejected.emit(self)
-
-
-del ui_class, base_class
-ui_class, base_class = uic.loadUiType(Resources.get('chat_widget.ui'))
-
-
 @implementer(IObserver)
-class ChatWidget(base_class, ui_class):
+class ChatWidget(QWidget):
+    """The transcript and the composer of one session of the MSRP sessions window.
+
+    The transcript is the message pane's (TranscriptView, BubbleDelegate) over the rows
+    this window adds (ChatTranscriptModel); files are fetched as the message pane fetches
+    them (AutoFetcher: what is in view, within its limits, from contacts allowed to send
+    files), and the text size follows the message pane's (A−/A+ there).
+    """
+
     default_user_icon = IconDescriptor(Resources.get('icons/default-avatar.png'))
-    checkmark_icon = IconDescriptor(Resources.get('icons/checkmark.svg'))
-    warning_icon = IconDescriptor(Resources.get('icons/warning.svg'))
-    done_all_icon = IconDescriptor(Resources.get('icons/done-all.svg'))
-    encrypted_icon = IconDescriptor(Resources.get('icons/lock-grey-12.svg'))
-    clock_icon = IconDescriptor(Resources.get('icons/clock.svg'))
 
-    chat_template = open(Resources.get('chat/template.html')).read()
-    loading_template = open(Resources.get('chat/loading.html')).read()
-
-    image_data_re = re.compile(r"data:(?P<type>image/.+?);base64,(?P<data>.*)", re.I|re.U)
+    # what a message's menu offers here: no replies, edits, reactions or forwarding over MSRP
+    menu_actions = frozenset({'download', 'delete'})
 
     def __init__(self, session, parent=None):
         super(ChatWidget, self).__init__(parent)
-        with Resources.directory:
-            self.setupUi(self)
-        blink_settings = BlinkSettings()
-        self.style = ChatMessageStyle(blink_settings.chat_window.style)
-        self.style_variant = blink_settings.chat_window.style_variant or self.style.default_variant
-        self.font_family = blink_settings.chat_window.font or self.style.font_family
-        self.font_size = blink_settings.chat_window.font_size or self.style.font_size
-        self.user_icons_css_class = 'show-icons' if blink_settings.chat_window.show_user_icons else 'hide-icons'
-        self.chat_view.setHtml(self.chat_template.format(base_url=FileURL(self.style.path) + '/', style_url=self.style_variant + '.css', font_family=self.font_family, font_size=self.font_size), baseUrl=QUrl.fromLocalFile(os.path.abspath(sys.argv[0])))
-        self.chat_js = ChatJSInterface(self.chat_view.page())
-        self.composing_timer = QTimer()
+        self.setAcceptDrops(True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.model = ChatTranscriptModel(self)
+        self.chat_view = TranscriptView(self)
+        self.chat_view.menu_actions = self.menu_actions
+        self.chat_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.chat_view.setMinimumSize(300, 100)
+        self.chat_view.setModel(self.model)
+        self.avatars = SenderAvatars()
+        self.chat_view.bubble_delegate.sender_avatar = self.avatars.draw
+        self.chat_view.bubble_delegate.sender_name = self.avatars.name
+        self.chat_view.bubble_delegate.group_by_sender = True     # a conference: each participant's turns of their own
+        layout.addWidget(self.chat_view, 1)
+        self.chat_input = ChatComposer(self)
+        layout.addWidget(self.chat_input)
+        self.transcript = self.chat_view       # what AutoFetcher looks at
+        self.fetcher = AutoFetcher(self)
+        self.chat_view.bubble_delegate.progress_of = self.fetcher.progress
+        self.chat_view.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
+        self.model.rowsInserted.connect(self.fetcher.schedule)
+        self.model.dataChanged.connect(self._SH_ModelDataChanged)
+        self._apply_font()
+
         self.otr_timer = QTimer()
         self.otr_timer.setSingleShot(True)
         self.otr_timer.setInterval(15000)
-        self.last_message = None
         self.session = session
         self.history_loaded = False
-        self.timestamp_rendered_messages = []
         self.pending_decryption = []
-        self.remove_requests = RequestList()
-        self.size = QSizeF()
+        self._message_statuses = {}
         if session is not None:
             notification_center = NotificationCenter()
             notification_center.add_observer(ObserverWeakrefProxy(self), sender=session.blink_session)
-            self.show_loading_screen(True)
 
-        # connect to signals
-        self.chat_input.textChanged.connect(self._SH_ChatInputTextChanged)
-        self.chat_input.textEntered.connect(self._SH_ChatInputTextEntered)
+        self.chat_input.sendText.connect(self._SH_ChatInputTextEntered)
+        self.chat_input.composing.connect(self._SH_ChatInputComposing)
+        self.chat_input.filesDropped.connect(self._SH_ChatInputFilesDropped)
+        self.chat_input.voiceNote.connect(self._SH_ChatInputVoiceNote)
         self.chat_input.lockReleased.connect(self._SH_ChatInputLockReleased)
-        self.chat_view.sizeChanged.connect(self._SH_ChatViewSizeChanged)
+        self.chat_view.actionRequested.connect(self._SH_ActionRequested)
+        self.chat_view.audioAction.connect(self._SH_AudioAction)
+        self.fetcher.changed.connect(self._SH_DownloadChanged)
 
-        self.chat_view.page().contentsSizeChanged.connect(self._SH_ChatViewFrameContentsSizeChanged)
-        self.chat_view.page().linkClicked.connect(self._SH_LinkClicked)
-        self.chat_js.contextMenuEvent.connect(self._SH_ContextMenuEvent)
-
-        self.chat_view.messageDelete.connect(self._SH_MessageDelete)
-
-        self.composing_timer.timeout.connect(self._SH_ComposingTimerTimeout)
         self.otr_timer.timeout.connect(self._SH_OTRTimerTimeout)
 
     @property
     def user_icon(self):
         return IconManager().get('avatar') or self.default_user_icon
 
-    def add_message(self, message):
-        message_id = None
-        if hasattr(message, 'id'):
-            message_id = message.id
-            if self.last_message is not None and not self.last_message.history and message.history:
-                message.history = False
+    # What AutoFetcher asks of the widget it fetches for
 
-            for i, (timestamp, id, rendered_message) in enumerate(self.timestamp_rendered_messages):
-                if id == message.id:
-                    return
+    @property
+    def contact(self):
+        return self.session.blink_session.contact if self.session is not None else None
 
-                (prev_timestamp, prev_id, previous_rendered_message) = self.timestamp_rendered_messages[i-1]
-                if timestamp >= message.timestamp:
-                    if message.is_related_to(previous_rendered_message):
-                        # print(f'consecutive {message_id} to previous {previous_rendered_message.id} {timestamp} > {message.timestamp}')
-                        message.consecutive = True
-                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
-                        if previous_rendered_message.consecutive:
-                            self.chat_js.append_outside_element(f'message-{previous_rendered_message.id}', html_message)
-                        else:
-                            if message.is_related_to(rendered_message):
-                                self.chat_js.prepend_outside_element(f'message-{id}', html_message)
-                            else:
-                                self.chat_js.append_element(f'#message-{prev_id}', html_message)
-                        self.chat_js.add_context_menu(message.id)
-                    elif message.is_related_to(rendered_message):
-                        if rendered_message.consecutive:
-                            message.consecutive = True
-                            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
-                            self.chat_js.previous_sibling(f'message-{id}', html_message)
-                            self.chat_js.add_context_menu(message.id)
-                        else:
-                            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
-                            rendered_message.consecutive = True
-                            html_rendered_message = rendered_message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
-                            self.timestamp_rendered_messages[i] = (rendered_message.timestamp, rendered_message.id, rendered_message)
-                            self.chat_js.insert_as_parent(f'message-{id}', html_message, html_rendered_message)
-                            self.chat_js.add_context_menu(message.id)
-                    else:
-                        html_message = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '').replace("<span id=\"insert\"></span>", '')
-                        self.chat_js.prepend_outside_element(f'message-{id}', html_message)
-                        self.chat_js.add_context_menu(message.id)
-                    self.timestamp_rendered_messages.insert(i, (message.timestamp, message.id, message))
+    @staticmethod
+    def _account(account_id):
+        account_manager = AccountManager()
+        if account_id and account_manager.has_account(account_id):
+            return account_manager.get_account(account_id)
+        return None
 
-                    try:
-                        if self.last_message.timestamp < message.timestamp:
-                            self.last_message = message
-                    except (TypeError, AttributeError):
-                        self.last_message.timestamp = self.last_message.timestamp.replace(tzinfo=tzlocal())
-                        if self.last_message.timestamp < message.timestamp:
-                            self.last_message = message
+    def _message_session(self):
+        return self.session.blink_session
 
-                    return
+    # Text size: the message pane's
 
-        if message.is_related_to(self.last_message):
-            message.consecutive = True
-            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
-            self.chat_js.replace_element('#insert', html_message)
-            self.chat_js.add_context_menu(message_id)
+    def _apply_font(self):
+        try:
+            delta = int(QSettings().value('message_pane/font_delta', 0))
+        except (TypeError, ValueError):
+            delta = 0
+        font = QApplication.font()
+        if font.pointSizeF() > 0:
+            font.setPointSizeF(max(font.pointSizeF() + delta, 6))
+        from blink.messagepane.reactions import EMOJI_FAMILIES
+        font.setFamilies([font.family()] + [family for family in EMOJI_FAMILIES if family != font.family()])
+        if font != self.chat_view.font():
+            self.chat_view.setFont(font)
+            self.chat_input.edit.setFont(font)
+
+    def showEvent(self, event):
+        self._apply_font()      # the message pane's text size may have changed meanwhile
+        super(ChatWidget, self).showEvent(event)
+
+    # The transcript
+
+    def _item_for(self, message):
+        """The transcript row of what the window adds."""
+        if isinstance(message, ChatNotification):
+            return ChatItem(getattr(message, 'id', None) or uuid.uuid4(), direction=getattr(message, 'direction', 'incoming'),
+                            content=message.message, category=None, timestamp=message.timestamp, note=True)
+        sender = message.sender
+        if message.direction == 'outgoing':
+            account_id = sender.uri if sender is not None else ''
+        elif getattr(message, 'account', None) is not None:
+            account_id = message.account.id
         else:
-            html_message = message.to_html(self.style, user_icons=self.user_icons_css_class)
-            self.chat_js.append_message_to_chat(html_message, message_id)
+            account_id = self.session.blink_session.account.id if self.session is not None else ''     # received on the session's account
+        if isinstance(message, ChatFile):
+            category = file_transfer_category(message.message) or 'other'
+        else:
+            category = 'text'
+        return ChatItem(message.id, direction=message.direction, content=message.message, content_type=message.content_type, category=category,
+                        timestamp=message.timestamp, display_name=sender.name if sender is not None else '', uri=sender.uri if sender is not None else '',
+                        account_id=account_id, remote_uri=self._remote_uri(),
+                        state=self._message_statuses.get(message.id), sender=sender.uri if sender is not None else None)
 
-        if hasattr(message, 'id'):
-            self.timestamp_rendered_messages.append((message.timestamp, message.id, message))
-        self.last_message = message
+    def _remote_uri(self):
+        if self.session is None:
+            return ''
+        return str(getattr(self.session.blink_session.contact_uri, 'uri', '') or '')
+
+    def add_message(self, message):
+        item = self._item_for(message)
+        if not item.note and item.id in self.model.ids:
+            return
+        if item.note:
+            last = self.model.items[-1] if self.model.items else None
+            if last is not None and last.note and last.content == item.content:
+                return      # the same line twice in a row (the stream and the session both say it)
+        at_bottom = self._at_bottom()
+        self.model.add(item)
+        if item.outgoing or at_bottom:
+            self.chat_view.follow_bottom()
 
     def replace_message(self, id, message):
-        html = message.to_html(self.style, user_icons=self.user_icons_css_class).replace("<div id=\"insert\"></div>", '')
-        self.chat_js.replace_element(f'#message-{id}', html)
-        self.chat_js.add_context_menu(id)
+        item = self._item_for(message)
+        self.model.replace(id, item)
+        self.chat_view.bubble_delegate.forget(id)
 
-    def update_message_text(self, id, text):
-        self.chat_js.update_element(f'#text-{id}', text)
-        for i, (timestamp, rendered_id, rendered_message) in enumerate(self.timestamp_rendered_messages):
-            if rendered_id == id:
-                rendered_message.message = text
-                self.timestamp_rendered_messages[i] = (rendered_message.timestamp, rendered_message.id, rendered_message)
+    def update_message_text(self, id, text, content_type='text/plain'):
+        """New content for a message (its text once decrypted)."""
+        if self.model.update(id, content=text, content_type=content_type):
+            self.chat_view.bubble_delegate.clear_cache()
 
     # a message state never goes back: a 'delivered' or 'received' report
     # arriving after 'displayed' (another device of the peer, the server
@@ -1137,45 +419,60 @@ class ChatWidget(base_class, ui_class):
     message_status_rank = {'pending': 0, 'failed-local': 1, 'failed': 1, 'accepted': 2, 'sent': 2, 'received': 2, 'delivered': 3, 'displayed': 4}
 
     def update_message_status(self, id, status):
-        statuses = self.__dict__.setdefault('_message_statuses', {})
         rank = self.message_status_rank.get(status, 2)
-        if rank < self.message_status_rank.get(statuses.get(id), -1):
+        if rank < self.message_status_rank.get(self._message_statuses.get(id), -1):
             return
-        statuses[id] = status
-        if status == 'pending':
-            icon = self.clock_icon
-        elif status == 'failed':
-            icon = self.warning_icon
-        elif status == 'failed-local':
-            icon = self.warning_icon
-        elif status == 'displayed':
-            icon = self.done_all_icon
-        else:
-            icon = self.checkmark_icon
-        html = ChatMessageStatus(status, icon.filename, id).to_html(self.style)
-        self.chat_js.replace_element(f'span#status-{id}', html)
+        self._message_statuses[id] = status
+        self.model.update(id, state=status)
 
     def update_message_encryption(self, id, is_secure=False):
         if is_secure is True:
-            path = QUrl.fromLocalFile(self.encrypted_icon.filename).toString()
-            html = f'<img src="{path}" class="status-icon is-secure">'
-            self.chat_js.update_element(f'span#encryption-{id}', html)
+            self.model.update(id, encryption_type='OpenPGP')
 
     def remove_message(self, id):
-        try:
-            if self.last_message is not None and self.last_message.id == id:
-                self.last_message = None
-        except AttributeError:
-            pass
-        self.chat_js.remove_element(f'#message-{id}')
+        self.model.remove(id)
+
+    def clear(self):
+        """Forget what is shown (the conversation is about to be loaded again)."""
+        self.model.clear()
+        self.avatars.clear()
+        self._message_statuses.clear()
+
+    def has_file(self, file_hash):
+        """Whether a file with this MSRP hash is in the transcript already (one's own upload, told of again by the room)."""
+        if not file_hash:
+            return False
+        from blink.history import msrp_hash
+        wanted = msrp_hash(file_hash)
+        for item in self.model.items:
+            if item.category in ('image', 'audio', 'video', 'other'):
+                meta = file_transfer_envelope(item.content) or {}
+                if meta.get('hash') and msrp_hash(meta['hash']) == wanted:
+                    return True
+        return False
+
+    def file_ready(self, id):
+        """The file of a message is in place: draw it."""
+        self.chat_view.bubble_delegate.forget(id)
+        self.model.refresh(id)
 
     def show_loading_screen(self, visible):
-        if visible:
-            self.chat_js.append_element('#loading', self.loading_template)
-            self.chat_js.set_style_property_element('body', 'overflow', 'hidden')
-        else:
-            self.chat_js.empty_element('#loading')
-            self.chat_js.set_style_property_element('body', 'overflow', 'auto')
+        self.chat_view.setEnabled(not visible)
+
+    def scroll_to_bottom(self):
+        self.chat_view.follow_bottom()
+
+    def _at_bottom(self):
+        scrollbar = self.chat_view.verticalScrollBar()
+        return scrollbar.value() >= scrollbar.maximum() - 4
+
+    def _SH_ModelDataChanged(self, *args):
+        self.chat_view.scheduleDelayedItemsLayout()
+
+    def _SH_DownloadChanged(self, message_id):
+        self.file_ready(message_id)
+
+    # Sending
 
     def send_sip_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         account = self.session.blink_session.account
@@ -1201,7 +498,7 @@ class ChatWidget(base_class, ui_class):
         else:
             raise RuntimeError("Cannot send messages in the '%s' state" % blink_session.state)
 
-        message_id = self.session.chat_stream.send_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
+        message_id = send_msrp_message(self.session.chat_stream, content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers)
         notification_center = NotificationCenter()
 
         timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
@@ -1214,24 +511,11 @@ class ChatWidget(base_class, ui_class):
     def stop_otr_timer(self):
         self.otr_timer.stop()
 
-    def _process_height(self, height, scroll=False):
-        widget_height = self.chat_view.size().height()
-        content_height = height
-        if widget_height > content_height:
-            self.chat_js.set_style_property_element('#chat', 'position', 'relative')
-            self.chat_js.set_style_property_element('#chat', 'top', '%dpx' % (widget_height - content_height))
-        else:
-            self.chat_js.set_style_property_element('#chat', 'position', 'static')
-            self.chat_js.set_style_property_element('#chat', 'top', '0')
-        if scroll:
-            self._scroll_to_bottom()
+    def _own_sender(self):
+        account = self.session.blink_session.account
+        return ChatSender(account.display_name, account.id, self.user_icon.filename)
 
-    def _align_chat(self, scroll=False):
-        self.chat_js.get_height_element('#chat', partial(self._process_height, scroll=scroll))
-
-    def _scroll_to_bottom(self):
-        self.chat_js.scroll_to_bottom()
-
+    # Drag and drop
 
     def dragEnterEvent(self, event):
         mime_data = event.mimeData()
@@ -1256,7 +540,7 @@ class ChatWidget(base_class, ui_class):
             urls = mime_data.urls()
             schemes = {url.scheme() for url in urls}
             if schemes == {'file'}:
-                self._DH_Files(urls)
+                self._DH_Files([url.toLocalFile() for url in urls])
             else:
                 self._DH_Text('\n'.join(url.toString() for url in urls))
         else:
@@ -1267,214 +551,95 @@ class ChatWidget(base_class, ui_class):
                 text = mime_data.html() or mime_data.text()
             self._DH_Text(text)
 
-    def _DH_Files(self, urls):
+    def _DH_Files(self, paths):
         session_manager = SessionManager()
         blink_session = self.session.blink_session
         if not conference_takes_files(blink_session):
             self.add_message(ChatStatus(translate('chat_window', 'Join the conference to share files: the room exists only while someone is in it')))
             return
+        for path in paths:
+            session_manager.send_file(blink_session.contact, blink_session.contact_uri, path, account=blink_session.account, route='msrp')  # the MSRP chat window: MSRP only
 
-        file_descriptors  = [FileDescriptor(url.toLocalFile()) for url in urls]
-        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
-        other_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is None]
-
-        # for image in image_descriptors:
-        #     try:
-        #         image_data = base64.b64encode(image.thumbnail.data).decode()
-        #         self.send_message(image_data, content_type=image.thumbnail.type)
-        #     except Exception as e:
-        #         self.add_message(ChatStatus("Error sending image '%s': %s" % (os.path.basename(image.filename), str(e))))  # decide what type to use here. -Dan
-        #     else:
-        #         content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
-        #         sender  = ChatSender(blink_session.account.display_name, blink_session.account.id, self.user_icon.filename)
-        #         self.add_message(ChatFile(content, sender, 'outgoing'))
-
-        for image in image_descriptors:
-            session_manager.send_file(blink_session.contact, blink_session.contact_uri, image.filename, account=blink_session.account, route='msrp')  # the MSRP chat window: MSRP only
-
-        for descriptor in other_descriptors:
-            session_manager.send_file(blink_session.contact, blink_session.contact_uri, descriptor.filename, account=blink_session.account, route='msrp')
+    image_data_re = re.compile(r"data:(?P<type>image/.+?);base64,(?P<data>.*)", re.I | re.U | re.S)
 
     def _DH_Text(self, text):
         match = self.image_data_re.match(text)
         if match is not None:
+            content_type = match.group('type')
             try:
-                data = match.group('data') if isinstance(match.group('data'), bytes) else match.group('data').encode()
-                image_data = base64.b64encode(data).decode()
-                self.send_message(image_data, content_type=match.group('type'))
+                data = base64.b64decode(match.group('data'))
+                message_id = self.send_message(match.group('data'), content_type=content_type)
             except Exception as e:
                 self.add_message(ChatStatus(translate('chat_window', 'Error sending image: %s') % str(e)))
             else:
-                account = self.session.blink_session.account
-                content = '''<img src="{}" class="scaled-to-fit" />'''.format(text)
-                sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
-                self.add_message(ChatFile(content, sender, 'outgoing'))
+                message_id = message_id or str(uuid.uuid4())
+                envelope = save_inline_image(message_id, content_type, data)
+                if envelope is not None:
+                    self.add_message(ChatFile(envelope, self._own_sender(), 'outgoing', id=message_id, content_type=FILE_TRANSFER_CONTENT_TYPE))
         else:
-            user_text = self.chat_input.toHtml()
-            self.chat_input.setHtml(text)
-            self.chat_input.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier, text='\r'))
-            self.chat_input.setHtml(user_text)
+            document = QTextDocument()
+            document.setHtml(text)
+            plain_text = document.toPlainText().strip()
+            if plain_text:
+                self._SH_ChatInputTextEntered(plain_text)
 
-    def _SH_ContextMenuEvent(self, id):
-        self.chat_view.last_message_id = id
+    # The composer
 
-    def _SH_LinkClicked(self, link):
-        directory = ApplicationData.get(f'downloads')
-        try:
-            link = copy_transfer_file(link, directory)
-            QDesktopServices.openUrl(link)
-        except FileNotFoundError:
-            blink_session = self.session.blink_session
-            id = None
-            if link.hasFragment():
-                id = link.fragment()
-            NotificationCenter().post_notification('BlinkSessionShouldDownloadFile',
-                                                   sender=blink_session,
-                                                   data=NotificationData(filename=link.fileName(), id=id))
+    def _SH_ChatInputFilesDropped(self, paths):
+        self._DH_Files(paths)
 
-    def delete_message(self, session, account, id, messages=[]):
-        for request in self.remove_requests[account, DeleteMessageRequest]:
-            request.dialog.hide()
-            self.remove_requests.remove(request)
+    def _SH_ChatInputVoiceNote(self, note):
+        """A voice note goes as a file, compressed to AAC as in the message pane (the WAV when that cannot be done)."""
+        from blink.messagepane.transcode import convert
 
-        delete_dialog = DeleteMessageDialog()
-        delete_request = DeleteMessageRequest(delete_dialog, session, account, id, messages)
-        delete_request.accepted.connect(self._SH_MessageDeleteAccepted)
-        delete_request.finished.connect(self._SH_MessageDeleteRequestFinished)
-        bisect.insort_right(self.remove_requests, delete_request)
-        delete_request.dialog.show()
-
-    def _SH_MessageDelete(self, id):
-        blink_session = self.session.blink_session
-
-        messages = [message for (timestamp, msg_id, message) in self.timestamp_rendered_messages if msg_id == id]
-        if messages[0].direction == 'outgoing':
-            account_manager = AccountManager()
-            account = account_manager.get_account(messages[0].sender.uri)
-        else:
-            account = messages[0].account
-        self.delete_message(blink_session, account, id, messages)
-
-    def _SH_MessageDeleteAccepted(self, request):
-        self.remove_message(request.id)
-        NotificationCenter().post_notification('BlinkMessageWillDelete', sender=request.session, data=NotificationData(id=request.id))
-        if request.dialog.delete_both_checkbox.isChecked():
-            MessageManager().send_remove_message(request.session, request.id, request.account)
-
-    def _SH_MessageDeleteRequestFinished(self, request):
-        request.dialog.hide()
-        self.remove_requests.remove(request)
-
-    def _SH_ChatViewSizeChanged(self):
-        # print("chat view size changed")
-        self._align_chat(scroll=True)
-
-    def _SH_ChatViewFrameContentsSizeChanged(self, size):
-        # print("frame contents size changed to %r (current=%r)" % (self.size, self.chat_view.page().contentsSize()))
-        self._align_chat(scroll=size.height() > self.size.height())
-        self.size = size
-
-    def _SH_ChatInputTextChanged(self):
-        if self.session.blink_session.chat_type is None:
-            manager = MessageManager()
-            if self.chat_input.empty:
-                if self.composing_timer.isActive():
-                    self.composing_timer.stop()
-                    manager.send_composing_indication(self.session.blink_session, 'idle')
-            elif not self.composing_timer.isActive():
-                manager.send_composing_indication(self.session.blink_session, 'active')
-                self.composing_timer.start(10000)
-        else:
-            chat_stream = self.session.chat_stream
-            if chat_stream is None:
-                return
-        if self.chat_input.empty:
-            if self.composing_timer.isActive():
-                self.composing_timer.stop()
+        def converted(path):
+            if path is not None:
                 try:
-                    chat_stream.send_composing_indication('idle')
-                except Exception:
+                    os.unlink(note['path'])
+                except OSError:
                     pass
-        elif not self.composing_timer.isActive():
-            try:
-                chat_stream.send_composing_indication('active')
-            except Exception:
-                pass
-            else:
-                self.composing_timer.start(10000)
+                note['path'] = path
+            self._DH_Files([note['path']])
+        convert(note['path'], converted)
+
+    def _SH_ChatInputComposing(self, state):
+        if self.session is None:
+            return
+        if self.session.blink_session.chat_type is None:
+            MessageManager().send_composing_indication(self.session.blink_session, state)
+            return
+        chat_stream = self.session.chat_stream
+        if chat_stream is None:
+            return
+        try:
+            chat_stream.send_composing_indication(state)
+        except Exception:
+            pass
 
     def _SH_ChatInputTextEntered(self, text):
-        self.composing_timer.stop()
-        doc = QTextDocument()
-        doc.setHtml(text)
-        plain_text = doc.toPlainText()
-        if plain_text == '/otr+':
+        if text == '/otr+':
             try:
                 self.session.chat_stream.encryption.start()
             except AttributeError:
                 pass
             return
-        elif plain_text == '/otr-':
+        elif text == '/otr-':
             try:
                 self.session.chat_stream.encryption.stop()
             except AttributeError:
                 pass
             return
         id = str(uuid.uuid4())
-        # plain text unless the user actually formatted something, as Sylk
-        # Mobile and Blink for macOS do; the input box always produces a full
-        # Qt rich text document, which other clients render badly
-        if self._has_formatting(doc):
-            content_type = 'text/html'
-            text = self._html_body(text)
-            payload = text
-        else:
-            content_type = 'text/plain'
-            payload = plain_text
-            text = QTextDocument(plain_text).toHtml()
         try:
-            msg_id = self.send_message(payload, content_type=content_type, id=id)
+            msg_id = self.send_message(text, content_type='text/plain', id=id)
         except Exception as e:
             self.add_message(ChatStatus(translate('chat_window', 'Error sending message: %s') % e))
             log.error('Error sending message:  %s' % str(e))
-
         else:
             if msg_id is not None:
                 id = msg_id
-            account = self.session.blink_session.account
-            content = HtmlProcessor.autolink(text)
-            sender  = ChatSender(account.display_name, account.id, self.user_icon.filename)
-            self.add_message(ChatMessage(content, sender, 'outgoing', id=id))
-
-    @staticmethod
-    def _has_formatting(document):
-        """True if the text has formatting a plain text message would lose.
-
-        Font family and size are not counted: the input box applies them to
-        everything, and pasted text brings its own.
-        """
-        block = document.begin()
-        while block.isValid():
-            if block.textList() is not None:
-                return True
-            iterator = block.begin()
-            while not iterator.atEnd():
-                fragment = iterator.fragment()
-                if fragment.isValid():
-                    char_format = fragment.charFormat()
-                    if (char_format.fontWeight() > 400 or char_format.fontItalic() or char_format.fontUnderline() or
-                            char_format.fontStrikeOut() or char_format.isAnchor() or char_format.isImageFormat() or
-                            char_format.foreground().style() != Qt.BrushStyle.NoBrush):
-                        return True
-                iterator += 1
-            block = block.next()
-        return False
-
-    @staticmethod
-    def _html_body(html):
-        """The content of the body element of a Qt rich text document."""
-        match = re.search(r'<body[^>]*>(.*)</body>', html, re.DOTALL | re.IGNORECASE)
-        return match.group(1).strip() if match else html
+            self.add_message(ChatMessage(text, self._own_sender(), 'outgoing', id=id))
+            self.chat_view.follow_bottom()
 
     def _SH_ChatInputLockReleased(self, lock_type):
         blink_session = self.session.blink_session
@@ -1484,42 +649,92 @@ class ChatWidget(base_class, ui_class):
             else:
                 blink_session.fake_streams.get('messages').encryption.stop()
 
-    def _SH_ComposingTimerTimeout(self):
-        self.composing_timer.stop()
-        if self.session.blink_session.chat_type is None:
-            manager = MessageManager()
-            manager.send_composing_indication(self.session.blink_session, 'idle')
-            return
-
-        chat_stream = self.session.chat_stream or Null
-        try:
-            chat_stream.send_composing_indication('idle')
-        except Exception:
-            pass
-
     def _SH_OTRTimerTimeout(self):
         self.otr_timer.stop()
         self.add_message(ChatStatus(translate('chat_window', 'Timeout in enabling OTR, recipient did not answer to OTR encryption request')))  # decide what type to use here. -Dan
         NotificationCenter().post_notification('ChatStreamOTRTimeout', self.session.blink_session)
+
+    # Message actions
+
+    def _SH_ActionRequested(self, action, item):
+        if action == 'delete':
+            self._delete_message(item)
+        elif action in ('download', 'open'):
+            path = local_file(item)
+            if path:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+            elif self.fetcher.progress(item.id) is None:
+                self.fetcher.fetch(item, force=True)        # asked for: whatever its size, and again after a failure
+
+    def _SH_AudioAction(self, item, action, fraction):
+        from blink.messagepane.audio import AudioPlayer
+        path = self.chat_view.bubble_delegate.file_path(item)
+        if not path:
+            return
+        video = item.category == 'video'
+        if action == 'play':
+            AudioPlayer.instance().toggle(item.id, path, video)
+        else:
+            AudioPlayer.instance().seek(item.id, path, fraction, video)
+
+    def _delete_message(self, item):
+        """Delete a message here, after asking (as the message pane asks). Never for the other
+        party too: a message can not be removed at the other end over MSRP."""
+        if item.note or self.session is None:
+            return
+        blink_session = self.session.blink_session
+        is_file = item.category in ('image', 'audio', 'video', 'other')
+        what = translate('chat_window', 'file') if is_file else translate('chat_window', 'message')
+        box = QMessageBox(QMessageBox.Icon.Question, translate('chat_window', 'Delete %s') % what,
+                          translate('chat_window', 'Delete this %s from this conversation?') % what, parent=self)
+        delete_button = box.addButton(translate('chat_window', 'Delete'), QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        if box.clickedButton() is not delete_button:
+            return
+        self.remove_message(item.id)
+        NotificationCenter().post_notification('BlinkMessageWillDelete', sender=blink_session, data=NotificationData(id=item.id))
+        ActivityLog().info(f'[chat] Deleted {what} {item.id} from the MSRP sessions window')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
-    def _NH_BlinkSessionDidEnd(self, notification):
-        self.composing_timer.stop()
-        self.chat_input.reset_locks()
+    # The session connecting and disconnecting, as lines in the transcript
 
-        # no "Call ended" here: calls are the main window's and the message pane's; the end of
-        # the chat itself is said by the chat stream (Chat stream ended, Disconnected)
+    def _session_address(self):
+        blink_session = self.session.blink_session
+        return str(getattr(blink_session, 'uri', None) or getattr(blink_session.contact_uri, 'uri', '') or '').replace('sip:', '')
+
+    def _NH_BlinkSessionWillConnect(self, notification):
+        self._connected = False
+        self.add_message(ChatStatus(translate('chat_window', 'Connecting to %s…') % self._session_address()))
+
+    def _NH_BlinkSessionDidConnect(self, notification):
+        self._connected = True
+        self.add_message(ChatStatus(translate('chat_window', 'Connected')))
+
+    def _NH_BlinkSessionDidEnd(self, notification):
+        self.chat_input.reset_locks()
+        # the chat session: never "Call ended", calls are the main window's and the message pane's
+        reason = getattr(notification.data, 'reason', None)
+        error = getattr(notification.data, 'error', False)
+        if not getattr(self, '_connected', False):
+            text = translate('chat_window', 'Could not connect: %s') % reason if reason else translate('chat_window', 'Could not connect')
+        elif error and reason:
+            text = translate('chat_window', 'Disconnected: %s') % reason
+        else:
+            text = translate('chat_window', 'Disconnected')
+        self._connected = False
+        self.add_message(ChatStatus(text))
 
     def _NH_BlinkSessionWasDeleted(self, notification):
+        self.fetcher.close()
         self.setParent(None)
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         if notification.data.stream.type == 'chat':
-            self.composing_timer.stop()
             self.chat_input.reset_locks()
             self.add_message(ChatStatus(translate('chat_window', 'Chat stream ended')))
 
@@ -1528,21 +743,9 @@ class ChatWidget(base_class, ui_class):
             self.add_message(ChatStatus(translate('chat_window', 'Cannot add chat stream: %s (%s)') % (notification.data.reason, notification.data.code)))
 
     def _NH_BlinkSessionShouldDeleteFile(self, notification):
-        item = notification.data.item
-        blink_session = self.session.blink_session
-
-        messages = [message for (timestamp, msg_id, message) in self.timestamp_rendered_messages if msg_id == item.id]
-        account_manager = AccountManager()
-
-        try:
-            msg = messages[0]
-        except IndexError:
-            pass
-        else:
-            account = account_manager.get_account(msg.account.id)
-            self.delete_message(blink_session, account, item.id, messages)
-
-del ui_class, base_class
+        item = self.model.get(notification.data.item.id)
+        if item is not None:
+            self._delete_message(item)
 
 
 class NoSessionsLabel(QLabel):
@@ -1570,22 +773,6 @@ class NoSessionsLabel(QLabel):
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('chat_window.ui'))
-
-
-def call_event_content(message):
-    """The HTML for a call row in the chat, from its call detail record, or None.
-
-    A row not converted yet (application/blink-call-history) is read with
-    literal_eval, never eval: its body is data from the database.
-    """
-    record = call_record(message.content, getattr(message, 'metadata', None))
-    if record is None and message.content_type.lower() == LEGACY_CALL_CONTENT_TYPE:
-        record = legacy_call_record(message.content, message.direction, message.message_id)
-    summary = call_summary(record, this_device_id()) if record is not None else None
-    if not summary:
-        return None
-    color = '#800000' if call_needs_attention(record, this_device_id()) else '#000000'
-    return f'<div style="color: {color}">{html_escape(summary)}</div>'
 
 
 @implementer(IObserver)
@@ -1726,7 +913,6 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         self.pending_displayed_notifications = {}
         self.render_after_load = deque()
-        self.fetch_after_load = deque()
         self.last_desktop_notify = None
         self.last_incoming_message_alert = None
 
@@ -2008,9 +1194,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
                 # TODO: somehow the placeholder does not get changed inside ChatInputText class -adi
                 if new_session.blink_session.info.streams.messages and new_session.blink_session.info.streams.messages.encryption:
-                    self.chat_input.setPlaceholderText(translate('chat_window', 'Write a message. Messages will be encrypted using %s' % new_session.blink_session.info.streams.messages.encryption))
+                    new_session.chat_widget.chat_input.setPlaceholderText(translate('chat_window', 'Write a message. Messages will be encrypted using %s' % new_session.blink_session.info.streams.messages.encryption))
                 else:
-                    self.chat_input.setPlaceholderText(translate('chat_window', 'Write a message'))
+                    new_session.chat_widget.chat_input.setPlaceholderText(translate('chat_window', 'Write a message'))
 
 
     selected_session = property(_get_selected_session, _set_selected_session)
@@ -2807,8 +1993,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self._update_session_info_panel(elements={'status'}, update_visibility=True)
 
     def _NH_BlinkSessionDidEnd(self, notification):
-        if not self.session_list.isVisibleTo(self) and self.isVisible():
-            self._EH_ShowSessions()     # an ended session is not expanded: back to the list
+        if not self.session_list.isVisibleTo(self) and self.isVisible() and not session_can_expand(self.selected_session):
+            self._EH_ShowSessions()     # an ended session is not expanded (unless a conference with files): back to the list
         if self.selected_session.active_panel is not self.info_panel:
             if self.sliding_panels:
                 self._slide_details(self.info_panel, direction=self.slide_direction)
@@ -2826,16 +2012,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _details_page(self, panel):
         """The participants and the files share one page; the participants only for a conference.
-        A conference never shows the info panel here (it is in the audio drawer): an empty page until
-        it is connected, then its participants and files."""
+        A conference shows the info panel here only when asked for with the i button (info_requested);
+        otherwise an empty page until it is connected (or its files when files were exchanged in it),
+        then its participants and files."""
         session = self.selected_session
         conference = session is not None and session.blink_session.is_conference
+        if conference and panel is self.info_panel and getattr(session, 'info_requested', False):
+            return self.info_panel
+        connected = session is not None and str(session.blink_session.state or '').startswith('connected')
         if conference:
-            if not str(session.blink_session.state or '').startswith('connected'):
+            if not connected and not conference_has_files(session):
                 return self.details_placeholder
             panel = self.participants_panel
         if panel in (self.participants_panel, self.files_panel):
-            self.participants_panel.setVisible(conference)
+            self.participants_panel.setVisible(conference and connected)    # not connected: only the files exchanged in it
             self.files_panel.setVisible(True)
             self.files_panel_info_button.setVisible(not conference)     # one info button per column
             return self.details_splitter
@@ -2868,6 +2058,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self.session_list.hide()    # the session list covers the panel; kept when there are sessions to switch between
         if session.active_panel is not self.info_panel and (session is not self.selected_session or self.session_details.currentWidget() is self.details_splitter):
             return  # already in view
+        if getattr(session, 'info_requested', False):
+            return  # the user is looking at the info panel (i button): the participants wait for the participants button
         if self.sliding_panels:
             self._slide_details(self.participants_panel, direction=self.slide_direction)
         else:
@@ -2881,19 +2073,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self._update_widgets_for_session()
 
     def _parse_fthttp(self, blink_session, message, from_history=False, account=None):
-        session = blink_session.items.chat
-
+        """The envelope of a file transfer message, drawn as a file bubble; None for a transfer
+        that expired before its file was fetched. The file is fetched as the message pane
+        fetches it (when in view, within limits, from contacts allowed to send files)."""
         if account is None:
             try:
                 account = AccountManager().get_account(message.account_id)
-            except AttributeError:
+            except (AttributeError, KeyError):
                 account = blink_session.account
 
-        try:
-            document = FTHTTPDocument.parse(message.content)
-        except ParserError as e:
-            raise ParserError
-            # log.warning('Failed to parse FT HTTP payload: %s' % str(e))
+        document = FTHTTPDocument.parse(message.content)     # ParserError for the caller
 
         for info in document:
             try:
@@ -2901,119 +2090,39 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             except AttributeError:
                 hash = None
 
-            if from_history:
-                id = message.message_id
-            else:
-                id = message.id
-
             file = File(info.file_name.value,
                         info.file_size.value,
                         blink_session.contact,
                         hash,
-                        id,
+                        message.message_id if from_history else message.id,
                         info.data.until if info.data.until else None,
                         url=info.data.url,
                         type=info.content_type.value,
                         account=account,
                         protocol='sylk')
-
             file.name = HistoryManager().get_decrypted_filename(file)
-            #log.info(f"History File {file.id} url {file.url} name {file.name} ")
-            is_audio_message = AudioDescriptor(info.file_name.value)
 
             try:
-                if info.data.until < datetime.now(timezone.utc):
-                    # session.chat_widget.add_message(ChatStatus(translate('chat_window', 'File transfer is expired: %s') % os.path.basename(info.file_name.value)))
-                    if not file.already_exists:
-                        return None
-            except AttributeError:
+                if info.data.until < datetime.now(timezone.utc) and not file.already_exists:
+                    return None
+            except (AttributeError, TypeError):
                 pass
-
-            if not info.content_type.value.startswith('image/') and not is_audio_message:
-                icon = FileIcon(file.decrypted_filename)
-                icon_data = base64.b64encode(icon.data).decode()
-                content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(icon.type, icon_data)
-                if from_history:
-                    NotificationCenter().post_notification('BlinkSessionDidShareFile',
-                                                           sender=blink_session,
-                                                           data=NotificationData(file=file, direction=message.direction, history=True))
-                return '''<a href='%s#%s' style='text-decoration: none !important'><div style="display: flex;">
-                            <div>%s</div>
-                                <div style="display: flex; align-items: center;">
-                                    <div>
-                                        <div style="padding-left: 4px; font-size: 14px; font-weight: 400;">%s</div>
-                                        <div style="padding-left: 4px;">%s</div>
-                                    </div>
-                                </div>
-                            </div></a>''' % (file.decrypted_filename,
-                                             id,
-                                             content,
-                                             os.path.basename(file.decrypted_filename),
-                                             FileSizeFormatter.format(file.size))
-
-            if message.direction == 'outgoing':
-                if is_audio_message:
-                    text = translate('chat_window', 'You sent an audio message. Fetching and processing...')
-                else:
-                    text = translate('chat_window', 'You sent an image: %s. Fetching and processing...') % os.path.basename(file.decrypted_filename)
-            else:
-                if is_audio_message:
-                    text = translate('chat_window', 'Sent you an audio message. Processing...')
-                else:
-                    text = translate('chat_window', 'Sent you an image: %s. Processing...') % os.path.basename(file.decrypted_filename)
-
-            content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">{text}'
-
-            if not file.already_exists:
-                if file.encrypted:
-                    # A conversation opened by the user renders its history
-                    # before anything has loaded the keys into its stream, so
-                    # load them now rather than declare the file undecryptable.
-                    stream = blink_session.fake_streams.get('messages')
-                    if stream is not None and account.sms.enable_pgp and not (stream.can_decrypt or stream.can_decrypt_with_others):
-                        stream.enable_pgp()
-                    if stream is None or not (stream.can_decrypt or stream.can_decrypt_with_others):
-                        if account.sms.enable_pgp:
-                            content = translate('chat_window', "%s can't be decrypted. There is no private key for this account") % os.path.basename(file.decrypted_filename)
-                        else:
-                            content = translate('chat_window', "%s can't be decrypted. PGP is disabled") % os.path.basename(file.decrypted_filename)
-                        return content
-
-                if from_history or not session.chat_widget.history_loaded:
-                    file.downloading = True
-                    queue_item = (blink_session, file, message, info)
-                    if queue_item not in self.fetch_after_load:
-                        self.fetch_after_load.append(queue_item)
-                    NotificationCenter().post_notification('BlinkSessionDidShareFile',
-                                                           sender=blink_session,
-                                                           data=NotificationData(file=file, direction=message.direction, history=True))
-                    return content
-
-                if hash and file.protocol == 'msrp':
-                    SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.name, file.hash, file.id, account=file.account, conference_file=False)
-                else:
-                    SessionManager().get_file_from_url(blink_session, file)
-                return content
-
-            if is_audio_message:
-                return f'''<div><audio controls style="height: 35px; width: 350px"><source src="{file.decrypted_filename}" type={file.type}></audio></div>'''
-
-            file_descriptors  = [FileDescriptor(file.decrypted_filename)]
-            image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
-
-            if not image_descriptors:
-                session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Error: image can not be rendered: %s') % os.path.basename(file.decrypted_filename)))
-                content = ''
-            else:
-                for image in image_descriptors:
-                    image_data = base64.b64encode(image.thumbnail.data).decode()
-                    content = '''<a href="{}" style='display: flex; border: 0 !important'><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
 
             if from_history:
                 NotificationCenter().post_notification('BlinkSessionDidShareFile',
                                                        sender=blink_session,
                                                        data=NotificationData(file=file, direction=message.direction, history=True))
-            return content
+            return message.content
+        return None
+
+    @staticmethod
+    def _image_content(message_id, content_type, content):
+        """An image sent inside a chat message as a file of its own, and its envelope (or None)."""
+        try:
+            data = content if isinstance(content, bytes) else base64.b64decode(content.strip())
+        except (ValueError, TypeError):
+            return None
+        return save_inline_image(message_id, content_type, data)
 
     def _NH_BlinkGotMessage(self, notification):
         blink_session = notification.sender
@@ -3044,17 +2153,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             received_account = None
 
         encrypted = False
+        content_type = message.content_type
+        is_file = False
         if message.content_type.startswith('image/'):
-            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.rstrip())
+            content = self._image_content(message.id, message.content_type, message.content)
+            if content is None:
+                return
+            content_type, is_file = FILE_TRANSFER_CONTENT_TYPE, True
         elif message.content_type.startswith('text/'):
+            content = message.content
             if MessageManager().check_encryption(message.content_type, message.content) == 'OpenPGP':
-                content = f'<img src={session.chat_widget.encrypted_icon.filename} class="inline-message-icon">Encrypted Message'
-                content = HtmlProcessor.autolink(content)
-                encrypted = True
+                encrypted = True        # drawn as an encrypted message until it is decrypted
                 session.chat_widget.pending_decryption.append((message))
-            else:
-                content = message.content
-                content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         elif message.content_type.lower() == FTHTTPDocument.content_type:
             try:
                 content = self._parse_fthttp(blink_session, message, account=received_account)
@@ -3062,6 +2172,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 return
             if content is None:
                 return
+            is_file = True
         else:
             return
 
@@ -3073,20 +2184,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         account_manager = AccountManager()
         if account_manager.has_account(uri):
             account = account_manager.get_account(uri)
-            sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
+            sender = ChatSender(message.sender.display_name or account.display_name, uri)
         else:
             account = None
-            sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
+            sender = ChatSender(message.sender.display_name or session.name, uri)
 
-        if message.content_type.lower() == FTHTTPDocument.content_type:
-            chat_message = ChatFile(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history, account=received_account)
+        if is_file:
+            chat_message = ChatFile(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history, account=received_account, content_type=content_type)
         else:
-            chat_message = ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history, account=received_account)
+            chat_message = ChatMessage(content, sender, direction, id=message.id, timestamp=message.timestamp, history=history, account=received_account, content_type=content_type)
 
         if session.chat_widget.history_loaded:
             if message in session.chat_widget.pending_decryption and not encrypted:
                 session.chat_widget.pending_decryption.remove(message)
-                session.chat_widget.update_message_text(message.id, content)
+                session.chat_widget.update_message_text(message.id, content, content_type)
             else:
                 session.chat_widget.add_message(chat_message)
             session.chat_widget.update_message_encryption(message.id, message.is_secure)
@@ -3219,8 +2330,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if message in session.chat_widget.pending_decryption:
             session.chat_widget.pending_decryption.remove(message)
             content = message.content
-            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
-            session.chat_widget.update_message_text(message.message_id, content)
+            session.chat_widget.update_message_text(message.message_id, content, message.content_type)
             notification_center = NotificationCenter()
             blink_message = BlinkMessage(content, message.content_type, id=message.message_id, is_secure=True)
             notification_center.post_notification('BlinkMessageDidDecrypt', sender=blink_session, data=NotificationData(message=blink_message))
@@ -3238,6 +2348,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionDidShareFile(self, notification):
         if self.selected_session and self.selected_session.blink_session == notification.sender:
              self._AH_ShowTransferredFiles()
+        if getattr(notification.data, 'conference', False):
+            # a file the room tells of: a bubble in its transcript, as history keeps it (HistoryManager)
+            from blink.history import msrp_file_envelope, own_room_upload_id, session_conversation_key
+            blink_session = notification.sender
+            chat = getattr(blink_session.items, 'chat', None)
+            file = notification.data.file
+            if chat is None or blink_session.account is None or chat.chat_widget.has_file(file.hash):
+                return
+            sender_uri = getattr(file, 'sender_uri', '') or ''
+            direction = 'outgoing' if sender_uri == str(blink_session.account.id) else 'incoming'
+            file_id = (own_room_upload_id(blink_session, file.hash) if direction == 'outgoing' else None) or file.id
+            envelope = msrp_file_envelope(file.name, file.size, None, file_id, file.hash, room=session_conversation_key(blink_session))
+            sender = ChatSender(getattr(file.contact, 'name', '') or sender_uri, sender_uri)
+            chat.chat_widget.add_message(ChatFile(envelope, sender, direction, id=file_id, content_type=FILE_TRANSFER_CONTENT_TYPE, account=blink_session.account))
 
     def _NH_BlinkFileTransferDidEnd(self, notification):
         if type(notification.sender) is BlinkFileTransfer:
@@ -3251,6 +2375,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             id = notification.sender.id
             filename = notification.sender.file_selector.name
+            self._show_msrp_transfer(blink_session, notification.sender)
 
         else:
             blink_session = notification.sender
@@ -3260,20 +2385,33 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if notification.data.must_open:
             QDesktopServices.openUrl(QUrl.fromLocalFile(filename))
 
-        if AudioDescriptor(filename):
-            content = f'''<div><audio controls style="height: 35px; width: 350px" src="{filename}"></audio></div>'''
-            blink_session.items.chat.chat_widget.update_message_text(id, content)
+        chat = getattr(getattr(blink_session, 'items', None), 'chat', None)
+        if chat is not None:
+            chat.chat_widget.file_ready(id)      # its bubble shows the file now
+
+    def _show_msrp_transfer(self, blink_session, transfer):
+        """A file sent or received over MSRP: a bubble in the session's transcript, as history keeps it
+        (HistoryManager._store_msrp_transfer). A pull fetched one the transcript already has."""
+        chat = getattr(blink_session.items, 'chat', None)
+        if chat is None or transfer.route != 'msrp' or transfer.transfer_type != 'push' or transfer.file_selector is None:
             return
-
-        file_descriptors  = [FileDescriptor(filename)]
-        image_descriptors = [descriptor for descriptor in file_descriptors if descriptor.thumbnail is not None]
-
-        for image in image_descriptors:
-            image_data = base64.b64encode(image.thumbnail.data).decode()
-            content = '''<a href="{}"><img src="data:{};base64,{}" class="scaled-to-fit" /></a>'''.format(image.fileurl, image.thumbnail.type, image_data)
-            blink_session.items.chat.chat_widget.update_message_text(id, content)
-
-        # TODO if is an image that cannot be decrypted we must update the chat message placeholder
+        if chat.chat_widget.model.get(transfer.id) is not None or chat.chat_widget.has_file(transfer.file_selector.hash):
+            return
+        from blink.history import msrp_file_envelope, session_conversation_key
+        from blink.sessions import is_conference_uri
+        key = session_conversation_key(transfer)
+        conference = is_conference_uri(str(transfer.contact_uri.uri), transfer.account)
+        selector = transfer.file_selector
+        try:
+            size = os.path.getsize(selector.name)
+        except OSError:
+            size = selector.size
+        envelope = msrp_file_envelope(selector.name, size, getattr(selector, 'type', None), transfer.id, selector.hash, room=key if conference else None)
+        if transfer.direction == 'outgoing':
+            sender = ChatSender(transfer.account.display_name, str(transfer.account.id))
+        else:
+            sender = ChatSender(getattr(transfer.contact, 'name', '') or str(transfer.contact_uri.uri), str(transfer.contact_uri.uri).replace('sip:', ''))
+        chat.chat_widget.add_message(ChatFile(envelope, sender, transfer.direction, id=transfer.id, content_type=FILE_TRANSFER_CONTENT_TYPE, account=transfer.account))
 
     def _NH_PGPFileDidNotDecrypt(self, notification):
         transfer_session = notification.sender
@@ -3284,6 +2422,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
 
         session = blink_session.items.chat
+        if session is None:
+            return
         session.chat_widget.replace_message(transfer_session.id, ChatStatus(translate('chat_window', f'File decryption failed: {notification.data.error}')))
 
     def _NH_MessageStreamPGPKeysDidLoad(self, notification):
@@ -3328,36 +2468,41 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             last_account = account
 
+            content_type = message.content_type
+            is_file = False
             if message.content_type.startswith('image/'):
-                content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, message.content.rstrip())
+                content = self._image_content(message.message_id, message.content_type, message.content)
+                if content is None:
+                    continue
+                content_type, is_file = FILE_TRANSFER_CONTENT_TYPE, True
             elif message.content_type.startswith('text/'):
+                content = message.content
                 if MessageManager().check_encryption(message.content_type, message.content) == 'OpenPGP':
-                    content = f'<img src="{QUrl.fromLocalFile(session.chat_widget.encrypted_icon.filename).toString()}" class="inline-message-icon">Encrypted Message'
-                    content = HtmlProcessor.autolink(content)
-                    encrypted = True
+                    encrypted = True        # drawn as an encrypted message until it is decrypted
                     if message.decrypted != '2':
                         session.chat_widget.pending_decryption.append((message))
                         stream = blink_session.fake_streams.get('messages')
                         if stream and (stream.can_decrypt or stream.can_decrypt_with_others):
                             stream.decrypt(message)
-                else:
-                    content = message.content
-                    content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
             elif message.content_type.lower() == FTHTTPDocument.content_type:
                 try:
                     content = self._parse_fthttp(blink_session, message, from_history=True)
                 except ParserError as e:
                     continue
-
                 if not content:
-                    timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
                     continue
+                is_file = True
+            elif message.content_type.lower() == FILE_TRANSFER_CONTENT_TYPE and file_transfer_envelope(message.content) is not None:
+                content = message.content
+                is_file = True
             else:
                 continue        # calls among them: the MSRP window shows chat only, calls are in the message pane
 
             # message.sender = SIPURI.parse(f'sip:{message.remote_uri}')
             if message.direction == 'outgoing':
                 uri = message.account_id
+            elif blink_session.is_conference and message.uri:
+                uri = re.sub('^sips?:', '', str(message.uri))       # the participant who wrote it (CPIM From), not the room
             else:
                 uri = message.remote_uri
 
@@ -3368,15 +2513,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
             if account_manager.has_account(uri):
                 found_account = account_manager.get_account(uri)
-                sender = ChatSender(message.display_name or found_account.display_name, uri, session.chat_widget.user_icon.filename)
+                sender = ChatSender(message.display_name or found_account.display_name, uri)
             else:
-                sender = ChatSender(message.display_name or session.name, uri, session.icon.filename)
-            if message.content_type.lower() == FTHTTPDocument.content_type:
-                chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account)
-            elif message.content_type.lower() in (CALL_CONTENT_TYPE, LEGACY_CALL_CONTENT_TYPE):
-                chat_message = ChatEvent(content, message.direction, id=message.message_id, timestamp=timestamp)
+                sender = ChatSender(message.display_name or session.name, uri)
+            if is_file:
+                chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account, content_type=content_type)
             else:
-                chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account)
+                chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account, content_type=content_type)
 
             session.chat_widget.add_message(chat_message)
 
@@ -3404,14 +2547,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 session.chat_widget.update_message_encryption(message.message_id, True)
         session.chat_widget.history_loaded = True
 
-        while self.render_after_load:
+        # the messages that arrived for this session while its history loaded; the others stay queued
+        # (going once over what is queued: putting them back while emptying the queue never ends)
+        for _ in range(len(self.render_after_load)):
             (found_session, received_account, message) = self.render_after_load.popleft()
+            if found_session is not session:
+                self.render_after_load.append((found_session, received_account, message))
+                continue
             if received_account is not None and received_account != last_account and received_account != session.blink_session.account:
                 last_account = received_account
-            if found_session is session:
-                session.chat_widget.add_message(message)
-            else:
-                self.render_after_load.append((found_session, received_account, message))
+            session.chat_widget.add_message(message)
 
         if blink_session.direction == 'outgoing' and last_account is not None and last_account.enabled and last_account != blink_session.account and not blink_session.remote_instance_id:
             blink_session.account = last_account
@@ -3421,13 +2566,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session.updateTimestamp(newest_timestamp)
 
         NotificationCenter().post_notification('BlinkSessionWasLoaded', sender=blink_session)
-        while self.fetch_after_load:
-            (blink_session, file, message, info) = self.fetch_after_load.popleft()
-            if file.hash is not None and file.protocol == 'msrp':
-                SessionManager().get_file(blink_session.contact, blink_session.contact_uri, file.original_name, file.hash, file.id, account=file.account, conference_file=False)
-            else:
-                SessionManager().get_file_from_url(blink_session, file)
-        session.chat_widget._align_chat(True)
+        session.chat_widget.scroll_to_bottom()
         session.chat_widget.show_loading_screen(False)
 
     def _NH_BlinkMessageHistoryLoadDidFail(self, notification):
@@ -3452,10 +2591,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session.chat_widget.history_loaded:
             session.chat_widget.history_loaded = False
             session.chat_widget.show_loading_screen(True)
-            session.chat_widget.last_message = None
-            session.chat_widget.timestamp_rendered_messages = []
-
-            session.chat_widget.chat_js.empty_element('#chat')
+            session.chat_widget.clear()
 
     def _NH_ChatStreamGotMessage(self, notification):
         blink_session = notification.sender.blink_session
@@ -3466,13 +2602,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
         message = notification.data.message
 
+        message_id = msrp_message_id(message)       # the id history keeps it by
+        content_type = message.content_type
+        is_file = False
         if message.content_type.startswith('image/'):
             # an MSRP image arrives as raw bytes; text was already base64 encoded by the sender
-            image_data = base64.b64encode(message.content).decode() if isinstance(message.content, bytes) else message.content.strip()
-            content = '''<img src="data:{};base64,{}" class="scaled-to-fit" />'''.format(message.content_type, image_data)
+            content = self._image_content(message_id, message.content_type, message.content)
+            if content is None:
+                return
+            content_type, is_file = FILE_TRANSFER_CONTENT_TYPE, True
         elif message.content_type.startswith('text/'):
             content = message.content
-            content = HtmlProcessor.autolink(content if message.content_type == 'text/html' else QTextDocument(content).toHtml())
         else:
             return
 
@@ -3482,20 +2622,31 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             uri = '%s@%s' % (message.sender.uri.user, message.sender.uri.host)
 
         account_manager = AccountManager()
+        account = None
         if account_manager.has_account(uri):
             account = account_manager.get_account(uri)
-            sender = ChatSender(message.sender.display_name or account.display_name, uri, session.chat_widget.user_icon.filename)
+            sender = ChatSender(message.sender.display_name or account.display_name, uri)
         elif blink_session.is_conference:
             contact, contact_uri = URIUtils.find_contact(uri)
-            sender = ChatSender(message.sender.display_name or contact.name, uri, contact.icon.filename)
+            sender = ChatSender(message.sender.display_name or contact.name, uri)
         else:
-            sender = ChatSender(message.sender.display_name or session.name, uri, session.icon.filename)
+            sender = ChatSender(message.sender.display_name or session.name, uri)
 
         is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
         if is_status_message:
+            if content_type == 'text/html':
+                document = QTextDocument()
+                document.setHtml(content)
+                content = document.toPlainText()
             session.chat_widget.add_message(ChatStatus(content))
         else:
-            session.chat_widget.add_message(ChatMessage(content, sender, 'incoming'))
+            # one of our own the room plays back (another device of ours, the backlog on joining) is ours
+            direction = 'outgoing' if account is not None and account is blink_session.account else 'incoming'
+            message_class = ChatFile if is_file else ChatMessage
+            session.chat_widget.add_message(message_class(content, sender, direction, id=message_id, timestamp=message.timestamp, content_type=content_type))
+            if direction == 'incoming' and self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
+                # seen as it arrives: read in history too (unread counts come from history otherwise)
+                NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=blink_session)
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
@@ -3606,7 +2757,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
-        session.chat_widget.add_message(ChatStatus('Chat stream established'))
+        if str(notification.sender.blink_session.state or '').startswith('connected'):
+            session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Chat started')))     # added to a session already connected; else "Connected" says it
 
     def _NH_MediaStreamDidEnd(self, notification):
         if notification.sender.type != 'chat':
@@ -3636,22 +2788,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if not self.selected_session:
             return
 
-        # the session info lives in the audio drawer: show it under the call in the main window
-        audio_item = self.selected_session.blink_session.items.audio
-        if audio_item is not None:
-            QApplication.instance().main_window.toggle_call_info(audio_item)
-            return
-
-        # no call in the audio drawer (chat only): the info panel here
+        # the info panel here, also for a conference and with audio (the participants or files button goes back)
+        self.selected_session.info_requested = True
+        self._update_panel_buttons()
+        self._update_session_info_panel(elements={'session', 'media', 'statistics', 'status'}, update_visibility=True)
         if self.sliding_panels:
             self._slide_details(self.info_panel, direction=self.slide_direction)
         else:
             self._set_details(self.info_panel)
+        self.selected_session.active_panel = self.info_panel
 
 
     def _SH_FilesButtonClicked(self, checked):
         if self.selected_session is None:
             return
+        self.selected_session.info_requested = False
         if self.sliding_panels:
             self._slide_details(self.files_panel, direction=self.slide_direction)
         else:
@@ -3661,6 +2812,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _SH_ParticipantsButtonClicked(self, checked):
         if self.selected_session is None:
             return
+        self.selected_session.info_requested = False
         if self.sliding_panels:
             self._slide_details(self.participants_panel, direction=self.slide_direction)
         else:
@@ -3992,37 +3144,6 @@ del ui_class, base_class
 
 # Helpers
 #
-
-class HtmlProcessor(object):
-    _autolink_re = [re.compile(r"""
-                                (?P<body>
-                                  https?://(?:[^:@/]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?    # scheme :// [ user [ : password ] @ ] host [ : port ]
-                                  (?:/(?:[\w/%!$@#*&='~:;,.+-]*(?:\([\w/%!$@#*&='~:;,.+-]*\))?)*)?   # [ / path]
-                                  (?:\?(?:[\w/%!$@#*&='~:;,.+-]*(?:\([\w/%!$@#*&='~:;,.+-]*\))?)*)?  # [ ? query]
-                                )
-                                """, re.IGNORECASE | re.UNICODE | re.VERBOSE),
-                    re.compile(r"""
-                                (?P<body>
-                                  ftps?://(?:[^:@/]+(?::[^@]*)?@)?(?P<host>[a-z0-9.-]+)(?::\d*)?                  # scheme :// [ user [ : password ] @ ] host [ : port ]
-                                  (?:/(?:[\w/%!?$@*&='~:,.+-]*(?:\([\w/%!?$@*&='~:,.+-]*\))?)*(?:;type=[aid])?)?  # [ / path [ ;type=a/i/d ] ]
-                                )
-                                """, re.IGNORECASE | re.UNICODE | re.VERBOSE),
-                    re.compile(r'mailto:(?P<body>[\w.-]+@(?P<host>[a-z0-9.-]+))', re.IGNORECASE | re.UNICODE)]
-
-    @classmethod
-    def autolink(cls, content):
-        if isinstance(content, str):
-            doc = html.fromstring(content)
-            autolink(doc, link_regexes=cls._autolink_re)
-            return html.tostring(doc, encoding='unicode')  # add method='xml' to get <br/> xhtml style tags and doctype=doc.getroottree().docinfo.doctype for prepending the DOCTYPE line
-        else:
-            autolink(content, link_regexes=cls._autolink_re)
-            return content
-
-    @classmethod
-    def normalize(cls, content):
-        return content
-
 
 class TrafficNormalizer(object):
     boundaries = [(             1024, '%d%ss',                   1),

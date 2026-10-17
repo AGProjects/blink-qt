@@ -82,6 +82,13 @@ class KindTests(unittest.TestCase):
         self.assertEqual(fmt.bubble_kind(self.item('text', '-----BEGIN PGP MESSAGE-----\nx')), 'encrypted')
         self.assertEqual(fmt.bubble_kind(self.item('image', '{}', 'application/vnd.gsma.rcs-ft-http+xml')), 'summary')
 
+    def test_status_line_is_a_note(self):
+        import types
+        # the MSRP sessions window's own lines (Chat stream ended, ...) are notes whatever they say
+        item = types.SimpleNamespace(category=None, content='Chat  stream\nended', content_type='text/plain', note=True)
+        self.assertEqual(fmt.bubble_kind(item), 'note')
+        self.assertEqual(fmt.plain_summary(item), 'Chat stream ended')
+
 
 class DayTests(unittest.TestCase):
     def test_labels(self):

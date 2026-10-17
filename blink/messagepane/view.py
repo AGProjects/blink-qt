@@ -29,6 +29,7 @@ __all__ = ['TranscriptView']
 
 class TranscriptView(QListView):
     load_margin = 48        # pixels from the top that load the page before
+    menu_actions = None     # what a message's menu offers besides copy, open and save (None: everything); see offers()
 
     actionRequested = pyqtSignal(str, object)      # ('delete', 'reply', 'edit', 'caption', 'info' or 'open', MessageItem)
     quoteClicked = pyqtSignal(object)              # the reply dict of a clicked quote
@@ -288,12 +289,17 @@ class TranscriptView(QListView):
             return
         self._show_menu(index, event.pos(), event.globalPos())
 
+    def offers(self, action):
+        """Whether a message's menu offers an action: 'react', 'reply', 'edit', 'caption', 'forward', 'info',
+        'download', 'download_again' or 'delete' (a transcript without a conversation in history offers fewer)."""
+        return self.menu_actions is None or action in self.menu_actions
+
     def _show_menu(self, index, position, global_position):
         item = index.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
         from blink.messagepane.reactions import EmojiPicker, reactable, reaction_action
         not_here = item.category in ('image', 'audio', 'video', 'other') and item.upload is None and not local_file(item)
-        if reactable(item) and not not_here:        # a file not downloaded yet takes no reaction
+        if self.offers('react') and reactable(item) and not not_here:        # a file not downloaded yet takes no reaction
             def pick_more(position):
                 self._picker = EmojiPicker(self)       # kept, so nothing collects it while it is up
                 self._picker.chosen.connect(lambda emoji: self._react(item, emoji, 'emoji picker'))
@@ -313,7 +319,7 @@ class TranscriptView(QListView):
             summary = plain_summary(item)
             menu.addAction(translate('message_pane', 'Copy Text'), lambda: QGuiApplication.clipboard().setText(summary))
         path = local_file(item)
-        if not path and self.bubble_delegate.downloadable(item):
+        if not path and self.offers('download') and self.bubble_delegate.downloadable(item):
             menu.addSeparator()
             menu.addAction(translate('message_pane', 'Download'), lambda: self.actionRequested.emit('download', item))
         if path:
@@ -321,7 +327,7 @@ class TranscriptView(QListView):
             menu.addAction(translate('message_pane', 'Open'), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
             menu.addAction(translate('message_pane', 'Save As…'), lambda: self._save_as(path))
             from blink.messagepane.files import can_download_again
-            if item.upload is None and can_download_again(item, path):
+            if self.offers('download_again') and item.upload is None and can_download_again(item, path):
                 menu.addAction(translate('message_pane', 'Download Again…'), lambda: self.actionRequested.emit('download_again', item))
         if item.upload is not None:
             # being sent: not a message yet
@@ -335,17 +341,20 @@ class TranscriptView(QListView):
             return
         if bubble_kind(item) != 'note' and item.category != 'call':     # a call record takes no reply
             menu.addSeparator()
-            menu.addAction(translate('message_pane', 'Reply'), lambda: self.actionRequested.emit('reply', item))
-            if item.outgoing and bubble_kind(item) == 'text':
+            if self.offers('reply'):
+                menu.addAction(translate('message_pane', 'Reply'), lambda: self.actionRequested.emit('reply', item))
+            if self.offers('edit') and item.outgoing and bubble_kind(item) == 'text':
                 menu.addAction(translate('message_pane', 'Edit'), lambda: self.actionRequested.emit('edit', item))
-            if item.outgoing and item.category in ('image', 'video'):
+            if self.offers('caption') and item.outgoing and item.category in ('image', 'video'):
                 menu.addAction(translate('message_pane', 'Edit Caption…'), lambda: self.actionRequested.emit('caption', item))
             from blink.messagepane.forward import forwardable
-            if forwardable(item):
+            if self.offers('forward') and forwardable(item):
                 menu.addAction(translate('message_pane', 'Forward…'), lambda: self.actionRequested.emit('forward', item))
         menu.addSeparator()
-        menu.addAction(translate('message_pane', 'Info…'), lambda: self.actionRequested.emit('info', item))
-        menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
+        if self.offers('info'):
+            menu.addAction(translate('message_pane', 'Info…'), lambda: self.actionRequested.emit('info', item))
+        if self.offers('delete'):
+            menu.addAction(translate('message_pane', 'Delete…'), lambda: self.actionRequested.emit('delete', item))
         menu.exec(global_position)
 
     def _react(self, item, emoji, where):
