@@ -174,6 +174,15 @@ class Blink(QApplication, metaclass=QSingleton):
             ActivityLog().error('[ui] Qt cannot read SVG images: most icons will be missing. Install qt6-svg-plugins (Debian 13 and later) or libqt6svg6')
         from blink import dns_cache
         dns_cache.install()     # last good DNS answers, used when the name servers do not answer
+        # kill -USR1 <pid>: the stack of every thread, appended to logs/stacks.txt (works while
+        # Python threads are stuck, as it runs in the signal handler, not in a Python thread)
+        import faulthandler
+        try:
+            self._stacks_file = open(ApplicationData.get('logs/stacks.txt'), 'a')
+            faulthandler.register(signal.SIGUSR1, file=self._stacks_file, all_threads=True)
+            ActivityLog().info(f'[debug] kill -USR1 {os.getpid()} writes the stack of every thread to {self._stacks_file.name}')
+        except Exception as e:
+            ActivityLog().warning(f'[debug] Thread stacks on SIGUSR1 are not available: {e!r}')
         self.registrar_addresses = {}
         self.registration_watch = RegistrationWatch()     # says so when a registration gets no result at all
         self._tls_diagnosed = {}
