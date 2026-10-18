@@ -3800,17 +3800,18 @@ def build_list_item_palettes(widget):
 
     What the item's .ui file set is kept (with its resolve mask) and the rest is taken from the
     application palette each time, so a theme change rebuilds them. Under a dark theme the light
-    blue AlternateBase the .ui files fix is replaced by the theme's, and Dark, which secondary
-    lines are drawn in and is near black there, becomes a readable grey. We set Window ourselves
-    because only the Oxygen theme honors the BackgroundRole."""
+    blue AlternateBase the .ui files fix is replaced by the theme's. Dark, which secondary lines
+    (the address or last message, the time) are drawn in, becomes a readable grey in either theme:
+    the palette's own is near black in a dark theme and too faint in a light one. We set Window
+    ourselves because only the Oxygen theme honors the BackgroundRole."""
     if not hasattr(widget, '_ui_palette'):
         widget._ui_palette = QPalette(widget.palette())
     application_palette = QApplication.palette()
     base = widget._ui_palette.resolve(application_palette)
     if is_dark_theme():
         base.setColor(QPalette.ColorRole.AlternateBase, application_palette.color(QPalette.ColorRole.AlternateBase))
-        for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
-            base.setColor(color_group, QPalette.ColorRole.Dark, secondary_text_color(application_palette, color_group))
+    for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+        base.setColor(color_group, QPalette.ColorRole.Dark, secondary_text_color(application_palette, color_group))
     palettes = Container()
     palettes.standard = QPalette(base)
     palettes.alternate = QPalette(base)

@@ -4914,9 +4914,24 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
 
     def apply_theme(self):
         self._create_widgets()
+        self._row_cache.clear()
+
+    # A contact row is the ContactWidget rendered into a pixmap: QWidget.render is costly and,
+    # done in C++ with the GIL held, starves the other threads (the twisted reactor) while the list
+    # repaints. The pixmap of each row is kept, keyed by everything that is drawn in it, and only
+    # a row whose content changed is rendered again.
+    row_cache_size = 1000
+
+    def _row_signature(self, contact):
+        from blink.contact_mangler import mangling_enabled
+        pixmap = contact.pixmap
+        return (getattr(contact, 'display_name', contact.name), contact.info, (getattr(contact, 'note', None) or '').strip(),
+                getattr(contact, 'row_time', None), pixmap.cacheKey() if pixmap is not None else None, contact.state,
+                getattr(contact, 'unread_messages', None), mangling_enabled())
 
     def _create_widgets(self):
         """The three widgets rows are rendered from (odd, even, selected), coloured for the current theme."""
+        self._row_cache = getattr(self, '_row_cache', {})
         self.contact_oddline_widget  = ContactWidget(None)
         self.contact_evenline_widget = ContactWidget(None)
         self.contact_selected_widget = ContactWidget(None)
@@ -4991,15 +5006,33 @@ class ContactDelegate(QStyledItemDelegate, ColorHelperMixin):
         else:
             widget = self.contact_oddline_widget
         item_size = option.rect.size()
-        widget.setFixedSize(item_size)
-        widget.init_from_contact(contact)
+        device = painter.device()
+        ratio = device.devicePixelRatioF() if device is not None else 1.0
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        key = (id(contact), id(widget), item_size.width(), item_size.height(), ratio)
+        signature = self._row_signature(contact)
+        cached = self._row_cache.get(key)
 
         painter.save()
-        render_row(widget, painter, option.rect)
-        widget.paint_unread_badge(painter, option.rect.topLeft())
-
-        if option.state & QStyle.StateFlag.State_MouseOver:
-            self.drawExpansionIndicator(contact, option, painter, widget)
+        if cached is not None and cached[0] == signature and not hovered:
+            painter.drawPixmap(option.rect.topLeft(), cached[1])
+        else:
+            widget.setFixedSize(item_size)
+            widget.init_from_contact(contact)
+            if widget.layout() is not None:
+                widget.layout().activate()
+            pixmap = QPixmap(item_size * ratio)
+            pixmap.setDevicePixelRatio(ratio)
+            widget.render(pixmap)
+            row_painter = QPainter(pixmap)
+            widget.paint_unread_badge(row_painter, QPoint(0, 0))
+            row_painter.end()
+            if len(self._row_cache) >= self.row_cache_size:
+                self._row_cache.clear()
+            self._row_cache[key] = (signature, pixmap)
+            painter.drawPixmap(option.rect.topLeft(), pixmap)
+            if hovered:
+                self.drawExpansionIndicator(contact, option, painter, widget)
 
         if 0 and (option.state & QStyle.StateFlag.State_MouseOver):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -5451,14 +5484,41 @@ class ContactModel(QAbstractListModel):
         # selection and the scroll position stay); the previews are already coalesced
         keys = notification.data.keys
         changed = [item for item in self.items if isinstance(item, Contact) and (keys is None or not keys.isdisjoint(item.conversation_keys))]
+        moving = [contact for contact in changed if row_time_kind(getattr(contact.group, 'settings', None)) is not None]
+        if len(moving) > 1:
+            self._reposition_contacts(moving)     # many at once (the start, a sync): one layout change, not a move each
+        elif moving:
+            self._reposition_contact(moving[0])
         for contact in changed:
-            if row_time_kind(getattr(contact.group, 'settings', None)) is not None:
-                self._reposition_contact(contact)
-            else:
+            if contact not in moving:
                 # the second line of a row in any other group quotes the conversation too
                 index = self.index(self.items.index(contact))
                 self.dataChanged.emit(index, index)
         self.update_own_contact_rows(changed)     # our own contact shows up with its first message
+
+    def _reposition_contacts(self, contacts):
+        """Move several contacts to their places in one layout change (each move done on its own makes
+        the view lay the whole list out again), keeping the selection and the scroll position."""
+        self.layoutAboutToBeChanged.emit()
+        persistent = [(index, self.items[index.row()]) for index in self.persistentIndexList() if index.isValid() and index.row() < len(self.items)]
+        for contact in contacts:
+            try:
+                position = self.items.index(contact)
+            except ValueError:
+                continue
+            move_point = self._find_contact_move_point(contact)
+            if move_point is not None and move_point not in (position, position + 1):
+                del self.items[position]
+                self.items.insert(self._find_contact_insertion_point(contact), contact)
+        for index, item in persistent:
+            try:
+                self.changePersistentIndex(index, self.index(self.items.index(item), index.column()))
+            except ValueError:
+                self.changePersistentIndex(index, QModelIndex())
+        self.layoutChanged.emit()
+        rows = [self.items.index(contact) for contact in contacts if contact in self.items]
+        if rows:
+            self.dataChanged.emit(self.index(min(rows)), self.index(max(rows)))
 
     def _reposition_contact(self, contact):
         """Move a contact to its place in its group if its sort key changed, and repaint it."""
