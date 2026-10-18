@@ -151,7 +151,8 @@ class Blink(QApplication, metaclass=QSingleton):
                                   'SIPAccountRegistrationGotAnswer',
                                   'TLSTransportHasChanged', 'SIPEngineTransportGotCertificateError', 'XCAPManagerDidDiscoverServerCapabilities', 'XCAPManagerClientError',
                                   'SystemIPAddressDidChange',
-                                  'SIPSessionNewOutgoing', 'SIPSessionNewIncoming', 'SIPSessionDidStart', 'SIPSessionDidEnd', 'SIPSessionDidFail')
+                                  'SIPSessionNewOutgoing', 'SIPSessionNewIncoming', 'SIPSessionDidStart', 'SIPSessionDidEnd', 'SIPSessionDidFail',
+                                  'SIPSessionWillTryNextRoute')
 
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
@@ -794,7 +795,11 @@ class Blink(QApplication, metaclass=QSingleton):
     @staticmethod
     def _call_route(session):
         """Where the INVITE went: transport:address:port (and the TLS name), or '' before it is known."""
-        route = getattr(session, 'route', None)
+        return Blink._route_text(getattr(session, 'route', None))
+
+    @staticmethod
+    def _route_text(route):
+        """' via transport:address:port (tls_name ...)' of a route, or ''."""
         if route is None:
             return ''
         address = getattr(route, 'address', None)
@@ -831,6 +836,13 @@ class Blink(QApplication, metaclass=QSingleton):
         originator = getattr(notification.data, 'originator', None)
         by = f' by {originator}' if originator else ''
         ActivityLog().info(f'[call] Call with {self._call_party(session)} ended{by}{self._call_duration(session)} ({self._call_info(session)})')
+
+    def _NH_SIPSessionWillTryNextRoute(self, notification):
+        # sipsimple Session.connect: the INVITE could not reach a proxy (a transport error, no answer), the next one is tried
+        session = notification.sender
+        data = notification.data
+        reason = getattr(data, 'reason', None) or 'unreachable'
+        ActivityLog().warning(f'[call] Call to {self._call_party(session)} not sent{self._route_text(data.failed_route)}: {reason}; trying{self._route_text(data.route)}'.replace('trying via', 'trying'))
 
     def _NH_SIPSessionDidFail(self, notification):
         session = notification.sender
