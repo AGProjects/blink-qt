@@ -792,6 +792,19 @@ class Blink(QApplication, metaclass=QSingleton):
         return f'{media}, account {account}' + (f', Call-ID {call_id}' if call_id else '')
 
     @staticmethod
+    def _call_route(session):
+        """Where the INVITE went: transport:address:port (and the TLS name), or '' before it is known."""
+        route = getattr(session, 'route', None)
+        if route is None:
+            return ''
+        address = getattr(route, 'address', None)
+        address = address.decode(errors='replace') if isinstance(address, bytes) else address
+        transport = getattr(route, 'transport', None) or 'udp'
+        tls_name = getattr(route, 'tls_name', None)
+        tls_name = tls_name.decode(errors='replace') if isinstance(tls_name, bytes) else tls_name
+        return f' via {transport}:{address}:{getattr(route, "port", "?")}' + (f' (tls_name {tls_name})' if transport == 'tls' and tls_name else '')
+
+    @staticmethod
     def _call_duration(session):
         start, end = getattr(session, 'start_time', None), getattr(session, 'end_time', None)
         if not start or not end:
@@ -802,7 +815,7 @@ class Blink(QApplication, metaclass=QSingleton):
     def _NH_SIPSessionNewOutgoing(self, notification):
         session = notification.sender
         streams = getattr(notification.data, 'streams', None)
-        ActivityLog().info(f'[call] Outgoing call to {self._call_party(session)} ({self._call_info(session, streams)})')
+        ActivityLog().info(f'[call] Outgoing call to {self._call_party(session)}{self._call_route(session)} ({self._call_info(session, streams)})')
 
     def _NH_SIPSessionNewIncoming(self, notification):
         session = notification.sender
