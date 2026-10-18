@@ -2138,6 +2138,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             tiles.append({'uri': str(blink_session.contact_uri.uri), 'account': str(account) if account else None})
         QSettings().setValue(self.settings_key, json.dumps(tiles))
 
+    # one tile per pass of the event loop: building a tile (its ChatWidget) is mostly C++ widget
+    # construction, done with the GIL held; all of them in one go kept the SIP reactor thread
+    # (DNS lookups, timers) from running for seconds at the start
+    tile_restore_interval = 0      # ms between two tiles
+
     def _restore_conference_tiles(self):
         try:
             tiles = json.loads(QSettings().value(self.settings_key) or '[]')
@@ -2145,16 +2150,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             tiles = []
         if not tiles:
             return
-        from blink.contacts import URIUtils
-        account_manager = AccountManager()
         present = {str(item.blink_session.contact_uri.uri).lower() for item in self.session_model.sessions
                    if item.blink_session.contact_uri is not None and self._shows_session(item.blink_session)}
         hidden = {str(item.blink_session.contact_uri.uri).lower(): item for item in self.session_model.sessions
                   if item.blink_session.contact_uri is not None and not self._shows_session(item.blink_session)}
         self._restoring_tiles = True
-        restored = 0
+        pending = list(reversed(tiles))       # the bottom one first: each newer one goes on top
+        self._restore_next_tile(tiles, pending, present, hidden, 0)
+
+    def _restore_next_tile(self, tiles, pending, present, hidden, restored):
+        from blink.contacts import URIUtils
+        account_manager = AccountManager()
         try:
-            for tile in reversed(tiles):        # the bottom one first: each newer one goes on top
+            while pending:
+                tile = pending.pop(0)
                 uri = tile.get('uri')
                 if not uri or uri.lower() in present:
                     continue
@@ -2163,7 +2172,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                     hidden[uri.lower()].msrp_tile = True
                     present.add(uri.lower())
                     restored += 1
-                    continue
+                    continue        # nothing built: the next one in this pass
                 try:
                     account = account_manager.get_account(tile['account']) if tile.get('account') else account_manager.default_account
                 except KeyError:
@@ -2174,8 +2183,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 SessionManager().create_session(contact, contact_uri, [StreamDescription('chat')], account=account, connect=False)
                 present.add(uri.lower())
                 restored += 1
-        finally:
-            self._restoring_tiles = False
+                break               # one tile built: the rest after the event loop has had a turn
+        except Exception as e:
+            ActivityLog().error(f'[ui] Chat window: restoring a tile failed: {e!r}')
+        if pending:
+            QTimer.singleShot(self.tile_restore_interval, lambda: self._restore_next_tile(tiles, pending, present, hidden, restored))
+            return
+        self._restoring_tiles = False
         self._hide_message_only_sessions()      # the rows of tiles made visible again
         self._save_conference_tiles()
         if restored:
