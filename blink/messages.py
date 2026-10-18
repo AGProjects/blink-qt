@@ -1552,6 +1552,75 @@ class MessageManager(object, metaclass=Singleton):
         finally:
             self._snapshot_backlogs.discard(account.id)
 
+    journal_snapshot_older = 'older'        # journal/<account>/snapshot/older/: the pages of the older history
+
+    def _download_snapshot_older(self, account, state, cache, progress):
+        """Download the older history of a first sync, from five years ago up to where its recent
+        days start, into snapshot/older/. Returns whether all of it is here."""
+        activity = ActivityLog()
+        jlog = JournalLog()
+        until = ISOTimestamp(state['until']).astimezone(timezone.utc)
+        headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
+        verify = SIPSimpleSettings().tls.verify_server
+        fetched = state.get('fetched') or 0
+        activity.info(f'[journal] Downloading the history of {account.id} older than {until} in the background' + (' (resumed)' if state.get('cursor') else ''))
+        jlog(account.id, 'backfill start', until=state['until'], cursor=state.get('cursor') or None)
+        while True:
+            if self.quitting or not account.enabled:
+                return False
+            if state.get('cursor'):
+                url = self._journal_url(account, cursor=state['cursor'])
+            else:
+                url = self._journal_url(account, since=datetime.now(timezone.utc) - timedelta(days=365 * self.journal_since_years))
+            try:
+                response = requests.get(url, headers=headers, timeout=20, verify=verify)
+                response.raise_for_status()
+                messages = response.json().get('messages') or []
+                if not state.get('total') and not state.get('cursor'):
+                    # from five years ago: the whole journal, less the recent days applied already
+                    try:
+                        remaining = int(response.headers.get('X-Sylk-Journal-Remaining'))
+                    except (TypeError, ValueError):
+                        remaining = 0       # an older server: the count alone is shown
+                    if remaining:
+                        state['total'] = max(remaining - (state.get('recent') or 0), len(messages))
+            except (requests.RequestException, ValueError, AttributeError) as e:
+                activity.warning(f'[journal] Downloading the older history of {account.id} stopped, it goes on after the next sync: {e}')
+                jlog(account.id, 'backfill stopped', error=str(e)[:200])
+                return False
+            entries = []
+            finished = not messages
+            for entry in messages:
+                try:
+                    when = ISOTimestamp(entry.get('timestamp')).replace(tzinfo=timezone.utc)
+                except Exception:
+                    when = None
+                if when is not None and when >= until:
+                    finished = True     # the recent days, applied already
+                    break
+                entries.append(entry)
+            if entries:
+                name = self._journal_file_name(entries)
+                path = cache.path(name)
+                try:
+                    with open(path + '.part', 'w', encoding='utf-8') as page_file:
+                        json.dump({'cursor': state.get('cursor') or '', 'messages': entries}, page_file)
+                    os.replace(path + '.part', path)
+                except OSError as e:
+                    activity.error(f'[journal] Cannot save older history page {path}: {e}')
+                    return False
+            fetched += len(entries)
+            if messages and messages[-1].get('message_id'):
+                state['cursor'] = messages[-1]['message_id']
+            state['fetched'] = fetched
+            state['downloaded'] = finished
+            self._save_journal_backfill_state(account, state)
+            jlog(account.id, 'backfill download page', entries=len(entries), total=fetched, cursor=state.get('cursor') or None)
+            progress('download', fetched)
+            if finished:
+                activity.info(f'[journal] Downloaded {fetched} older journal entries of {account.id}')
+                return True
+
     def _run_snapshot_backlog(self, account):
         from blink.history import MessageHistory
         notification_center = NotificationCenter()
@@ -1584,77 +1653,61 @@ class MessageManager(object, metaclass=Singleton):
             return      # still failing: tried again after the next sync
 
         if state is not None:
-            until = ISOTimestamp(state['until']).astimezone(timezone.utc)
-            headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
-            verify = SIPSimpleSettings().tls.verify_server
-            activity.info(f'[journal] Fetching the history of {account.id} older than {until} in the background' + (' (resumed)' if state.get('cursor') else ''))
-            jlog(account.id, 'backfill start', until=state['until'], cursor=state.get('cursor') or None)
-            progress('apply', done)
-            while True:
-                if self.quitting or not account.enabled:
+            older = JournalCache(os.path.join(cache.directory, self.journal_snapshot_older))
+            makedirs(older.directory)
+            if not state.get('downloaded'):
+                # all of it first: the read points need every page, so each message is stored with
+                # its final read state at once, not fixed by a later page (a badge in between)
+                if not self._download_snapshot_older(account, state, older, progress):
                     progress('done')
                     return      # goes on after the next sync
-                if state.get('cursor'):
-                    url = self._journal_url(account, cursor=state['cursor'])
-                else:
-                    url = self._journal_url(account, since=datetime.now(timezone.utc) - timedelta(days=365 * self.journal_since_years))
-                try:
-                    response = requests.get(url, headers=headers, timeout=20, verify=verify)
-                    response.raise_for_status()
-                    messages = response.json().get('messages') or []
-                    if not state.get('total') and not state.get('cursor'):
-                        # from five years ago: the whole journal, less the recent days applied already
-                        try:
-                            remaining = int(response.headers.get('X-Sylk-Journal-Remaining'))
-                        except (TypeError, ValueError):
-                            remaining = 0       # an older server: the count alone is shown
-                        if remaining:
-                            state['total'] = max(remaining - (state.get('recent') or 0), len(messages))
-                except (requests.RequestException, ValueError, AttributeError) as e:
-                    activity.warning(f'[journal] Fetching the older history of {account.id} stopped, it goes on after the next sync: {e}')
-                    jlog(account.id, 'backfill stopped', error=str(e)[:200])
-                    progress('done')
-                    return
-                older = []
-                finished = not messages
-                for entry in messages:
+            if not state.get('points'):
+                for name in older.pages():
                     try:
-                        when = ISOTimestamp(entry.get('timestamp')).replace(tzinfo=timezone.utc)
-                    except Exception:
-                        when = None
-                    if when is not None and when >= until:
-                        finished = True     # the recent days, applied already
-                        break
-                    older.append(entry)
-                self._merge_read_points(points, older)
+                        self._merge_read_points(points, older.load(name).get('messages') or [])
+                    except (OSError, ValueError, AttributeError):
+                        continue
                 self._save_snapshot_read_points(cache, points)
+                state['points'] = True
+                self._save_journal_backfill_state(account, state)
+                jlog(account.id, 'read points made', conversations=len(points), older=True)
+            names = list(reversed(older.pages()))
+            activity.info(f'[journal] Applying {len(names)} pages of the older history of {account.id} newest first in the background')
+            for name in names:
+                if self.quitting or not account.enabled:
+                    progress('done')
+                    return      # goes on after the next start
+                try:
+                    size = len(older.load(name).get('messages') or [])
+                except (OSError, ValueError, AttributeError):
+                    size = 0
                 before = done
                 try:
-                    outcomes = self._apply_snapshot_entries(account, list(reversed(older)), contacts,
-                                                            progress=lambda index, size, db_wait=0.0: progress('apply', before + index),
-                                                            batch=self.journal_backlog_batch, duty=self.journal_backlog_duty)
+                    self._apply_snapshot_page(account, older, name, contacts,
+                                              progress=lambda index, total, db_wait=0.0: progress('apply', before + index),
+                                              batch=self.journal_backlog_batch, duty=self.journal_backlog_duty)
                 except JournalInterrupted:
                     progress('done')
-                    return      # the page is fetched again after the next sync
-                done += len(older)
-                # what came in up to its conversation's read point was read
-                MessageHistory().apply_read_points(account.id, points, page=f'backfill {done}')
+                    return
+                done += size
                 MessageHistory().flush_batched_stores()
-                if messages and messages[-1].get('message_id'):
-                    state['cursor'] = messages[-1]['message_id']
                 state['done'] = done
                 self._save_journal_backfill_state(account, state)
-                jlog(account.id, 'backfill page', entries=len(older), total=done, cursor=state.get('cursor') or None,
-                     **{re.sub(r'[^0-9a-z]+', '_', outcome.lower()).strip('_'): count for outcome, count in sorted(outcomes.items())})
                 progress('apply', done)
-                if finished:
-                    break
                 time.sleep(self.journal_backlog_pause)
+            MessageHistory().apply_read_points(account.id, points, page='older history')     # pages quarantined meanwhile aside, a no-op
+            if older.pages():
+                progress('done')
+                return      # pages that failed, tried again after the next sync
 
         MessageHistory().wait_for_writes()
         unlink(os.path.join(cache.directory, self.journal_snapshot_backfill))
         unlink(os.path.join(cache.directory, self.journal_snapshot_reads))
         unlink(os.path.join(cache.directory, self.journal_snapshot_complete))
+        try:
+            os.rmdir(os.path.join(cache.directory, self.journal_snapshot_older))
+        except OSError:
+            pass
         activity.info(f'[journal] First sync of {account.id} complete: {done} older entries applied in {time.monotonic() - started:.1f}s')
         jlog(account.id, 'snapshot complete', entries=done, took=f'{time.monotonic() - started:.1f}s')
         progress('done', done)

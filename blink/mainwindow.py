@@ -1662,14 +1662,18 @@ class MainWindow(base_class, ui_class):
             if not self._journal_in_progress:
                 self._show_idle_progress()
             return
-        self._backlog_progress = (notification.data.done or 0, notification.data.total, notification.sender.id)
+        self._backlog_progress = (notification.data.done or 0, notification.data.total, notification.sender.id, notification.data.phase)
         if not self._journal_in_progress:
             self._show_backlog_progress()
 
     def _show_backlog_progress(self):
-        done, total, account = self._backlog_progress
+        done, total, account, phase = self._backlog_progress
         self.decryption_speed_button.hide()
-        self._show_progress((translate('main_window', 'Importing older messages'), translate('main_window', 'Older messages')), done, total, account)
+        if phase == 'download':
+            labels = (translate('main_window', 'Downloading older messages'), translate('main_window', 'Older messages'))
+        else:
+            labels = (translate('main_window', 'Importing older messages'), translate('main_window', 'Older messages'))
+        self._show_progress(labels, done, total, account)
 
     def _show_idle_progress(self):
         """No journal run: the older first sync pages, else the background decryption, else nothing."""
