@@ -216,6 +216,7 @@ class Blink(QApplication, metaclass=QSingleton):
         self.setOrganizationName("AG Projects")
         self.setApplicationName("Blink")
         self.setApplicationVersion(__version__)
+        self.setDesktopFileName("blink")  # Wayland app_id / X11 WM_CLASS -> blink.desktop, so GNOME picks the right icon
         self.setWindowIcon(QIcon(Resources.get('icons/blink.png')))
         self._check_default_font()
         from blink.widgets.style import BlinkStyle
