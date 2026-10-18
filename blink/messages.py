@@ -4,6 +4,7 @@ import json
 import os
 import re
 import requests
+import threading
 import time
 import urllib3
 import random
@@ -1405,7 +1406,7 @@ class MessageManager(object, metaclass=Singleton):
     journal_snapshot_skipped = frozenset(('receipt', 'conversation_remove', 'message_remove', 'messages_bulk_delete', 'conversation_read', 'public_key'))
     journal_throttle = 0.05         # seconds to pause, so the GUI and the db thread keep up
 
-    def _apply_snapshot_page(self, account, cache, name, contacts, progress=None):
+    def _apply_snapshot_page(self, account, cache, name, contacts, progress=None, **pace):
         """Apply one page of a first sync, newest entry first (they are only inserts). Returns
         the timestamp of its oldest entry, or None when it failed (kept for a later attempt, or
         quarantined). JournalInterrupted when quitting: the page is kept."""
@@ -1413,7 +1414,7 @@ class MessageManager(object, metaclass=Singleton):
         try:
             page = cache.load(name)
             entries = list(reversed(page.get('messages') or []))
-            stats = self._apply_server_history_messages(account, entries, first_sync=True, contacts=contacts, progress=progress, mark_synced=False)
+            stats = self._apply_server_history_messages(account, entries, first_sync=True, contacts=contacts, progress=progress, mark_synced=False, **pace)
         except JournalInterrupted:
             raise
         except Exception as e:
@@ -1475,6 +1476,8 @@ class MessageManager(object, metaclass=Singleton):
         self._apply_snapshot_backlog(account)
 
     journal_backlog_pause = 0.2     # seconds between two older pages of a first sync, so live work goes first
+    journal_backlog_batch = 50      # older entries between two pauses
+    journal_backlog_duty = 2.0      # each pause is twice the time the batch took: the import works a third of the time
 
     @run_in_thread('journal-backlog')
     def _apply_snapshot_backlog(self, account):
@@ -1483,6 +1486,10 @@ class MessageManager(object, metaclass=Singleton):
         counted, and the public keys of the contacts are asked from the server."""
         if account.id in self._snapshot_backlogs or not self._journal_snapshot_downloaded(account):
             return      # running, or finished by a call queued before this one
+        try:
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 10)     # Linux: this thread only, the GUI keeps its priority
+        except (AttributeError, OSError):
+            pass
         self._snapshot_backlogs.add(account.id)
         try:
             self._run_snapshot_backlog(account)
@@ -1515,7 +1522,8 @@ class MessageManager(object, metaclass=Singleton):
             try:
                 self._apply_snapshot_page(account, cache, name, contacts,
                                           progress=lambda index, size, db_wait=0.0: notification_center.post_notification(
-                                              'BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='apply', done=before + index, total=total)))
+                                              'BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='apply', done=before + index, total=total)),
+                                          batch=self.journal_backlog_batch, duty=self.journal_backlog_duty)
             except JournalInterrupted:
                 notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='done', done=done, total=total))
                 return
@@ -1699,7 +1707,8 @@ class MessageManager(object, metaclass=Singleton):
         """For the main window's progress bar: 'download' or 'apply', done of total entries (total None: not known), then 'done'."""
         NotificationCenter().post_notification('BlinkJournalProgress', sender=account, data=NotificationData(phase=phase, done=done, total=total))
 
-    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None, progress=None, mark_synced=True):
+    def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None, progress=None, mark_synced=True,
+                                       batch=None, duty=None):
         """Apply journal entries by content type (blink.journal.journal_action). Runs in the sync thread.
 
         Bulk mode: nothing here creates a conversation or decrypts; an entry for a
@@ -1718,6 +1727,10 @@ class MessageManager(object, metaclass=Singleton):
         from blink.history import MessageHistory
         stored = MessageHistory().stored_message_ids(message.get('message_id') for message in messages)
         db_wait = 0.0       # seconds waited for the db thread (stats of the journal log)
+        # batch: entries between pauses; duty: the pause is this many times the time the batch took
+        # (2.0: busy a third of the time), for work in the background that must not hog the CPU
+        batch = batch or self.journal_progress_every
+        batch_started = time.monotonic()
         for index, message in enumerate(messages, 1):
             if self.quitting:
                 # what fails while Blink stops would be counted as failed and the page deleted with it
@@ -1738,7 +1751,7 @@ class MessageManager(object, metaclass=Singleton):
             outcomes[outcome] += 1
             if stats is not None:
                 stats.entry(content_type, outcome, message.get('contact'), message.get('direction'), message.get('timestamp'))
-            if index % self.journal_progress_every == 0:
+            if index % batch == 0:
                 # wait for the db thread to store what was queued: the queue stays short, so a
                 # conversation opened meanwhile loads between batches, not after the whole run;
                 # the contact list and the open conversation hear of the batch once per conversation
@@ -1750,7 +1763,9 @@ class MessageManager(object, metaclass=Singleton):
                 log.info(f'Applied {index} of {len(messages)} journal entries of {account.id} ({index / elapsed if elapsed else 0:.0f}/s)')
                 if progress is not None:
                     progress(index, len(messages), db_wait)
-                time.sleep(self.journal_throttle)
+                busy = time.monotonic() - batch_started
+                time.sleep(max(self.journal_throttle, busy * duty) if duty else self.journal_throttle)
+                batch_started = time.monotonic()
         MessageHistory().flush_batched_stores()
         MessageHistory().wait_for_writes()
         if mark_synced:
