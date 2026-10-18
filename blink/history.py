@@ -496,6 +496,20 @@ def first_sync_start(account_id):
         return None
 
 
+FIRST_SYNC_DATE = 'first-sync.date'
+
+
+def first_sync_date(account_id):
+    """When this device's first journal sync of the account started (journal/<account>/first-sync.date,
+    kept for ever), None when not known (an account synced before it was kept, Bonjour).
+    What is older was sent before this device had the account: it never sends a receipt for it."""
+    try:
+        with open(ApplicationData.get(os.path.join('journal', str(account_id), FIRST_SYNC_DATE))) as file:
+            return ISOTimestamp(file.read().strip())
+    except Exception:
+        return None
+
+
 def history_info(account_id, text):
     """An activity line about stored history, at debug level while the account's first sync runs."""
     if first_sync_pending(account_id):

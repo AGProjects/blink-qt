@@ -1247,11 +1247,21 @@ class MessageManager(object, metaclass=Singleton):
         resumed = os.path.exists(marker)
         first_sync = resumed or not account.sms.history_synchronization_id
         if first_sync and not resumed:
+            started_at = ISOTimestamp.now()
             try:
                 with open(marker, 'w') as marker_file:
-                    marker_file.write(f'{ISOTimestamp.now()}\n')
+                    marker_file.write(f'{started_at}\n')
             except OSError as e:
                 activity.warning(f'[journal] Cannot write {marker}: {e}')
+            from blink.history import FIRST_SYNC_DATE
+            date_path = os.path.join(directory, FIRST_SYNC_DATE)
+            if not os.path.exists(date_path):
+                # kept for ever: no receipt is ever sent for a message older than it (send_imdn_message)
+                try:
+                    with open(date_path, 'w') as date_file:
+                        date_file.write(f'{started_at}\n')
+                except OSError as e:
+                    activity.warning(f'[journal] Cannot write {date_path}: {e}')
         # the pages of a first sync are a snapshot, kept apart (applied newest first, _apply_snapshot_recent)
         page_directory = self._journal_snapshot_cache(account).directory if first_sync else directory
         jlog = JournalLog()
@@ -3331,9 +3341,30 @@ class MessageManager(object, metaclass=Singleton):
             return
         if open_only or account is BonjourAccount() or not account.sms.use_cpim or not account.sms.enable_imdn or host.default_ip is None:
             return
+        if self._before_first_sync(account, message.id, message.timestamp, 'delivered'):
+            return
         content = IMDNDocument.create(message_id=message.id, datetime=message.timestamp, recipient_uri=contact.uri.uri,
                                       notification=DeliveryNotification('delivered'))
         self._send_message(OutgoingMessage(account, contact, content, IMDNDocument.content_type, sessionless=True))
+
+    @staticmethod
+    def _before_first_sync(account, message_id, timestamp, state):
+        """A device never sends a receipt for a message older than its first sync of the account:
+        it was sent before this device had the account, its sender was answered by the others."""
+        if account is None or account is BonjourAccount():
+            return False
+        from blink.history import first_sync_date
+        since = first_sync_date(account.id)
+        if since is None:
+            return False
+        try:
+            when = timestamp if isinstance(timestamp, datetime) else ISOTimestamp(timestamp)
+            older = when < since
+        except Exception:
+            return False
+        if older:
+            log.debug(f'Message {message_id} imdn {state} not sent: the message ({timestamp}) is older than the first sync of {account.id} ({since})')
+        return older
 
     def send_imdn_message(self, session, id, timestamp, state, account=None):
         if host.default_ip is None:
@@ -3345,6 +3376,9 @@ class MessageManager(object, metaclass=Singleton):
         if account is not None:
             if not account.sms.use_cpim or not account.sms.enable_imdn:
                 return
+
+        if self._before_first_sync(session.account if account is None else account, id, timestamp, state):
+            return
 
         log.debug(f"Message {id} imdn sending: {state}")
         if state == 'delivered':
