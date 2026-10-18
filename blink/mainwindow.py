@@ -84,6 +84,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
         notification_center.add_observer(self, name='BlinkMessagePaneDidReadConversation')
         notification_center.add_observer(self, name='BlinkJournalProgress')
+        notification_center.add_observer(self, name='BlinkJournalBacklogProgress')
         notification_center.add_observer(self, name='BlinkBackgroundDecryptionProgress')
 
         notification_center.add_observer(self, sender=AccountManager())
@@ -394,6 +395,7 @@ class MainWindow(base_class, ui_class):
         self.journal_progress_timer.timeout.connect(self.progress_row.show)
         self._journal_in_progress = False
         self._decryption_progress = None        # (done, total) of the background decryption, while it runs
+        self._backlog_progress = None           # (done, total, account) of the older first sync pages, while they are applied
 
         # the message pane, right of the contact list (which becomes the conversation switcher);
         # closed at start whatever it was when Blink quit, so starting never shows (and reads) a conversation
@@ -1641,10 +1643,7 @@ class MainWindow(base_class, ui_class):
         phase = notification.data.phase
         if phase == 'done':
             self._journal_in_progress = False
-            if self._decryption_progress is not None:
-                self._show_decryption_progress()
-            else:
-                self._hide_progress()
+            self._show_idle_progress()
             return
         self._journal_in_progress = True
         self.decryption_speed_button.hide()
@@ -1656,14 +1655,39 @@ class MainWindow(base_class, ui_class):
             labels = (translate('main_window', 'Importing messages'), translate('main_window', 'Importing'))
         self._show_progress(labels, done, total, account)
 
+    def _NH_BlinkJournalBacklogProgress(self, notification):
+        # the older pages of a first sync, in the background: shown while no journal run is
+        if notification.data.phase == 'done':
+            self._backlog_progress = None
+            if not self._journal_in_progress:
+                self._show_idle_progress()
+            return
+        self._backlog_progress = (notification.data.done or 0, notification.data.total, notification.sender.id)
+        if not self._journal_in_progress:
+            self._show_backlog_progress()
+
+    def _show_backlog_progress(self):
+        done, total, account = self._backlog_progress
+        self.decryption_speed_button.hide()
+        self._show_progress((translate('main_window', 'Importing older messages'), translate('main_window', 'Older messages')), done, total, account)
+
+    def _show_idle_progress(self):
+        """No journal run: the older first sync pages, else the background decryption, else nothing."""
+        if self._backlog_progress is not None:
+            self._show_backlog_progress()
+        elif self._decryption_progress is not None:
+            self._show_decryption_progress()
+        else:
+            self._hide_progress()
+
     def _NH_BlinkBackgroundDecryptionProgress(self, notification):
         if notification.data.phase == 'done':
             self._decryption_progress = None
             if not self._journal_in_progress:
-                self._hide_progress()
+                self._show_idle_progress()
             return
         self._decryption_progress = (notification.data.done or 0, notification.data.total, getattr(notification.data, 'speed', 'normal'), getattr(notification.data, 'eta', None))
-        if not self._journal_in_progress:
+        if not self._journal_in_progress and self._backlog_progress is None:
             self._show_decryption_progress()
 
     def _show_decryption_progress(self):

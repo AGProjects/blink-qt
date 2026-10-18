@@ -22,7 +22,7 @@ from pgpy.errors import PGPEncryptionError, PGPDecryptionError
 
 from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
-from application.system import makedirs, host
+from application.system import makedirs, host, unlink
 from application.python.types import Singleton
 from datetime import datetime, timezone, timedelta
 from dateutil.tz import tzlocal, tzutc
@@ -812,6 +812,7 @@ class MessageManager(object, metaclass=Singleton):
         self._own_conversation_removes = OwnMarkers(ttl=60)  # conversation removals this device asked the server for
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
+        self._snapshot_backlogs = set()  # account ids whose older first sync pages are being applied
         self._journal_decrypts = set()  # ids of first sync entries decrypted for an open conversation: stored, never handled as live
         self._sync_queue = deque()
         self._token_requested = {}      # account id -> monotonic time of the last API token request
@@ -1005,7 +1006,8 @@ class MessageManager(object, metaclass=Singleton):
 
     _journal_unverified_logged = False
     journal_since_years = 5     # how far back the history of a new device goes, as sylk mobile does
-    journal_recent_days = 7     # a first sync takes these last days first; the older history follows in the background
+    journal_recent_days = 7     # a first sync is applied newest first: once these last days are in, it is finished
+                                # and the older pages are applied in the background (_apply_snapshot_backlog)
     journal_max_pages = 200     # pages per run; the next run continues from the cursor
 
     def _journal_directory(self, account):
@@ -1049,29 +1051,26 @@ class MessageManager(object, metaclass=Singleton):
                 self._announce_after_sync.add(account.id)
 
     journal_first_sync_marker = FIRST_SYNC_MARKER
-    journal_backfill_file = 'backfill.json'     # journal/<account>/backfill.json: the older history still to fetch
+    journal_snapshot_directory = 'snapshot'     # journal/<account>/snapshot/: the pages of a first sync
+    journal_snapshot_complete = 'complete'      # journal/<account>/snapshot/complete: all of them are downloaded
 
-    def _journal_backfill_path(self, account):
-        return os.path.join(self._journal_directory(account), self.journal_backfill_file)
+    # A first sync is a snapshot of the journal: every message has its final state in it and
+    # removed messages are not in it. Its pages are only inserts, so they are applied in any
+    # order: newest first, the last journal_recent_days days before the first sync is finished,
+    # the older ones in the background after it. Pages of later syncs (events after the first
+    # sync started) are kept apart in journal/<account>/ and applied in order, as always.
 
-    def _journal_backfill_state(self, account):
-        """{'until': ISO time, 'cursor': last id fetched}: the history older than the first sync's
-        window, fetched in the background after it; None when there is nothing left to fetch."""
-        try:
-            with open(self._journal_backfill_path(account)) as file:
-                state = json.load(file)
-        except (OSError, ValueError):
-            return None
-        return state if isinstance(state, dict) and state.get('until') else None
+    def _journal_snapshot_cache(self, account):
+        path = os.path.join(self._journal_directory(account), self.journal_snapshot_directory)
+        makedirs(path)
+        return JournalCache(path)
 
-    def _save_journal_backfill_state(self, account, state):
-        path = self._journal_backfill_path(account)
-        try:
-            with open(path + '.tmp', 'w') as file:
-                json.dump(state, file)
-            os.replace(path + '.tmp', path)
-        except OSError as e:
-            ActivityLog().warning(f'[journal] Cannot write {path}: {e}')
+    def _journal_snapshot_downloaded(self, account):
+        return os.path.exists(os.path.join(self._journal_directory(account), self.journal_snapshot_directory, self.journal_snapshot_complete))
+
+    def _journal_snapshot_pending(self, account):
+        """Whether pages of the first sync are still to be applied (its older history, in the background)."""
+        return self._journal_snapshot_downloaded(account)
 
     journal_progress_interval = 0.25        # seconds between progress updates while a page is read
 
@@ -1109,8 +1108,7 @@ class MessageManager(object, metaclass=Singleton):
         return os.path.join(self._journal_directory(account), self.journal_first_sync_marker)
 
     def _journal_page_url(self, account):
-        """The next journal page: after the cursor, or for a first sync `since` the start of its
-        window (the last journal_recent_days days; the older history is fetched after it).
+        """The next journal page: after the cursor, or for a first sync `since` five years ago.
 
         Without `since` and without a cursor the server answers with the last
         three days only, and the older entries are never asked for.
@@ -1121,11 +1119,7 @@ class MessageManager(object, metaclass=Singleton):
             url = urllib.parse.urljoin(f'{base}/', cursor)
             query = ''
         else:
-            backfill = self._journal_backfill_state(account)
-            if backfill is not None:
-                since = ISOTimestamp(backfill['until']).astimezone(timezone.utc)     # a first sync resumed before its first page
-            else:
-                since = datetime.now(timezone.utc) - timedelta(days=self.journal_recent_days)
+            since = datetime.now(timezone.utc) - timedelta(days=365 * self.journal_since_years)
             url = base
             query = 'since=' + since.strftime('%Y-%m-%dT%H:%M:%S.') + f'{since.microsecond // 1000:03d}Z'
         scheme, netloc, path, _, fragment = urlsplit(url)
@@ -1159,6 +1153,15 @@ class MessageManager(object, metaclass=Singleton):
         settings = SIPSimpleSettings()
         activity = ActivityLog()
         marker = self._journal_first_sync_marker(account)
+        if self._journal_snapshot_downloaded(account):
+            # a first sync downloaded before a quit: its recent days first (if they were not applied
+            # yet, this finishes the first sync), then its older pages go on in the background
+            if os.path.exists(marker):
+                self._apply_snapshot_recent(account)
+                if os.path.exists(marker):
+                    return      # stopped by quitting: the first sync is finished at the next start
+            else:
+                self._apply_snapshot_backlog(account)
         resumed = os.path.exists(marker)
         first_sync = resumed or not account.sms.history_synchronization_id
         if first_sync and not resumed:
@@ -1167,14 +1170,13 @@ class MessageManager(object, metaclass=Singleton):
                     marker_file.write(f'{ISOTimestamp.now()}\n')
             except OSError as e:
                 activity.warning(f'[journal] Cannot write {marker}: {e}')
-            # what is older than the window is fetched after it, in the background
-            since = datetime.now(timezone.utc) - timedelta(days=self.journal_recent_days)
-            self._save_journal_backfill_state(account, {'until': since.isoformat(), 'cursor': ''})
+        # the pages of a first sync are a snapshot, kept apart (applied newest first, _apply_snapshot_recent)
+        page_directory = self._journal_snapshot_cache(account).directory if first_sync else directory
         jlog = JournalLog()
         jlog(account.id, 'sync start', reason=reason, first_sync=first_sync, resumed=resumed or None, cursor=account.sms.history_synchronization_id,
-             since=f'{self.journal_recent_days} days' if first_sync else None, server=account.sms.history_synchronization_url)
+             since=f'{self.journal_since_years} years' if first_sync else None, server=account.sms.history_synchronization_url)
         activity.info(f'[journal] Fetching the message journal of {account.id}' + (f' ({reason})' if reason else '')
-                      + (f' after {account.sms.history_synchronization_id}' if account.sms.history_synchronization_id else f' of the last {self.journal_recent_days} days')
+                      + (f' after {account.sms.history_synchronization_id}' if account.sms.history_synchronization_id else f' since {self.journal_since_years} years ago')
                       + (' (resuming the first sync)' if resumed else ''))
         if not settings.tls.verify_server and not self._journal_unverified_logged:
             # the user's choice (tls.verify_server); said once here instead of a urllib3 warning per request
@@ -1186,7 +1188,7 @@ class MessageManager(object, metaclass=Singleton):
         expected = None     # entries the server has after the cursor (X-Sylk-Journal-Remaining of the first page)
         # pages downloaded by an earlier run that was stopped (quit) and not imported yet: the
         # progress counts them, so a resumed download goes on from where it was, not from 0
-        cache = JournalCache(directory)
+        cache = JournalCache(page_directory)
         cached = 0
         for name in cache.pages():
             try:
@@ -1198,7 +1200,8 @@ class MessageManager(object, metaclass=Singleton):
         stopped = None
         stats = JournalStats(account.id, first_sync=first_sync, cursor=account.sms.history_synchronization_id, reason=reason)
 
-        while pages < self.journal_max_pages:
+        # a first sync downloads all of it: its newest pages are applied first
+        while first_sync or pages < self.journal_max_pages:
             if self.quitting:
                 stopped = 'quitting'
                 break
@@ -1242,7 +1245,7 @@ class MessageManager(object, metaclass=Singleton):
                 break
 
             name = self._journal_file_name(messages)
-            path = os.path.join(directory, name)
+            path = os.path.join(page_directory, name)
             try:
                 with open(path + '.part', 'w', encoding='utf-8') as page_file:
                     # the cursor as it stood before this page: the apply stage tells a
@@ -1287,11 +1290,159 @@ class MessageManager(object, metaclass=Singleton):
             activity.info(f'[journal] Downloaded {entries} journal entries of {account.id} in {pages} pages ({transferred} bytes, {time.monotonic() - started:.1f}s)')
         elif complete:
             activity.info(f'[journal] The message journal of {account.id} has no new entries')
+        if first_sync:
+            if not complete:
+                # its newest pages are not here yet: nothing is applied, the next sync downloads the rest
+                activity.info(f'[journal] First sync of {account.id} not complete ({stopped}), the download goes on at the next sync')
+                self._journal_progress(account, 'done')
+                return
+            try:
+                with open(os.path.join(page_directory, self.journal_snapshot_complete), 'w') as complete_file:
+                    complete_file.write(f'{ISOTimestamp.now()} {cached + entries} entries\n')
+            except OSError as e:
+                activity.error(f'[journal] Cannot mark the first sync of {account.id} as downloaded: {e}')
+                self._journal_progress(account, 'done')
+                return
+            self._apply_snapshot_recent(account, stats)
+            return
         self._apply_cached_journal(account, stats)
 
     journal_progress_every = 250    # entries between progress lines, and between short pauses
-    journal_snapshot_skipped = frozenset(('receipt', 'conversation_remove', 'message_remove', 'messages_bulk_delete', 'conversation_read'))
+    # events of a snapshot have nothing to act on; public keys are asked from the server when the
+    # whole snapshot is in (_fetch_public_keys_once), not taken from old journal entries
+    journal_snapshot_skipped = frozenset(('receipt', 'conversation_remove', 'message_remove', 'messages_bulk_delete', 'conversation_read', 'public_key'))
     journal_throttle = 0.05         # seconds to pause, so the GUI and the db thread keep up
+
+    def _apply_snapshot_page(self, account, cache, name, contacts, progress=None):
+        """Apply one page of a first sync, newest entry first (they are only inserts). Returns
+        the timestamp of its oldest entry, or None when it failed (kept for a later attempt, or
+        quarantined). JournalInterrupted when quitting: the page is kept."""
+        jlog = JournalLog()
+        try:
+            page = cache.load(name)
+            entries = list(reversed(page.get('messages') or []))
+            stats = self._apply_server_history_messages(account, entries, first_sync=True, contacts=contacts, progress=progress, mark_synced=False)
+        except JournalInterrupted:
+            raise
+        except Exception as e:
+            attempts, quarantined = cache.failed(name)
+            jlog(account.id, 'snapshot page quarantined' if quarantined else 'snapshot page failed', file=name, attempts=attempts, error=str(e)[:200])
+            ActivityLog().error(f'[journal] Applying first sync page {name} of {account.id} failed (attempt {attempts})'
+                                + (', moved to quarantine' if quarantined else '') + f': {e}')
+            return None
+        cache.applied(name)
+        jlog(account.id, 'snapshot page applied', file=name, entries=len(entries),
+             **{re.sub(r'[^0-9a-z]+', '_', outcome.lower()).strip('_'): count for outcome, count in sorted(stats.items())})
+        stamps = [entry.get('timestamp') for entry in entries if entry.get('timestamp')]
+        return min(stamps) if stamps else ''
+
+    def _apply_snapshot_recent(self, account, stats=None):
+        """The first sync, in the sync thread: its pages newest first until the last
+        journal_recent_days days are in, then the first sync is finished (read state, badges,
+        the Messages group) and the older pages go on in the background."""
+        from blink.history import MessageHistory, first_sync_start
+        cache = self._journal_snapshot_cache(account)
+        names = list(reversed(cache.pages()))
+        marker = self._journal_first_sync_marker(account)
+        start = first_sync_start(account.id) or ISOTimestamp.now()
+        cutoff = start.astimezone(timezone.utc) - timedelta(days=self.journal_recent_days)
+        activity = ActivityLog()
+        activity.info(f'[journal] Applying the first sync of {account.id} newest first: {len(names)} pages, the last {self.journal_recent_days} days before the rest')
+        JournalLog()(account.id, 'snapshot recent start', pages=len(names), cutoff=cutoff)
+        contacts = Counter()
+        started = time.monotonic()
+        applied = 0
+        for name in names:
+            if self.quitting:
+                self._journal_progress(account, 'done')
+                return
+            try:
+                oldest = self._apply_snapshot_page(account, cache, name, contacts,
+                                                   progress=lambda index, total, db_wait=0.0: self._journal_progress(account, 'apply', index, total))
+            except JournalInterrupted:
+                self._journal_progress(account, 'done')
+                return
+            if oldest is None:
+                continue
+            applied += 1
+            if oldest and ISOTimestamp(oldest).replace(tzinfo=timezone.utc) < cutoff:     # journal times are UTC (_journal_timestamp)
+                break
+        MessageHistory().flush_batched_stores()
+        MessageHistory().wait_for_writes()
+        self._journal_progress(account, 'done')
+        left = len(cache.pages())
+        activity.info(f'[journal] First sync of {account.id}: the last {self.journal_recent_days} days applied ({applied} pages, '
+                      f'{time.monotonic() - started:.1f}s), {left} older pages follow in the background')
+        JournalLog()(account.id, 'snapshot recent end', applied=applied, left=left, took=f'{time.monotonic() - started:.1f}s')
+        # the first sync is finished: what follows is counted and filed as usual
+        unlink(marker)
+        NotificationCenter().post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=None,
+                                                                                                  first_sync=True, first_sync_marker=marker))
+        self._apply_snapshot_backlog(account)
+
+    journal_backlog_pause = 0.2     # seconds between two older pages of a first sync, so live work goes first
+
+    @run_in_thread('journal-backlog')
+    def _apply_snapshot_backlog(self, account):
+        """The older pages of a first sync, newest first, in the background. Live messages and later
+        syncs go on meanwhile. When all are in: the contacts they mention are filed, the badges
+        counted, and the public keys of the contacts are asked from the server."""
+        if account.id in self._snapshot_backlogs or not self._journal_snapshot_downloaded(account):
+            return      # running, or finished by a call queued before this one
+        self._snapshot_backlogs.add(account.id)
+        try:
+            self._run_snapshot_backlog(account)
+        finally:
+            self._snapshot_backlogs.discard(account.id)
+
+    def _run_snapshot_backlog(self, account):
+        from blink.history import MessageHistory
+        cache = self._journal_snapshot_cache(account)
+        names = list(reversed(cache.pages()))
+        notification_center = NotificationCenter()
+        activity = ActivityLog()
+        if names:
+            activity.info(f'[journal] Applying {len(names)} older pages of the first sync of {account.id} in the background')
+        sizes = {}
+        for name in names:
+            try:
+                sizes[name] = len(cache.load(name).get('messages') or [])
+            except (OSError, ValueError, AttributeError):
+                sizes[name] = 0
+        total = sum(sizes.values())
+        done = 0
+        contacts = Counter()
+        started = time.monotonic()
+        for name in names:
+            if self.quitting or not account.enabled:
+                notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='done', done=done, total=total))
+                return      # the pages left are applied after the next start
+            before = done
+            try:
+                self._apply_snapshot_page(account, cache, name, contacts,
+                                          progress=lambda index, size, db_wait=0.0: notification_center.post_notification(
+                                              'BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='apply', done=before + index, total=total)))
+            except JournalInterrupted:
+                notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='done', done=done, total=total))
+                return
+            done += sizes.get(name, 0)
+            MessageHistory().flush_batched_stores()
+            notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='apply', done=done, total=total))
+            time.sleep(self.journal_backlog_pause)
+        MessageHistory().flush_batched_stores()
+        MessageHistory().wait_for_writes()
+        if cache.pages():
+            # pages that failed and are kept for another attempt
+            notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='done', done=done, total=total))
+            return
+        unlink(os.path.join(cache.directory, self.journal_snapshot_complete))
+        activity.info(f'[journal] First sync of {account.id} complete: {done} older entries applied in {time.monotonic() - started:.1f}s')
+        JournalLog()(account.id, 'snapshot complete', entries=done, took=f'{time.monotonic() - started:.1f}s')
+        notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='done', done=done, total=total))
+        # the contacts of the older history are filed and the badges counted, as after a journal run
+        notification_center.post_notification('BlinkJournalDidApply', sender=account, data=NotificationData(new_messages=dict(contacts), stats_path=None,
+                                                                                                         first_sync=False, first_sync_marker=None))
+        self._fetch_public_keys_once(account)
 
     def _apply_cached_journal(self, account, stats=None):
         """Apply cached journal pages oldest first.
@@ -2585,8 +2736,8 @@ class MessageManager(object, metaclass=Singleton):
             return
         directory = self._journal_directory(account)
         done = os.path.join(directory, self.public_keys_marker)
-        if os.path.exists(done) or os.path.exists(os.path.join(directory, FIRST_SYNC_MARKER)):
-            return
+        if os.path.exists(done) or os.path.exists(os.path.join(directory, FIRST_SYNC_MARKER)) or self._journal_snapshot_pending(account):
+            return      # done, or asked for when the whole first sync is in (its older pages too)
         account_manager = AccountManager()
         addresses = set()
         for contact in AddressbookManager().get_contacts():

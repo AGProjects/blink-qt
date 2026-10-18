@@ -1494,6 +1494,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         self.pending = {}           # conversation key -> display name (or None), from live messages
         self.history_pending = {}   # the same from history (journal, conversations at start): missing contacts only
         self.importing = False      # a journal import is going on (BlinkJournalProgress)
+        self.backlogs = set()       # accounts whose older first sync pages are being applied (BlinkJournalBacklogProgress)
         self.group_created = False  # this run created the Messages group: history fills it with existing contacts too
         self.reloaded_accounts = set()  # accounts whose addressbook has loaded this run
         self._started = False
@@ -1509,6 +1510,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='BlinkJournalDidApply')
         notification_center.add_observer(self, name='BlinkJournalProgress')
+        notification_center.add_observer(self, name='BlinkJournalBacklogProgress')
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -1556,6 +1558,13 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         # collected waits for the import that finishes it
         self.importing = notification.data.phase != 'done'
 
+    def _NH_BlinkJournalBacklogProgress(self, notification):
+        # the older pages of a first sync: their contacts are filed when all of them are in
+        if notification.data.phase == 'done':
+            self.backlogs.discard(notification.sender.id)
+        else:
+            self.backlogs.add(notification.sender.id)
+
     def _NH_BlinkJournalDidApply(self, notification):
         self.importing = False
         self._flush()
@@ -1585,7 +1594,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
                 self._file(keys)
             except Exception as e:
                 ActivityLog().exception(f'[contacts] Filing conversations under the Messages group failed: {e!r}')
-        if self.history_pending and not self.importing:
+        if self.history_pending and not self.importing and not self.backlogs:
             keys, self.history_pending = self.history_pending, {}
             try:
                 self._file(keys, missing_only=True)
