@@ -321,6 +321,24 @@ class ChatWidget(QWidget):
         self.model.dataChanged.connect(self._SH_ModelDataChanged)
         self.strip.set_conversation(self.model, self.chat_view)
         self.chat_view.verticalScrollBar().valueChanged.connect(self.strip.update_text)
+        # the calendar, as in the message pane: jump to a day of the conversation (Back to Now after one)
+        from blink.resources import themed_icon
+        self.calendar_button = QToolButton(self)
+        self.calendar_button.setAutoRaise(True)
+        self.calendar_button.setToolTip(translate('message_pane', 'Jump to a date'))
+        self.calendar_button.setIconSize(QSize(16, 16))
+        self.calendar_button.setFixedSize(26, 26)
+        self.calendar_button.setIcon(themed_icon(Resources.get('icons/clock.svg'), '#d0d0d0', outline=True))
+        self.calendar_menu = QMenu(self.calendar_button)
+        self.calendar_menu.aboutToShow.connect(self._fill_calendar_menu)
+        self.calendar_button.setMenu(self.calendar_menu)
+        self.calendar_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.calendar_button.setStyleSheet('QToolButton::menu-indicator { image: none; }')
+        self.calendar_button.setEnabled(False)
+        self.strip.add_before_search(self.calendar_button)
+        self.day_counts = {}
+        self._history_range = None      # (oldest, newest) time of the rows loaded from history: where the next pages start
+        self.model.pager = self.load_page
         self.model.modelReset.connect(self._SH_SearchChanged)
         self._apply_font()
 
@@ -340,6 +358,7 @@ class ChatWidget(QWidget):
         self.chat_input.filesDropped.connect(self._SH_ChatInputFilesDropped)
         self.chat_input.voiceNote.connect(self._SH_ChatInputVoiceNote)
         self.chat_input.lockReleased.connect(self._SH_ChatInputLockReleased)
+        self.update_input_state()       # disabled until the session is connected with chat
         self.chat_view.actionRequested.connect(self._SH_ActionRequested)
         self.chat_view.audioAction.connect(self._SH_AudioAction)
         self.fetcher.changed.connect(self._SH_DownloadChanged)
@@ -474,6 +493,7 @@ class ChatWidget(QWidget):
         self._apply_font()
 
     def _NH_BlinkSessionDidAddStream(self, notification):
+        self.update_input_state()
         self.update_header()
 
     def _NH_BlinkSessionContactDidChange(self, notification):
@@ -488,8 +508,23 @@ class ChatWidget(QWidget):
         if getattr(self.chat_input, 'files_allowed', None) != (allowed, voice_notes):
             self.chat_input.set_files_allowed(allowed, voice_notes)
 
+    def update_input_state(self):
+        """The composer takes text only once the session is connected with a chat stream: before
+        (and after it ends, or the chat stream is removed) it is disabled."""
+        session = self.session
+        blink_session = session.blink_session if session is not None else None
+        ready = (blink_session is not None and str(blink_session.state or '').startswith('connected')
+                 and session.chat_stream is not None)
+        if self.chat_input.isEnabled() == ready:
+            return
+        self.chat_input.setEnabled(ready)
+        self.chat_input.setToolTip('' if ready else translate('chat_window', 'Connect the chat to write'))
+        if ready and self.isVisible():
+            self.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _NH_BlinkSessionDidChangeState(self, notification):
         self.update_file_options()
+        self.update_input_state()
         self.update_header()
 
     @property
@@ -631,8 +666,71 @@ class ChatWidget(QWidget):
     def clear(self):
         """Forget what is shown (the conversation is about to be loaded again)."""
         self.model.clear()
+        self.model.has_more = self.model.has_newer = False
+        self._history_range = None
         self.avatars.clear()
         self._message_statuses.clear()
+
+    # Pages of history, read and paged as the message pane does (MessageHistory.load): older ones as
+    # the transcript is scrolled up, a past day from the calendar and the newer ones after it
+
+    def load_page(self, kind, day=None):
+        """kind 'older', 'newer', 'jump' (to day) or 'now' (the newest page again, after a jump)."""
+        if self.session is None or self.session.blink_session is None:
+            return
+        tick = timedelta(microseconds=1)
+        before = after = None
+        if kind == 'older':
+            if self._history_range is None:
+                return
+            before = self._history_range[0] + tick       # rows sharing its time that did not fit come too (known ones are dropped)
+        elif kind == 'newer':
+            if self._history_range is None:
+                return
+            after = self._history_range[1] - tick
+        elif kind == 'jump':
+            before = datetime.combine(day + timedelta(days=1), datetime.min.time()).astimezone()     # local midnight after the day
+        if kind in ('jump', 'now'):
+            self.strip.close_search()
+        self.model.set_loading(True)
+        blink_session = self.session.blink_session
+        HistoryManager().load(blink_session.contact.uri.uri, blink_session, kind=kind, before=before, after=after, day=day)
+
+    def history_page_loaded(self, kind, messages, data):
+        """A page is in the transcript: where the next ones start, and what is left to load."""
+        times = [message.timestamp.replace(tzinfo=timezone.utc) if message.timestamp.tzinfo is None else message.timestamp.astimezone(timezone.utc) for message in messages]
+        previous = self._history_range
+        if times:
+            if previous is None or kind in ('initial', 'now', 'jump'):
+                self._history_range = (min(times), max(times))
+            else:
+                self._history_range = (min(previous[0], min(times)), max(previous[1], max(times)))
+        model = self.model
+        more = bool(getattr(data, 'more', False))
+        if kind == 'older':
+            # no further back than before (only rows already shown): the beginning
+            model.has_more = more and bool(times) and (previous is None or min(times) < previous[0])
+        elif kind == 'newer':
+            model.has_newer = more and bool(times) and (previous is None or max(times) > previous[1])
+        elif kind in ('initial', 'now', 'jump'):
+            model.has_more = more
+            model.has_newer = bool(getattr(data, 'newer', False)) if kind == 'jump' else False
+        day_counts = getattr(data, 'day_counts', None)
+        if day_counts is not None:
+            self.day_counts = day_counts
+            self.calendar_button.setEnabled(bool(day_counts))
+        model.loaded = True
+        model.set_loading(False)
+        if kind == 'jump':
+            day = data.day
+            row = next((position for position, item in enumerate(model.items) if item.timestamp.astimezone().date() >= day), max(len(model.items) - 1, 0))
+            model.jumped.emit(row)
+        self.strip.update_text()
+
+    def _fill_calendar_menu(self):
+        from blink.messagepane.header import fill_calendar_menu
+        fill_calendar_menu(self.calendar_menu, self.day_counts, lambda day: self.load_page('jump', day),
+                           (lambda: self.load_page('now')) if self.model.has_newer else None)
 
     def has_file(self, file_hash):
         """Whether a file with this MSRP hash is in the transcript already (one's own upload, told of again by the room)."""
@@ -981,10 +1079,12 @@ class ChatWidget(QWidget):
 
     def _NH_BlinkSessionDidConnect(self, notification):
         self._connected = True
+        self.update_input_state()
         self.add_message(ChatStatus(translate('chat_window', 'Connected')))
 
     def _NH_BlinkSessionDidEnd(self, notification):
         self.chat_input.reset_locks()
+        self.update_input_state()
         # the chat session: never "Call ended", calls are the main window's and the message pane's
         reason = getattr(notification.data, 'reason', None)
         error = getattr(notification.data, 'error', False)
@@ -1002,6 +1102,7 @@ class ChatWidget(QWidget):
         self.setParent(None)
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
+        self.update_input_state()
         self.update_header()
         if notification.data.stream.type == 'chat':
             self.chat_input.reset_locks()
@@ -1304,6 +1405,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.back_to_sessions_button.clicked.connect(lambda: self._EH_ShowSessions())
         self.session_panel_layout.insertWidget(0, self.back_to_sessions_button)
         self.session_list.raise_()      # the list covers the panel, the bar included
+
+        # what this window is for, above the sessions (the window title names the selected session)
+        self.window_kind_label = QLabel(translate('chat_window', 'MSRP sessions'), self.layoutWidget)
+        self.window_kind_label.setObjectName('window_kind_label')
+        self.window_kind_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.window_kind_label.setContentsMargins(6, 4, 6, 0)
+        font = self.window_kind_label.font()
+        font.setBold(True)
+        self.window_kind_label.setFont(font)
+        self.window_kind_label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
+        self.left_panel_layout.insertWidget(0, self.window_kind_label)
         self.no_sessions_label.raise_()
 
         # connect buttons on the bottom bar, shown while the session is not connected (the wheel's
@@ -1630,10 +1742,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _update_panel_buttons(self):
         self.info_panel_participants_button.setVisible(self.selected_session.blink_session.is_conference)
-        if self.selected_session.blink_session.is_conference:
-            self.info_panel_files_button.setVisible(len(self.selected_session.blink_session.server_conference.shared_files) == 0)
-        else:
-            self.info_panel_files_button.setVisible(True)
+        self.info_panel_files_button.setVisible(self._shows_files(self.selected_session))
         self.files_panel_participants_button.hide()
         self.participants_panel_files_button.hide()
 
@@ -2343,24 +2452,34 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self._update_panel_buttons()
             self._show_conference_participants(self.selected_session)
 
+    @staticmethod
+    def _shows_files(session):
+        """The files pane is a connected conference's, once files were shared in it: a one to one
+        chat, or a conference not connected, has none."""
+        if session is None or session.blink_session is None:
+            return False
+        return str(session.blink_session.state or '').startswith('connected') and conference_has_files(session)
+
     def _details_page(self, panel):
-        """The participants and the files share one page; the participants only for a conference.
-        A conference shows the info panel here only when asked for with the i button (info_requested);
-        otherwise an empty page until it is connected (or its files when files were exchanged in it),
-        then its participants and files."""
+        """The participants and the files share one page, a connected conference's. A conference
+        shows the info panel here only when asked for with the i button (info_requested), otherwise
+        an empty page until it is connected, then its participants (and its files, once some were
+        shared). A one to one chat has the info panel only."""
         session = self.selected_session
         conference = session is not None and session.blink_session.is_conference
         if conference and panel is self.info_panel and getattr(session, 'info_requested', False):
             return self.info_panel
         connected = session is not None and str(session.blink_session.state or '').startswith('connected')
         if conference:
-            if not connected and not conference_has_files(session):
+            if not connected:
                 return self.details_placeholder
             panel = self.participants_panel
+        elif panel in (self.participants_panel, self.files_panel):
+            return self.info_panel
         if panel in (self.participants_panel, self.files_panel):
-            self.participants_panel.setVisible(conference and connected)    # not connected: only the files exchanged in it
-            self.files_panel.setVisible(not conference or conference_has_files(session))   # a conference without shared files: no files pane
-            self.files_panel_info_button.setVisible(not conference)     # one info button per column
+            self.participants_panel.setVisible(True)
+            self.files_panel.setVisible(self._shows_files(session))     # no files shared yet: no files pane
+            self.files_panel_info_button.hide()     # one info button per column
             return self.details_splitter
         return panel
 
@@ -2385,7 +2504,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return  # the column appears once the conference is connected (from BlinkSessionDidChangeState)
         if session is self.selected_session:
             self.participants_panel.setVisible(True)
-            self.files_panel.setVisible(conference_has_files(session))  # shown once the conference shares a file
+            self.files_panel.setVisible(self._shows_files(session))  # shown once the conference shares a file
             self.files_panel_info_button.hide()
             if self.session_list.isVisibleTo(self) and sum(1 for item in self.session_model.sessions if self._shows_session(item.blink_session)) < 2:
                 self.session_list.hide()    # the session list covers the panel; kept when there are sessions to switch between
@@ -2406,7 +2525,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self._update_widgets_for_session()
         session = self.selected_session
         if session is not None and notification.sender is session and session.blink_session is not None and session.blink_session.is_conference:
-            self.files_panel.setVisible(conference_has_files(session))  # the first file shared in the conference brings the files pane
+            self.files_panel.setVisible(self._shows_files(session))  # the first file shared in the conference brings the files pane
+            self.info_panel_files_button.setVisible(self._shows_files(session))
 
     def _parse_fthttp(self, blink_session, message, from_history=False, account=None):
         """The envelope of a file transfer message, drawn as a file bubble; None for a transfer
@@ -2828,10 +2948,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if session is None:
             return
 
+        kind = getattr(notification.data, 'kind', None) or 'initial'
+        if kind in ('jump', 'now'):
+            session.chat_widget.clear()       # a page of its own: what was shown goes
+
         last_account = None
         last_timestamp = None
         newest_timestamp = None
-        for message in messages:
+        # an older page goes in newest first, each row on top: the view keeps what is on screen in place
+        for message in (reversed(messages) if kind == 'older' else messages):
             encrypted = False
             state = message.state
             account = account_manager.get_account(message.account_id) if account_manager.has_account(message.account_id) else None
@@ -2926,6 +3051,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             elif 'OTR' in message.encryption_type:
                 session.chat_widget.update_message_encryption(message.message_id, True)
         session.chat_widget.history_loaded = True
+        if kind != 'reload':
+            session.chat_widget.history_page_loaded(kind, messages, notification.data)
+        if kind in ('older', 'newer', 'jump'):
+            return
+        if kind == 'now':
+            session.chat_widget.scroll_to_bottom()
+            return
 
         # the messages that arrived for this session while its history loaded; the others stay queued
         # (going once over what is queued: putting them back while emptying the queue never ends)
@@ -2954,6 +3086,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = blink_session.items.chat
         # TODO Should we attempt to reload history if it fails? -- Tijmen
         session.chat_widget.history_loaded = True
+        session.chat_widget.model.set_loading(False)
         session.chat_widget.show_loading_screen(False)
 
     def _NH_BlinkMessageHistoryLastContactsDidSucceed(self, notification):
