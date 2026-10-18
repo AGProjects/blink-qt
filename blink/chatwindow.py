@@ -203,13 +203,20 @@ class ChatComposer(Composer):
 
     def setPlaceholderText(self, text):
         self._placeholder = text
-        if self.isEnabled():
+        if self.edit.isEnabled():
             self.edit.setPlaceholderText(text)
 
+    @property
+    def connected(self):
+        return self.edit.isEnabled()
+
     def set_connected(self, connected):
-        """Typing only into a connected chat: otherwise disabled, its placeholder saying so."""
-        self.setEnabled(connected)
-        self.edit.setPlaceholderText(self._placeholder if connected else translate('chat_window', 'Not connected'))
+        """Typing only into a connected chat: otherwise the text field and the send button are
+        disabled, the placeholder saying so. Attaching stays: a file goes in an MSRP file transfer
+        of its own, without the chat (set_files_allowed hides it where it cannot go)."""
+        self.edit.setEnabled(connected)
+        self.send_button.setEnabled(connected and bool(self.text().strip()))
+        self.edit.setPlaceholderText(self._placeholder if connected else translate('chat_window', 'Not connected, messages can be sent while connected'))
 
     def setFocus(self, *args):
         self.edit.setFocus(*args)
@@ -245,8 +252,13 @@ class ChatComposer(Composer):
             self.lock_widget.hide()
             self.edit.setReadOnly(False)
 
+    def _SH_TextChanged(self):
+        super(ChatComposer, self)._SH_TextChanged()
+        if not self.connected:
+            self.send_button.setEnabled(False)
+
     def _send(self):
-        if not self.locked:
+        if not self.locked and self.connected:
             super(ChatComposer, self)._send()
 
     def set_files_allowed(self, allowed, voice_notes=True):
@@ -523,7 +535,7 @@ class ChatWidget(QWidget):
         blink_session = session.blink_session if session is not None else None
         ready = (blink_session is not None and str(blink_session.state or '').startswith('connected')
                  and session.chat_stream is not None)
-        was_ready = self.chat_input.isEnabled()
+        was_ready = self.chat_input.connected
         self.chat_input.set_connected(ready)
         if ready and not was_ready and self.isVisible():
             self.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
