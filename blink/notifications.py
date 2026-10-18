@@ -14,6 +14,8 @@ device, or for what the journal brings (only live messages notify).
 import html
 import sys
 
+from datetime import datetime, timedelta, timezone
+
 from application.notification import IObserver, NotificationCenter
 from application.python import Null
 from zope.interface import implementer
@@ -49,9 +51,11 @@ class MessageNotifier(object):
     path = '/org/freedesktop/Notifications'
     interface = 'org.freedesktop.Notifications'
     desktop_entry = 'blink'
+    clock_skew = timedelta(seconds=60)     # a sender's clock may be this far behind ours
 
     def __init__(self, main_window):
         self.main_window = main_window
+        self.started = datetime.now(timezone.utc)   # what was written before Blink started is history, not news
         self.bus = None
         self.shown = {}             # conversation key: (notification id, count)
         self.targets = {}           # notification id: (conversation key, contact, contact_uri)
@@ -87,7 +91,20 @@ class MessageNotifier(object):
         content_type = str(getattr(message, 'content_type', '') or '').lower()
         if not (content_type.startswith('text/') and content_type not in ('text/pgp-public-key', 'text/pgp-private-key')):
             return
+        if self._from_the_past(message):
+            return
         self._notify(notification.sender, _preview(content_type, message.content))
+
+    def _from_the_past(self, message):
+        """Written before Blink started (a first sync, the journal, a message stored on the server
+        while offline, a decryption finishing late): it shows unread, it does not notify."""
+        timestamp = getattr(message, 'timestamp', None)
+        if not isinstance(timestamp, datetime) or timestamp.tzinfo is None:
+            return False
+        if timestamp >= self.started - self.clock_skew:
+            return False
+        ActivityLog().info(f'[notifications] No notification for message {getattr(message, "id", None)} of {timestamp}: older than the start of Blink')
+        return True
 
     def _NH_BlinkSessionDidShareFile(self, notification):
         if getattr(notification.data, 'direction', None) != 'incoming':
