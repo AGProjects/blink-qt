@@ -1487,6 +1487,17 @@ class MessageManager(object, metaclass=Singleton):
         activity = ActivityLog()
         activity.info(f'[journal] Applying the last {self.journal_recent_days} days of {account.id} newest first: {len(names)} pages')
         JournalLog()(account.id, 'snapshot recent start', pages=len(names))
+        state = self._journal_backfill_state(account)
+        if state is not None and 'recent' not in state:
+            # the older history's total is what the journal has from five years ago, less these
+            recent = 0
+            for name in names:
+                try:
+                    recent += len(cache.load(name).get('messages') or [])
+                except (OSError, ValueError, AttributeError):
+                    pass
+            state['recent'] = recent
+            self._save_journal_backfill_state(account, state)
         read_points = self._snapshot_read_points(account, cache)
         contacts = Counter()
         started = time.monotonic()
@@ -1549,11 +1560,14 @@ class MessageManager(object, metaclass=Singleton):
         cache = self._journal_snapshot_cache(account)
         points = self._snapshot_read_points(account, cache)
         contacts = Counter()
-        done = 0
+        state = self._journal_backfill_state(account)
+        done = (state or {}).get('done') or 0      # resumed: the bar goes on from where it was
         started = time.monotonic()
 
         def progress(phase, count=None):
-            notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase=phase, done=count, total=None))
+            total = (state or {}).get('total') or None
+            notification_center.post_notification('BlinkJournalBacklogProgress', sender=account,
+                                                  data=NotificationData(phase=phase, done=count, total=max(total, count or 0) if total else None))
 
         # recent pages that failed to apply are retried first
         for name in list(reversed(cache.pages())):
@@ -1569,7 +1583,6 @@ class MessageManager(object, metaclass=Singleton):
             progress('done')
             return      # still failing: tried again after the next sync
 
-        state = self._journal_backfill_state(account)
         if state is not None:
             until = ISOTimestamp(state['until']).astimezone(timezone.utc)
             headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
@@ -1589,6 +1602,14 @@ class MessageManager(object, metaclass=Singleton):
                     response = requests.get(url, headers=headers, timeout=20, verify=verify)
                     response.raise_for_status()
                     messages = response.json().get('messages') or []
+                    if not state.get('total') and not state.get('cursor'):
+                        # from five years ago: the whole journal, less the recent days applied already
+                        try:
+                            remaining = int(response.headers.get('X-Sylk-Journal-Remaining'))
+                        except (TypeError, ValueError):
+                            remaining = 0       # an older server: the count alone is shown
+                        if remaining:
+                            state['total'] = max(remaining - (state.get('recent') or 0), len(messages))
                 except (requests.RequestException, ValueError, AttributeError) as e:
                     activity.warning(f'[journal] Fetching the older history of {account.id} stopped, it goes on after the next sync: {e}')
                     jlog(account.id, 'backfill stopped', error=str(e)[:200])
@@ -1621,7 +1642,8 @@ class MessageManager(object, metaclass=Singleton):
                 MessageHistory().flush_batched_stores()
                 if messages and messages[-1].get('message_id'):
                     state['cursor'] = messages[-1]['message_id']
-                    self._save_journal_backfill_state(account, state)
+                state['done'] = done
+                self._save_journal_backfill_state(account, state)
                 jlog(account.id, 'backfill page', entries=len(older), total=done, cursor=state.get('cursor') or None,
                      **{re.sub(r'[^0-9a-z]+', '_', outcome.lower()).strip('_'): count for outcome, count in sorted(outcomes.items())})
                 progress('apply', done)
