@@ -191,6 +191,7 @@ class ChatComposer(Composer):
         self.lock_widget.hide()
         self.lock_widget.confirm_button.clicked.connect(self._SH_LockWidgetConfirmButtonClicked)
         self.lock_queue = deque()
+        self._placeholder = self.edit.placeholderText()     # the one shown while connected
 
     @property
     def empty(self):
@@ -201,7 +202,14 @@ class ChatComposer(Composer):
         return bool(self.lock_queue)
 
     def setPlaceholderText(self, text):
-        self.edit.setPlaceholderText(text)
+        self._placeholder = text
+        if self.isEnabled():
+            self.edit.setPlaceholderText(text)
+
+    def set_connected(self, connected):
+        """Typing only into a connected chat: otherwise disabled, its placeholder saying so."""
+        self.setEnabled(connected)
+        self.edit.setPlaceholderText(self._placeholder if connected else translate('chat_window', 'Not connected'))
 
     def setFocus(self, *args):
         self.edit.setFocus(*args)
@@ -515,11 +523,9 @@ class ChatWidget(QWidget):
         blink_session = session.blink_session if session is not None else None
         ready = (blink_session is not None and str(blink_session.state or '').startswith('connected')
                  and session.chat_stream is not None)
-        if self.chat_input.isEnabled() == ready:
-            return
-        self.chat_input.setEnabled(ready)
-        self.chat_input.setToolTip('' if ready else translate('chat_window', 'Connect the chat to write'))
-        if ready and self.isVisible():
+        was_ready = self.chat_input.isEnabled()
+        self.chat_input.set_connected(ready)
+        if ready and not was_ready and self.isVisible():
             self.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _NH_BlinkSessionDidChangeState(self, notification):
