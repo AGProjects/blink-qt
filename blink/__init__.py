@@ -841,7 +841,7 @@ class Blink(QApplication, metaclass=QSingleton):
         originator = getattr(data, 'originator', None)
         what = ' '.join(str(part) for part in (code, reason) if part) or 'no answer'
         detail = f', {failure}' if failure and failure != reason else ''
-        ActivityLog().warning(f'[call] Call with {self._call_party(session)} failed{f" ({originator})" if originator else ""}: {what}{detail} ({self._call_info(session)})')
+        ActivityLog().warning(f'[call] Call with {self._call_party(session)} failed{f" ({originator})" if originator else ""}: {what}{detail}{self._call_route(session) if getattr(session, 'direction', None) == 'outgoing' else ''} ({self._call_info(session)})')
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
         account = notification.sender

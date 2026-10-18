@@ -184,7 +184,14 @@ class BubbleDelegate(QStyledItemDelegate):
                 layout.kind = kind = 'audio'
             else:
                 layout.kind = kind = 'pdf' if image_path and image_path.lower().endswith('.pdf') and pdf_available() else 'file'
-        if run_start and not item.outgoing and kind != 'note':
+        if getattr(item, 'private', False) and kind != 'note':
+            # every private bubble says so, and with whom, as Blink for macOS does
+            if item.outgoing:
+                layout.name_text = translate('message_pane', 'Private message to %s') % (getattr(item, 'recipient_name', '') or '?')
+            else:
+                sender = self.sender_name(item) if self.sender_name is not None else mangled_name(item.display_name or '', uri=item.uri or item.remote_uri or None)
+                layout.name_text = translate('message_pane', 'Private message from %s') % sender
+        elif run_start and not item.outgoing and kind != 'note':
             layout.name_text = self.sender_name(item) if self.sender_name is not None else mangled_name(item.display_name or '', uri=item.uri or item.remote_uri or None)
         else:
             layout.name_text = ''
@@ -959,8 +966,13 @@ class BubbleDelegate(QStyledItemDelegate):
         if layout.name_text:
             painter.setFont(small)
             painter.setPen(secondary)
-            name_rect = QRectF(bubble.left() + self.padding_h, bubble.top() - QFontMetricsF(small).height() - 2, max(bubble.width(), 240), QFontMetricsF(small).height())
-            painter.drawText(name_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.name_text)
+            name_width = max(bubble.width(), 240)
+            if item.outgoing:       # an outgoing private message: the label ends where the bubble does
+                name_rect = QRectF(bubble.right() - self.padding_h - name_width, bubble.top() - QFontMetricsF(small).height() - 2, name_width, QFontMetricsF(small).height())
+                painter.drawText(name_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, layout.name_text)
+            else:
+                name_rect = QRectF(bubble.left() + self.padding_h, bubble.top() - QFontMetricsF(small).height() - 2, name_width, QFontMetricsF(small).height())
+                painter.drawText(name_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, layout.name_text)
         if layout.run_start and not item.outgoing and (self.sender_avatar or self.peer_avatar) is not None:
             avatar = QRectF(rect.left() + self.margin, bubble.top(), self.avatar_size, self.avatar_size)
             if self.sender_avatar is not None:
@@ -969,6 +981,8 @@ class BubbleDelegate(QStyledItemDelegate):
                 self.peer_avatar(painter, avatar)
 
         fill, text_colour = self._colours(palette, item.outgoing)
+        if getattr(item, 'private', False):
+            fill = QColor('#2b4a32') if is_dark_theme() else QColor('#ccffcc')     # Blink for macOS: COLOR_PRIVATE
         if layout.mark_kind == 'failed':
             fill = QColor('#6e2b2b') if is_dark_theme() else QColor('#ffd9d6')
         path = QPainterPath()
@@ -1100,6 +1114,8 @@ class BubbleDelegate(QStyledItemDelegate):
         """A file not here and not being downloaded: it has a Download button (and Download in its menu)."""
         if item is None or item.upload is not None or item.category not in ('image', 'audio', 'video', 'other'):
             return False
+        if item.outgoing:
+            return False        # our own file: we had it to start with
         from blink.messagepane.files import file_info
         if file_info(item) is None or self.file_path(item):
             return False

@@ -25,7 +25,7 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QEasingCurve, QModelIndex, QObject, QProcess, QPropertyAnimation, pyqtSignal
 from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl, QFileInfo, QSettings
 from PyQt6.QtGui import QAction, QBrush, QColor, QDesktopServices, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QScreen, QShortcut
-from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QListView, QMenu, QStyle, QStyledItemDelegate, QStyleOption, QFileIconProvider, QFileDialog
+from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QListView, QMenu, QMessageBox, QStyle, QStyledItemDelegate, QStyleOption, QFileIconProvider, QFileDialog
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -517,6 +517,7 @@ class BlinkSession(BlinkSessionBase):
             self.uri = None
             self.remote_instance_id = None
             self.server_conference = ServerConference(self)
+            self.was_focus = False      # the remote party was a conference focus once (kept after it ends)
 
             self._delete_when_done = False
             self._delete_requested = False
@@ -720,7 +721,7 @@ class BlinkSession(BlinkSessionBase):
         """A conference: the remote party is a focus (isfocus in its Contact), or its domain is the
         Conference server of an account (conference.sipBridge from SylkServer discovery, or set by
         hand). The two are equivalent; the domain is known before the call connects."""
-        return self.remote_focus or (self.contact_uri is not None and _is_conference_address(self.contact_uri.uri, self.account))
+        return self.remote_focus or getattr(self, 'was_focus', False) or (self.contact_uri is not None and _is_conference_address(self.contact_uri.uri, self.account))
 
     @property
     def conference_room(self):
@@ -867,6 +868,7 @@ class BlinkSession(BlinkSessionBase):
 
         self.lookup = DNSLookup()
         notification_center.add_observer(self, sender=self.lookup)
+        self._lookup_target = (uri, list(settings.sip.transport_list))
         self.lookup.lookup_sip_proxy(uri, settings.sip.transport_list, tls_name=self.account.sip.tls_name or uri.host)
 
     def add_stream(self, stream_description):
@@ -1131,10 +1133,30 @@ class BlinkSession(BlinkSessionBase):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _log_dns_lookup(self, routes=None, error=None):
+        target, transports = getattr(self, '_lookup_target', (None, ()))
+        if target is None:
+            return
+        host = target.host.decode(errors='replace') if isinstance(target.host, bytes) else target.host
+        port = f':{target.port}' if target.port else ''
+        what = f'[dns] {self.uri}: lookup of {host}{port} ({", ".join(transports)})'
+        if error is not None:
+            ActivityLog().warning(f'{what} failed: {error}')
+        elif not routes:
+            ActivityLog().warning(f'{what} returned no routes')
+        else:
+            def describe(route):
+                address = route.address.decode(errors='replace') if isinstance(route.address, bytes) else route.address
+                tls_name = getattr(route, 'tls_name', None)
+                tls_name = tls_name.decode(errors='replace') if isinstance(tls_name, bytes) else tls_name
+                return f'{route.transport}:{address}:{route.port}' + (f' (tls_name {tls_name})' if route.transport == 'tls' and tls_name else '')
+            ActivityLog().info(f'{what}: {", ".join(describe(route) for route in routes)}')
+
     def _NH_DNSLookupDidSucceed(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
             routes = notification.data.result
+            self._log_dns_lookup(routes)
             if routes:
                 self.routes = routes
                 self.state = 'connection/dns_lookup_succeeded'
@@ -1148,6 +1170,7 @@ class BlinkSession(BlinkSessionBase):
     def _NH_DNSLookupDidFail(self, notification):
         notification.center.remove_observer(self, sender=notification.sender)
         if notification.sender is self.lookup:
+            self._log_dns_lookup(error=getattr(notification.data, 'error', None) or 'failed')
             self._terminate(reason='Domain not found in DNS', error=True)
 
     def _NH_SIPSessionNewOutgoing(self, notification):
@@ -1717,6 +1740,7 @@ class ServerConference(object):
         notification.center.add_observer(self, sender=self.sip_session)
         self._got_conference_info = False
         if self.sip_session.remote_focus:
+            self.session.was_focus = True
             party, info = self._describe()
             ActivityLog().info(f'[conference] {party} is a conference focus (isfocus in its Contact), subscribing to its conference-info ({info})')
             if self.session.contact_uri is not None:
@@ -3949,6 +3973,12 @@ class ChatSessionItem(object):
 
     @property
     def info(self):
+        # a conference (the remote party is a focus) with participants: how many, not the room address
+        if self.blink_session.remote_focus:
+            conference = self.blink_session.server_conference
+            count = len([participant for participant in conference.participants.values() if participant not in conference.pending_additions])
+            if count:
+                return translate('sessions', '1 participant') if count == 1 else translate('sessions', '%d participants') % count
         # a Bonjour conversation is the neighbour's instance id, not today's transport address
         return self.blink_session.remote_instance_id or self.blink_session.contact.note or self.blink_session.contact_uri.uri
 
@@ -4097,6 +4127,12 @@ class ChatSessionItem(object):
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
         self.widget.hold_icon.setVisible(self.blink_session.on_hold)
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionDidAddParticipant(self, notification):
+        self.widget.update_content(self)    # the participants count on the second line
+        notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    _NH_BlinkSessionDidRemoveParticipant = _NH_BlinkSessionDidAddParticipant
 
     def _NH_BlinkSessionDidChangeRecordingState(self, notification):
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
@@ -6295,6 +6331,13 @@ class FileListView(QListView, ColorHelperMixin):
         self.actions.open_downloads_folder = QAction(translate('filelist_view', "Open Transfers Folder"), self, triggered=self._AH_OpenTransfersFolder)
         self.actions.remove_file = QAction(translate('filelist_view', "Remove File"), self, triggered=self._AH_RemoveFile)
         self.paint_drop_indicator = False
+        self.menu_item = None   # the row the context menu was opened on (a right click does not select it)
+
+    def _context_item(self):
+        if self.menu_item is not None:
+            return self.menu_item
+        indexes = self.selectedIndexes()
+        return indexes[0].data(Qt.ItemDataRole.UserRole) if indexes else None
 
     def setModel(self, model):
         selection_model = self.selectionModel()
@@ -6306,8 +6349,9 @@ class FileListView(QListView, ColorHelperMixin):
         menu = self.context_menu
         menu.clear()
         index = self.indexAt(event.pos())
+        self.menu_item = None
         if index.isValid():
-            item = index.data(Qt.ItemDataRole.UserRole)
+            item = self.menu_item = index.data(Qt.ItemDataRole.UserRole)
             if isinstance(item, FileTransferItem):
                 # a transfer in progress (or just done) from here: its own actions
                 if item.ended and not item.failed and item.filename:
@@ -6410,7 +6454,9 @@ class FileListView(QListView, ColorHelperMixin):
         # self.paint_drop_indicator = True
 
     def _AH_OpenFile(self, must_open=True):
-        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        item = self._context_item()
+        if item is None or isinstance(item, FileTransferItem):
+            return
         model = self.model()
         if item.already_exists:
             QDesktopServices.openUrl(QUrl.fromLocalFile(item.decrypted_filename))
@@ -6443,12 +6489,16 @@ class FileListView(QListView, ColorHelperMixin):
         return True
 
     def _AH_CancelDownloadFile(self):
-        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        item = self._context_item()
+        if item is None or isinstance(item, FileTransferItem):
+            return
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkHTTPTransferMustStop', sender=item.file)
 
     def _AH_DownloadFile(self):
-        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        item = self._context_item()
+        if item is None or isinstance(item, FileTransferItem):
+            return
         model = self.model()
         if item.downloading:
             return
@@ -6473,12 +6523,23 @@ class FileListView(QListView, ColorHelperMixin):
             SessionManager().get_file_from_url(model.session, item.file, force=True)
 
     def _AH_RemoveFile(self):
-        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        item = self._context_item()
+        if item is None or isinstance(item, FileTransferItem):
+            return
         model = self.model()
         self.model().deleteItem(item)
 
     def _AH_OpenTransfersFolder(self):
-        item = self.selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        item = self._context_item()
+        if item is None:
+            return
+        if isinstance(item, FileTransferItem):
+            # a transfer from this window: the folder its file is (or will be) in
+            directory = os.path.dirname(item.filename) if item.filename else ''
+            if not directory or not os.path.isdir(directory):
+                directory = BlinkSettings().transfers_directory.normalized
+            QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
+            return
         if item.hash and item.file.protocol == 'msrp':
             settings = BlinkSettings()
             QDesktopServices.openUrl(QUrl.fromLocalFile(settings.transfers_directory.normalized))
@@ -6580,9 +6641,23 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
             cross_rect = option.rect.adjusted(int(option.rect.width()) - 14, 0, 0, int(-option.rect.height() / 2))  # top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
                 item = index.data(Qt.ItemDataRole.UserRole)
-                model.session.server_conference.remove_participant(item.participant)
+                if self.is_myself(item, model.session) or not item.widget.isEnabled():
+                    return True     # no remove button for myself, nor while a request is pending
+                title = translate('sessions', 'Remove participant')
+                message = translate('sessions', 'Would you like to kick %s out of the conference?') % item.name
+                if QMessageBox.question(self.parent(), title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                    ActivityLog().info(f'[conference] Remove {item.participant.uri} from {model.session.uri}')
+                    model.session.server_conference.remove_participant(item.participant)
                 return True
         return super(ConferenceParticipantDelegate, self).editorEvent(event, model, option, index)
+
+    @staticmethod
+    def is_myself(item, blink_session):
+        account = getattr(blink_session, 'account', None)
+        if account is None or getattr(account, 'id', None) is None:
+            return False
+        uri = re.sub('^sips?:', '', str(item.participant.uri)).split(';')[0].lower()
+        return uri == str(account.id).lower()
 
     def paint(self, painter, option, index):
         participant = index.data(Qt.ItemDataRole.UserRole)
@@ -6596,7 +6671,7 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
 
         painter.save()
         painter.drawPixmap(option.rect, render_widget(participant.widget, option.rect.size(), painter.device().devicePixelRatioF()))
-        if (option.state & QStyle.StateFlag.State_MouseOver) and participant.widget.isEnabled():
+        if (option.state & QStyle.StateFlag.State_MouseOver) and participant.widget.isEnabled() and not self.is_myself(participant, getattr(index.model(), 'session', None)):
             self.drawRemoveIndicator(participant, option, painter, participant.widget)
         if 0 and (option.state & QStyle.StateFlag.State_MouseOver):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)

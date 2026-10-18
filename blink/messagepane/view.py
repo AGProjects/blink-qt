@@ -30,6 +30,7 @@ __all__ = ['TranscriptView']
 class TranscriptView(QListView):
     load_margin = 48        # pixels from the top that load the page before
     menu_actions = None     # what a message's menu offers besides copy, open and save (None: everything); see offers()
+    extra_menu_actions = None   # callable(item) -> [(label, callback)]: actions of the transcript's own (Reply in Private)
 
     actionRequested = pyqtSignal(str, object)      # ('delete', 'reply', 'edit', 'caption', 'info' or 'open', MessageItem)
     quoteClicked = pyqtSignal(object)              # the reply dict of a clicked quote
@@ -350,6 +351,9 @@ class TranscriptView(QListView):
             from blink.messagepane.forward import forwardable
             if self.offers('forward') and forwardable(item):
                 menu.addAction(translate('message_pane', 'Forward…'), lambda: self.actionRequested.emit('forward', item))
+            if self.extra_menu_actions is not None:
+                for label, callback in self.extra_menu_actions(item) or ():
+                    menu.addAction(label, callback)
         menu.addSeparator()
         if self.offers('info'):
             menu.addAction(translate('message_pane', 'Info…'), lambda: self.actionRequested.emit('info', item))

@@ -130,4 +130,43 @@ def local_file(item):
             path = os.path.join(ApplicationData.get('downloads'), transfer_id, filename)
             if os.path.isfile(path) and not path.endswith('.asc'):
                 return path
+    return _same_file_elsewhere(item, names)
+
+
+def _same_size(path, size):
+    try:
+        return os.path.isfile(path) and (size is None or os.path.getsize(path) == size)
+    except OSError:
+        return False
+
+
+def _same_file_elsewhere(item, names):
+    """The file under another id or folder: where we sent it from (the envelope's path), or a file
+    of the same name and size in the transfers folders (Blink's own, and the user's download folder).
+    Without a known size only the path we sent it from is trusted."""
+    meta = file_transfer_envelope(item.content) if item.content else None
+    if not meta:
+        return None
+    try:
+        size = int(meta.get('filesize') or 0) or None
+    except (TypeError, ValueError):
+        size = None
+    source = meta.get('path')
+    if source and _same_size(source, size):
+        return source
+    if size is None:
+        return None
+    folders = [os.path.join(ApplicationData.get('file_transfers'), '*', '*', '*'), ApplicationData.get('downloads') + os.sep + '*']
+    try:
+        from sipsimple.configuration.settings import SIPSimpleSettings
+        directory = SIPSimpleSettings().file_transfer.directory.normalized
+        if directory:
+            folders.append(glob.escape(directory))
+    except Exception:
+        pass
+    for folder in folders:
+        for filename in names:
+            for path in glob.glob(os.path.join(folder, glob.escape(filename))):
+                if not path.endswith('.asc') and _same_size(path, size):
+                    return path
     return None

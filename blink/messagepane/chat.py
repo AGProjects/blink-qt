@@ -29,12 +29,12 @@ def _utc(timestamp):
 
 
 class ChatItem(MessageItem):
-    __slots__ = ('note', 'sender')
+    __slots__ = ('note', 'sender', 'private', 'recipient_name')
 
     _sequence = itertools.count()
 
     def __init__(self, id, direction='incoming', content='', content_type='text/plain', category='text', timestamp=None,
-                 display_name='', uri='', account_id='', remote_uri='', state=None, note=False, sender=None):
+                 display_name='', uri='', account_id='', remote_uri='', state=None, note=False, sender=None, private=False, recipient_name=''):
         self.id = str(id)
         self.row_id = next(self._sequence)      # keeps the order of rows with the same time
         self.account_id = str(account_id or '')
@@ -60,6 +60,8 @@ class ChatItem(MessageItem):
         self.upload = None
         self.note = note
         self.sender = sender
+        self.private = private                  # a private message in a conference (CPIM To: one participant)
+        self.recipient_name = recipient_name    # whom an outgoing private message went to
 
 
 def save_inline_image(message_id, content_type, data):

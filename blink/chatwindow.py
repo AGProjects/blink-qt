@@ -107,10 +107,12 @@ class ChatStatus(ChatNotification):
 class ChatMessage(ChatContent):
     """A message: message is its body as it was sent (content_type says what it is)."""
 
-    def __init__(self, message, sender, direction, history=False, focus=False, id=None, timestamp=None, account=None, content_type='text/plain'):
+    def __init__(self, message, sender, direction, history=False, focus=False, id=None, timestamp=None, account=None, content_type='text/plain', private=False, recipient=None):
         super(ChatMessage, self).__init__(message, history, focus)
         self.sender = sender
         self.direction = direction
+        self.private = private          # a private message in a conference
+        self.recipient = recipient      # ChatSender: whom a private message went to
         self.id = str(uuid.uuid4()) if id is None else id
         self.status = ''
         self.account = account
@@ -239,6 +241,13 @@ class ChatComposer(Composer):
         if not self.locked:
             super(ChatComposer, self)._send()
 
+    def set_files_allowed(self, allowed):
+        """Attach and voice notes only where files can go (not a conference we are out of)."""
+        from blink.messagepane.recorder import recording_available
+        self.files_allowed = allowed
+        self.attach_button.setVisible(allowed)
+        self.mic_button.setVisible(allowed and recording_available())
+
 
 class IconDescriptor(object):
     def __init__(self, filename):
@@ -282,6 +291,7 @@ class ChatWidget(QWidget):
         self.model = ChatTranscriptModel(self)
         self.chat_view = TranscriptView(self)
         self.chat_view.menu_actions = self.menu_actions
+        self.chat_view.extra_menu_actions = self._extra_menu_actions
         self.chat_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.chat_view.setMinimumSize(300, 100)
         self.chat_view.setModel(self.model)
@@ -321,6 +331,17 @@ class ChatWidget(QWidget):
         self.fetcher.changed.connect(self._SH_DownloadChanged)
 
         self.otr_timer.timeout.connect(self._SH_OTRTimerTimeout)
+        self.update_file_options()
+
+    def update_file_options(self):
+        """A conference (the remote party is or was a focus) takes files only while we are in it;
+        a one to one conversation always does."""
+        allowed = self.session is None or conference_takes_files(self.session.blink_session)
+        if getattr(self.chat_input, 'files_allowed', None) != allowed:
+            self.chat_input.set_files_allowed(allowed)
+
+    def _NH_BlinkSessionDidChangeState(self, notification):
+        self.update_file_options()
 
     @property
     def user_icon(self):
@@ -383,7 +404,14 @@ class ChatWidget(QWidget):
         return ChatItem(message.id, direction=message.direction, content=message.message, content_type=message.content_type, category=category,
                         timestamp=message.timestamp, display_name=sender.name if sender is not None else '', uri=sender.uri if sender is not None else '',
                         account_id=account_id, remote_uri=self._remote_uri(),
-                        state=self._message_statuses.get(message.id), sender=sender.uri if sender is not None else None)
+                        state=self._message_statuses.get(message.id), sender=sender.uri if sender is not None else None,
+                        private=bool(getattr(message, 'private', False)), recipient_name=self._recipient_name(getattr(message, 'recipient', None)))
+
+    @staticmethod
+    def _recipient_name(recipient):
+        if recipient is None:
+            return ''
+        return recipient.name or str(recipient.uri or '').partition('@')[0]
 
     def _remote_uri(self):
         if self.session is None:
@@ -519,6 +547,10 @@ class ChatWidget(QWidget):
 
     def dragEnterEvent(self, event):
         mime_data = event.mimeData()
+        if mime_data.hasUrls() and self.session is not None and not conference_takes_files(self.session.blink_session) \
+                and all(url.isLocalFile() for url in mime_data.urls()):
+            event.ignore()      # files cannot go to a conference we are not in
+            return
         if mime_data.hasUrls() or mime_data.hasHtml() or mime_data.hasText():
             event.accept()
         else:
@@ -665,6 +697,63 @@ class ChatWidget(QWidget):
                 QDesktopServices.openUrl(QUrl.fromLocalFile(path))
             elif self.fetcher.progress(item.id) is None:
                 self.fetcher.fetch(item, force=True)        # asked for: whatever its size, and again after a failure
+
+    # Private messages in a conference, as Blink for macOS sends them: CPIM To one participant,
+    # offered when the focus allows them (a=chatroom:private-messages, the stream's
+    # private_messages_allowed) and the participant takes messages
+
+    def _private_recipient(self, item):
+        """The conference participant a message came from, when a private reply can go to them; else None."""
+        if self.session is None or item.note or item.outgoing:
+            return None
+        blink_session = self.session.blink_session
+        if not blink_session.remote_focus:
+            return None
+        chat_stream = self.session.chat_stream
+        if chat_stream is None or not getattr(chat_stream, 'private_messages_allowed', False):
+            return None
+        from blink.messagepane.chat import sender_key
+        uri = sender_key(item)
+        if not uri or uri == str(blink_session.account.id) or uri == self._remote_uri().replace('sip:', ''):
+            return None
+        participant = blink_session.server_conference.participants.get(uri)
+        if participant is None or 'chat' not in participant.active_media:
+            return None
+        return participant
+
+    def _extra_menu_actions(self, item):
+        participant = self._private_recipient(item)
+        if participant is None:
+            return []
+        return [(translate('chat_window', 'Reply in Private…'), lambda: self._reply_in_private(item, participant))]
+
+    def _reply_in_private(self, item, participant):
+        from PyQt6.QtWidgets import QInputDialog
+        from sipsimple.core import SIPURI, SIPCoreError
+        from sipsimple.streams.msrp.chat import ChatIdentity
+        name = self.chat_view.bubble_delegate.sender_name(item) if self.chat_view.bubble_delegate.sender_name is not None else (item.display_name or participant.uri)
+        text, ok = QInputDialog.getMultiLineText(self, translate('chat_window', 'Private message'), translate('chat_window', 'Private message to %s:') % name)
+        text = text.strip() if ok else ''
+        if not text:
+            return
+        try:
+            recipient = ChatIdentity(SIPURI.parse('sip:%s' % participant.uri), display_name=name)
+        except SIPCoreError:
+            return
+        chat_stream = self.session.chat_stream
+        if chat_stream is None or not getattr(chat_stream, 'private_messages_allowed', False):
+            self.add_message(ChatStatus(translate('chat_window', 'The conference does not take private messages')))
+            return
+        try:
+            message_id = self.send_message(text, content_type='text/plain', recipients=[recipient])
+        except Exception as e:
+            self.add_message(ChatStatus(translate('chat_window', 'Error sending private message: %s') % e))
+            log.error('Error sending private message: %s' % str(e))
+            return
+        message_id = message_id or str(uuid.uuid4())
+        ActivityLog().info(f'[chat] Private message {message_id} to {participant.uri} in {self._session_address()}')
+        self.add_message(ChatMessage(text, self._own_sender(), 'outgoing', id=message_id, private=True, recipient=ChatSender(name, participant.uri)))
+        self.chat_view.follow_bottom()
 
     def _SH_AudioAction(self, item, action, fraction):
         from blink.messagepane.audio import AudioPlayer
@@ -1313,7 +1402,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             menu.clear()
             menu.addAction(self.control_button.actions.mark_messages_read)
             menu.addSeparator()
-            menu.addAction(self.control_button.actions.send_files)
+            if conference_takes_files(blink_session):
+                menu.addAction(self.control_button.actions.send_files)
             menu.addAction(self.control_button.actions.show_transferred_files)
             if True:    # only a connected session gets here (idle ones have the connect buttons)
                 if state == 'connected':
@@ -1990,7 +2080,22 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self._update_window_title()  # remote_focus is only known once connected
         if self.selected_session is not None and self.selected_session.blink_session is notification.sender:
             self._show_conference_participants(self.selected_session)
+            old_state = str(notification.data.old_state or '')
+            new_state = str(notification.data.new_state or '')
+            if notification.sender.is_conference and new_state.startswith('connected') and not old_state.startswith('connected'):
+                self._expand_selected_session()     # once per connect: the user may go back to the list afterwards
         self._update_session_info_panel(elements={'status'}, update_visibility=True)
+
+    def _expand_selected_session(self):
+        """Collapse the session list onto the selected tile, as its expand arrow does."""
+        if not self.session_list.isVisibleTo(self) or not session_can_expand(self.selected_session):
+            return
+        ActivityLog().info(f'[chat window] Expand the tile of {self.selected_session.blink_session.uri} on connect')
+        if self.isVisible():
+            self.session_list.animation.setDirection(QPropertyAnimation.Direction.Backward)
+            self.session_list.animation.start()
+        else:
+            self.session_list.hide()
 
     def _NH_BlinkSessionDidEnd(self, notification):
         if not self.session_list.isVisibleTo(self) and self.isVisible() and not session_can_expand(self.selected_session):
@@ -2026,7 +2131,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             panel = self.participants_panel
         if panel in (self.participants_panel, self.files_panel):
             self.participants_panel.setVisible(conference and connected)    # not connected: only the files exchanged in it
-            self.files_panel.setVisible(True)
+            self.files_panel.setVisible(not conference or conference_has_files(session))   # a conference without shared files: no files pane
             self.files_panel_info_button.setVisible(not conference)     # one info button per column
             return self.details_splitter
         return panel
@@ -2052,7 +2157,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return  # the column appears once the conference is connected (from BlinkSessionDidChangeState)
         if session is self.selected_session:
             self.participants_panel.setVisible(True)
-            self.files_panel.setVisible(True)
+            self.files_panel.setVisible(conference_has_files(session))  # shown once the conference shares a file
             self.files_panel_info_button.hide()
             if self.session_list.isVisibleTo(self) and sum(1 for item in self.session_model.sessions if self._shows_session(item.blink_session)) < 2:
                 self.session_list.hide()    # the session list covers the panel; kept when there are sessions to switch between
@@ -2071,6 +2176,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_ChatSessionItemDidChange(self, notification):
         self._update_widgets_for_session()
+        session = self.selected_session
+        if session is not None and notification.sender is session and session.blink_session is not None and session.blink_session.is_conference:
+            self.files_panel.setVisible(conference_has_files(session))  # the first file shared in the conference brings the files pane
 
     def _parse_fthttp(self, blink_session, message, from_history=False, account=None):
         """The envelope of a file transfer message, drawn as a file bubble; None for a transfer
@@ -2359,7 +2467,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender_uri = getattr(file, 'sender_uri', '') or ''
             direction = 'outgoing' if sender_uri == str(blink_session.account.id) else 'incoming'
             file_id = (own_room_upload_id(blink_session, file.hash) if direction == 'outgoing' else None) or file.id
-            envelope = msrp_file_envelope(file.name, file.size, None, file_id, file.hash, room=session_conversation_key(blink_session))
+            source = None
+            if direction == 'outgoing':
+                # our own upload: the file we sent it from, when its transfer is still known
+                from blink.sessions import SessionManager
+                transfer = next((transfer for transfer in SessionManager().file_transfers if transfer.id == file_id), None)
+                selector = getattr(transfer, 'file_selector', None)
+                if selector is not None and os.path.isabs(str(selector.name)):
+                    source = selector.name
+            envelope = msrp_file_envelope(file.name, file.size, None, file_id, file.hash, room=session_conversation_key(blink_session), path=source)
             sender = ChatSender(getattr(file.contact, 'name', '') or sender_uri, sender_uri)
             chat.chat_widget.add_message(ChatFile(envelope, sender, direction, id=file_id, content_type=FILE_TRANSFER_CONTENT_TYPE, account=blink_session.account))
 
@@ -2406,7 +2522,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             size = os.path.getsize(selector.name)
         except OSError:
             size = selector.size
-        envelope = msrp_file_envelope(selector.name, size, getattr(selector, 'type', None), transfer.id, selector.hash, room=key if conference else None)
+        source = selector.name if transfer.direction == 'outgoing' and os.path.isabs(str(selector.name)) else None
+        envelope = msrp_file_envelope(selector.name, size, getattr(selector, 'type', None), transfer.id, selector.hash, room=key if conference else None, path=source)
         if transfer.direction == 'outgoing':
             sender = ChatSender(transfer.account.display_name, str(transfer.account.id))
         else:
@@ -2633,6 +2750,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender = ChatSender(message.sender.display_name or session.name, uri)
 
         is_status_message = any(h.name == 'Message-Type' and h.value == 'status' and h.namespace == 'urn:ag-projects:xml:ns:cpim' for h in message.additional_headers)
+        private = bool(getattr(notification.data, 'private', False))
         if is_status_message:
             if content_type == 'text/html':
                 document = QTextDocument()
@@ -2643,7 +2761,16 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             # one of our own the room plays back (another device of ours, the backlog on joining) is ours
             direction = 'outgoing' if account is not None and account is blink_session.account else 'incoming'
             message_class = ChatFile if is_file else ChatMessage
-            session.chat_widget.add_message(message_class(content, sender, direction, id=message_id, timestamp=message.timestamp, content_type=content_type))
+            recipient = None
+            if private and direction == 'outgoing' and message.recipients:
+                # one of our private messages played back by the room: whom it went to
+                to = message.recipients[0]
+                try:
+                    to_uri = '%s@%s' % (to.uri.user.decode(), to.uri.host.decode())
+                except AttributeError:
+                    to_uri = '%s@%s' % (to.uri.user, to.uri.host)
+                recipient = ChatSender(to.display_name or URIUtils.find_contact(to_uri)[0].name, to_uri)
+            session.chat_widget.add_message(message_class(content, sender, direction, id=message_id, timestamp=message.timestamp, content_type=content_type, private=private, recipient=recipient))
             if direction == 'incoming' and self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                 # seen as it arrives: read in history too (unread counts come from history otherwise)
                 NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=blink_session)
@@ -2923,7 +3050,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if not self.isMinimized():
                 self.confirm_read_messages(self.selected_session)
         else:
-            if self.session_model.sessions:
+            if previous is not None and self.session_model.sessions:
+                # only when a selection was lost: at start sessions are added one by one with none
+                # selected yet, and each addition comes here with nothing to report
                 ActivityLog().info(f'[ui] Chat window: no session selected ({len(self.session_model.sessions)} sessions, {sum(1 for item in self.session_model.sessions if self._shows_session(item.blink_session))} shown here)')
             if previous is not None and previous in self.session_model.sessions and self._shows_session(previous.blink_session):
                 # the selection was lost while the session is still here (a message only conversation

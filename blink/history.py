@@ -718,7 +718,7 @@ def own_room_upload_id(blink_session, file_hash):
     return None
 
 
-def msrp_file_envelope(name, size, file_type, transfer_id, file_hash=None, room=None):
+def msrp_file_envelope(name, size, file_type, transfer_id, file_hash=None, room=None, path=None):
     """The file transfer envelope of a file sent or received over MSRP: as one over HTTP, without
     a url (the file is on this device only); a conference's carries the room and the hash it is
     pulled by (blink.messagepane.fetch)."""
@@ -729,6 +729,8 @@ def msrp_file_envelope(name, size, file_type, transfer_id, file_hash=None, room=
         envelope['hash'] = str(file_hash)
     if room:
         envelope['room'] = str(room)
+    if path:
+        envelope['path'] = str(path)    # a file we sent: where it was sent from (blink.messagepane.files.local_file)
     return json.dumps(envelope)
 
 
