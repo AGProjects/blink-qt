@@ -1973,9 +1973,8 @@ class MessageManager(object, metaclass=Singleton):
             return 'failed'
         contact, contact_uri = URIUtils.find_contact(address)
         timestamp = ISOTimestamp(message['timestamp'])
-        from blink.history import first_sync_pending
         text = f'[Message with {contact_uri.uri}] Conversation removed on another device (from the journal), messages up to {timestamp} for account {account.id}'
-        log.debug(text) if first_sync_pending(account.id) else ActivityLog().info(text)
+        log.debug(text)     # a journal entry: debug level
         session = self._journal_session(contact)
         if session is None:
             NotificationCenter().post_notification('BlinkGotHistoryConversationRemove', sender=account, data=NotificationData(contact=contact_uri.uri, timestamp=timestamp))
@@ -2105,7 +2104,8 @@ class MessageManager(object, metaclass=Singleton):
         """Hand a call detail record from another device to history; returns the journal outcome."""
         record, refused = foreign_call_record(body, metadata, party, account.id, this_device_id())
         if record is None:
-            ActivityLog().info(f'[Message] Call record message {message_id} for account {account.id} skipped ({origin}): {refused}')
+            text = f'[Message] Call record message {message_id} for account {account.id} skipped ({origin}): {refused}'
+            log.debug(text) if 'journal' in str(origin) else ActivityLog().info(text)     # journal entries: debug level
             return f'call records skipped ({refused})'
         NotificationCenter().post_notification('BlinkGotHistoryCallRecord', sender=account,
                                                data=NotificationData(record=record, message_id=message_id, origin=origin))

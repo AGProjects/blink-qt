@@ -510,9 +510,10 @@ def first_sync_date(account_id):
         return None
 
 
-def history_info(account_id, text):
-    """An activity line about stored history, at debug level while the account's first sync runs."""
-    if first_sync_pending(account_id):
+def history_info(account_id, text, journal=False):
+    """An activity line about stored history: at debug level for what the journal brings (thousands
+    of entries on a first sync, old ones on any sync) and while the account's first sync runs."""
+    if journal or first_sync_pending(account_id):
         log.debug(text)
     else:
         ActivityLog().info(f'[db] {text}')
@@ -1170,12 +1171,12 @@ class MessageHistory(object, metaclass=Singleton):
         return {'related_msg_id': link[0], 'related_action': link[1]}
 
     @classmethod
-    def _stored_location(cls, message_id, fields, remote_uri, account=None):
+    def _stored_location(cls, message_id, fields, remote_uri, account=None, journal=False):
         """After a location tick is stored: log it (trail ticks only at debug level,
         they come every few seconds; everything at debug level while the first journal
         sync of the account is not done, thousands of them). Caller is in the db thread."""
         action = fields.get('related_action')
-        quiet = account is not None and first_sync_pending(account.id)
+        quiet = journal or (account is not None and first_sync_pending(account.id))     # journal entries: debug level
         # a share's bubble draws its trail: tell it (blink.messagepane.locations)
         NotificationCenter().post_notification('BlinkMessageHistoryLocationDidStore',
                                                data=NotificationData(remote_uri=remote_uri, message_id=message_id, action=action, session_id=fields.get('related_msg_id') or message_id))
@@ -2783,7 +2784,8 @@ class MessageHistory(object, metaclass=Singleton):
                     return      # replayed (the server call history every 5 minutes): nothing to do, nothing to log
                 row.set(metadata=json.dumps(merged), content=call_summary(merged) or '',
                         media_type=dominant_media(merged.get('media') or []) or row.media_type)
-                history_info(account_id, f"Call record of {what} merged into the stored one: {(stored or {}).get('outcome')} -> {merged.get('outcome')}, source {merged.get('source')}")
+                history_info(account_id, f"Call record of {what} merged into the stored one: {(stored or {}).get('outcome')} -> {merged.get('outcome')}, source {merged.get('source')}",
+                             journal='journal' in str(origin))
                 self._call_record_stored(account, row.remote_uri)
                 return
             remote_party = str(record.get('remoteParty') or '')
@@ -2811,7 +2813,7 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             ActivityLog().error(f'[db] Storing the call record of {what} failed: {e!r}')
         else:
-            history_info(account_id, f"Call record of {what} stored: {record.get('outcome')}, source {record.get('source')}")
+            history_info(account_id, f"Call record of {what} stored: {record.get('outcome')}, source {record.get('source')}", journal='journal' in str(origin))
             self._call_record_stored(account, canonical_uri(remote_party, account) or remote_party)
 
     @staticmethod
@@ -2897,7 +2899,7 @@ class MessageHistory(object, metaclass=Singleton):
             if message.content_type == METADATA_CONTENT_TYPE:
                 cls._stored_companion(message.id, optional_fields)     # not a bubble: nothing to refresh
             elif message.content_type == LOCATION_CONTENT_TYPE and optional_fields.get('related_action') in cls.__trail_actions__:
-                cls._stored_location(message.id, optional_fields, remote_uri, account)     # moves a pin: nothing to refresh
+                cls._stored_location(message.id, optional_fields, remote_uri, account, journal=batched)     # moves a pin: nothing to refresh
             elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
                 # from_history: a journal (server history) entry, not a live message: it does not file its party in Messages
                 if batched:
@@ -2905,7 +2907,7 @@ class MessageHistory(object, metaclass=Singleton):
                 else:
                     NotificationCenter().post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction, from_history=True))
                 if message.content_type == LOCATION_CONTENT_TYPE:
-                    cls._stored_location(message.id, optional_fields, remote_uri, account)
+                    cls._stored_location(message.id, optional_fields, remote_uri, account, journal=batched)
 
     @classmethod
     @run_in_thread('db')
