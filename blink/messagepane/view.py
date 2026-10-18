@@ -24,6 +24,18 @@ from blink.resources import Resources
 from blink.widgets.color import follow_theme, is_dark_theme
 
 
+def copy_text(text):
+    """Put text on the clipboard, and on the X11 selection too (middle-click paste), saying so in the log."""
+    from PyQt6.QtGui import QClipboard
+    from blink.logging import ActivityLog
+    clipboard = QGuiApplication.clipboard()
+    clipboard.setText(text, QClipboard.Mode.Clipboard)
+    if clipboard.supportsSelection():
+        clipboard.setText(text, QClipboard.Mode.Selection)
+    copied = clipboard.text(QClipboard.Mode.Clipboard)
+    ActivityLog().info(f'[ui] Copied {len(text)} characters to the clipboard (platform {QGuiApplication.platformName()}, read back: {"the same" if copied == text else f"{len(copied)} characters"})')
+
+
 __all__ = ['TranscriptView']
 
 
@@ -311,14 +323,14 @@ class TranscriptView(QListView):
             menu.addSeparator()
         anchor = self._link_at(position)
         if anchor:
-            menu.addAction(translate('message_pane', 'Copy Link'), lambda: QGuiApplication.clipboard().setText(anchor))
+            menu.addAction(translate('message_pane', 'Copy Link'), lambda: copy_text(anchor))
         if bubble_kind(item) in ('text', 'note'):
             layout = self.bubble_delegate.layout(index, self.visualRect(index).width(), self.font())
             text = layout.document.toPlainText()
-            menu.addAction(translate('message_pane', 'Copy Text'), lambda: QGuiApplication.clipboard().setText(text))
+            menu.addAction(translate('message_pane', 'Copy Text'), lambda: copy_text(text))
         else:
             summary = plain_summary(item)
-            menu.addAction(translate('message_pane', 'Copy Text'), lambda: QGuiApplication.clipboard().setText(summary))
+            menu.addAction(translate('message_pane', 'Copy Text'), lambda: copy_text(summary))
         path = local_file(item)
         if not path and self.offers('download') and self.bubble_delegate.downloadable(item):
             menu.addSeparator()

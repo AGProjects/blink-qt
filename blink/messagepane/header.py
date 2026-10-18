@@ -33,7 +33,7 @@ from blink.widgets.labels import ElidedLabel
 from blink.widgets.style import make_segmented
 
 
-__all__ = ['ConversationHeader', 'contact_photo', 'draw_avatar']
+__all__ = ['ConversationHeader', 'contact_photo', 'draw_avatar', 'fill_calendar_menu']
 
 
 def contact_photo(contact):
@@ -94,6 +94,37 @@ def draw_avatar(painter, rect, photo, letters, colour):
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, letters)
     painter.restore()
 
+
+
+def fill_calendar_menu(menu, day_counts, day_chosen, now_chosen=None):
+    """A conversation's calendar: years, then months, then days, newest first, each with its number
+    of messages (day_counts: {'YYYY-MM-DD': count}); with now_chosen, Back to Now on top."""
+    menu.clear()
+    if now_chosen is not None:
+        menu.addAction(translate('message_pane', 'Back to Now'), now_chosen)
+        menu.addSeparator()
+    days = {}
+    for text, count in (day_counts or {}).items():
+        try:
+            days[date.fromisoformat(text)] = count
+        except ValueError:
+            pass
+    if not days:
+        menu.addAction(translate('message_pane', 'No messages')).setEnabled(False)
+        return
+    locale = QLocale()
+    years = defaultdict(lambda: defaultdict(dict))
+    for day, count in days.items():
+        years[day.year][day.month][day] = count
+    for year in sorted(years, reverse=True):
+        months = years[year]
+        year_menu = menu.addMenu(f'{year}   ({sum(sum(month.values()) for month in months.values())})')
+        for month in sorted(months, reverse=True):
+            month_days = months[month]
+            month_menu = year_menu.addMenu(f'{locale.monthName(month, QLocale.FormatType.LongFormat)}   ({sum(month_days.values())})')
+            for day in sorted(month_days, reverse=True):
+                label = f'{locale.dayName(day.isoweekday(), QLocale.FormatType.ShortFormat)} {day.day}   ({month_days[day]})'
+                month_menu.addAction(label, lambda day=day: day_chosen(day))
 
 class AvatarLabel(QLabel):
     size = 40
@@ -340,34 +371,7 @@ class ConversationHeader(QWidget):
             self.calendar_button.setEnabled(bool(counts))
 
     def _fill_calendar_menu(self):
-        """Years, then months, then days, newest first, each with its number of messages."""
-        menu = self.calendar_menu
-        menu.clear()
-        if self.jumped():
-            menu.addAction(translate('message_pane', 'Back to Now'), self.nowChosen.emit)
-            menu.addSeparator()
-        days = {}
-        for text, count in self.day_counts.items():
-            try:
-                days[date.fromisoformat(text)] = count
-            except ValueError:
-                pass
-        if not days:
-            menu.addAction(translate('message_pane', 'No messages')).setEnabled(False)
-            return
-        locale = QLocale()
-        years = defaultdict(lambda: defaultdict(dict))
-        for day, count in days.items():
-            years[day.year][day.month][day] = count
-        for year in sorted(years, reverse=True):
-            months = years[year]
-            year_menu = menu.addMenu(f'{year}   ({sum(sum(month.values()) for month in months.values())})')
-            for month in sorted(months, reverse=True):
-                month_days = months[month]
-                month_menu = year_menu.addMenu(f'{locale.monthName(month, QLocale.FormatType.LongFormat)}   ({sum(month_days.values())})')
-                for day in sorted(month_days, reverse=True):
-                    label = f'{locale.dayName(day.isoweekday(), QLocale.FormatType.ShortFormat)} {day.day}   ({month_days[day]})'
-                    month_menu.addAction(label, lambda day=day: self.dayChosen.emit(day))
+        fill_calendar_menu(self.calendar_menu, self.day_counts, self.dayChosen.emit, self.nowChosen.emit if self.jumped() else None)
 
     def set_account(self, account):
         self.account = account

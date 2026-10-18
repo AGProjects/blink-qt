@@ -110,8 +110,8 @@ class HistoryManager(object, metaclass=Singleton):
         with open(ApplicationData.get('calls_history'), 'wb+') as history_file:
             pickle.dump(self.calls, history_file)
 
-    def load(self, uri, session, entries=100):
-        return self.message_history.load(uri, session, entries=entries)
+    def load(self, uri, session, **kw):
+        return self.message_history.load(uri, session, **kw)
 
     def reload_pending_encrypted(self, uri, session, entries=100):
         return self.message_history.reload_pending_encrypted(uri, session, entries=entries)
@@ -3080,20 +3080,70 @@ class MessageHistory(object, metaclass=Singleton):
                     if not decrypted:
                         db_message.decryption_error = notification.data.error
 
+    # what the MSRP sessions window draws (chatwindow._NH_BlinkMessageHistoryLoadDidSucceed): chat
+    # and files, not calls or locations (those are the message pane's)
+    chat_window_categories = ('text', 'image', 'audio', 'video', 'other')
+
+    def _chat_window_page(self, remote_uri, before=None, after=None, entries=50):
+        """A page of a conversation for the MSRP sessions window, read and paged as the message pane
+        reads and pages one (get_messages, blink.messagepane.model.ConversationModel._fetch): the
+        `entries` newest messages before `before` (None: the newest ones), or with `after` the
+        `entries` oldest ones after it. Oldest first, and whether there are more past them."""
+        tick = timedelta(microseconds=1)
+        fetch_size = 100
+        forward = after is not None
+        cursor = self._storage_time(after if forward else before)
+        found, seen, more = [], set(), True
+        while len(found) < entries:
+            if forward:
+                rows = self.get_messages(remote_uri, after=cursor, limit=fetch_size, oldest_first=True)
+            else:
+                rows = self.get_messages(remote_uri, before=cursor, limit=fetch_size)
+            for row in rows:
+                if row.message_id not in seen and row.category in self.chat_window_categories:
+                    seen.add(row.message_id)
+                    found.append(row)
+            if len(rows) < fetch_size:
+                more = False
+                break
+            last = rows[-1].timestamp
+            # past the rows of the last time seen, unless a whole query was that one time
+            if forward:
+                cursor = last if last - tick == cursor else last - tick
+            else:
+                cursor = last if cursor is not None and last + tick == cursor else last + tick
+        if len(found) > entries:
+            found = found[:entries]
+            more = True
+        if not forward:
+            found.reverse()
+        return found, more
+
     @run_in_thread('db')
-    def load(self, uri, session, entries=100):
+    def load(self, uri, session, entries=50, kind='initial', before=None, after=None, day=None):
+        """A page of the conversation of an MSRP session (BlinkMessageHistoryLoadDidSucceed): kind
+        'initial' (or 'now', back from a past day) the newest page, 'older' the page before `before`,
+        'newer' the page after `after`, 'jump' the page ending at `before` (the end of `day`)."""
         notification_center = NotificationCenter()
         remote_uri = bare_instance_id(session.remote_instance_id) if session.remote_instance_id else conversation_key(uri, session.account)
+        newer = False
+        day_counts = None
         try:
-            query = Message.select(f"remote_uri = {self.db.sqlrepr(remote_uri)} and state != 'deleted' and {NOT_DELETED_SQL} and {self._get_enabled_account_filter()}")
-            total = query.count()
-            result = list(query.orderBy('timestamp')[-entries:])
+            result, more = self._chat_window_page(remote_uri, before=before, after=after, entries=entries)
+            if kind == 'jump' and before is not None:
+                newer = bool(self.get_messages(remote_uri, after=self._storage_time(before) - timedelta(microseconds=1), limit=1, oldest_first=True))
+            if kind in ('initial', 'now', 'jump'):
+                day_counts = self.day_counts(remote_uri)
         except Exception as e:
             ActivityLog().error(f'[Message with {remote_uri}] Loading the conversation from history failed: {e}')
-            notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri))
+            notification_center.post_notification('BlinkMessageHistoryLoadDidFail', sender=session, data=NotificationData(uri=uri, kind=kind))
             return
-        ActivityLog().info(f'[Message with {remote_uri}] Loaded {len(result)} of {total} messages from history')
-        notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
+        what = {'initial': '', 'now': 'the newest ', 'older': 'older ', 'newer': 'newer ', 'jump': f'up to {day} '}.get(kind, '')
+        since = f' from {result[0].timestamp.replace(tzinfo=timezone.utc).astimezone():%Y-%m-%d %H:%M}' if result else ''
+        rest = (', newer ones available' if newer else '') + ((', older ones available' if more else ', up to the newest') if kind == 'newer' else (', older ones available' if more else ', the whole conversation'))
+        ActivityLog().info(f'[Message with {remote_uri}] Loaded {len(result)} {what}messages from history{since}{rest}')
+        notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session,
+                                              data=NotificationData(messages=list(result), uri=uri, kind=kind, more=more, newer=newer, day=day, day_counts=day_counts))
 
     @run_in_thread('db')
     def reload_pending_encrypted(self, uri, session, entries=100):
@@ -3104,7 +3154,7 @@ class MessageHistory(object, metaclass=Singleton):
         except Exception as e:
             return
         log.debug(f"== ReLoaded {len(list(result))} messages for {remote_uri} from history")
-        notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri))
+        notification_center.post_notification('BlinkMessageHistoryLoadDidSucceed', sender=session, data=NotificationData(messages=list(result), uri=uri, kind='reload'))
 
     @run_in_thread('db')
     def get_last_contacts(self, number=25, unread=False):

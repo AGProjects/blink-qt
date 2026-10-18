@@ -94,13 +94,15 @@ class ChatTranscriptModel(QAbstractListModel):
 
     MessageItemRole = Qt.ItemDataRole.UserRole
 
-    # what TranscriptView asks of a model that pages: this one has everything already
+    # what TranscriptView asks of a model that pages: the window loads the pages from history
+    # (pager, given by the window: pager('older') and pager('newer')) and sets these
     has_more = False
-    has_newer = False
+    has_newer = False       # after a jump to a day: newer messages not loaded yet
     loading = False
     loaded = True
     search_truncated = False
     category = None
+    pager = None
 
     loadingChanged = pyqtSignal(bool)
     initialLoadFinished = pyqtSignal()
@@ -115,6 +117,21 @@ class ChatTranscriptModel(QAbstractListModel):
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.items)
+
+    # Paging
+
+    def load_older(self):
+        if self.pager is not None and self.has_more and not self.loading and not self.search_text:
+            self.pager('older')
+
+    def load_newer(self):
+        if self.pager is not None and self.has_newer and not self.loading and not self.search_text:
+            self.pager('newer')
+
+    def set_loading(self, loading):
+        if self.loading != loading:
+            self.loading = loading
+            self.loadingChanged.emit(loading)
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid() or not 0 <= index.row() < len(self.items):

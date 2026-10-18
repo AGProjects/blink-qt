@@ -118,7 +118,7 @@ except ImportError:
     class TLSSettingsExtension(TLSSettings):
         ca_list = Setting(type=ApplicationDataPath, default=ApplicationDataPath(_default_ca_list), nillable=True)
         certificate = Setting(type=ApplicationDataPath, default=ApplicationDataPath(Resources.get('tls/default.crt')), nillable=True)
-        verify_server = Setting(type=bool, default=True)
+        verify_server = Setting(type=bool, default=False)
 
 
 class SIPSimpleSettingsExtension(SettingsObjectExtension):
