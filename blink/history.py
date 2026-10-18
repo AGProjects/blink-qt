@@ -2835,7 +2835,7 @@ class MessageHistory(object, metaclass=Singleton):
 
     @classmethod
     @run_in_thread('db')
-    def add_from_server_history(cls, account, remote_uri, message, state=None, encryption=None, batched=False):
+    def add_from_server_history(cls, account, remote_uri, message, state=None, encryption=None, batched=False, read=None):
         if message.content.startswith('?OTRv'):
             return
         if cls._own_self_transfer(account, message):
@@ -2862,7 +2862,8 @@ class MessageHistory(object, metaclass=Singleton):
         optional_fields = {}
         if state is not None:
             optional_fields['state'] = state
-        optional_fields['read'] = cls._initial_read(message.direction, message.content_type, state)
+        # read: known by the caller (a first sync: up to the conversation's read point), else from the state
+        optional_fields['read'] = 1 if read else cls._initial_read(message.direction, message.content_type, state)
         optional_fields.update(cls._content_fields(message.content_type, message.content))
         optional_fields.update(cls._related_fields(message.content_type, message.content, getattr(message, 'metadata', None)))
 
