@@ -55,6 +55,7 @@ class MessageNotifier(object):
         self.bus = None
         self.shown = {}             # conversation key: (notification id, count)
         self.targets = {}           # notification id: (conversation key, contact, contact_uri)
+        self.actions = {}           # notification id: (key, callable) - an MSRP chat's: opens its tile
         if not sys.platform.startswith('linux'):
             return
         try:
@@ -153,6 +154,52 @@ class MessageNotifier(object):
         self.bus.call(self.bus_name, self.path, self.interface, 'Notify', parameters, GLib.VariantType('(u)'), 0, -1, None, sent)
         ActivityLog().info(f'[notifications] New message from {key}' + (f' ({count} unread)' if count > 1 else ''))
 
+    # MSRP chats (the MSRP sessions window): the sender and what they wrote, as the user asked for
+    # them; one notification per session, a newer message replaces it
+
+    chat_preview_length = 200
+
+    def notify_chat(self, blink_session, sender_name, text, opener):
+        """A message in an MSRP session the user is not looking at. opener: what clicking it does."""
+        if self.bus is None or blink_session.contact_uri is None:
+            return
+        key = 'msrp:' + str(blink_session.contact_uri.uri).lower()
+        room = getattr(blink_session.contact, 'name', '') or str(blink_session.contact_uri.uri)
+        text = ' '.join(str(text or '').split())
+        if len(text) > self.chat_preview_length:
+            text = text[:self.chat_preview_length - 1] + '…'
+        if blink_session.is_conference:
+            title, body = room, f'{sender_name}: {text}' if sender_name else text
+        else:
+            title, body = sender_name or room, text
+        previous_id, count = self.shown.get(key, (0, 0))
+        count += 1
+        from gi.repository import GLib
+        hints = {'desktop-entry': GLib.Variant('s', self.desktop_entry),
+                 'category': GLib.Variant('s', 'im.received'),
+                 'image-path': GLib.Variant('s', Resources.get('icons/blink.png'))}
+        parameters = GLib.Variant('(susssasa{sv}i)', ('Blink', previous_id, Resources.get('icons/blink.png'), title,
+                                                      html.escape(body, quote=False), ['default', translate('notifications', 'Open')], hints, -1))
+
+        def sent(bus, result):
+            try:
+                notification_id = bus.call_finish(result).unpack()[0]
+            except Exception as e:
+                ActivityLog().warning(f'[notifications] Cannot show a desktop notification: {e}')
+                return
+            self.shown[key] = (notification_id, count)
+            self.actions[notification_id] = (key, opener)
+        self.bus.call(self.bus_name, self.path, self.interface, 'Notify', parameters, GLib.VariantType('(u)'), 0, -1, None, sent)
+        ActivityLog().info(f'[notifications] New chat message in {key}' + (f' ({count} unread)' if count > 1 else ''))
+
+    def withdraw_chat(self, blink_session):
+        if blink_session is not None and blink_session.contact_uri is not None:
+            key = 'msrp:' + str(blink_session.contact_uri.uri).lower()
+            shown = self.shown.get(key)
+            if shown is not None:
+                self.actions.pop(shown[0], None)
+            self._withdraw(key)
+
     def _withdraw(self, key):
         shown = self.shown.pop(key, None)
         if shown is None or self.bus is None:
@@ -167,6 +214,15 @@ class MessageNotifier(object):
     def _signal(self, bus, sender, path, interface, signal, parameters):
         values = parameters.unpack()
         notification_id = values[0]
+        action = self.actions.pop(notification_id, None)
+        if action is not None:
+            key, opener = action
+            if self.shown.get(key, (None,))[0] == notification_id:
+                self.shown.pop(key, None)
+            if signal == 'ActionInvoked':
+                ActivityLog().info(f'[notifications] Opened {key} from its notification')
+                opener()
+            return
         target = self.targets.get(notification_id)
         if target is None:
             return

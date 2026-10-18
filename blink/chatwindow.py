@@ -2061,6 +2061,29 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         painter.drawLine(-3, 3, 3, -3)
         painter.restore()
 
+    def _open_from_notification(self, session):
+        """Clicked desktop notification of a chat message: this window in front, on that session."""
+        if session not in self.session_model.sessions:
+            return
+        model = self.session_model
+        selection_model = self.session_list.selectionModel()
+        selection_model.select(model.index(model.sessions.index(session)), selection_model.SelectionFlag.ClearAndSelect)
+        if self.isMinimized():
+            self.showNormal()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def changeEvent(self, event):
+        super(ChatWindow, self).changeEvent(event)
+        if event.type() in (QEvent.Type.ActivationChange, QEvent.Type.WindowStateChange) and self.isActiveWindow() and not self.isMinimized():
+            self._withdraw_notification(self.selected_session)     # looking at it now: its notification goes
+
+    def _withdraw_notification(self, session):
+        notifier = getattr(QApplication.instance().main_window, 'message_notifier', None)
+        if notifier is not None and session is not None and session.blink_session is not None:
+            notifier.withdraw_chat(session.blink_session)
+
     def confirm_read_messages(self, session):
         if self.selected_session:
             NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=session.blink_session)
@@ -2991,6 +3014,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if direction == 'incoming' and self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                 # seen as it arrives: read in history too (unread counts come from history otherwise)
                 NotificationCenter().post_notification('BlinkSessionConfirmReadMessages', sender=blink_session)
+            elif direction == 'incoming':
+                # not looked at: a desktop notification with who wrote what
+                text = content if not is_file else translate('chat_window', 'sent a file')
+                if not is_file and content_type == 'text/html':
+                    document = QTextDocument()
+                    document.setHtml(content)
+                    text = document.toPlainText()
+                if private:
+                    text = translate('chat_window', '(private) %s') % text
+                notifier = getattr(QApplication.instance().main_window, 'message_notifier', None)
+                if notifier is not None:
+                    notifier.notify_chat(blink_session, sender.name or sender.uri, text, lambda session=session: self._open_from_notification(session))
 
         session.remote_composing = False
         settings = SIPSimpleSettings()
@@ -3266,6 +3301,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.control_button.setEnabled(True)
             if not self.isMinimized():
                 self.confirm_read_messages(self.selected_session)
+            if self.isActiveWindow() and not self.isMinimized():
+                self._withdraw_notification(self.selected_session)
         else:
             if previous is not None and self.session_model.sessions:
                 # only when a selection was lost: at start sessions are added one by one with none
