@@ -512,9 +512,18 @@ class ChatWidget(QWidget):
         ui_settings().setValue('message_pane/font_delta', max(low, min(high, delta + step)))
         self._apply_font()
 
+    _media_names = {'audio': 'Audio', 'video': 'Video', 'screen-sharing': 'Screen sharing'}
+
+    def _media_note(self, stream, text):
+        """A line in the transcript for audio, video or screen sharing added to or gone from the session."""
+        name = self._media_names.get(getattr(stream, 'type', None))
+        if name is not None:
+            self.add_message(ChatStatus(translate('chat_window', text) % translate('chat_window', name)))
+
     def _NH_BlinkSessionDidAddStream(self, notification):
         self.update_input_state()
         self.update_header()
+        self._media_note(notification.data.stream, '%s added')
 
     def _NH_BlinkSessionContactDidChange(self, notification):
         self._header_conversation = None
@@ -1125,10 +1134,15 @@ class ChatWidget(QWidget):
         if notification.data.stream.type == 'chat':
             self.chat_input.reset_locks()
             self.add_message(ChatStatus(translate('chat_window', 'Chat stream ended')))
+        else:
+            self._media_note(notification.data.stream, '%s ended')
 
     def _NH_BlinkSessionDidNotAddStream(self, notification):
         if notification.data.stream.type == 'chat':
             self.add_message(ChatStatus(translate('chat_window', 'Cannot add chat stream: %s (%s)') % (notification.data.reason, notification.data.code)))
+        else:
+            reason, code = getattr(notification.data, 'reason', None), getattr(notification.data, 'code', None)
+            self._media_note(notification.data.stream, '%s could not be added' + (f': {reason}' if reason else '') + (f' ({code})' if code else ''))
 
     def _NH_BlinkSessionShouldDeleteFile(self, notification):
         item = self.model.get(notification.data.item.id)
