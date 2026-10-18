@@ -28,6 +28,7 @@ from PyQt6.QtCore import QMimeData, QPoint, QPointF, QRectF, QSettings, QSize, Q
 from PyQt6.QtGui import QColor, QDrag, QFontMetricsF, QPainter, QPainterPath, QPalette, QPen
 from PyQt6.QtWidgets import QAbstractScrollArea, QApplication, QHBoxLayout, QLabel, QMenu, QPushButton, QWidget
 
+from blink.resources import ui_settings
 from blink.util import translate
 from blink.widgets.color import is_dark_theme, secondary_text_color
 
@@ -53,7 +54,7 @@ class GridView(QAbstractScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.model = None
-        self.columns = max(self.min_columns, min(self.max_columns, int(QSettings().value('message_pane/grid_columns', 3) or 3)))
+        self.columns = max(self.min_columns, min(self.max_columns, int(ui_settings().value('message_pane/grid_columns', 3) or 3)))
         self.progress_of = None         # callable(message id) -> download fraction or None
         self._entries = []              # ('divider', QRectF, text) or ('tile', QRectF, row)
         self._height = 0
@@ -129,7 +130,7 @@ class GridView(QAbstractScrollArea):
         columns = max(self.min_columns, min(self.max_columns, columns))
         if columns != self.columns:
             self.columns = columns
-            QSettings().setValue('message_pane/grid_columns', columns)
+            ui_settings().setValue('message_pane/grid_columns', columns)
             self._relayout()
 
     # Selection

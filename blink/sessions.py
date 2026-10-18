@@ -54,7 +54,7 @@ from sipsimple.util import ISOTimestamp
 from blink.logging import ActivityLog, MessagingTrace as message_log
 from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
-from blink.resources import ApplicationData, Resources
+from blink.resources import ApplicationData, Resources, ui_settings
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessioninfo import SessionInfoPanel
 from blink.util import call_later, call_in_gui_thread, run_in_gui_thread, translate, copy_transfer_file
@@ -7699,7 +7699,7 @@ class ConferenceDialog(base_class, ui_class):
         self.chat_button.clicked.connect(self._SH_MediaButtonClicked)
         self.room_button.editTextChanged.connect(self._SH_RoomButtonEditTextChanged)
         self.accepted.connect(self.join_conference)
-        geometry = QSettings().value("conference_dialog/geometry")
+        geometry = ui_settings().value("conference_dialog/geometry")
         if geometry:
             self.restoreGeometry(geometry)
 
@@ -7755,11 +7755,11 @@ class ConferenceDialog(base_class, ui_class):
         super(ConferenceDialog, self).keyPressEvent(event)
 
     def closeEvent(self, event):
-        QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
+        ui_settings().setValue("conference_dialog/geometry", self.saveGeometry())
         super(ConferenceDialog, self).closeEvent(event)
 
     def show(self):
-        geometry = QSettings().value("conference_dialog/geometry")
+        geometry = ui_settings().value("conference_dialog/geometry")
         if geometry:
             self.restoreGeometry(geometry)
         self.resize(self.size().expandedTo(self.minimumSize()))      # a geometry saved when the dialog was smaller
@@ -7780,7 +7780,7 @@ class ConferenceDialog(base_class, ui_class):
         (self.accept_button if self.accept_button.isEnabled() else self.invite_list).setFocus()
 
     def join_conference(self):
-        QSettings().setValue("conference_dialog/geometry", self.saveGeometry())
+        ui_settings().setValue("conference_dialog/geometry", self.saveGeometry())
         from blink.contacts import URIUtils
 
         current_text = self.room_button.currentText().strip()

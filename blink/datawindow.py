@@ -47,7 +47,7 @@ from blink.history import MessageHistory
 from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
 from blink.messagepane.format import format_size
-from blink.resources import ApplicationData
+from blink.resources import ApplicationData, ui_settings
 from blink.logging import ActivityLog
 from blink.util import run_in_gui_thread, translate
 
@@ -1711,7 +1711,7 @@ class DataWindow(QWidget):
         self.tabs.addTab(self.export_panel, translate('data_window', 'Export to device'))
         self.tabs.currentChanged.connect(self._SH_TabChanged)
         layout.addWidget(self.tabs)
-        geometry = QSettings().value('data_window/geometry')
+        geometry = ui_settings().value('data_window/geometry')
         if geometry:
             self.restoreGeometry(geometry)
 
@@ -1739,7 +1739,7 @@ class DataWindow(QWidget):
             self.files_panel.refresh(keep_status=True)
 
     def closeEvent(self, event):
-        QSettings().setValue('data_window/geometry', self.saveGeometry())
+        ui_settings().setValue('data_window/geometry', self.saveGeometry())
         # an export is a server on the local network: it does not outlive the window that shows it
         self.export_panel.stop()
         super().closeEvent(event)

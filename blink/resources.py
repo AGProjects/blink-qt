@@ -18,7 +18,7 @@ from sipsimple.configuration.datatypes import Path
 from blink.util import run_in_gui_thread
 
 
-__all__ = ['ApplicationData', 'Resources', 'IconManager', 'themed_icon']
+__all__ = ['ApplicationData', 'Resources', 'IconManager', 'themed_icon', 'ui_settings']
 
 
 def themed_icon(filename, dark_color='#b4b4b4', size=64, outline=False):
@@ -84,6 +84,32 @@ class ApplicationData(object):
     @classmethod
     def get(cls, resource):
         return os.path.join(cls.directory, os.path.normpath(resource))
+
+
+_ui_settings_migrated = False
+
+
+def ui_settings():
+    """Where the windows keep their state (geometry, splitters, the chat window's tiles, the
+    message pane's text size): <ApplicationData>/ui.conf, an INI file with the rest of Blink's
+    configuration and logs, not the Qt default (~/.config/AG Projects/Blink.conf). Use it instead
+    of QSettings(). The first time, what the Qt default place held is copied over."""
+    global _ui_settings_migrated
+    from PyQt6.QtCore import QSettings
+    path = ApplicationData.get('ui.conf')
+    if not _ui_settings_migrated:
+        _ui_settings_migrated = True
+        if not os.path.exists(path):
+            old = QSettings()       # the Qt default place, any format
+            keys = old.allKeys()
+            if keys:
+                new = QSettings(path, QSettings.Format.IniFormat)
+                for key in keys:
+                    new.setValue(key, old.value(key))
+                new.sync()
+                from blink.logging import ActivityLog
+                ActivityLog().info(f'[ui] Window state moved from {old.fileName()} to {path} ({len(keys)} keys)')
+    return QSettings(path, QSettings.Format.IniFormat)
 
 
 class Resources(object):

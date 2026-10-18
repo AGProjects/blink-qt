@@ -45,7 +45,7 @@ from sipsimple.threading import run_in_thread
 from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog
 from blink import screen_pointer
-from blink.resources import Resources
+from blink.resources import Resources, ui_settings
 from blink.camera_formats import resolution_support, usable_cameras
 from blink.screen_share import ScreenShareManager
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
@@ -680,13 +680,13 @@ class LocalVideoView(TrackedVideoSurface):
 
     @staticmethod
     def corner():
-        corner = QSettings().value(MY_VIDEO_CORNER_KEY, 'TR')
+        corner = ui_settings().value(MY_VIDEO_CORNER_KEY, 'TR')
         return corner if corner in ('TL', 'TR', 'BL', 'BR') else 'TR'
 
     @staticmethod
     def scale():
         try:
-            value = float(QSettings().value(MY_VIDEO_SCALE_KEY, MY_VIDEO_DEFAULT_SCALE))
+            value = float(ui_settings().value(MY_VIDEO_SCALE_KEY, MY_VIDEO_DEFAULT_SCALE))
         except (TypeError, ValueError):
             value = MY_VIDEO_DEFAULT_SCALE
         return value if value > 0 else MY_VIDEO_DEFAULT_SCALE
@@ -817,7 +817,7 @@ class LocalVideoView(TrackedVideoSurface):
         container = self.parent()
         if not dragged or container is None:
             return
-        settings = QSettings()
+        settings = ui_settings()
         geometry = self.geometry()
         if mode == 'move':
             center = geometry.center()

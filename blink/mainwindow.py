@@ -36,7 +36,7 @@ from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, 
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
-from blink.resources import ApplicationData, IconManager, Resources, themed_icon
+from blink.resources import ApplicationData, IconManager, Resources, themed_icon, ui_settings
 from blink.util import run_in_gui_thread, translate
 from blink.widgets.buttons import AccountState, SwitchViewButton
 from blink.widgets.color import follow_theme
@@ -101,7 +101,7 @@ class MainWindow(base_class, ui_class):
 
         self.setWindowTitle('Blink')
 
-        geometry = QSettings().value("main_window/geometry")
+        geometry = ui_settings().value("main_window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
 
@@ -433,14 +433,14 @@ class MainWindow(base_class, ui_class):
     @property
     def message_pane_width(self):
         try:
-            width = int(QSettings().value('main_window/message_pane_width', MessagePane.default_width))
+            width = int(ui_settings().value('main_window/message_pane_width', MessagePane.default_width))
         except (TypeError, ValueError):
             width = MessagePane.default_width
         return max(width, MessagePane.minimum_width)
 
     def _save_message_pane_width(self):
         if self.message_pane.isVisible():
-            QSettings().setValue('main_window/message_pane_width', self.message_pane.width())
+            ui_settings().setValue('main_window/message_pane_width', self.message_pane.width())
 
     def _SH_MainSplitterMoved(self, position, index):
         self._save_message_pane_width()
@@ -482,7 +482,7 @@ class MainWindow(base_class, ui_class):
     def closeEvent(self, event):
         # the geometry is kept without the pane, which is closed at the next start
         self.set_message_pane_visible(False)
-        QSettings().setValue("main_window/geometry", self.saveGeometry())
+        ui_settings().setValue("main_window/geometry", self.saveGeometry())
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
         self.contact_editor_dialog.close()

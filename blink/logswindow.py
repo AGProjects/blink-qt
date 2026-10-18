@@ -8,7 +8,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from application.python import Null
 from application.notification import IObserver, NotificationCenter
 from blink.logging import ActivityLog
-from blink.resources import ApplicationData, Resources
+from blink.resources import ApplicationData, Resources, ui_settings
 from blink.util import run_in_gui_thread
 from sipsimple.configuration.settings import SIPSimpleSettings
 from zope.interface import implementer
@@ -41,7 +41,7 @@ class LogsWindow(base_class, ui_class):
             self.setupUi()
 
         # after setupUi, which sets the default size from the .ui file
-        geometry = QtCore.QSettings().value("logs_window/geometry")
+        geometry = ui_settings().value("logs_window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
 
@@ -93,7 +93,7 @@ class LogsWindow(base_class, ui_class):
         self._sip_sending_format = QtGui.QTextCharFormat()
         self._sip_sending_format.setForeground(QtGui.QColor(self.sip_sending_color))
         try:
-            index = int(QtCore.QSettings().value('logs_window/sip_category', 0))
+            index = int(ui_settings().value('logs_window/sip_category', 0))
         except (TypeError, ValueError):
             index = 0
         if 0 <= index < len(self.sip_categories):
@@ -129,7 +129,7 @@ class LogsWindow(base_class, ui_class):
         ActivityLog().set_gui_logger(self._queue_activity)
 
     def closeEvent(self, event):
-        QtCore.QSettings().setValue("logs_window/geometry", self.saveGeometry())
+        ui_settings().setValue("logs_window/geometry", self.saveGeometry())
         # lines keep going to activity.txt and to the in-memory backlog,
         # which is replayed when the window is shown again
         ActivityLog().detach_gui_logger()
@@ -195,7 +195,7 @@ class LogsWindow(base_class, ui_class):
             
     def _SH_SipCategoryChanged(self, index):
         self._sip_category = self.sip_categories[index] if 0 <= index < len(self.sip_categories) else None
-        QtCore.QSettings().setValue('logs_window/sip_category', index)
+        ui_settings().setValue('logs_window/sip_category', index)
         self._apply_sip_filter()
 
     def _sip_matches(self, entry):

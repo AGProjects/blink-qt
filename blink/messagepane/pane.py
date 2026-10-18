@@ -51,7 +51,7 @@ from blink.messagepane.header import ConversationHeader
 from blink.messagepane.model import ConversationModel
 from blink.messagepane.strip import TranscriptStrip
 from blink.messagepane.view import TranscriptView
-from blink.resources import Resources
+from blink.resources import Resources, ui_settings
 from blink.util import call_in_gui_thread, run_in_gui_thread, translate
 from blink.widgets.color import follow_theme, secondary_text_color
 
@@ -782,7 +782,7 @@ class MessagePane(QWidget):
         self.grid_button.setText(translate('message_pane', 'Grid'))
         self.grid_button.setToolTip(translate('message_pane', 'Show pictures, videos and locations as tiles'))
         self.grid_button.setCheckable(True)
-        self.grid_button.setChecked(QSettings().value('message_pane/grid', True, type=bool))
+        self.grid_button.setChecked(ui_settings().value('message_pane/grid', True, type=bool))
         self.grid_button.toggled.connect(self._SH_GridToggled)
         self.columns_box = QSpinBox(self.filters)
         self.columns_box.setRange(self.grid.min_columns, self.grid.max_columns)
@@ -889,7 +889,7 @@ class MessagePane(QWidget):
             self._update_mode()
 
     def _SH_GridToggled(self, checked):
-        QSettings().setValue('message_pane/grid', checked)
+        ui_settings().setValue('message_pane/grid', checked)
         self._update_mode()
 
     def _update_mode(self):
@@ -928,14 +928,14 @@ class MessagePane(QWidget):
 
     def _font_delta(self):
         try:
-            return int(QSettings().value('message_pane/font_delta', 0))
+            return int(ui_settings().value('message_pane/font_delta', 0))
         except (TypeError, ValueError):
             return 0
 
     def _step_font(self, step):
         low, high = self.font_steps
         delta = max(low, min(high, self._font_delta() + step))
-        QSettings().setValue('message_pane/font_delta', delta)
+        ui_settings().setValue('message_pane/font_delta', delta)
         self._apply_font()
 
     def _apply_font(self):

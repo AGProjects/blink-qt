@@ -52,7 +52,7 @@ from blink.messagepane.files import local_file
 from blink.messagepane.header import contact_photo, draw_avatar
 from blink.messagepane.view import TranscriptView
 from blink.messages import MessageManager, BlinkMessage, msrp_message_id, send_msrp_message
-from blink.resources import IconManager, Resources
+from blink.resources import IconManager, Resources, ui_settings
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, BlinkFileTransfer, conference_has_files, session_can_expand
 from blink.util import run_in_gui_thread, call_later, translate
@@ -467,10 +467,10 @@ class ChatWidget(QWidget):
         from blink.messagepane.pane import MessagePane
         low, high = MessagePane.font_steps
         try:
-            delta = int(QSettings().value('message_pane/font_delta', 0))
+            delta = int(ui_settings().value('message_pane/font_delta', 0))
         except (TypeError, ValueError):
             delta = 0
-        QSettings().setValue('message_pane/font_delta', max(low, min(high, delta + step)))
+        ui_settings().setValue('message_pane/font_delta', max(low, min(high, delta + step)))
         self._apply_font()
 
     def _NH_BlinkSessionDidAddStream(self, notification):
@@ -516,7 +516,7 @@ class ChatWidget(QWidget):
 
     def _apply_font(self):
         try:
-            delta = int(QSettings().value('message_pane/font_delta', 0))
+            delta = int(ui_settings().value('message_pane/font_delta', 0))
         except (TypeError, ValueError):
             delta = 0
         font = QApplication.font()
@@ -1172,11 +1172,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.zrtp_widget.statusChanged.connect(self._SH_ZRTPWidgetStatusChanged)
 
 
-        geometry = QSettings().value("chat_window/geometry")
+        geometry = ui_settings().value("chat_window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
 
-        splitter_state = QSettings().value("chat_window/splitter")
+        splitter_state = ui_settings().value("chat_window/splitter")
         if splitter_state:
             self.splitter.restoreState(splitter_state)
 
@@ -1931,8 +1931,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         history.get_last_contacts(unread=True)
 
     def closeEvent(self, event):
-        QSettings().setValue("chat_window/geometry", self.saveGeometry())
-        QSettings().setValue("chat_window/splitter", self.splitter.saveState())
+        ui_settings().setValue("chat_window/geometry", self.saveGeometry())
+        ui_settings().setValue("chat_window/splitter", self.splitter.saveState())
         super(ChatWindow, self).closeEvent(event)
 
     def eventFilter(self, watched, event):
@@ -2126,7 +2126,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_SIPApplicationWillEnd(self, notification):
         self._quitting = True       # sessions ending and going away on quit are not closed tiles
 
-    def _save_conference_tiles(self):
+    def _save_conference_tiles(self, keep=()):
+        """Remember the tiles shown; keep: remembered tiles that did not come up this time (they are
+        not forgotten because of a failure: only closing a tile forgets it)."""
         if getattr(self, '_restoring_tiles', False) or getattr(self, '_quitting', False):
             return
         tiles = []
@@ -2136,7 +2138,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 continue    # a SIP message conversation (the message pane's) is not a tile here
             account = getattr(blink_session.account, 'id', None)
             tiles.append({'uri': str(blink_session.contact_uri.uri), 'account': str(account) if account else None})
-        QSettings().setValue(self.settings_key, json.dumps(tiles))
+        shown = {tile['uri'].lower() for tile in tiles}
+        tiles.extend(tile for tile in keep if tile.get('uri') and tile['uri'].lower() not in shown)
+        ui_settings().setValue(self.settings_key, json.dumps(tiles))
 
     # one tile per pass of the event loop: building a tile (its ChatWidget) is mostly C++ widget
     # construction, done with the GIL held; all of them in one go kept the SIP reactor thread
@@ -2145,7 +2149,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _restore_conference_tiles(self):
         try:
-            tiles = json.loads(QSettings().value(self.settings_key) or '[]')
+            tiles = json.loads(ui_settings().value(self.settings_key) or '[]')
         except (TypeError, ValueError):
             tiles = []
         if not tiles:
@@ -2191,9 +2195,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         self._restoring_tiles = False
         self._hide_message_only_sessions()      # the rows of tiles made visible again
-        self._save_conference_tiles()
+        shown = {str(item.blink_session.contact_uri.uri).lower() for item in self.session_model.sessions
+                 if item.blink_session.contact_uri is not None and self._shows_session(item.blink_session)}
+        missing = [tile for tile in tiles if tile.get('uri') and tile['uri'].lower() not in shown]
+        self._save_conference_tiles(keep=missing)
         if restored:
-            ActivityLog().info(f'[ui] Chat window: {restored} tiles restored')
+            ActivityLog().info(f'[ui] Chat window: {restored - len(missing)} of {len(tiles)} tiles restored')
+        if missing:
+            ActivityLog().warning(f'[ui] Chat window: {len(missing)} tiles did not come up, kept for the next start: {", ".join(tile["uri"] for tile in missing)}')
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()

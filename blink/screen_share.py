@@ -44,6 +44,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink import screen_pointer as SP
+from blink.resources import ui_settings
 from blink.logging import ActivityLog
 from blink.pstn_normalize import check_valid_phone_number, is_conference_uri
 from blink.util import call_later, run_in_gui_thread, translate
@@ -158,7 +159,7 @@ def _select_device(device):
     """Select the video device; the screen also gets the screen resolution,
     a camera gets back the resolution it had before the screen."""
     settings = SIPSimpleSettings()
-    qsettings = QSettings()
+    qsettings = ui_settings()
     modified = False
     if SP.is_screen_device(device):
         if str(settings.video.resolution) != str(SCREEN_RESOLUTION):
@@ -446,7 +447,7 @@ class ScreenShareManager(object, metaclass=Singleton):
         current = SIPSimpleSettings().video.device
         if not SP.is_screen_device(current) and not self.capture_wanted:
             self.device_before_share = current
-            QSettings().setValue(CAMERA_BEFORE_KEY, current or '')
+            ui_settings().setValue(CAMERA_BEFORE_KEY, current or '')
         state = screen_capture_info()['state']
         if state == 'unavailable':
             # the device opens by itself (or falls back to a camera)
@@ -471,11 +472,11 @@ class ScreenShareManager(object, metaclass=Singleton):
         self.capture_wanted = False
         reset_screen_capture()
         if _local_on_screen() or (camera is not None and not SP.is_screen_device(camera)):
-            camera = camera or self.device_before_share or QSettings().value(CAMERA_BEFORE_KEY, '') or 'system_default'
+            camera = camera or self.device_before_share or ui_settings().value(CAMERA_BEFORE_KEY, '') or 'system_default'
             log('sharing over, video back to %s' % camera)
             _select_device(camera)
         self.device_before_share = None
-        QSettings().remove(CAMERA_BEFORE_KEY)
+        ui_settings().remove(CAMERA_BEFORE_KEY)
         for state in self.calls.values():
             state.awaiting_share = False
 
@@ -555,7 +556,7 @@ class ScreenShareManager(object, metaclass=Singleton):
             return
         if not SP.is_screen_device(SIPSimpleSettings().video.device) and not self.capture_wanted:
             return
-        camera = self.device_before_share or QSettings().value(CAMERA_BEFORE_KEY, '') or start_device or 'system_default'
+        camera = self.device_before_share or ui_settings().value(CAMERA_BEFORE_KEY, '') or start_device or 'system_default'
         if SP.is_screen_device(camera):
             camera = 'system_default'
         self.capture_wanted = False
@@ -563,7 +564,7 @@ class ScreenShareManager(object, metaclass=Singleton):
         log('calls over, video back to %s' % camera)
         _select_device(camera)
         self.device_before_share = None
-        QSettings().remove(CAMERA_BEFORE_KEY)
+        ui_settings().remove(CAMERA_BEFORE_KEY)
 
     # the desktop's answer, the capture going on
 
@@ -622,12 +623,12 @@ class ScreenShareManager(object, metaclass=Singleton):
         token = screen_capture_restore_token()
         if token and token != self.saved_token:
             self.saved_token = token
-            QSettings().setValue(RESTORE_TOKEN_KEY, token)
+            ui_settings().setValue(RESTORE_TOKEN_KEY, token)
 
     # notifications
 
     def _NH_SIPApplicationDidStart(self, sender, data):
-        settings = QSettings()
+        settings = ui_settings()
         token = settings.value(RESTORE_TOKEN_KEY, '') or None
         if token:
             self.saved_token = token
@@ -765,7 +766,7 @@ class ScreenShareManager(object, metaclass=Singleton):
             return
         # back on a camera by hand: nothing left to put back
         self.device_before_share = None
-        QSettings().remove(CAMERA_BEFORE_KEY)
+        ui_settings().remove(CAMERA_BEFORE_KEY)
 
     def _NH_SIPSessionGotMessage(self, session, data):
         content_type, body = _content_of(data)

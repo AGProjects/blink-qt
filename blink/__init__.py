@@ -571,6 +571,12 @@ class Blink(QApplication, metaclass=QSingleton):
             ActivityLog().error('Cannot update the video settings: %s' % e)
         self.ip_address_monitor.start()
         try:
+            from blink.reactor_watch import ReactorWatch
+            self.reactor_watch = ReactorWatch()
+            self.reactor_watch.start()          # a blocked SIP reactor thread (DNS lookups that time out) is logged, with its stack
+        except Exception as e:
+            ActivityLog().error('Cannot watch the SIP reactor thread: %s' % e)
+        try:
             from blink.desktop_dnd import DesktopDoNotDisturb
             DesktopDoNotDisturb().start()       # the desktop's Do Not Disturb turns Silent on and off
         except Exception as e:
@@ -594,6 +600,8 @@ class Blink(QApplication, metaclass=QSingleton):
     def _NH_SIPApplicationWillEnd(self, notification):
         ActivityLog().info('Stopping Blink')
         self.ip_address_monitor.stop()
+        if getattr(self, 'reactor_watch', None) is not None:
+            self.reactor_watch.stop()
         from blink.desktop_dnd import DesktopDoNotDisturb
         DesktopDoNotDisturb().stop()
 
