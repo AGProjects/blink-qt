@@ -85,7 +85,12 @@ def save_inline_image(message_id, content_type, data):
 
 
 class ChatTranscriptModel(QAbstractListModel):
-    """The rows of one MSRP session's transcript, in time order (for TranscriptView)."""
+    """The rows of one MSRP session's transcript, in time order (for TranscriptView).
+
+    all_items holds every row; items the ones shown: all of them, or while searching
+    (search(), the strip's search field) the messages containing the text, status
+    lines left out. ids finds any row, shown or not.
+    """
 
     MessageItemRole = Qt.ItemDataRole.UserRole
 
@@ -94,7 +99,7 @@ class ChatTranscriptModel(QAbstractListModel):
     has_newer = False
     loading = False
     loaded = True
-    search_text = ''
+    search_truncated = False
     category = None
 
     loadingChanged = pyqtSignal(bool)
@@ -103,8 +108,10 @@ class ChatTranscriptModel(QAbstractListModel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.all_items = []
         self.items = []
         self.ids = {}
+        self.search_text = ''
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.items)
@@ -120,7 +127,36 @@ class ChatTranscriptModel(QAbstractListModel):
             return plain_summary(item)
         return None
 
+    # Searching
+
+    def matches(self, item):
+        if not self.search_text:
+            return True
+        if item.note:
+            return False
+        from blink.messagepane.format import plain_summary
+        text = plain_summary(item)
+        if item.category in ('image', 'audio', 'video', 'other'):
+            from blink.messagepane.files import file_info
+            info = file_info(item)
+            if info:
+                text += ' ' + info['name']
+        return self.search_text.casefold() in text.casefold()
+
+    def search(self, text):
+        """Show only the messages containing text ('' shows all again)."""
+        text = (text or '').strip()
+        if text == self.search_text:
+            return
+        self.beginResetModel()
+        self.search_text = text
+        self.items = [item for item in self.all_items if self.matches(item)]
+        self.endResetModel()
+
+    # Rows
+
     def row_of(self, message_id):
+        """The row a message is shown in, None when it is not here or not shown (searching)."""
         item = self.ids.get(str(message_id))
         if item is None:
             return None
@@ -137,37 +173,51 @@ class ChatTranscriptModel(QAbstractListModel):
         if item.id in self.ids and not item.note:
             self.replace(item.id, item)
             return
-        keys = [(row.timestamp, row.row_id) for row in self.items]
         import bisect
+        keys = [(row.timestamp, row.row_id) for row in self.all_items]
+        self.all_items.insert(bisect.bisect_right(keys, (item.timestamp, item.row_id)), item)
+        if not item.note:
+            self.ids[item.id] = item
+        if not self.matches(item):
+            return
+        keys = [(row.timestamp, row.row_id) for row in self.items]
         position = bisect.bisect_right(keys, (item.timestamp, item.row_id))
         self.beginInsertRows(QModelIndex(), position, position)
         self.items.insert(position, item)
-        if not item.note:
-            self.ids[item.id] = item
         self.endInsertRows()
         self._neighbours_changed(position)
 
     def replace(self, message_id, item):
-        row = self.row_of(message_id)
-        if row is None:
+        old = self.ids.get(str(message_id))
+        if old is None:
             self.add(item)
             return
-        item.row_id = self.items[row].row_id
-        item.timestamp = self.items[row].timestamp
-        self.items[row] = item
+        item.row_id = old.row_id
+        item.timestamp = old.timestamp
+        self.all_items[self.all_items.index(old)] = item
         self.ids.pop(str(message_id), None)
         self.ids[item.id] = item
-        self._changed(row)
+        row = self.items.index(old) if old in self.items else None
+        if row is not None:
+            if self.matches(item):
+                self.items[row] = item
+                self._changed(row)
+            else:
+                self.beginRemoveRows(QModelIndex(), row, row)
+                self.items.pop(row)
+                self.endRemoveRows()
+                self._neighbours_changed(row - 1)
 
     def update(self, message_id, **changes):
         """Change some fields of a row (its state, its content); False when it is not here."""
-        row = self.row_of(message_id)
-        if row is None:
+        item = self.ids.get(str(message_id))
+        if item is None:
             return False
-        item = self.items[row]
         for name, value in changes.items():
             setattr(item, name, value)
-        self._changed(row)
+        row = self.row_of(message_id)
+        if row is not None:
+            self._changed(row)
         return True
 
     def refresh(self, message_id):
@@ -176,18 +226,21 @@ class ChatTranscriptModel(QAbstractListModel):
             self._changed(row)
 
     def remove(self, message_id):
-        row = self.row_of(message_id)
-        if row is None:
+        item = self.ids.pop(str(message_id), None)
+        if item is None:
             return None
-        self.beginRemoveRows(QModelIndex(), row, row)
-        item = self.items.pop(row)
-        self.ids.pop(item.id, None)
-        self.endRemoveRows()
-        self._neighbours_changed(row - 1)
+        self.all_items.remove(item)
+        if item in self.items:
+            row = self.items.index(item)
+            self.beginRemoveRows(QModelIndex(), row, row)
+            self.items.pop(row)
+            self.endRemoveRows()
+            self._neighbours_changed(row - 1)
         return item
 
     def clear(self):
         self.beginResetModel()
+        self.all_items = []
         self.items = []
         self.ids = {}
         self.endResetModel()

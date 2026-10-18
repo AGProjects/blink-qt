@@ -459,7 +459,7 @@ class HistoryManager(object, metaclass=Singleton):
             return
         key = session_conversation_key(session)
         sender_uri = getattr(file, 'sender_uri', '') or ''
-        direction = 'outgoing' if sender_uri == str(session.account.id) else 'incoming'
+        direction = room_file_direction(session, sender_uri, file.hash)
         display_name = getattr(file.contact, 'name', '') or sender_uri
         file_id = (own_room_upload_id(session, file.hash) if direction == 'outgoing' else None) or file.id
         envelope = msrp_file_envelope(file.name, file.size, None, file_id, file.hash, room=key)
@@ -700,6 +700,36 @@ def msrp_room_file_id(room, file_hash):
     """The id of a file a conference room tells of (conference-info): the same every time it does,
     for the files list, its row in history and its folder."""
     return uuid.uuid5(uuid.NAMESPACE_URL, f'msrp-file:{room}:{msrp_hash(file_hash)}').hex
+
+
+def bare_address(value):
+    """user@host of a SIP address in any of the forms it is written in ('sip:u@h;params',
+    '"Name" <sip:u@h>', 'u@h'), lower case; '' when there is none."""
+    text = str(value or '').strip()
+    match = re.search(r'<([^>]*)>', text)
+    if match:
+        text = match.group(1)
+    text = re.sub(r'^sips?:', '', text.strip(), flags=re.I)
+    return text.split(';')[0].split('?')[0].strip().lower()
+
+
+def is_own_address(value, account=None):
+    """Whether a sender is us: the account, or any other account of ours."""
+    address = bare_address(value)
+    if not address:
+        return False
+    if account is not None and address == str(getattr(account, 'id', '')).lower():
+        return True
+    from sipsimple.account import AccountManager, BonjourAccount
+    return any(address == str(other.id).lower() for other in AccountManager().iter_accounts() if not isinstance(other, BonjourAccount))
+
+
+def room_file_direction(blink_session, sender, file_hash):
+    """A file a conference room tells of is ours (outgoing) when we sent it: its sender is one of our
+    accounts, or it is the file of our own upload to the room (by its hash)."""
+    if is_own_address(sender, blink_session.account) or own_room_upload_id(blink_session, file_hash):
+        return 'outgoing'
+    return 'incoming'
 
 
 def own_room_upload_id(blink_session, file_hash):
@@ -2645,18 +2675,24 @@ class MessageHistory(object, metaclass=Singleton):
         ActivityLog().info(f'[db] The server copy of our own transfer {transfer_id} is already filed here, not stored again')
         return True
 
-    @classmethod
-    def _add_own_file(cls, path, transfer_id, key, account, uri, display_name, timestamp, filetype, extra, what):
-        """A file made on this device during a call, filed as an outgoing transfer of the
-        conversation with the other party: from us, to us (it was never sent to them)."""
+    @staticmethod
+    def own_file_envelope(path, transfer_id, account, filetype, extra=None):
+        """The envelope of a file made on this device during a call (a recording, a screenshot):
+        from us, to us, without a url (it was never sent)."""
         envelope = {'filename': os.path.basename(path),
                     'filesize': os.path.getsize(path),
                     'filetype': filetype,
                     'transfer_id': transfer_id,
                     'sender': {'uri': str(account.id)},
                     'receiver': {'uri': str(account.id)}}
-        envelope.update(extra)
-        content = json.dumps(envelope)
+        envelope.update(extra or {})
+        return json.dumps(envelope)
+
+    @classmethod
+    def _add_own_file(cls, path, transfer_id, key, account, uri, display_name, timestamp, filetype, extra, what):
+        """A file made on this device during a call, filed as an outgoing transfer of the
+        conversation with the other party: from us, to us (it was never sent to them)."""
+        content = cls.own_file_envelope(path, transfer_id, account, filetype, extra)
         fields = cls._content_fields(FILE_TRANSFER_CONTENT_TYPE, content)
         try:
             Message(remote_uri=key,
@@ -2822,6 +2858,10 @@ class MessageHistory(object, metaclass=Singleton):
             for row in Message.select(AND(Message.q.remote_uri == remote_uri, Message.q.content_type == FILE_TRANSFER_CONTENT_TYPE)):
                 meta = file_transfer_envelope(row.content) or {}
                 if meta.get('msrp') and meta.get('hash') and msrp_hash(meta['hash']) == wanted:
+                    if direction == 'outgoing' and row.direction != 'outgoing':
+                        # our own upload the room told of first, stored as someone else's: it is ours
+                        row.set(direction='outgoing', state='delivered', uri=sender_uri if str(sender_uri).startswith(('sip:', 'sips:')) else f'sip:{sender_uri}',
+                                display_name=display_name or row.display_name)
                     return
         uri = sender_uri if str(sender_uri).startswith(('sip:', 'sips:')) else f'sip:{sender_uri}'
         state = 'delivered' if direction == 'outgoing' else 'received'

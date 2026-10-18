@@ -1011,7 +1011,7 @@ class BlinkSession(BlinkSessionBase):
         """File the recording that stopped (once the recorder has closed the file)."""
         recording, self._pending_recording = self._pending_recording, None
         if recording is not None:
-            call_later(delay, _file_call_recording, recording)
+            call_later(delay, _file_call_recording, recording, self)
 
     def stop_recording(self):
         audio_stream = self.streams.get('audio')
@@ -1829,7 +1829,8 @@ class ServerConference(object):
                                    protocol='msrp')
                 shared_file.name = shared_file.original_name = os.path.join(transfer_folder(ApplicationData.get('file_transfers'), str(self.session.account.id), room, file_id), transfer_filename(file.name))
                 shared_file.account = self.session.account
-                shared_file.sender_uri = self.sip_prefix_re.sub('', str(file.sender))
+                from blink.history import bare_address
+                shared_file.sender_uri = bare_address(file.sender) or self.sip_prefix_re.sub('', str(file.sender))     # user@host, whatever form the room writes it in
 
                 notification.center.post_notification('BlinkSessionDidShareFile', sender=self.session, data=NotificationData(file=shared_file, direction='incoming', conference=True))
 
@@ -1879,8 +1880,9 @@ class ServerConference(object):
         participant.request_status = notification.data.reason
 
 
-def _file_call_recording(recording):
-    """Store a finished call recording as an audio message of its conversation."""
+def _file_call_recording(recording, session=None):
+    """Store a finished call recording as an audio message of its conversation, and tell the
+    windows showing that conversation (the MSRP sessions window draws its bubble at once)."""
     from blink.history import MessageHistory
     path = recording['path']
     if not os.path.isfile(path) or os.path.getsize(path) <= 44:    # nothing past the WAV header
@@ -1892,6 +1894,7 @@ def _file_call_recording(recording):
             pass
         return
     MessageHistory().add_call_recording(**recording)
+    NotificationCenter().post_notification('BlinkSessionDidSaveCallRecording', sender=session, data=NotificationData(**recording))
 
 
 # Audio sessions
@@ -3840,6 +3843,17 @@ class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
         with Resources.directory:
             self.setupUi(self)
         self.unread_label.setFont(badge_font(self.font()))
+        # the time of the last message, right of the name (as the contact list's conversations)
+        self.time_label = QLabel(self)
+        self.time_label.setObjectName('time_label')
+        self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.time_label.setForegroundRole(QPalette.ColorRole.Dark)
+        time_font = self.time_label.font()
+        if time_font.pointSizeF() > 0:
+            time_font.setPointSizeF(max(time_font.pointSizeF() - 1, 6))
+        self.time_label.setFont(time_font)
+        self.time_label.hide()
+        self.name_layout.insertWidget(self.name_layout.indexOf(self.name_label) + 1, self.time_label)
         sharpen_ui_pixmaps(self, 'chat_session.ui')
         build_list_item_palettes(self)
         follow_theme(self)
@@ -3871,16 +3885,19 @@ class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
             self.setForegroundRole(QPalette.ColorRole.WindowText)
             self.name_label.setForegroundRole(QPalette.ColorRole.WindowText)
             self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.time_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.AlternateDisplayMode:
             self.setPalette(self.palettes.alternate)
             self.setForegroundRole(QPalette.ColorRole.WindowText)
             self.name_label.setForegroundRole(QPalette.ColorRole.WindowText)
             self.info_label.setForegroundRole(QPalette.ColorRole.Dark)
+            self.time_label.setForegroundRole(QPalette.ColorRole.Dark)
         elif new_mode is self.SelectedDisplayMode:
             self.setPalette(self.palettes.selected)
             self.setForegroundRole(QPalette.ColorRole.HighlightedText)
             self.name_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
             self.info_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
+            self.time_label.setForegroundRole(QPalette.ColorRole.HighlightedText)
 
     display_mode = property(_get_display_mode, _set_display_mode)
     del _get_display_mode, _set_display_mode
@@ -3908,6 +3925,9 @@ class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
     def update_content(self, session):
         self.name_label.setText(session.name)
         self.info_label.setText(session.info)
+        time_text = getattr(session, 'time_text', '')
+        self.time_label.setText(time_text)
+        self.time_label.setVisible(bool(time_text))
         self.icon_label.setPixmap(session.pixmap)
         self.state_label.state = session.state
         self.hold_icon.setVisible(session.blink_session.on_hold)
@@ -3972,13 +3992,52 @@ class ChatSessionItem(object):
         return self.blink_session.contact.name
 
     @property
+    def last_message(self):
+        """The newest message of the transcript (not a status line), or None."""
+        chat_widget = getattr(self, 'chat_widget', None)
+        model = getattr(chat_widget, 'model', None)
+        for item in reversed(getattr(model, 'all_items', None) or []):
+            if not item.note:
+                return item
+        return None
+
+    @property
+    def time_text(self):
+        """When the last message was: its time today, else its day."""
+        item = self.last_message
+        if item is None:
+            return ''
+        from datetime import datetime as _datetime
+        when = item.timestamp.astimezone()
+        now = _datetime.now().astimezone()
+        if when.date() == now.date():
+            return when.strftime('%H:%M')
+        if when.year == now.year:
+            return f'{when.day} {when.strftime("%b")}'
+        return f'{when.day} {when.strftime("%b")} {when.year}'
+
+    @property
     def info(self):
-        # a conference (the remote party is a focus) with participants: how many, not the room address
+        # a connected conference (the remote party is a focus) with participants: how many
         if self.blink_session.remote_focus:
             conference = self.blink_session.server_conference
             count = len([participant for participant in conference.participants.values() if participant not in conference.pending_additions])
             if count:
                 return translate('sessions', '1 participant') if count == 1 else translate('sessions', '%d participants') % count
+        # else the last message, with who wrote it in a conference
+        item = self.last_message
+        if item is not None:
+            from blink.messagepane.format import plain_summary
+            text = plain_summary(item)
+            if item.outgoing:
+                text = translate('sessions', 'You: %s') % text
+            elif self.blink_session.is_conference:
+                chat_widget = getattr(self, 'chat_widget', None)
+                avatars = getattr(chat_widget, 'avatars', None)
+                name = avatars.name(item) if avatars is not None else (item.display_name or '')
+                if name:
+                    text = f'{name}: {text}'
+            return text
         # a Bonjour conversation is the neighbour's instance id, not today's transport address
         return self.blink_session.remote_instance_id or self.blink_session.contact.note or self.blink_session.contact_uri.uri
 

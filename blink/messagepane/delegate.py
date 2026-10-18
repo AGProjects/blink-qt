@@ -559,16 +559,25 @@ class BubbleDelegate(QStyledItemDelegate):
         circle = QPainterPath()
         circle.addEllipse(button)
         painter.fillPath(circle, accent)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor('#ffffff'))
-        centre, side = button.center(), button.width() * 0.34
+        # the glyph: a play triangle with rounded corners, nudged right to look centred, or two rounded bars
+        white = QColor('#ffffff')
+        centre, side = button.center(), button.width() * 0.36
         if playing:
-            for offset in (-side * 0.45, side * 0.15):
-                painter.drawRect(QRectF(centre.x() + offset, centre.y() - side * 0.55, side * 0.3, side * 1.1))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(white)
+            bar_width, bar_height = side * 0.32, side * 1.05
+            for offset in (-side * 0.42, side * 0.10):
+                painter.drawRoundedRect(QRectF(centre.x() + offset, centre.y() - bar_height / 2, bar_width, bar_height), bar_width * 0.35, bar_width * 0.35)
         else:
             from PyQt6.QtGui import QPolygonF
-            painter.drawPolygon(QPolygonF([QPointF(centre.x() - side * 0.4, centre.y() - side * 0.6), QPointF(centre.x() - side * 0.4, centre.y() + side * 0.6),
-                                           QPointF(centre.x() + side * 0.65, centre.y())]))
+            pen = QPen(white, max(1.0, side * 0.16))
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(white)
+            x = centre.x() + side * 0.08
+            painter.drawPolygon(QPolygonF([QPointF(x - side * 0.42, centre.y() - side * 0.55), QPointF(x - side * 0.42, centre.y() + side * 0.55),
+                                           QPointF(x + side * 0.55, centre.y())]))
+            painter.setPen(Qt.PenStyle.NoPen)
         step = wave.width() / len(bars)
         played = fraction or 0.0
         for number, value in enumerate(bars):

@@ -241,12 +241,13 @@ class ChatComposer(Composer):
         if not self.locked:
             super(ChatComposer, self)._send()
 
-    def set_files_allowed(self, allowed):
-        """Attach and voice notes only where files can go (not a conference we are out of)."""
+    def set_files_allowed(self, allowed, voice_notes=True):
+        """Attach only where files can go (not a conference we are out of); voice notes also
+        only where they are wanted (not to a conference)."""
         from blink.messagepane.recorder import recording_available
-        self.files_allowed = allowed
+        self.files_allowed = (allowed, voice_notes)
         self.attach_button.setVisible(allowed)
-        self.mic_button.setVisible(allowed and recording_available())
+        self.mic_button.setVisible(allowed and voice_notes and recording_available())
 
 
 class IconDescriptor(object):
@@ -288,6 +289,12 @@ class ChatWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        self.session = session
+        self._build_header()
+        layout.addWidget(self.header)
+        from blink.messagepane.strip import TranscriptStrip
+        self.strip = TranscriptStrip(self)      # what is shown, and the search field: typing filters the transcript
+        layout.addWidget(self.strip)
         self.model = ChatTranscriptModel(self)
         self.chat_view = TranscriptView(self)
         self.chat_view.menu_actions = self.menu_actions
@@ -299,6 +306,10 @@ class ChatWidget(QWidget):
         self.chat_view.bubble_delegate.sender_avatar = self.avatars.draw
         self.chat_view.bubble_delegate.sender_name = self.avatars.name
         self.chat_view.bubble_delegate.group_by_sender = True     # a conference: each participant's turns of their own
+        # audio bubbles (call recordings, voice notes) more compact than in the message pane
+        self.chat_view.bubble_delegate.audio_button = 24
+        self.chat_view.bubble_delegate.audio_wave_height = 22
+        self.chat_view.bubble_delegate.audio_width = 260
         layout.addWidget(self.chat_view, 1)
         self.chat_input = ChatComposer(self)
         layout.addWidget(self.chat_input)
@@ -308,6 +319,9 @@ class ChatWidget(QWidget):
         self.chat_view.verticalScrollBar().valueChanged.connect(self.fetcher.schedule)
         self.model.rowsInserted.connect(self.fetcher.schedule)
         self.model.dataChanged.connect(self._SH_ModelDataChanged)
+        self.strip.set_conversation(self.model, self.chat_view)
+        self.chat_view.verticalScrollBar().valueChanged.connect(self.strip.update_text)
+        self.model.modelReset.connect(self._SH_SearchChanged)
         self._apply_font()
 
         self.otr_timer = QTimer()
@@ -332,16 +346,151 @@ class ChatWidget(QWidget):
 
         self.otr_timer.timeout.connect(self._SH_OTRTimerTimeout)
         self.update_file_options()
+        self.update_header()
+
+    # The bar on top: the message pane's header (name, address, A− A+, the call buttons), without
+    # location and video; its chat and audio buttons connect and hang up this session
+
+    def _build_header(self):
+        from PyQt6.QtWidgets import QHBoxLayout
+        from blink.messagepane.header import ConversationHeader
+        header = self.header = ConversationHeader(self)
+        # what does not belong to an MSRP session: location, video, the calendar (the message
+        # pane's strip), another address or account (this session has its own), the PGP lock
+        header._update_location_button = lambda: header.location_button.hide()
+        header._update_account_button = lambda: header.account_button.hide()
+        header._update_address_button = lambda: header.address_button.hide()
+        for button in (header.location_button, header.video_button, header.calendar_button, header.account_button, header.address_button, header.lock_button):
+            button.hide()
+        header.audio_button.clicked.disconnect()
+        header.audio_button.clicked.connect(self._SH_HeaderAudioClicked)
+        self.header_chat_button = header._tool_button(translate('chat_window', 'Chat'))
+        from blink.resources import themed_icon
+        self.header_chat_button.setIcon(themed_icon(Resources.get('icons/chat.svg'), '#d0d0d0'))     # as the handset beside it
+        self.header_chat_button.setProperty('segmented', 'call')
+        self.header_chat_button.clicked.connect(self._SH_HeaderChatClicked)
+        for button in (self.header_chat_button, header.audio_button):
+            button.setCheckable(True)
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        for row in header.findChildren(QHBoxLayout):
+            position = row.indexOf(header.audio_button)
+            if position >= 0:
+                row.insertWidget(position, self.header_chat_button)     # chat, then audio: one segmented control
+                break
+        header.fontStep.connect(self._SH_FontStep)
+        self._header_conversation = None
+
+    def update_header(self):
+        if self.session is None:
+            self.header.hide()
+            return
+        blink_session = self.session.blink_session
+        if blink_session is None or blink_session.contact is None or blink_session.contact_uri is None:
+            return
+        from blink.history import session_conversation_key
+        conversation = (blink_session.contact, str(blink_session.contact_uri.uri), blink_session.account)
+        if conversation != self._header_conversation:
+            self._header_conversation = conversation
+            self.header.set_conversation(blink_session.contact, blink_session.contact_uri, session_conversation_key(blink_session), blink_session.account)
+            self.header.lock_button.hide()
+        state = str(blink_session.state or '')
+        idle = state in ('', 'initialized', 'ended', 'deleted')
+        busy = state in ('ending', 'connected/sent_proposal', 'connected/received_proposal')
+        streams = blink_session.streams.types if not idle else set()
+        has_chat = 'chat' in streams or blink_session.chat_type is None and not idle
+        has_audio = 'audio' in streams
+        chat_button, audio_button = self.header_chat_button, self.header.audio_button
+        chat_button.setChecked(not idle and has_chat)
+        audio_button.setChecked(not idle and has_audio)
+        chat_button.setEnabled(not busy)
+        audio_button.setEnabled(not busy and blink_session.account is not None)
+        if idle:
+            chat_button.setToolTip(translate('chat_window', 'Connect with chat'))
+            audio_button.setToolTip(translate('chat_window', 'Connect with audio and chat'))
+        elif state.startswith('connecting'):
+            chat_button.setToolTip(translate('chat_window', 'Cancel'))
+            audio_button.setToolTip(translate('chat_window', 'Cancel'))
+        else:
+            chat_button.setToolTip(translate('chat_window', 'Hang up'))
+            if has_audio:
+                audio_button.setToolTip(translate('chat_window', 'Hang up') if not streams - {'audio'} else translate('chat_window', 'Remove audio'))
+            else:
+                audio_button.setToolTip(translate('chat_window', 'Add audio'))
+
+    def _log_header_action(self, action):
+        blink_session = self.session.blink_session
+        uri = blink_session.contact_uri.uri if blink_session.contact_uri is not None else '?'
+        ActivityLog().info(f'[chat window] {action} {uri} (account {getattr(blink_session.account, "id", "?")}, state {blink_session.state or "new"})')
+
+    def _SH_HeaderChatClicked(self):
+        if self.session is None:
+            return
+        blink_session = self.session.blink_session
+        state = str(blink_session.state or '')
+        if state in ('', 'initialized', 'ended', 'deleted'):
+            self._log_header_action('Connect with chat:')
+            blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=[StreamDescription('chat')], reinitialize=True)
+            blink_session.connect()
+        elif state.startswith(('connecting', 'connected')):
+            self._log_header_action('Hang up')
+            self.session.end()
+        self.update_header()
+
+    def _SH_HeaderAudioClicked(self):
+        if self.session is None:
+            return
+        blink_session = self.session.blink_session
+        state = str(blink_session.state or '')
+        if state in ('', 'initialized', 'ended', 'deleted'):
+            self._log_header_action('Connect with audio and chat:')
+            blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri,
+                                        stream_descriptions=[StreamDescription('audio'), StreamDescription('chat')], reinitialize=True)
+            blink_session.connect()
+        elif state.startswith('connecting'):
+            self._log_header_action('Cancel')
+            self.session.end()
+        elif state == 'connected':
+            streams = blink_session.streams.types
+            if 'audio' in streams:
+                if streams - {'audio'}:
+                    self._log_header_action('Remove audio from')
+                    blink_session.remove_stream(blink_session.streams.get('audio'))
+                else:
+                    self._log_header_action('Hang up')
+                    self.session.end()
+            else:
+                self._log_header_action('Add audio to')
+                blink_session.add_stream(StreamDescription('audio'))
+        self.update_header()
+
+    def _SH_FontStep(self, step):
+        from blink.messagepane.pane import MessagePane
+        low, high = MessagePane.font_steps
+        try:
+            delta = int(QSettings().value('message_pane/font_delta', 0))
+        except (TypeError, ValueError):
+            delta = 0
+        QSettings().setValue('message_pane/font_delta', max(low, min(high, delta + step)))
+        self._apply_font()
+
+    def _NH_BlinkSessionDidAddStream(self, notification):
+        self.update_header()
+
+    def _NH_BlinkSessionContactDidChange(self, notification):
+        self._header_conversation = None
+        self.update_header()
 
     def update_file_options(self):
         """A conference (the remote party is or was a focus) takes files only while we are in it;
         a one to one conversation always does."""
         allowed = self.session is None or conference_takes_files(self.session.blink_session)
-        if getattr(self.chat_input, 'files_allowed', None) != allowed:
-            self.chat_input.set_files_allowed(allowed)
+        voice_notes = self.session is None or not self.session.blink_session.is_conference     # no voice notes to a conference (focus, or was one)
+        if getattr(self.chat_input, 'files_allowed', None) != (allowed, voice_notes):
+            self.chat_input.set_files_allowed(allowed, voice_notes)
 
     def _NH_BlinkSessionDidChangeState(self, notification):
         self.update_file_options()
+        self.update_header()
 
     @property
     def user_icon(self):
@@ -423,23 +572,41 @@ class ChatWidget(QWidget):
         if not item.note and item.id in self.model.ids:
             return
         if item.note:
-            last = self.model.items[-1] if self.model.items else None
+            last = self.model.all_items[-1] if self.model.all_items else None
             if last is not None and last.note and last.content == item.content:
                 return      # the same line twice in a row (the stream and the session both say it)
         at_bottom = self._at_bottom()
         self.model.add(item)
         if item.outgoing or at_bottom:
             self.chat_view.follow_bottom()
+        if not item.note:
+            self._tile_changed()
 
     def replace_message(self, id, message):
         item = self._item_for(message)
         self.model.replace(id, item)
         self.chat_view.bubble_delegate.forget(id)
+        self._tile_changed()
+
+    def _tile_changed(self):
+        """The session's tile shows the last message and its time: drawn again, once for many changes (history loading)."""
+        if self.session is None or getattr(self, '_tile_pending', False):
+            return
+        self._tile_pending = True
+        def refresh():
+            self._tile_pending = False
+            session = self.session
+            if session is None or getattr(session, 'widget', None) is None or session.blink_session is None:
+                return
+            session.widget.update_content(session)
+            NotificationCenter().post_notification('ChatSessionItemDidChange', sender=session)
+        QTimer.singleShot(0, refresh)
 
     def update_message_text(self, id, text, content_type='text/plain'):
         """New content for a message (its text once decrypted)."""
         if self.model.update(id, content=text, content_type=content_type):
             self.chat_view.bubble_delegate.clear_cache()
+            self._tile_changed()
 
     # a message state never goes back: a 'delivered' or 'received' report
     # arriving after 'displayed' (another device of the peer, the server
@@ -459,6 +626,7 @@ class ChatWidget(QWidget):
 
     def remove_message(self, id):
         self.model.remove(id)
+        self._tile_changed()
 
     def clear(self):
         """Forget what is shown (the conversation is about to be loaded again)."""
@@ -468,16 +636,20 @@ class ChatWidget(QWidget):
 
     def has_file(self, file_hash):
         """Whether a file with this MSRP hash is in the transcript already (one's own upload, told of again by the room)."""
+        return self.file_item(file_hash) is not None
+
+    def file_item(self, file_hash):
+        """The transcript row of the file with this MSRP hash, or None."""
         if not file_hash:
-            return False
+            return None
         from blink.history import msrp_hash
         wanted = msrp_hash(file_hash)
-        for item in self.model.items:
+        for item in self.model.all_items:
             if item.category in ('image', 'audio', 'video', 'other'):
                 meta = file_transfer_envelope(item.content) or {}
                 if meta.get('hash') and msrp_hash(meta['hash']) == wanted:
-                    return True
-        return False
+                    return item
+        return None
 
     def file_ready(self, id):
         """The file of a message is in place: draw it."""
@@ -493,6 +665,13 @@ class ChatWidget(QWidget):
     def _at_bottom(self):
         scrollbar = self.chat_view.verticalScrollBar()
         return scrollbar.value() >= scrollbar.maximum() - 4
+
+    def _SH_SearchChanged(self):
+        self.chat_view.bubble_delegate.clear_cache()      # the hits are highlighted
+        if self.model.search_text:
+            self.chat_view.scrollToTop()
+        else:
+            self.chat_view.follow_bottom()
 
     def _SH_ModelDataChanged(self, *args):
         self.chat_view.scheduleDelayedItemsLayout()
@@ -823,6 +1002,7 @@ class ChatWidget(QWidget):
         self.setParent(None)
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
+        self.update_header()
         if notification.data.stream.type == 'chat':
             self.chat_input.reset_locks()
             self.add_message(ChatStatus(translate('chat_window', 'Chat stream ended')))
@@ -1043,6 +1223,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='PGPMessageDidDecrypt')
         notification_center.add_observer(self, name='PGPFileDidNotDecrypt')
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
+        notification_center.add_observer(self, name='BlinkSessionDidSaveCallRecording')
         notification_center.add_observer(self, name='BlinkMessageHistoryMustReload')
 
 
@@ -1381,11 +1562,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         state = blink_session.state
         messages_info = blink_session.info.streams.messages
         idle = str(state or '') in ('', 'initialized', 'ended', 'deleted')
-        self.connect_audio_button.setVisible(idle)
-        self.connect_chat_button.setVisible(idle)
+        # connecting and hanging up are the chat and audio buttons of the bar on top of the session (ChatWidget.header)
+        self.connect_audio_button.hide()
+        self.connect_chat_button.hide()
         connected = str(state or '').startswith('connected')
         self.connection_status_label.setVisible(not idle and not connected)     # while connecting or disconnecting only
-        self.hangup_button.setVisible(connected)
+        self.hangup_button.hide()
         if not idle and not connected:
             self.connection_status_label.setText(self._connection_status(blink_session))
         self.control_button.setVisible(not idle)     # the wheel: a connected session's menu (or cancel, while connecting)
@@ -2458,14 +2640,14 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
              self._AH_ShowTransferredFiles()
         if getattr(notification.data, 'conference', False):
             # a file the room tells of: a bubble in its transcript, as history keeps it (HistoryManager)
-            from blink.history import msrp_file_envelope, own_room_upload_id, session_conversation_key
+            from blink.history import msrp_file_envelope, own_room_upload_id, room_file_direction, session_conversation_key
             blink_session = notification.sender
             chat = getattr(blink_session.items, 'chat', None)
             file = notification.data.file
             if chat is None or blink_session.account is None or chat.chat_widget.has_file(file.hash):
                 return
             sender_uri = getattr(file, 'sender_uri', '') or ''
-            direction = 'outgoing' if sender_uri == str(blink_session.account.id) else 'incoming'
+            direction = room_file_direction(blink_session, sender_uri, file.hash)
             file_id = (own_room_upload_id(blink_session, file.hash) if direction == 'outgoing' else None) or file.id
             source = None
             if direction == 'outgoing':
@@ -2505,14 +2687,39 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if chat is not None:
             chat.chat_widget.file_ready(id)      # its bubble shows the file now
 
+    def _NH_BlinkSessionDidSaveCallRecording(self, notification):
+        """A call (a conference's audio) recorded on this device: an audio bubble of ours in the
+        transcript of its conversation, to listen to later. It was filed in history as an outgoing
+        file that was never sent (MessageHistory.add_call_recording), where reloading finds it too."""
+        from blink.history import MessageHistory, session_conversation_key
+        data = notification.data
+        account = data.account
+        try:
+            chat = next(item for item in self.session_model.sessions
+                        if item.blink_session is not None and item.blink_session.account is account
+                        and (item.blink_session is notification.sender or session_conversation_key(item.blink_session) == data.key))
+        except StopIteration:
+            return
+        try:
+            envelope = MessageHistory.own_file_envelope(data.path, data.transfer_id, account, 'audio/wav', {'call_recording': True})
+        except OSError:
+            return
+        timestamp = data.timestamp.replace(tzinfo=timezone.utc) if data.timestamp.tzinfo is None else data.timestamp
+        sender = ChatSender(account.display_name, str(account.id))
+        chat.chat_widget.add_message(ChatFile(envelope, sender, 'outgoing', id=data.transfer_id, timestamp=timestamp, account=account, content_type=FILE_TRANSFER_CONTENT_TYPE))
+        ActivityLog().info(f'[chat window] Call recording {data.transfer_id} shown in the conversation with {data.key}')
+
     def _show_msrp_transfer(self, blink_session, transfer):
         """A file sent or received over MSRP: a bubble in the session's transcript, as history keeps it
         (HistoryManager._store_msrp_transfer). A pull fetched one the transcript already has."""
         chat = getattr(blink_session.items, 'chat', None)
         if chat is None or transfer.route != 'msrp' or transfer.transfer_type != 'push' or transfer.file_selector is None:
             return
-        if chat.chat_widget.model.get(transfer.id) is not None or chat.chat_widget.has_file(transfer.file_selector.hash):
+        if chat.chat_widget.model.get(transfer.id) is not None:
             return
+        existing = chat.chat_widget.file_item(transfer.file_selector.hash)
+        if existing is not None and not (transfer.direction == 'outgoing' and not existing.outgoing):
+            return      # already shown, on the right side
         from blink.history import msrp_file_envelope, session_conversation_key
         from blink.sessions import is_conference_uri
         key = session_conversation_key(transfer)
@@ -2528,7 +2735,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             sender = ChatSender(transfer.account.display_name, str(transfer.account.id))
         else:
             sender = ChatSender(getattr(transfer.contact, 'name', '') or str(transfer.contact_uri.uri), str(transfer.contact_uri.uri).replace('sip:', ''))
-        chat.chat_widget.add_message(ChatFile(envelope, sender, transfer.direction, id=transfer.id, content_type=FILE_TRANSFER_CONTENT_TYPE, account=transfer.account))
+        message = ChatFile(envelope, sender, transfer.direction, id=transfer.id, content_type=FILE_TRANSFER_CONTENT_TYPE, account=transfer.account)
+        if existing is not None:
+            chat.chat_widget.replace_message(existing.id, message)     # the room's bubble of our own upload, shown as another's
+        else:
+            chat.chat_widget.add_message(message)
 
     def _NH_PGPFileDidNotDecrypt(self, notification):
         transfer_session = notification.sender
@@ -2628,15 +2839,21 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 newest_timestamp = timestamp
             last_timestamp = timestamp
 
+            direction = message.direction
+            if direction == 'incoming' and blink_session.is_conference:
+                from blink.history import bare_address, is_own_address
+                if is_own_address(uri, blink_session.account):
+                    direction = 'outgoing'      # ours, played back by the room (or a file of ours it told of, stored as another's)
+                    uri = bare_address(uri)
             if account_manager.has_account(uri):
                 found_account = account_manager.get_account(uri)
                 sender = ChatSender(message.display_name or found_account.display_name, uri)
             else:
                 sender = ChatSender(message.display_name or session.name, uri)
             if is_file:
-                chat_message = ChatFile(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account, content_type=content_type)
+                chat_message = ChatFile(content, sender, direction, id=message.message_id, timestamp=timestamp, history=True, account=account, content_type=content_type)
             else:
-                chat_message = ChatMessage(content, sender, message.direction, id=message.message_id, timestamp=timestamp, history=True, account=account, content_type=content_type)
+                chat_message = ChatMessage(content, sender, direction, id=message.message_id, timestamp=timestamp, history=True, account=account, content_type=content_type)
 
             session.chat_widget.add_message(chat_message)
 
