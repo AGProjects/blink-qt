@@ -2697,6 +2697,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         else:
             self.render_after_load.append((session, received_account, chat_message))
 
+        if getattr(notification.data, 'first_sync', False):
+            # replayed by a first sync (thousands of them): drawn only; unread counts come from history
+            # when the sync is settled, and no receipt, notification or sound goes out for it
+            session.remote_composing = False
+            return
+
         if direction != 'outgoing' and message.disposition is not None and 'display' in message.disposition and not encrypted:
             if self.selected_session is session and not self.isMinimized() and self.isActiveWindow():
                 MessageManager().send_imdn_message(blink_session, message.id, message.timestamp, 'displayed', received_account)

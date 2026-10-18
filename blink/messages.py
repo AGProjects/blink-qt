@@ -812,7 +812,7 @@ class MessageManager(object, metaclass=Singleton):
         self._own_conversation_removes = OwnMarkers(ttl=60)  # conversation removals this device asked the server for
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
-        self._journal_decrypts = set()  # ids of journal entries decrypted for an open conversation: stored, never handled as live
+        self._journal_decrypts = set()  # ids of first sync entries decrypted for an open conversation: stored, never handled as live
         self._sync_queue = deque()
         self._token_requested = {}      # account id -> monotonic time of the last API token request
         self._token_not_asked = set()   # account ids whose domain does not run SylkServer (asked if it turns out to)
@@ -1585,7 +1585,7 @@ class MessageManager(object, metaclass=Singleton):
             contacts[contact.uri.uri] += 1
         session = self._journal_session(contact)
         if session is not None:
-            NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, account=account))
+            NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, first_sync=first_sync, account=account))
             file = File(document['filename'], document.get('filesize'), contact, file_hash, message['message_id'], ISOTimestamp(until),
                         document.get('url'), account=account, protocol='sylk')
             NotificationCenter().post_notification('BlinkSessionDidShareFile', sender=session, data=NotificationData(file=file, direction=message['direction'], history=True))
@@ -1613,9 +1613,10 @@ class MessageManager(object, metaclass=Singleton):
             # a first sync replays history: its senders got their receipts from the devices that were there
             if not first_sync and message['direction'] == 'incoming' and 'positive-delivery' in (history_message.disposition or ()):
                 self.send_imdn_message(session, history_message.id, history_message.timestamp, 'delivered')
-            NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, account=account))
+            NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, first_sync=first_sync, account=account))
             if encryption == 'OpenPGP':
-                self._journal_decrypts.add(history_message.id)
+                if first_sync:
+                    self._journal_decrypts.add(history_message.id)
                 if session.fake_streams.get('messages').can_decrypt:
                     session.fake_streams.get('messages').decrypt(history_message)
                 else:
@@ -2683,7 +2684,7 @@ class MessageManager(object, metaclass=Singleton):
 
         notification_center = NotificationCenter()
         if message.id in self._journal_decrypts:
-            # from the journal: the plaintext is stored, the bubble redrawn; no receipt, no notification, no unread
+            # from a first sync: the plaintext is stored, the bubble redrawn; no receipt, no notification, no unread
             self._journal_decrypts.discard(message.id)
             from blink.history import MessageHistory
             MessageHistory().update_decrypted_message(message.id, message.content)
@@ -2710,7 +2711,7 @@ class MessageManager(object, metaclass=Singleton):
 
         if msg_id in self._journal_decrypts:
             self._journal_decrypts.discard(msg_id)
-            return      # from the journal: its sender is not told now
+            return      # from a first sync: its sender is not told now
 
         self.send_imdn_message(session, msg_id, message.timestamp, 'error')
 
