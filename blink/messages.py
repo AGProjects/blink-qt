@@ -1454,8 +1454,10 @@ class MessageManager(object, metaclass=Singleton):
                 stats.entry(content_type, outcome, message.get('contact'), message.get('direction'), message.get('timestamp'))
             if index % self.journal_progress_every == 0:
                 # wait for the db thread to store what was queued: the queue stays short, so a
-                # conversation opened meanwhile loads between batches, not after the whole run
+                # conversation opened meanwhile loads between batches, not after the whole run;
+                # the contact list and the open conversation hear of the batch once per conversation
                 waited = time.monotonic()
+                MessageHistory().flush_batched_stores()
                 MessageHistory().wait_for_writes()
                 db_wait += time.monotonic() - waited
                 elapsed = time.monotonic() - started
@@ -1463,6 +1465,7 @@ class MessageManager(object, metaclass=Singleton):
                 if progress is not None:
                     progress(index, len(messages), db_wait)
                 time.sleep(self.journal_throttle)
+        MessageHistory().flush_batched_stores()
         MessageHistory().wait_for_writes()
         if mark_synced:
             account.sms.history_synchronization_timestamp = ISOTimestamp.now()
@@ -1556,9 +1559,12 @@ class MessageManager(object, metaclass=Singleton):
         return 'public keys'
 
     def _journal_store(self, account, message, history_message, remote_uri, encryption=None, state=None):
-        """Persist a journal entry (history decides read state and category) and show it if its conversation is open."""
-        NotificationCenter().post_notification('BlinkGotHistoryMessage', sender=account,
-                                               data=NotificationData(remote_uri=remote_uri, message=history_message, encryption=encryption, state=state))
+        """Persist a journal entry (history decides read state and category) and show it if its conversation is open.
+
+        Queued on the db thread from here, not through a notification handled in the GUI thread: an import
+        is thousands of entries. What was stored is told once per conversation (flush_batched_stores)."""
+        from blink.history import MessageHistory
+        MessageHistory.add_from_server_history(account, remote_uri, history_message, state=state, encryption=encryption, batched=True)
 
     def _journal_sender(self, account, message, contact):
         if message['direction'] == 'incoming':

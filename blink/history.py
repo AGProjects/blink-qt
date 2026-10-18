@@ -2786,9 +2786,21 @@ class MessageHistory(object, metaclass=Singleton):
         NotificationCenter().post_notification('BlinkMessageHistoryCallRecordDidStore', sender=account,
                                                data=NotificationData(remote_uri=remote_uri))
 
+    _batched_stores = {}    # (account id, remote uri, direction): (account, state), journal stores not told yet (db thread)
+
+    @run_in_thread('db')
+    def flush_batched_stores(self):
+        """One BlinkMessageHistoryMessageDidStore per conversation and direction for the journal entries
+        stored since the last flush: a batch of hundreds is a handful of notifications for the GUI thread."""
+        stores, MessageHistory._batched_stores = MessageHistory._batched_stores, {}
+        notification_center = NotificationCenter()
+        for (account_id, remote_uri, direction), (account, state) in stores.items():
+            notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account,
+                                                  data=NotificationData(remote_uri=remote_uri, state=state, direction=direction, from_history=True))
+
     @classmethod
     @run_in_thread('db')
-    def add_from_server_history(cls, account, remote_uri, message, state=None, encryption=None):
+    def add_from_server_history(cls, account, remote_uri, message, state=None, encryption=None, batched=False):
         if message.content.startswith('?OTRv'):
             return
         if cls._own_self_transfer(account, message):
@@ -2851,9 +2863,11 @@ class MessageHistory(object, metaclass=Singleton):
             elif message.content_type == LOCATION_CONTENT_TYPE and optional_fields.get('related_action') in cls.__trail_actions__:
                 cls._stored_location(message.id, optional_fields, remote_uri, account)     # moves a pin: nothing to refresh
             elif message.content_type not in {IsComposingDocument.content_type, IMDNDocument.content_type, 'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-message-remove'}:
-                notification_center = NotificationCenter()
                 # from_history: a journal (server history) entry, not a live message: it does not file its party in Messages
-                notification_center.post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction, from_history=True))
+                if batched:
+                    cls._batched_stores[(str(account.id), remote_uri, message.direction)] = (account, state)
+                else:
+                    NotificationCenter().post_notification('BlinkMessageHistoryMessageDidStore', sender=account, data=NotificationData(remote_uri=remote_uri, state=state, direction=message.direction, from_history=True))
                 if message.content_type == LOCATION_CONTENT_TYPE:
                     cls._stored_location(message.id, optional_fields, remote_uri, account)
 
