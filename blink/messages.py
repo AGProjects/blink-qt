@@ -812,6 +812,7 @@ class MessageManager(object, metaclass=Singleton):
         self._own_conversation_removes = OwnMarkers(ttl=60)  # conversation removals this device asked the server for
         self._outgoing_message_queue = deque()
         self._incoming_encrypted_message_queue = deque()
+        self._journal_decrypts = set()  # ids of journal entries decrypted for an open conversation: stored, never handled as live
         self._sync_queue = deque()
         self._token_requested = {}      # account id -> monotonic time of the last API token request
         self._token_not_asked = set()   # account ids whose domain does not run SylkServer (asked if it turns out to)
@@ -1609,10 +1610,12 @@ class MessageManager(object, metaclass=Singleton):
             contacts[contact.uri.uri] += 1
         session = self._journal_session(contact)
         if session is not None:
-            if message['direction'] == 'incoming' and 'positive-delivery' in (history_message.disposition or ()):
+            # a first sync replays history: its senders got their receipts from the devices that were there
+            if not first_sync and message['direction'] == 'incoming' and 'positive-delivery' in (history_message.disposition or ()):
                 self.send_imdn_message(session, history_message.id, history_message.timestamp, 'delivered')
             NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, account=account))
             if encryption == 'OpenPGP':
+                self._journal_decrypts.add(history_message.id)
                 if session.fake_streams.get('messages').can_decrypt:
                     session.fake_streams.get('messages').decrypt(history_message)
                 else:
@@ -2675,11 +2678,19 @@ class MessageManager(object, metaclass=Singleton):
             return
 
         session = notification.sender
-        notification.data.message.is_secure = True
+        message = notification.data.message
+        message.is_secure = True
 
         notification_center = NotificationCenter()
-        notification_center.post_notification('BlinkMessageDidDecrypt', sender=session, data=NotificationData(message=notification.data.message))
-        self._handle_incoming_message(notification.data.message, session, notification.data.account)
+        if message.id in self._journal_decrypts:
+            # from the journal: the plaintext is stored, the bubble redrawn; no receipt, no notification, no unread
+            self._journal_decrypts.discard(message.id)
+            from blink.history import MessageHistory
+            MessageHistory().update_decrypted_message(message.id, message.content)
+            notification_center.post_notification('BlinkMessageDidDecrypt', sender=session, data=NotificationData(message=message))
+            return
+        notification_center.post_notification('BlinkMessageDidDecrypt', sender=session, data=NotificationData(message=message))
+        self._handle_incoming_message(message, session, notification.data.account)
 
     def _NH_PGPMessageDidNotDecrypt(self, notification):
         session = notification.sender
@@ -2696,6 +2707,10 @@ class MessageManager(object, metaclass=Singleton):
 
         if message.direction == 'outgoing':
             return
+
+        if msg_id in self._journal_decrypts:
+            self._journal_decrypts.discard(msg_id)
+            return      # from the journal: its sender is not told now
 
         self.send_imdn_message(session, msg_id, message.timestamp, 'error')
 

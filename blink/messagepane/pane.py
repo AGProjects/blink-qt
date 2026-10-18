@@ -554,8 +554,12 @@ class MessagePane(QWidget):
         NotificationCenter().post_notification('BlinkMessagePaneDidReadConversation', sender=self, data=NotificationData(remote_uri=key))
         ActivityLog().info(f'[Message with {key}] Read in the message pane: {len(unread)} unread messages shown' + (f', badge was {badge}' if badge else ''))
 
+        # what a first sync imports is old history: its sender is not told it was read now
+        from blink.history import first_sync_start
+        sync_starts = {account_id: first_sync_start(account_id) for account_id in {item.account_id for item in unread}}
         displayed = [item for item in unread if 'display' in item.disposition and item.id not in self._displayed_sent
-                     and '-----BEGIN PGP MESSAGE-----' not in str(item.content or '')]
+                     and '-----BEGIN PGP MESSAGE-----' not in str(item.content or '')
+                     and not (sync_starts.get(item.account_id) is not None and item.timestamp < sync_starts[item.account_id])]
         if not unread and not displayed:
             return
         from blink.messages import MessageManager

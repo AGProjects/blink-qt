@@ -486,6 +486,16 @@ def first_sync_pending(account_id=None):
         return False
 
 
+def first_sync_start(account_id):
+    """When the first journal sync of the account started (the time written in its marker),
+    None when it is not running. What is older came from history, not live."""
+    try:
+        with open(ApplicationData.get(os.path.join('journal', str(account_id), FIRST_SYNC_MARKER))) as marker:
+            return ISOTimestamp(marker.read().strip())
+    except Exception:
+        return None
+
+
 def history_info(account_id, text):
     """An activity line about stored history, at debug level while the account's first sync runs."""
     if first_sync_pending(account_id):
