@@ -839,6 +839,7 @@ class MessageManager(object, metaclass=Singleton):
         notification_center.add_observer(self, name='BlinkMessageHistoryFailedLocalFound')
         notification_center.add_observer(self, name='BlinkMessageHistoryConversationDidRemove')
         notification_center.add_observer(self, name='BlinkJournalFirstSyncDidFinish')
+        notification_center.add_observer(self, name='BlinkConfirmReadMessagesOnOtherDevice')
         notification_center.add_observer(self, name='BlinkJournalProgress')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
         KeyEscrowManager().start()
@@ -1071,6 +1072,87 @@ class MessageManager(object, metaclass=Singleton):
     def _journal_snapshot_pending(self, account):
         """Whether pages of the first sync are still to be applied (its older history, in the background)."""
         return self._journal_snapshot_downloaded(account)
+
+    # The messages of a snapshot carry their delivery state, not whether the user read them: an
+    # incoming message is 'received' for ever. That is in the read markers (conversation read up
+    # to a time, on another device) and in the user's own answers (who answers has read). A
+    # conversation's read point is the latest of them; incoming messages up to it are read.
+
+    journal_snapshot_reads = 'read-points'      # journal/<account>/snapshot/read-points: {conversation: read point} (JSON, not a page)
+
+    @staticmethod
+    def _read_point_key(address):
+        address = str(address or '').strip().lower()
+        for scheme in ('sips:', 'sip:'):
+            address = address.removeprefix(scheme)
+        return address.split(';', 1)[0] or None
+
+    def _snapshot_read_points(self, account, cache):
+        """The read points of a first sync: made once from all its pages (they are all downloaded
+        before any is applied), then kept in read-points, moved on by reads after it started."""
+        path = os.path.join(cache.directory, self.journal_snapshot_reads)
+        try:
+            with open(path) as file:
+                points = json.load(file)
+            if isinstance(points, dict):
+                return points
+        except (OSError, ValueError):
+            pass
+        points = {}
+        for name in cache.pages():
+            try:
+                entries = cache.load(name).get('messages') or []
+            except (OSError, ValueError, AttributeError):
+                continue
+            for entry in entries:
+                action = journal_action(entry.get('content_type'))
+                if action == 'conversation_read':
+                    address = conversation_read_marker(entry.get('content'))[0] or entry.get('contact')
+                elif entry.get('direction') == 'outgoing' and action in ('text', 'file_transfer'):
+                    address = entry.get('contact')
+                else:
+                    continue
+                key = self._read_point_key(address)
+                if not key or not entry.get('timestamp'):
+                    continue
+                try:
+                    when = ISOTimestamp(entry['timestamp']).replace(tzinfo=timezone.utc)
+                except Exception:
+                    continue
+                if key not in points or when > ISOTimestamp(points[key]):
+                    points[key] = when.isoformat()
+        self._save_snapshot_read_points(cache, points)
+        JournalLog()(account.id, 'read points made', conversations=len(points))
+        return points
+
+    def _save_snapshot_read_points(self, cache, points):
+        path = os.path.join(cache.directory, self.journal_snapshot_reads)
+        try:
+            with open(path + '.tmp', 'w') as file:
+                json.dump(points, file)
+            os.replace(path + '.tmp', path)
+        except OSError as e:
+            ActivityLog().warning(f'[journal] Cannot write {path}: {e}')
+
+    def _NH_BlinkConfirmReadMessagesOnOtherDevice(self, notification):
+        # read on another device while older pages of a first sync are still to come: they are
+        # applied with it, else they would arrive unread
+        data = notification.data
+        key = self._read_point_key(getattr(data, 'remote_uri', None))
+        if not key:
+            return
+        try:
+            when = ISOTimestamp(data.timestamp).replace(tzinfo=timezone.utc) if getattr(data, 'timestamp', None) else datetime.now(timezone.utc)
+        except Exception:
+            return
+        for account in AccountManager().iter_accounts():
+            if account is BonjourAccount() or not account.enabled or not self._journal_snapshot_pending(account):
+                continue
+            cache = self._journal_snapshot_cache(account)
+            points = self._snapshot_read_points(account, cache)
+            if key not in points or when > ISOTimestamp(points[key]):
+                points[key] = when.isoformat()
+                self._save_snapshot_read_points(cache, points)
 
     journal_progress_interval = 0.25        # seconds between progress updates while a page is read
 
@@ -1349,6 +1431,7 @@ class MessageManager(object, metaclass=Singleton):
         activity = ActivityLog()
         activity.info(f'[journal] Applying the first sync of {account.id} newest first: {len(names)} pages, the last {self.journal_recent_days} days before the rest')
         JournalLog()(account.id, 'snapshot recent start', pages=len(names), cutoff=cutoff)
+        read_points = self._snapshot_read_points(account, cache)
         contacts = Counter()
         started = time.monotonic()
         applied = 0
@@ -1367,6 +1450,7 @@ class MessageManager(object, metaclass=Singleton):
             applied += 1
             if oldest and ISOTimestamp(oldest).replace(tzinfo=timezone.utc) < cutoff:     # journal times are UTC (_journal_timestamp)
                 break
+        MessageHistory().apply_read_points(account.id, read_points, page='recent days')
         MessageHistory().flush_batched_stores()
         MessageHistory().wait_for_writes()
         self._journal_progress(account, 'done')
@@ -1426,6 +1510,8 @@ class MessageManager(object, metaclass=Singleton):
                 notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='done', done=done, total=total))
                 return
             done += sizes.get(name, 0)
+            # what the page brought in up to its conversation's read point was read
+            MessageHistory().apply_read_points(account.id, self._snapshot_read_points(account, cache), page=name)
             MessageHistory().flush_batched_stores()
             notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='apply', done=done, total=total))
             time.sleep(self.journal_backlog_pause)
@@ -1435,6 +1521,7 @@ class MessageManager(object, metaclass=Singleton):
             # pages that failed and are kept for another attempt
             notification_center.post_notification('BlinkJournalBacklogProgress', sender=account, data=NotificationData(phase='done', done=done, total=total))
             return
+        unlink(os.path.join(cache.directory, self.journal_snapshot_reads))
         unlink(os.path.join(cache.directory, self.journal_snapshot_complete))
         activity.info(f'[journal] First sync of {account.id} complete: {done} older entries applied in {time.monotonic() - started:.1f}s')
         JournalLog()(account.id, 'snapshot complete', entries=done, took=f'{time.monotonic() - started:.1f}s')

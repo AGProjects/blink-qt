@@ -2248,6 +2248,33 @@ class MessageHistory(object, metaclass=Singleton):
         return sorted(key for key in keys if key)
 
     @run_in_thread('db')
+    def apply_read_points(self, account_id, points, page=None):
+        """{conversation: time}: the incoming messages of each conversation up to its time were read
+        (on another device, or answered). A first sync is a snapshot of messages whose own state never
+        says the user read them: the read points say it, and are applied again after every page of it."""
+        table = Message.sqlmeta.table
+        total = 0
+        for remote_uri, when in points.items():
+            try:
+                floor = self._storage_time(when)
+            except (ValueError, OverflowError):
+                continue
+            if floor is None:
+                continue
+            keys = self._conversation_keys(remote_uri)
+            where = (f"remote_uri in ({', '.join(self.db.sqlrepr(key) for key in keys)}) and direction = 'incoming' and read = 0"
+                     f" and timestamp <= {self.db.sqlrepr(floor)}")
+            try:
+                count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
+                if count:
+                    self.db.queryAll(f'update {table} set read = 1 where {where}')
+            except Exception as e:
+                ActivityLog().error(f'[db] Applying the read point of {remote_uri} failed: {e}')
+                continue
+            total += count
+        JournalLog()(account_id, 'read points', page=page, conversations=len(points), marked_read=total)
+
+    @run_in_thread('db')
     def mark_conversation_read(self, remote_uri, source=None, before_time=None):
         """Mark the incoming messages of a conversation read, whatever account it was filed
         under. With `before_time` (when it was read on another device) only those up to then:
