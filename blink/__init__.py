@@ -70,7 +70,7 @@ from blink.screen_share import ScreenShareManager
 from blink.logswindow import LogsWindow
 from blink.configuration.account import AccountExtension, BonjourAccountExtension
 from blink import addressbook_origin
-from blink.configuration.addressbook import ContactExtension, ContactURIExtension, GroupExtension, SharedSettingsMigration
+from blink.configuration.addressbook import ContactExtension, ContactURIExtension, GroupExtension
 from blink.message_envelopes import this_device_id
 from blink.configuration.settings import H264_LEVELS, BlinkSettings, SIPSimpleSettingsExtension
 from blink.logging import ActivityLog, LogManager
@@ -283,7 +283,6 @@ class Blink(QApplication, metaclass=QSingleton):
                                    device_id=this_device_id,
                                    agent=lambda: SIPSimpleSettings().user_agent,
                                    log=lambda line: ActivityLog().info(line))
-        SharedSettingsMigration().start()
         from blink.rtp_log import RTPLog
         RTPLog().start()        # the RTP Media tab of the logs window and logs/rtp_trace.txt
         from blink.sylk_discovery import SylkServerDiscovery
