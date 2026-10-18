@@ -1226,8 +1226,8 @@ class MessageHistory(object, metaclass=Singleton):
     def unread_counts(self):
         """{conversation key: unread incoming messages}, for enabled accounts. Caller is in the db thread.
 
-        An account in its first sync counts nothing: its messages arrive unread and are
-        settled at the end (settle_first_sync_read), a count before that means nothing.
+        An account in its first sync counts nothing until it is finished (settle_first_sync_read):
+        its badges are set once, not counted up while thousands of messages are stored.
         """
         table = Message.sqlmeta.table
         syncing = self.first_sync_accounts()
@@ -1544,28 +1544,22 @@ class MessageHistory(object, metaclass=Singleton):
         ActivityLog().info(f'[db] Applied {len(receipts)} journal receipts: ' + (', '.join(f'{count} {what}' for what, count in sorted(changed.items()) if count) or 'nothing changed'))
 
     @run_in_thread('db')
-    def settle_first_sync_read(self, account_id, days=7, marker=None):
-        """After a first sync: an incoming message older than the newest outgoing one in its
-        conversation, or older than `days`, was read (on another device, before this one).
-        Then the first sync is finished: its marker file (journal/<account>/first-sync.marker) goes."""
+    def settle_first_sync_read(self, account_id, marker=None):
+        """After a first sync: the journal is a snapshot, every message came with its final state, so
+        what is unread now was not read on any device and stays unread. The first sync is finished:
+        its marker file (journal/<account>/first-sync.marker) goes, unread counts start to count."""
         table = Message.sqlmeta.table
         account = self.db.sqlrepr(str(account_id))
-        cutoff = self.db.sqlrepr(self._storage_time(datetime.now(timezone.utc) - timedelta(days=days)))
-        where = (f"account_id = {account} and direction = 'incoming' and read = 0 and (timestamp < {cutoff} or timestamp < "
-                 f"(select max(o.timestamp) from {table} as o where o.remote_uri = {table}.remote_uri and o.direction = 'outgoing'))")
         try:
-            count = self.db.queryOne(f'select count(*) from {table} where {where}')[0]
-            if count:
-                self.db.queryAll(f'update {table} set read = 1 where {where}')
+            count = self.db.queryOne(f"select count(*) from {table} where account_id = {account} and direction = 'incoming' and read = 0 and {NOT_DELETED_SQL}")[0]
         except Exception as e:
-            ActivityLog().error(f'[db] Settling the read state of {account_id} after the first sync failed: {e}')
-            JournalLog()(account_id, 'settle failed', error=str(e)[:200])
-            return
+            count = None
+            ActivityLog().error(f'[db] Counting the unread messages of {account_id} after the first sync failed: {e}')
         if marker:
             unlink(marker)
         NotificationCenter().post_notification('BlinkJournalFirstSyncDidFinish', data=NotificationData(account_id=str(account_id)))
-        JournalLog()(account_id, 'settle first_sync', incoming_read=count, rule=f'older than the newest outgoing or {days} days', finished='yes')
-        ActivityLog().info(f'[db] First sync of {account_id}: {count} older incoming messages marked read')
+        JournalLog()(account_id, 'settle first_sync', unread=count, rule='final state from the journal', finished='yes')
+        ActivityLog().info(f'[db] First sync of {account_id} finished: {count} unread incoming messages')
 
     @run_in_thread('db')
     def log_unread(self, account_id):

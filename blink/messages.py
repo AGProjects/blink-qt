@@ -1004,7 +1004,8 @@ class MessageManager(object, metaclass=Singleton):
             self._syncing.discard(account.id)
 
     _journal_unverified_logged = False
-    journal_since_years = 5     # how far back a first sync (no cursor) asks, as sylk mobile does
+    journal_since_years = 5     # how far back the history of a new device goes, as sylk mobile does
+    journal_recent_days = 7     # a first sync takes these last days first; the older history follows in the background
     journal_max_pages = 200     # pages per run; the next run continues from the cursor
 
     def _journal_directory(self, account):
@@ -1048,6 +1049,30 @@ class MessageManager(object, metaclass=Singleton):
                 self._announce_after_sync.add(account.id)
 
     journal_first_sync_marker = FIRST_SYNC_MARKER
+    journal_backfill_file = 'backfill.json'     # journal/<account>/backfill.json: the older history still to fetch
+
+    def _journal_backfill_path(self, account):
+        return os.path.join(self._journal_directory(account), self.journal_backfill_file)
+
+    def _journal_backfill_state(self, account):
+        """{'until': ISO time, 'cursor': last id fetched}: the history older than the first sync's
+        window, fetched in the background after it; None when there is nothing left to fetch."""
+        try:
+            with open(self._journal_backfill_path(account)) as file:
+                state = json.load(file)
+        except (OSError, ValueError):
+            return None
+        return state if isinstance(state, dict) and state.get('until') else None
+
+    def _save_journal_backfill_state(self, account, state):
+        path = self._journal_backfill_path(account)
+        try:
+            with open(path + '.tmp', 'w') as file:
+                json.dump(state, file)
+            os.replace(path + '.tmp', path)
+        except OSError as e:
+            ActivityLog().warning(f'[journal] Cannot write {path}: {e}')
+
     journal_progress_interval = 0.25        # seconds between progress updates while a page is read
 
     def _journal_read_page(self, account, response, before, expected):
@@ -1084,7 +1109,8 @@ class MessageManager(object, metaclass=Singleton):
         return os.path.join(self._journal_directory(account), self.journal_first_sync_marker)
 
     def _journal_page_url(self, account):
-        """The next journal page: after the cursor, or for a first sync `since` five years ago.
+        """The next journal page: after the cursor, or for a first sync `since` the start of its
+        window (the last journal_recent_days days; the older history is fetched after it).
 
         Without `since` and without a cursor the server answers with the last
         three days only, and the older entries are never asked for.
@@ -1095,7 +1121,11 @@ class MessageManager(object, metaclass=Singleton):
             url = urllib.parse.urljoin(f'{base}/', cursor)
             query = ''
         else:
-            since = datetime.now(timezone.utc) - timedelta(days=365 * self.journal_since_years)
+            backfill = self._journal_backfill_state(account)
+            if backfill is not None:
+                since = ISOTimestamp(backfill['until']).astimezone(timezone.utc)     # a first sync resumed before its first page
+            else:
+                since = datetime.now(timezone.utc) - timedelta(days=self.journal_recent_days)
             url = base
             query = 'since=' + since.strftime('%Y-%m-%dT%H:%M:%S.') + f'{since.microsecond // 1000:03d}Z'
         scheme, netloc, path, _, fragment = urlsplit(url)
@@ -1137,11 +1167,14 @@ class MessageManager(object, metaclass=Singleton):
                     marker_file.write(f'{ISOTimestamp.now()}\n')
             except OSError as e:
                 activity.warning(f'[journal] Cannot write {marker}: {e}')
+            # what is older than the window is fetched after it, in the background
+            since = datetime.now(timezone.utc) - timedelta(days=self.journal_recent_days)
+            self._save_journal_backfill_state(account, {'until': since.isoformat(), 'cursor': ''})
         jlog = JournalLog()
         jlog(account.id, 'sync start', reason=reason, first_sync=first_sync, resumed=resumed or None, cursor=account.sms.history_synchronization_id,
-             since=f'{self.journal_since_years} years' if first_sync else None, server=account.sms.history_synchronization_url)
+             since=f'{self.journal_recent_days} days' if first_sync else None, server=account.sms.history_synchronization_url)
         activity.info(f'[journal] Fetching the message journal of {account.id}' + (f' ({reason})' if reason else '')
-                      + (f' after {account.sms.history_synchronization_id}' if account.sms.history_synchronization_id else f' since {self.journal_since_years} years ago')
+                      + (f' after {account.sms.history_synchronization_id}' if account.sms.history_synchronization_id else f' of the last {self.journal_recent_days} days')
                       + (' (resuming the first sync)' if resumed else ''))
         if not settings.tls.verify_server and not self._journal_unverified_logged:
             # the user's choice (tls.verify_server); said once here instead of a urllib3 warning per request
@@ -1257,6 +1290,7 @@ class MessageManager(object, metaclass=Singleton):
         self._apply_cached_journal(account, stats)
 
     journal_progress_every = 250    # entries between progress lines, and between short pauses
+    journal_snapshot_skipped = frozenset(('receipt', 'conversation_remove', 'message_remove', 'messages_bulk_delete', 'conversation_read'))
     journal_throttle = 0.05         # seconds to pause, so the GUI and the db thread keep up
 
     def _apply_cached_journal(self, account, stats=None):
@@ -1428,6 +1462,8 @@ class MessageManager(object, metaclass=Singleton):
         outcomes = Counter()
         contacts = contacts if contacts is not None else Counter()
         started = time.monotonic()
+        # a first sync is a snapshot: every message has its final state in it and removed ones are not
+        # in it, so the events (receipts, reads, removals) have nothing to act on (journal_snapshot_skipped)
         log.debug(f'-- {len(messages)} messages fetched from server for {account.id}')
         # what an earlier run of Blink stored (received live before quitting, say) is a duplicate
         # too: the in-memory seen ids start empty, and handling it again would show it as new
@@ -1442,6 +1478,8 @@ class MessageManager(object, metaclass=Singleton):
             action = journal_action(content_type)
             if self.seen_message_ids.seen(message.get('message_id')) or str(message.get('message_id') or '') in stored:
                 outcome = 'duplicates'      # already handled live (or earlier in this run), or already stored
+            elif first_sync and action in self.journal_snapshot_skipped:
+                outcome = f'{action.replace("_", " ")} skipped (final state)'
             else:
                 try:
                     outcome = getattr(self, f'_journal_{action}')(account, message, content_type, first_sync, contacts)
@@ -1488,14 +1526,6 @@ class MessageManager(object, metaclass=Singleton):
         if not payload or not payload.get('message_id'):
             return 'failed'
         status = payload.get('state') or message.get('state')
-        if first_sync:
-            # collected and applied in one go at the end of the run (MessageHistory.apply_receipts)
-            receipts = self.journal_receipts.setdefault(account.id, {})
-            rank = {'delivered': 1, 'displayed': 2}
-            message_id = str(payload['message_id'])
-            if rank.get(status, 0) >= rank.get(receipts.get(message_id), 0):
-                receipts[message_id] = status
-            return 'receipts collected (first sync)'
         kwargs = {'data': NotificationData(id=payload['message_id'], status=status)}
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(message['contact'])
@@ -1586,10 +1616,12 @@ class MessageManager(object, metaclass=Singleton):
         history_message = BlinkMessage(new_body.decode(), FTHTTPDocument.content_type, self._journal_sender(account, message, contact),
                                        timestamp=self._journal_timestamp(message), id=message['message_id'],
                                        disposition=message.get('disposition'), direction=message['direction'], is_secure=is_secure)
-        self._journal_store(account, message, history_message, contact.uri.uri, encryption='OpenPGP' if is_secure else None, state='accepted')
+        # the entry's state is final (a file the user opened on another device is displayed)
+        self._journal_store(account, message, history_message, contact.uri.uri, encryption='OpenPGP' if is_secure else None, state=message.get('state') or 'accepted')
         if message['direction'] == 'incoming':
             contacts[contact.uri.uri] += 1
-        session = self._journal_session(contact)
+        # a first sync only stores: an open conversation loads what was stored from history
+        session = None if first_sync else self._journal_session(contact)
         if session is not None:
             NotificationCenter().post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=history_message, history=True, first_sync=first_sync, account=account))
             file = File(document['filename'], document.get('filesize'), contact, file_hash, message['message_id'], ISOTimestamp(until),
@@ -1614,7 +1646,9 @@ class MessageManager(object, metaclass=Singleton):
         self._journal_store(account, message, history_message, message['contact'], encryption=encryption, state=message.get('state'))
         if message['direction'] == 'incoming':
             contacts[contact.uri.uri] += 1
-        session = self._journal_session(contact)
+        # a first sync only stores: an open conversation loads what was stored from history, and
+        # the background decryption opens what is encrypted
+        session = None if first_sync else self._journal_session(contact)
         if session is not None:
             # a first sync replays history: its senders got their receipts from the devices that were there
             if not first_sync and message['direction'] == 'incoming' and 'positive-delivery' in (history_message.disposition or ()):
