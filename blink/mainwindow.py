@@ -1,5 +1,6 @@
 
 import hashlib
+import importlib.util
 import os
 
 from functools import partial
@@ -22,8 +23,8 @@ from sipsimple.session import IllegalStateError
 
 from blink.aboutpanel import AboutPanel
 from blink.camera_formats import log_camera_formats, usable_cameras
-from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel, ServerToolsWindow
-from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI, conversation_uri
+from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel
+from blink.contacts import Contact, ContactEditorDialog, ContactModel, ContactSearchModel, URIUtils, ContactURI, conversation_uri, google_contacts_available
 from blink.filetransferwindow import FileTransferWindow
 from blink.history import HistoryManager, conversation_key
 from blink.messages import MessageManager
@@ -41,6 +42,14 @@ from blink.util import run_in_gui_thread, translate
 from blink.widgets.buttons import AccountState, SwitchViewButton
 from blink.widgets.color import follow_theme
 from blink.widgets.style import make_segmented
+
+
+# the server tools show the account's web pages in a QtWebEngine window: builds without
+# QtWebEngine (Windows) have none
+if importlib.util.find_spec('PyQt6.QtWebEngineWidgets') is not None:
+    from blink.servertools import ServerToolsWindow
+else:
+    ServerToolsWindow = None
 
 
 __all__ = ['MainWindow']
@@ -238,7 +247,7 @@ class MainWindow(base_class, ui_class):
         self.contact_editor_dialog = ContactEditorDialog(self)
         self.filetransfer_window = FileTransferWindow()
         self.preferences_window = PreferencesWindow(self.account_model, None)
-        self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None)
+        self.server_tools_window = ServerToolsWindow(self.server_tools_account_model, None) if ServerToolsWindow is not None else None
 
         # Signals
         self.account_state.stateChanged.connect(self._SH_AccountStateChanged)
@@ -342,6 +351,9 @@ class MainWindow(base_class, ui_class):
         self.search_for_people_action.triggered.connect(self._AH_SearchForPeople)
         self.history_on_server_action.triggered.connect(self._AH_HistoryOnServer)
         self.google_contacts_action.triggered.connect(self._AH_GoogleContactsActionTriggered)
+        for action in (self.sip_server_settings_action, self.search_for_people_action, self.history_on_server_action):
+            action.setVisible(ServerToolsWindow is not None)
+        self.google_contacts_action.setVisible(google_contacts_available)
 
         self.export_pgp_key_action.triggered.connect(self._AH_ExportPGPkeyActionTriggered)
         self.generate_pgp_key.triggered.connect(self._AH_GeneratePGPkeyActionTriggered)
@@ -536,7 +548,8 @@ class MainWindow(base_class, ui_class):
         super(MainWindow, self).closeEvent(event)
         self.about_panel.close()
         self.contact_editor_dialog.close()
-        self.server_tools_window.close()
+        if self.server_tools_window is not None:
+            self.server_tools_window.close()
         for dialog in self.pending_watcher_dialogs[:]:
             dialog.close()
 

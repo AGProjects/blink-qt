@@ -13,7 +13,6 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
 from PyQt6.QtCore import QByteArray, QEvent, QLocale, QMimeData, QPoint, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
-from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
 from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QListView, QMenu, QMessageBox, QRadioButton, QSizePolicy, QTableView, QWidget
 
@@ -28,19 +27,29 @@ from collections import OrderedDict, deque
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from functools import lru_cache, partial
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 from heapq import heappush
 from itertools import count
-from google_auth_oauthlib.flow import Flow
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request, AuthorizedSession
-from google.auth.exceptions import RefreshError as AccessTokenRefreshError
 from operator import attrgetter
 from requests import RequestException
 from threading import Event
 from urllib.parse import parse_qsl
 from zope.interface import implementer
+
+# Google contacts sign in through an embedded web view: builds without QtWebEngine (Windows)
+# have no Google contacts
+try:
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+    from google_auth_oauthlib.flow import Flow
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request, AuthorizedSession
+    from google.auth.exceptions import RefreshError as AccessTokenRefreshError
+except ImportError:
+    google_contacts_available = False
+    QWebEngineView = QWidget
+else:
+    google_contacts_available = True
 
 from sipsimple import addressbook
 from sipsimple.account import Account, AccountManager, BonjourAccount
@@ -3672,6 +3681,8 @@ class GoogleContactsManager(object, metaclass=Singleton):
 
     @run_in_gui_thread
     def _initialize(self):  # object is instantiated from a non-UI thread, while these need to be created in the UI thread
+        if not google_contacts_available:
+            return
         self.auth = GoogleAuthorization()
         self._sync_timer = QTimer()
         self._sync_timer.setInterval(60 * 1000)  # a minute (in milliseconds)
@@ -3686,7 +3697,7 @@ class GoogleContactsManager(object, metaclass=Singleton):
 
     @run_in_gui_thread
     def _start(self):
-        if not self.running:
+        if not self.running and google_contacts_available:
             self.running = True
             self.auth.request_credentials()
 

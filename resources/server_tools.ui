@@ -224,7 +224,7 @@
   <customwidget>
    <class>ServerToolsWebView</class>
    <extends>QWebView</extends>
-   <header>blink.accounts</header>
+   <header>blink.servertools</header>
   </customwidget>
   <customwidget>
    <class>ToolButton</class>
