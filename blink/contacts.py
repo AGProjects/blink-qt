@@ -697,10 +697,77 @@ def _sync_deleted_presence(subscribe, contacts):
 
 
 def deleted_contact_menu(menu, parent, contacts):
-    """What a deleted contact offers, wherever it is shown: Restore and Delete Permanently,
-    no calls, messages or edits (it comes back to use only by being restored)."""
+    """What a deleted contact offers, wherever it is shown: Restore, Edit and Delete Permanently,
+    no calls or messages (it comes back to use only by being restored)."""
     menu.addAction(translate('contact_list', 'Restore'), lambda: ContactTrash.restore(contacts))
+    if len(contacts) == 1:
+        menu.addAction(translate('contact_list', 'Edit...'), lambda: QApplication.instance().main_window.contact_editor_dialog.open_for_edit(contacts[0]))
     menu.addAction(translate('contact_list', 'Delete Permanently'), lambda: confirm_delete_permanently(parent, contacts))
+
+
+def checklist_dialog(parent, title, text, entries, hint, actions):
+    """A list to check, with Select All / Deselect All, action buttons and Ask Later.
+    entries: [(key, line)], all checked to start; actions: [(name, label)], the first the default.
+    Returns (the action name or None for Ask Later / closed, the keys checked)."""
+    from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(title)
+    layout = QVBoxLayout(dialog)
+    label = QLabel(text, dialog)
+    label.setWordWrap(True)
+    layout.addWidget(label)
+    listing = QListWidget(dialog)
+    for key, line in entries:
+        item = QListWidgetItem(line, listing)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked)
+        item.setData(Qt.ItemDataRole.UserRole, key)
+    layout.addWidget(listing)
+    selection = QHBoxLayout()
+    for button_label, state in ((translate('contact_list', 'Select All'), Qt.CheckState.Checked), (translate('contact_list', 'Deselect All'), Qt.CheckState.Unchecked)):
+        button = QPushButton(button_label, dialog)
+        button.setAutoDefault(False)
+        button.clicked.connect(lambda checked=False, state=state: [listing.item(row).setCheckState(state) for row in range(listing.count())])
+        selection.addWidget(button)
+    selection.addStretch(1)
+    layout.addLayout(selection)
+    if hint:
+        hint_label = QLabel(hint, dialog)
+        hint_label.setWordWrap(True)
+        layout.addWidget(hint_label)
+    box = QDialogButtonBox(dialog)
+    chosen = []
+    action_buttons = []
+    for number, (name, button_label) in enumerate(actions):
+        button = box.addButton(button_label, QDialogButtonBox.ButtonRole.AcceptRole if number == 0 else QDialogButtonBox.ButtonRole.ActionRole)
+        button.clicked.connect(lambda checked=False, name=name: (chosen.append(name), dialog.accept()))
+        action_buttons.append(button)
+        if number == 0:
+            button.setDefault(True)
+    later = box.addButton(translate('contact_list', 'Ask Later'), QDialogButtonBox.ButtonRole.RejectRole)
+    later.clicked.connect(dialog.reject)
+    layout.addWidget(box)
+
+    def update_buttons(item=None):
+        any_checked = any(listing.item(row).checkState() == Qt.CheckState.Checked for row in range(listing.count()))
+        for button in action_buttons:
+            button.setEnabled(any_checked)
+    listing.itemChanged.connect(update_buttons)
+    dialog.exec()
+    if not chosen:
+        return None, set()
+    return chosen[0], {listing.item(row).data(Qt.ItemDataRole.UserRole) for row in range(listing.count()) if listing.item(row).checkState() == Qt.CheckState.Checked}
+
+
+def log_context_menu(where, items, menu):
+    """One Activity log line per right click: on what, and what the menu offers (disabled ones in brackets)."""
+    def label(item):
+        name = getattr(item, 'name', None) or getattr(getattr(item, 'settings', None), 'name', None) or str(getattr(item, 'uri', '') or item)
+        group = getattr(getattr(getattr(item, 'group', None), 'settings', None), 'name', None)
+        return f'{name} in {group}' if group else str(name)
+    offered = [action.text().replace('&', '') if action.isEnabled() else f'[{action.text().replace("&", "")}]'
+               for action in menu.actions() if action.isVisible() and not action.isSeparator()]
+    ActivityLog().info(f"[ui] Right click in {where} on {', '.join(label(item) for item in items) or 'nothing'}: {', '.join(offered) or 'no menu'}")
 
 
 def confirm_delete_permanently(parent, contacts):
@@ -713,6 +780,18 @@ def confirm_delete_permanently(parent, contacts):
                 translate('contact_list', 'Permanently delete %d contacts?') % len(contacts))
     info = translate('contact_list', 'The contact is removed from the server address book, and its messages are deleted on all your devices. This cannot be undone.')
     shared = ContactTrash.shared_keys(contacts)
+    # how many messages go: of the addresses only these contacts list, and of those other contacts list too
+    from blink.history import MessageHistory
+    own = [key for contact in contacts for key in ContactTrash._keys(contact) if key not in shared]
+    own_count = MessageHistory().count_messages(own) if own else 0
+    shared_count = MessageHistory().count_messages(list(shared)) if shared else 0
+    if own_count is not None:
+        info += '\n\n' + (translate('contact_list', '1 message will be deleted.') if own_count == 1 else
+                           translate('contact_list', '%d messages will be deleted.') % own_count)
+    if shared and shared_count:
+        info += ' ' + (translate('contact_list', '1 more of the addresses other contacts list too, if their messages are deleted as well.') if shared_count == 1 else
+                       translate('contact_list', '%d more of the addresses other contacts list too, if their messages are deleted as well.') % shared_count)
+    ActivityLog().info(f"[trash] Asking to delete permanently {', '.join(names)}: {own_count} messages" + (f', {shared_count} more of shared addresses' if shared else ''))
     if shared:
         choice = ask_about_shared_messages(parent, title, question, info, shared, warning=True)
         if choice is None:
@@ -5478,6 +5557,7 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='AddressbookGroupWasActivated')
         notification_center.add_observer(self, name='AddressbookGroupWasDeleted')
         notification_center.add_observer(self, name='AddressbookGroupDidChange')
+        notification_center.add_observer(self, name='XCAPManagerDidReloadData')
         notification_center.add_observer(self, name='VirtualGroupWasActivated')
         notification_center.add_observer(self, name='VirtualGroupWasDeactivated')
         notification_center.add_observer(self, name='VirtualGroupDidAddContact')
@@ -5780,11 +5860,157 @@ class ContactModel(QAbstractListModel):
     def _NH_AddressbookGroupWasActivated(self, notification):
         group = Group(notification.sender)
         self.addGroup(group)
+        deleted = notification.sender.id == DELETED_GROUP_ID
         for contact in notification.sender.contacts:
-            self.addContact(Contact(contact, group))
+            if deleted or not is_deleted_contact(contact):     # a deleted contact is shown in Deleted only
+                self.addContact(Contact(contact, group))
         self._update_deleted_group_visibility()
-        if notification.sender.id == DELETED_GROUP_ID:
+        if deleted:
+            self._hide_elsewhere(list(notification.sender.contacts))
             sync_deleted_presence(False, list(notification.sender.contacts))
+
+    # A contact in Deleted is in no other group. Another client may leave one in both (the
+    # addressbook as fetched): it is shown in Deleted only, and the user is asked whether it was
+    # deleted by mistake (_ask_about_deleted_conflicts).
+
+    def _addressbook_group_items(self):
+        return [item for item in self.items if isinstance(item, Group) and isinstance(item.settings, addressbook.Group)
+                and item.settings.id != DELETED_GROUP_ID]
+
+    def _hide_elsewhere(self, contacts):
+        for group in self._addressbook_group_items():
+            group_contacts = self.items[GroupContacts, group.settings]
+            for contact in contacts:
+                try:
+                    self.removeContact(group_contacts[contact])
+                except KeyError:
+                    pass
+
+    def _show_elsewhere(self, contacts):
+        manager = addressbook.AddressbookManager()
+        contacts = [contact for contact in contacts if manager.has_contact(contact.id)]     # not deleted for good
+        for group in self._addressbook_group_items():
+            members = {member.id for member in group.settings.contacts}
+            group_contacts = self.items[GroupContacts, group.settings]
+            for contact in contacts:
+                if contact.id not in members:
+                    continue
+                try:
+                    group_contacts[contact]
+                except KeyError:
+                    self.addContact(Contact(contact, group))
+
+    deleted_conflict_delay = 20     # seconds after an addressbook reload, so the filers and the other checks are done
+    _deleted_conflict_asking = False
+    _deleted_conflict_pending = False
+    _deleted_conflict_postponed = frozenset()      # the contact ids answered with Ask Later: not asked again until they change
+
+    def _NH_XCAPManagerDidReloadData(self, notification):
+        if not self._deleted_conflict_pending:
+            self._deleted_conflict_pending = True
+            call_later(self.deleted_conflict_delay, self._check_addressbook)
+
+    def _check_addressbook(self):
+        """The anomalies of the addressbook as fetched, put to the user one after the other."""
+        self._deleted_conflict_pending = False
+        if self._deleted_conflict_asking:
+            return
+        try:
+            self._ask_about_deleted_conflicts()
+            self._ask_about_presence_anomalies()
+        except Exception as e:
+            ActivityLog().exception(f'[contacts] Checking the addressbook failed: {e!r}')
+
+    # Contacts allowed to see our presence that we do not subscribe to: one side of the presence
+    # relation is missing (another client turned it off, or never on). Asked once per run.
+
+    _presence_anomalies_asked = False
+
+    def _ask_about_presence_anomalies(self):
+        if self._presence_anomalies_asked:
+            return
+        anomalies = []
+        for contact in addressbook.AddressbookManager().get_contacts():
+            if contact.presence.policy != 'allow' or contact.presence.subscribe:
+                continue
+            if is_deleted_contact(contact) or is_blocked_contact(contact) or is_own_contact(contact) or is_conference_contact(contact):
+                continue
+            addresses = [str(uri.uri) for uri in contact.uris if '@' in str(uri.uri)]     # presence is for SIP addresses, not phone numbers
+            if addresses:
+                anomalies.append((contact, addresses))
+        self._presence_anomalies_asked = True
+        if not anomalies:
+            return
+        lines = [f"{contact.name or contact.id} ({', '.join(addresses)})" for contact, addresses in anomalies]
+        ActivityLog().info(f"[presence] {len(anomalies)} contacts may see our presence but are not subscribed to: {'; '.join(lines)}")
+        self._deleted_conflict_asking = True
+        try:
+            action, checked = checklist_dialog(
+                QApplication.instance().main_window, translate('contact_list', 'Presence'),
+                translate('contact_list', 'These contacts are allowed to see your presence, but you are not subscribed to theirs.'),
+                [(contact.id, line) for (contact, addresses), line in zip(anomalies, lines)],
+                translate('contact_list', 'Subscribe shows their presence too. Stop Sharing no longer lets them see yours. Unchecked ones stay as they are.'),
+                [('subscribe', translate('contact_list', 'Subscribe')), ('stop', translate('contact_list', 'Stop Sharing'))])
+        finally:
+            self._deleted_conflict_asking = False
+        manager = addressbook.AddressbookManager()
+        contacts = [contact for contact, addresses in anomalies if contact.id in checked and manager.has_contact(contact.id)]
+        if not action or not contacts:
+            ActivityLog().info('[presence] Contacts allowed to see our presence but not subscribed to: left as they are')
+            return
+        names = ', '.join(contact.name or contact.id for contact in contacts)
+        if action == 'subscribe':
+            ActivityLog().info(f'[presence] Subscribing to the presence of {len(contacts)} contacts that could see ours: {names}')
+        else:
+            ActivityLog().info(f'[presence] {len(contacts)} contacts no longer allowed to see our presence: {names}')
+
+        def apply():
+            for contact in contacts:
+                if action == 'subscribe':
+                    contact.presence.subscribe = True
+                else:
+                    contact.presence.policy = 'block'      # as the contact editor unchecking 'Allow to see my presence state'
+                contact.save()
+        in_one_xcap_update('presence-subscribe' if action == 'subscribe' else 'presence-stop-sharing', apply)
+
+    def _ask_about_deleted_conflicts(self):
+        """Contacts in Deleted and in another group too: restored (deleted by mistake) or taken out of the others."""
+        manager = addressbook.AddressbookManager()
+        try:
+            deleted = manager.get_group(DELETED_GROUP_ID)
+        except KeyError:
+            return
+        others = [group for group in manager.get_groups() if group.id != DELETED_GROUP_ID]
+        conflicts = []
+        for contact in deleted.contacts:
+            groups = [group.name or group.id for group in others if contact.id in {member.id for member in group.contacts}]
+            if groups:
+                conflicts.append((contact, groups))
+        if not conflicts or frozenset(contact.id for contact, groups in conflicts) == self._deleted_conflict_postponed:
+            return
+        lines = [f"{contact.name or contact.id} ({', '.join(groups)})" for contact, groups in conflicts]
+        ActivityLog().info(f"[trash] {len(conflicts)} contacts are in Deleted and in other groups: {'; '.join(lines)}")
+        self._deleted_conflict_asking = True
+        try:
+            action, checked = checklist_dialog(
+                QApplication.instance().main_window, translate('contact_list', 'Deleted Contacts'),
+                translate('contact_list', 'These contacts are in the Deleted group and in other groups too. They may have been deleted by mistake on another device.'),
+                [(contact.id, line) for (contact, groups), line in zip(conflicts, lines)],
+                translate('contact_list', 'Restore puts the checked contacts back in use, in their groups. Keep Deleted takes them out of the other groups. Unchecked ones are asked about again later.'),
+                [('restore', translate('contact_list', 'Restore')), ('keep', translate('contact_list', 'Keep Deleted'))])
+        finally:
+            self._deleted_conflict_asking = False
+        contacts = [contact for contact, groups in conflicts if contact.id in checked and manager.has_contact(contact.id)]
+        if action == 'restore' and contacts:
+            ActivityLog().info(f"[trash] Restoring {len(contacts)} contacts that were in Deleted and in other groups: {', '.join(contact.name or contact.id for contact in contacts)}")
+            ContactTrash.restore(contacts)
+        elif action == 'keep' and contacts:
+            ActivityLog().info(f"[trash] Keeping {len(contacts)} contacts in Deleted, taken out of their other groups: {', '.join(contact.name or contact.id for contact in contacts)}")
+            ContactTrash.soft_delete(contacts)
+        left = frozenset(contact.id for contact, groups in conflicts if contact.id not in checked)
+        self._deleted_conflict_postponed = left
+        if left:
+            ActivityLog().info(f'[trash] {len(left)} contacts in Deleted and in other groups left as they are: asked again when they change, or at the next start')
 
     def _update_deleted_group_visibility(self):
         # the Deleted group is shown only while it holds somebody
@@ -5802,11 +6028,18 @@ class ContactModel(QAbstractListModel):
         group = self.items[GroupElement, notification.sender]
         group_contacts = self.items[GroupContacts, notification.sender]
         for contact in notification.data.modified['contacts'].removed:
-            self.removeContact(group_contacts[contact])
+            try:
+                self.removeContact(group_contacts[contact])
+            except KeyError:
+                pass        # not shown in this group: deleted (shown in Deleted only), or removed already
+        deleted = notification.sender.id == DELETED_GROUP_ID
         for contact in notification.data.modified['contacts'].added:
-            self.addContact(Contact(contact, group))
+            if deleted or not is_deleted_contact(contact):     # a deleted contact is shown in Deleted only
+                self.addContact(Contact(contact, group))
         self._update_deleted_group_visibility()
-        if notification.sender.id == DELETED_GROUP_ID:
+        if deleted:
+            self._hide_elsewhere(list(notification.data.modified['contacts'].added))
+            self._show_elsewhere(list(notification.data.modified['contacts'].removed))
             sync_deleted_presence(False, list(notification.data.modified['contacts'].added))
             sync_deleted_presence(True, list(notification.data.modified['contacts'].removed))
         elif is_group(notification.sender, BLOCKED):
@@ -6547,8 +6780,10 @@ class ContactListView(QListView):
             self.actions.delete_item.setEnabled(selected_items[0].deletable)
             self.actions.undo_last_delete.setEnabled(len(model.deleted_items) > 0)
         elif isinstance(selected_items[0], Contact) and getattr(selected_items[0].group.settings, 'id', None) == DELETED_GROUP_ID:
-            # a deleted contact is not called or written to: it can only be restored or deleted for good
+            # a deleted contact is not called or written to: it is restored, edited or deleted for good
             menu.addAction(self.actions.restore_contact)
+            menu.addAction(self.actions.edit_item)
+            self.actions.edit_item.setEnabled(True)
             menu.addAction(self.actions.delete_permanently)
         else:
             contact = selected_items[0]
@@ -6672,6 +6907,7 @@ class ContactListView(QListView):
 
             # adding a contact or a group is the person button's (bottom left), not a contact's or a group's
             self.actions.edit_item.setEnabled(contact.editable)
+        log_context_menu('the contact list', selected_items, menu)
         menu.exec(event.globalPos())
 
     def hideEvent(self, event):
@@ -7202,6 +7438,7 @@ class ContactSearchListView(QListView):
             self.actions.edit_item.setEnabled(contact.editable)
             self.actions.delete_item.setEnabled(contact.deletable)
             self.actions.undo_last_delete.setEnabled(len(source_model.deleted_items) > 0)
+        log_context_menu('the search results', selected_items, menu)
         menu.exec(event.globalPos())
 
     def focusInEvent(self, event):
@@ -7526,10 +7763,12 @@ class ContactDetailView(QListView):
         menu.clear()
         if is_deleted_contact(model.contact):
             deleted_contact_menu(menu, self, [model.contact])
+            log_context_menu('the contact details', [model.contact], menu)
             menu.exec(event.globalPos())
             return
         if is_blocked_contact(model.contact):
             blocked_contact_menu(menu, self, [model.contact])
+            log_context_menu('the contact details', [model.contact], menu)
             menu.exec(event.globalPos())
             return
         menu.addAction(self.actions.send_sms)
@@ -7562,6 +7801,7 @@ class ContactDetailView(QListView):
         self.actions.transfer_call.setEnabled(can_transfer)
         self.actions.edit_contact.setEnabled(model.contact_detail.editable)
         self.actions.delete_contact.setEnabled(model.contact_detail.deletable)
+        log_context_menu('the contact details', [model.contact], menu)
         menu.exec(event.globalPos())
 
     def hideEvent(self, event):
@@ -8249,6 +8489,8 @@ class ContactEditorDialog(base_class, ui_class):
         self.original_groups = []
         self.selected_groups = [target_group.settings] if target_group is not None and is_selectable_group(target_group.settings) else []
         self._update_groups_button()
+        self.groups_button.setEnabled(True)
+        self.presence.setEnabled(True)
         self.accept_button.setText(translate('contact_editor', 'Add'))
         self.accept_button.setEnabled(False)
         self.show()
@@ -8270,6 +8512,10 @@ class ContactEditorDialog(base_class, ui_class):
         self.original_groups = [group for group in self._selectable_groups() if contact.id in {member.id for member in group.contacts}]
         self.selected_groups = list(self.original_groups)
         self._update_groups_button()
+        # a deleted contact is edited where it is: Restore brings it back to its groups and its presence
+        deleted = is_deleted_contact(contact)
+        self.groups_button.setEnabled(not deleted)
+        self.presence.setEnabled(not deleted)
         self.accept_button.setText(translate('contact_editor', 'Ok'))
         self.accept_button.setEnabled(True)
         self._update_pgp_key_label()

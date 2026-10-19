@@ -2252,6 +2252,34 @@ class MessageHistory(object, metaclass=Singleton):
                 keys.add(f'{user}@video{domain}')
         return sorted(key for key in keys if key)
 
+    def count_messages(self, remote_uris, timeout=5.0):
+        """How many messages are stored with these peers (every spelling of their addresses, hidden ones
+        too, metadata companions not counted). For callers outside the db thread: waits for it; None
+        when it does not answer in time."""
+        result = {}
+        done = threading.Event()
+
+        @run_in_thread('db')
+        def count():
+            try:
+                keys = set()
+                for remote_uri in remote_uris:
+                    keys |= set(self._conversation_keys(remote_uri))
+                keys.discard('')
+                if not keys:
+                    result['count'] = 0
+                    return
+                table = Message.sqlmeta.table
+                result['count'] = self.db.queryOne(f"select count(*) from {table} where remote_uri in ({', '.join(self.db.sqlrepr(key) for key in keys)})"
+                                                   f" and content_type != {self.db.sqlrepr(METADATA_CONTENT_TYPE)}")[0]
+            except Exception as e:
+                log.warning(f'Counting the messages of {list(remote_uris)} failed: {e!r}')
+            finally:
+                done.set()
+        count()
+        done.wait(timeout)
+        return result.get('count')
+
     @run_in_thread('db')
     def apply_read_points(self, account_id, points, page=None):
         """{conversation: time}: the incoming messages of each conversation up to its time were read
