@@ -8,7 +8,7 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, QRectF, QSettings, QSize, QTimer, QUrl, QTranslator
 from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QAction, QActionGroup, QPainter, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
-from PyQt6.QtWidgets import QLabel, QMessageBox, QProgressBar, QSplitter
+from PyQt6.QtWidgets import QLabel, QMessageBox, QProgressBar, QSplitter, QToolButton, QWidget
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -47,6 +47,77 @@ __all__ = ['MainWindow']
 
 
 ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
+
+
+class ProgressLine(QWidget):
+    """A progress bar of a background job, with an optional button beside it. Shown only when the
+    job takes a while (show_delay); the text is the longest label that fits the bar."""
+
+    show_delay = 1500       # ms
+
+    def __init__(self, parent, font, button=None):
+        super().__init__(parent)
+        from PyQt6.QtWidgets import QHBoxLayout
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        self.bar = QProgressBar(self)
+        self.bar.setTextVisible(True)
+        self.bar.setFont(font)
+        self.bar.setFixedHeight(self.bar.fontMetrics().height() + 4)
+        layout.addWidget(self.bar, 1)
+        self.button = button
+        if button is not None:
+            button.setParent(self)
+            button.setFixedHeight(self.bar.height())
+            button.hide()
+            layout.addWidget(button)
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.setInterval(self.show_delay)
+        self.timer.timeout.connect(self.show)
+        self.shown = None       # the last (labels, done, total, account, extra): drawn again to fit when the bar is resized
+        self.bar.installEventFilter(self)
+        self.hide()
+
+    def hide_progress(self):
+        self.shown = None
+        self.timer.stop()
+        self.hide()
+
+    def show_progress(self, labels, done, total, account=None, extra=None):
+        """labels: the label, longest first, then shorter ones: the longest text that fits the bar is
+        shown (with the percentage when there is room), else the count alone, elided if need be."""
+        bar = self.bar
+        if not self.isVisible() and not self.timer.isActive():
+            self.timer.start()
+        self.shown = (labels, done, total, account, extra)
+        if total:
+            bar.setRange(0, total)
+            bar.setValue(min(done, total))
+            count = f'{min(done, total)}/{total}'
+            percent = f' ({min(done, total) * 100 // total}%)'
+            candidates = [f'{label} {count}{percent}' for label in labels] + [f'{label} {count}' for label in labels] + [count]
+        else:
+            # the total is not known (a server without X-Sylk-Journal-Remaining); not the busy mode
+            # (range 0, 0): most styles draw no text in it, and the count is the point
+            bar.setRange(0, 1)
+            bar.setValue(0)
+            candidates = [f'{label} {done}' for label in labels] + [str(done)]
+        metrics = bar.fontMetrics()
+        room = max(0, bar.contentsRect().width() - 12)
+        text = next((candidate for candidate in candidates if metrics.horizontalAdvance(candidate) <= room), None)
+        if text is None:
+            text = metrics.elidedText(candidates[-1], Qt.TextElideMode.ElideRight, room) if room else ''
+        bar.setFormat(text)     # no %v/%m/%p left in it: the numbers are written in
+        of = f' of {account}' if account else ''
+        bar.setToolTip((f'{labels[0]}{of}: {done} of {total}' if total else f'{labels[0]}{of}: {done}') + (f'\n{extra}' if extra else ''))
+
+    def eventFilter(self, watched, event):
+        from PyQt6.QtCore import QEvent
+        if watched is self.bar and event.type() == QEvent.Type.Resize and self.shown is not None:
+            self.show_progress(*self.shown)     # the text that fits the new width
+        return super().eventFilter(watched, event)
 
 
 @implementer(IObserver)
@@ -342,86 +413,37 @@ class MainWindow(base_class, ui_class):
         wide_padding = self.identity.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option, QStyle.SubControl.SC_ComboBoxEditField, self.identity).height() < 10
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
-        # the message journal's download and import, under the account; shown only when it takes a while
-        self.journal_progress = QProgressBar(self)
-        self.journal_progress.setTextVisible(True)
-        font = self.journal_progress.font()
+        # Under the account selector, one line per background job, each shown only when it takes a
+        # while and all of them at once: the message journal (download and import), the older history
+        # of a first sync, the background decryption of stored messages. The last two have a button
+        # beside the bar that sets how much CPU they take.
+        from PyQt6.QtWidgets import QVBoxLayout
+        sample = QProgressBar(self)
+        font = sample.font()
         if font.pointSizeF() > 0:
             font.setPointSizeF(font.pointSizeF() * 0.8)
         else:
             font.setPixelSize(max(8, round(font.pixelSize() * 0.8)))
-        self.journal_progress.setFont(font)
-        self.journal_progress.setFixedHeight(self.journal_progress.fontMetrics().height() + 4)
-        # the bar, and beside it while stored messages are decrypted the button that sets how much
-        # CPU that takes (blink.pgp_decryptor.BackgroundDecryptor.set_speed)
-        from PyQt6.QtWidgets import QHBoxLayout, QToolButton, QWidget
-        self.progress_row = QWidget(self)
-        progress_layout = QHBoxLayout(self.progress_row)
+        sample.deleteLater()
+        self.progress_area = QWidget(self)
+        progress_layout = QVBoxLayout(self.progress_area)
         progress_layout.setContentsMargins(0, 0, 0, 0)
-        progress_layout.setSpacing(4)
-        progress_layout.addWidget(self.journal_progress, 1)
-        self.decryption_speed_button = QToolButton(self.progress_row)
-        self.decryption_speed_button.setFont(font)
-        self.decryption_speed_button.setAutoRaise(True)
-        self.decryption_speed_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.decryption_speed_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        # the style's menu arrow is drawn over the text of a small button: a ▾ in the text instead
-        self.decryption_speed_button.setStyleSheet('QToolButton::menu-indicator { image: none; width: 0px; }')
-        self.decryption_speed_button.setFixedHeight(self.journal_progress.height())
-        self.decryption_speed_button.setToolTip(translate('main_window', 'How much CPU decrypting stored messages may use'))
-        self.decryption_speed_menu = QMenu(self.decryption_speed_button)
-        self.decryption_speed_group = QActionGroup(self.decryption_speed_menu)
+        progress_layout.setSpacing(2)
+        self.journal_line = ProgressLine(self.progress_area, font)
         from blink.pgp_decryptor import BackgroundDecryptor
-        for speed, name in BackgroundDecryptor.speed_names:
-            action = self.decryption_speed_menu.addAction(translate('main_window', name))
-            action.setToolTip(translate('main_window', BackgroundDecryptor.speed_descriptions[speed]))
-            action.setStatusTip(action.toolTip())
-            action.setData(speed)
-            action.setCheckable(True)
-            self.decryption_speed_group.addAction(action)
-            if speed == 'paused':
-                self.decryption_speed_menu.insertSeparator(action)
-        self.decryption_speed_menu.setToolTipsVisible(True)
-        self.decryption_speed_group.triggered.connect(self._SH_DecryptionSpeedChosen)
-        self.decryption_speed_button.setMenu(self.decryption_speed_menu)
-        self.decryption_speed_button.hide()
-        progress_layout.addWidget(self.decryption_speed_button)
-        # the same for the import of the older history of a first sync (MessageManager.set_journal_import_speed)
-        self.import_speed_button = QToolButton(self.progress_row)
-        self.import_speed_button.setFont(font)
-        self.import_speed_button.setAutoRaise(True)
-        self.import_speed_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.import_speed_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.import_speed_button.setStyleSheet('QToolButton::menu-indicator { image: none; width: 0px; }')
-        self.import_speed_button.setFixedHeight(self.journal_progress.height())
-        self.import_speed_button.setToolTip(translate('main_window', 'How much CPU importing the older messages may use'))
-        self.import_speed_menu = QMenu(self.import_speed_button)
-        self.import_speed_group = QActionGroup(self.import_speed_menu)
-        for speed, name in MessageManager.journal_import_speed_names:
-            action = self.import_speed_menu.addAction(translate('main_window', name))
-            action.setToolTip(translate('main_window', MessageManager.journal_import_speed_descriptions[speed]))
-            action.setStatusTip(action.toolTip())
-            action.setData(speed)
-            action.setCheckable(True)
-            self.import_speed_group.addAction(action)
-            if speed == 'paused':
-                self.import_speed_menu.insertSeparator(action)
-        self.import_speed_menu.setToolTipsVisible(True)
-        self.import_speed_group.triggered.connect(self._SH_ImportSpeedChosen)
-        self.import_speed_button.setMenu(self.import_speed_menu)
-        self.import_speed_button.hide()
-        progress_layout.addWidget(self.import_speed_button)
-        self.progress_row.hide()
-        self._progress_shown = None         # the last (labels, done, total): drawn again to fit when the bar is resized
-        self.journal_progress.installEventFilter(self)
-        self.window_layout.insertWidget(self.window_layout.indexOf(self.identity_widget) + 1, self.progress_row)
-        self.journal_progress_timer = QTimer(self)
-        self.journal_progress_timer.setSingleShot(True)
-        self.journal_progress_timer.setInterval(1500)
-        self.journal_progress_timer.timeout.connect(self.progress_row.show)
-        self._journal_in_progress = False
-        self._decryption_progress = None        # (done, total) of the background decryption, while it runs
-        self._backlog_progress = None           # (done, total, account) of the older first sync pages, while they are applied
+        self.import_speed_button, self.import_speed_group = self._speed_button(
+            font, MessageManager.journal_import_speed_names, MessageManager.journal_import_speed_descriptions,
+            translate('main_window', 'How much CPU importing the older messages may use'), self._SH_ImportSpeedChosen)
+        self.backlog_line = ProgressLine(self.progress_area, font, self.import_speed_button)
+        self.decryption_speed_button, self.decryption_speed_group = self._speed_button(
+            font, BackgroundDecryptor.speed_names, BackgroundDecryptor.speed_descriptions,
+            translate('main_window', 'How much CPU decrypting stored messages may use'), self._SH_DecryptionSpeedChosen)
+        self.decryption_line = ProgressLine(self.progress_area, font, self.decryption_speed_button)
+        for line in (self.journal_line, self.backlog_line, self.decryption_line):
+            progress_layout.addWidget(line)
+        self.window_layout.insertWidget(self.window_layout.indexOf(self.identity_widget) + 1, self.progress_area)
+        self._decryption_progress = None        # (done, total, speed, eta) of the background decryption, while it runs
+        self._backlog_progress = None           # (done, total, account, phase) of the older history of a first sync, while it runs
 
         # the message pane, right of the contact list (which becomes the conversation switcher);
         # closed at start whatever it was when Blink quit, so starting never shows (and reads) a conversation
@@ -1662,60 +1684,81 @@ class MainWindow(base_class, ui_class):
             self.raise_()
             self.activateWindow()
 
-    # The progress bar under the account selector: the journal download and import, and when
-    # none is going on the background decryption of stored messages (blink.pgp_decryptor)
+    # The progress lines under the account selector (ProgressLine): the journal run, the older
+    # history of a first sync, the background decryption (blink.pgp_decryptor), each on its own
+
+    def _speed_button(self, font, names, descriptions, tooltip, slot):
+        """A button with a menu of speeds (and Pause / Resume), for beside a progress bar."""
+        button = QToolButton(self)
+        button.setFont(font)
+        button.setAutoRaise(True)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        # the style's menu arrow is drawn over the text of a small button: a ▾ in the text instead
+        button.setStyleSheet('QToolButton::menu-indicator { image: none; width: 0px; }')
+        button.setToolTip(tooltip)
+        menu = QMenu(button)
+        group = QActionGroup(menu)
+        for speed, name in names:
+            action = menu.addAction(translate('main_window', name))
+            action.setToolTip(translate('main_window', descriptions[speed]))
+            action.setStatusTip(action.toolTip())
+            action.setData(speed)
+            action.setCheckable(True)
+            group.addAction(action)
+            if speed == 'paused':
+                menu.insertSeparator(action)
+        menu.setToolTipsVisible(True)
+        group.triggered.connect(slot)
+        button.setMenu(menu)
+        return button, group
+
+    @staticmethod
+    def _update_speed_button(button, group, speed, names, descriptions):
+        # the menu says what to do (Pause), the button what is (Paused)
+        for action in group.actions():
+            if action.data() == 'paused':
+                action.setText(translate('main_window', 'Resume' if speed == 'paused' else 'Pause'))
+                action.setToolTip(translate('main_window', 'Go on at the speed it had before' if speed == 'paused' else descriptions['paused']))
+                action.setChecked(False)
+            else:
+                action.setChecked(action.data() == speed)
+        button.setText(translate('main_window', 'Paused' if speed == 'paused' else dict(names).get(speed, 'Normal')) + ' \u25be')
 
     def _NH_BlinkJournalProgress(self, notification):
         phase = notification.data.phase
         if phase == 'done':
-            self._journal_in_progress = False
-            self._show_idle_progress()
+            self.journal_line.hide_progress()
             return
-        self._journal_in_progress = True
-        self.decryption_speed_button.hide()
-        self.import_speed_button.hide()
-        account = notification.sender.id
-        done, total = notification.data.done or 0, notification.data.total
         if phase == 'download':
             labels = (translate('main_window', 'Downloading messages'), translate('main_window', 'Downloading'))
         else:
             labels = (translate('main_window', 'Importing messages'), translate('main_window', 'Importing'))
-        self._show_progress(labels, done, total, account)
+        self.journal_line.show_progress(labels, notification.data.done or 0, notification.data.total, notification.sender.id)
 
     def _NH_BlinkJournalBacklogProgress(self, notification):
-        # the older pages of a first sync, in the background: shown while no journal run is
         if notification.data.phase == 'done':
             self._backlog_progress = None
-            if not self._journal_in_progress:
-                self._show_idle_progress()
+            self.backlog_line.hide_progress()
             return
         self._backlog_progress = (notification.data.done or 0, notification.data.total, notification.sender.id, notification.data.phase)
-        if not self._journal_in_progress:
-            self._show_backlog_progress()
+        self._show_backlog_progress()
 
     def _show_backlog_progress(self):
         done, total, account, phase = self._backlog_progress
-        self.decryption_speed_button.hide()
         speed = MessageManager().journal_import_speed
         if phase == 'download':
-            self.import_speed_button.hide()
+            self.import_speed_button.hide()     # the network only: nothing to slow down
             labels = (translate('main_window', 'Downloading older messages'), translate('main_window', 'Older messages'))
         else:
-            names = dict(MessageManager.journal_import_speed_names)
-            for action in self.import_speed_group.actions():
-                if action.data() == 'paused':
-                    action.setText(translate('main_window', 'Resume' if speed == 'paused' else 'Pause'))
-                    action.setToolTip(translate('main_window', 'Go on at the speed it had before' if speed == 'paused' else MessageManager.journal_import_speed_descriptions['paused']))
-                    action.setChecked(False)
-                else:
-                    action.setChecked(action.data() == speed)
-            self.import_speed_button.setText(translate('main_window', 'Paused' if speed == 'paused' else names.get(speed, 'Normal')) + ' \u25be')
+            self._update_speed_button(self.import_speed_button, self.import_speed_group, speed,
+                                      MessageManager.journal_import_speed_names, MessageManager.journal_import_speed_descriptions)
             self.import_speed_button.show()
             if speed == 'paused':
                 labels = (translate('main_window', 'Importing older messages paused'), translate('main_window', 'Older messages paused'), translate('main_window', 'Paused'))
             else:
                 labels = (translate('main_window', 'Importing older messages'), translate('main_window', 'Older messages'))
-        self._show_progress(labels, done, total, account)
+        self.backlog_line.show_progress(labels, done, total, account)
 
     def _SH_ImportSpeedChosen(self, action):
         manager = MessageManager()
@@ -1725,49 +1768,28 @@ class MainWindow(base_class, ui_class):
             manager.set_journal_import_speed(action.data())
 
     def _NH_BlinkJournalImportSpeedDidChange(self, notification):
-        if self._backlog_progress is not None and not self._journal_in_progress:
-            self._show_backlog_progress()
-
-    def _show_idle_progress(self):
-        """No journal run: the older first sync pages, else the background decryption, else nothing."""
         if self._backlog_progress is not None:
             self._show_backlog_progress()
-        elif self._decryption_progress is not None:
-            self._show_decryption_progress()
-        else:
-            self._hide_progress()
 
     def _NH_BlinkBackgroundDecryptionProgress(self, notification):
         if notification.data.phase == 'done':
             self._decryption_progress = None
-            if not self._journal_in_progress:
-                self._show_idle_progress()
+            self.decryption_line.hide_progress()
             return
         self._decryption_progress = (notification.data.done or 0, notification.data.total, getattr(notification.data, 'speed', 'normal'), getattr(notification.data, 'eta', None))
-        if not self._journal_in_progress and self._backlog_progress is None:
-            self._show_decryption_progress()
+        self._show_decryption_progress()
 
     def _show_decryption_progress(self):
         from blink.pgp_decryptor import BackgroundDecryptor
         done, total, speed, eta = self._decryption_progress
-        names = dict(BackgroundDecryptor.speed_names)
-        for action in self.decryption_speed_group.actions():
-            if action.data() == 'paused':
-                # Pause while it runs, Resume (back to the speed before) while paused
-                action.setText(translate('main_window', 'Resume' if speed == 'paused' else 'Pause'))
-                action.setToolTip(translate('main_window', 'Go on at the speed it had before' if speed == 'paused' else BackgroundDecryptor.speed_descriptions['paused']))
-                action.setChecked(False)
-            else:
-                action.setChecked(action.data() == speed)
-        # the menu says what to do (Pause), the button what is (Paused)
-        self.decryption_speed_button.setText(translate('main_window', 'Paused' if speed == 'paused' else names.get(speed, 'Normal')) + ' \u25be')
-        self.import_speed_button.hide()
+        self._update_speed_button(self.decryption_speed_button, self.decryption_speed_group, speed,
+                                  BackgroundDecryptor.speed_names, BackgroundDecryptor.speed_descriptions)
         self.decryption_speed_button.show()
         if speed == 'paused':
             labels = (translate('main_window', 'Decrypting messages paused'), translate('main_window', 'Decrypting paused'), translate('main_window', 'Paused'))
         else:
             labels = (translate('main_window', 'Decrypting messages'), translate('main_window', 'Decrypting'))
-        self._show_progress(labels, done, total, extra=eta)
+        self.decryption_line.show_progress(labels, done, total, extra=eta)
 
     def _SH_DecryptionSpeedChosen(self, action):
         from blink.pgp_decryptor import BackgroundDecryptor
@@ -1776,47 +1798,6 @@ class MainWindow(base_class, ui_class):
             decryptor.resume()
         else:
             decryptor.set_speed(action.data())
-
-    def _hide_progress(self):
-        self._progress_shown = None
-        self.journal_progress_timer.stop()
-        self.progress_row.hide()
-        self.decryption_speed_button.hide()
-        self.import_speed_button.hide()
-
-    def _show_progress(self, labels, done, total, account=None, extra=None):
-        """labels: the label, longest first, then shorter ones: the longest text that fits the bar is
-        shown (with the percentage when there is room), else the count alone, elided if need be."""
-        bar = self.journal_progress
-        if not self.progress_row.isVisible() and not self.journal_progress_timer.isActive():
-            self.journal_progress_timer.start()
-        self._progress_shown = (labels, done, total, account, extra)
-        if total:
-            bar.setRange(0, total)
-            bar.setValue(min(done, total))
-            count = f'{min(done, total)}/{total}'
-            percent = f' ({min(done, total) * 100 // total}%)'
-            candidates = [f'{label} {count}{percent}' for label in labels] + [f'{label} {count}' for label in labels] + [count]
-        else:
-            # the total is not known (a server without X-Sylk-Journal-Remaining); not the busy mode
-            # (range 0, 0): most styles draw no text in it, and the count is the point
-            bar.setRange(0, 1)
-            bar.setValue(0)
-            candidates = [f'{label} {done}' for label in labels] + [str(done)]
-        metrics = bar.fontMetrics()
-        room = max(0, bar.contentsRect().width() - 12)
-        text = next((candidate for candidate in candidates if metrics.horizontalAdvance(candidate) <= room), None)
-        if text is None:
-            text = metrics.elidedText(candidates[-1], Qt.TextElideMode.ElideRight, room) if room else ''
-        bar.setFormat(text)     # no %v/%m/%p left in it: the numbers are written in
-        of = f' of {account}' if account else ''
-        bar.setToolTip((f'{labels[0]}{of}: {done} of {total}' if total else f'{labels[0]}{of}: {done}') + (f'\n{extra}' if extra else ''))
-
-    def eventFilter(self, watched, event):
-        from PyQt6.QtCore import QEvent
-        if watched is getattr(self, 'journal_progress', None) and event.type() == QEvent.Type.Resize and self._progress_shown is not None:
-            self._show_progress(*self._progress_shown)      # the text that fits the new width
-        return super().eventFilter(watched, event)
 
     @run_in_gui_thread
     def handle_notification(self, notification):

@@ -4184,6 +4184,8 @@ class Contact(object):
             # In the Messages group a row is a conversation, and a Bonjour
             # conversation is the neighbour's instance id.
             in_messages_group = is_messages_group(getattr(self.group, 'settings', None))
+            if self.type != 'bonjour' and is_deleted_contact(self.settings):
+                return self.uri.uri         # a deleted contact: its address, not its conversation
             # in every group: they are typing, else the last typed message of the conversation, when there is one
             from blink.history import ConversationPreviews, ConversationTyping
             keys = self.conversation_keys
