@@ -1,0 +1,1 @@
+Bonjour Support==========To use Bonjour networking with Blink you must install the Apple Bonjour SDK.The SDK installer will be launched after Blink installation has been completed if it's not already installed. You must be logged in as a system Administrator to perform this operation.

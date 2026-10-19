@@ -9,10 +9,6 @@ Copyright AG Projects https://ag-projects.com
 Blink Qt is a state of the art, easy to use SIP client for Linux, Mac and
 Windows. Python3 and Qt6 are required to run the software.
 
-The code base for the MS Windows version is available at:
-
-https://github.com/AGProjects/blink-qt5-windows
-
 
 Features
 --------
@@ -35,9 +31,7 @@ Building
 
 Building instructions for Mac are available in macos/ folder.
 
-Building instructions for Windows are available at:
-
-https://github.com/AGProjects/blink-qt5-windows/windows/README.md
+Building instructions for Windows are available in windows/README.md.
 
 
 Support

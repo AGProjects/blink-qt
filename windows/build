@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# Build the Windows installer: run from the repository root in an MSYS2 UCRT64 shell.
+#   windows/build            executable and installer
+#   windows/build --exe      executable only (dist/blink/blink.exe)
+#
+# The installer needs Inno Setup 6; set ISCC if it is not in its default place.
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+if [ "$MSYSTEM" != "UCRT64" ]; then
+    echo "Run this from an MSYS2 UCRT64 shell (MSYSTEM is '$MSYSTEM')" >&2
+    exit 1
+fi
+
+version=$(python3 -c "exec(open('blink/__info__.py').read()); print(__version__)")
+echo "Building Blink $version"
+
+python3 -m PyInstaller windows/blink.spec --noconfirm --clean --distpath dist --workpath build/pyinstaller
+
+[ "$1" = "--exe" ] && exit 0
+
+ISCC=${ISCC:-"/c/Program Files (x86)/Inno Setup 6/ISCC.exe"}
+if [ ! -x "$ISCC" ]; then
+    echo "Inno Setup compiler not found at $ISCC: install Inno Setup 6 or set ISCC" >&2
+    exit 1
+fi
+"$ISCC" "/DAppVersion=$version" "$(cygpath -w windows/setup.iss)"
+
+echo "Installer: dist/Blink-Installer-$version.exe"

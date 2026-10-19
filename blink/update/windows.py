@@ -1,5 +1,6 @@
 
 import os
+import sys
 
 from ctypes import c_char_p, c_wchar_p, CDLL
 from ctypes.util import find_library
@@ -11,12 +12,13 @@ from blink.update import IUpdateManager
 
 def library_locations(name):
     library_name = '%s.dll' % (name)
-    additional_paths = ['.']
+    # a frozen Blink keeps its DLLs next to its Python modules (lib\ beside blink.exe)
+    additional_paths = [getattr(sys, '_MEIPASS', None), os.path.dirname(os.path.realpath(sys.executable)), '.']
 
     library = find_library(library_name)
     if library is not None:
         yield library
-    for path in additional_paths:
+    for path in filter(None, additional_paths):
         yield os.path.join(path, library_name)
 
 
