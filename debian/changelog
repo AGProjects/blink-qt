@@ -1,3 +1,9 @@
+blink (7.1.5) unstable; urgency=medium
+
+  * Fix for missing fonts 
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Mon, 19 Oct 2026 14:34:42 -0300
+
 blink (7.1.4) unstable; urgency=medium
 
   * Fixes for deleted contacts
