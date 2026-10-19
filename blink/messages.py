@@ -1532,8 +1532,63 @@ class MessageManager(object, metaclass=Singleton):
         self._apply_snapshot_backlog(account)
 
     journal_backlog_pause = 1.0     # seconds between two older pages of a first sync, so live work goes first
-    journal_backlog_batch = 50      # older entries between two pauses
-    journal_backlog_duty = 2.0      # each pause is twice the time the batch took: the import works a third of the time
+    # The speed of the older history import, chosen by the user (the button by the progress bar):
+    # entries per batch, and the pause after a batch as a multiple of the time it took
+    journal_import_speeds = {
+        'fast':   (250, 0.0),       # the pace of a normal sync
+        'normal': (50, 2.0),        # a third of the time
+        'gentle': (20, 6.0),        # a seventh of the time
+    }
+    journal_import_speed_names = (('fast', 'Fast'), ('normal', 'Normal'), ('gentle', 'Gentle'), ('paused', 'Pause'))     # as in the menu
+    journal_import_speed_descriptions = {
+        'fast': 'As fast as it can, finishes soonest',
+        'normal': 'Works a third of the time',
+        'gentle': 'Hardly noticeable, takes longest',
+        'paused': 'Stopped until resumed',
+    }
+    journal_import_speed_file = 'journal_import_speed'     # <data>/journal_import_speed: '<speed> <speed before a pause>'
+
+    def _backlog_pace(self):
+        return self.journal_import_speeds.get(self.journal_import_speed, self.journal_import_speeds['normal'])
+
+    @property
+    def journal_import_speed(self):
+        try:
+            return self._journal_import_speed
+        except AttributeError:
+            self._journal_import_speed, self._journal_import_resume = 'normal', 'normal'
+            try:
+                with open(ApplicationData.get(self.journal_import_speed_file)) as file:
+                    words = file.read().split()
+            except OSError:
+                words = []
+            if words and (words[0] in self.journal_import_speeds or words[0] == 'paused'):
+                self._journal_import_speed = words[0]
+            if len(words) > 1 and words[1] in self.journal_import_speeds:
+                self._journal_import_resume = words[1]
+            elif self._journal_import_speed in self.journal_import_speeds:
+                self._journal_import_resume = self._journal_import_speed
+            return self._journal_import_speed
+
+    def set_journal_import_speed(self, speed):
+        """The speed of the older history import; 'paused' stops it between batches until resumed."""
+        current = self.journal_import_speed
+        if speed == current or not (speed in self.journal_import_speeds or speed == 'paused'):
+            return
+        self._journal_import_speed = speed
+        if speed in self.journal_import_speeds:
+            self._journal_import_resume = speed
+        try:
+            with open(ApplicationData.get(self.journal_import_speed_file), 'w') as file:
+                file.write(f'{speed} {self._journal_import_resume}\n')
+        except OSError as e:
+            ActivityLog().warning(f'[journal] Cannot keep the import speed: {e}')
+        ActivityLog().info('[journal] Older history import paused' if speed == 'paused' else f'[journal] Older history import speed: {dict(self.journal_import_speed_names)[speed]}')
+        NotificationCenter().post_notification('BlinkJournalImportSpeedDidChange', sender=self, data=NotificationData(speed=speed))
+
+    def resume_journal_import(self):
+        self.journal_import_speed
+        self.set_journal_import_speed(self._journal_import_resume)
 
     @run_in_thread('journal-backlog')
     def _apply_snapshot_backlog(self, account):
@@ -1644,7 +1699,7 @@ class MessageManager(object, metaclass=Singleton):
                 progress('done')
                 return
             try:
-                self._apply_snapshot_page(account, cache, name, contacts, batch=self.journal_backlog_batch, duty=self.journal_backlog_duty)
+                self._apply_snapshot_page(account, cache, name, contacts, pace=self._backlog_pace)
             except JournalInterrupted:
                 progress('done')
                 return
@@ -1685,7 +1740,7 @@ class MessageManager(object, metaclass=Singleton):
                 try:
                     self._apply_snapshot_page(account, older, name, contacts,
                                               progress=lambda index, total, db_wait=0.0: progress('apply', before + index),
-                                              batch=self.journal_backlog_batch, duty=self.journal_backlog_duty)
+                                              pace=self._backlog_pace)
                 except JournalInterrupted:
                     progress('done')
                     return
@@ -1875,7 +1930,7 @@ class MessageManager(object, metaclass=Singleton):
         NotificationCenter().post_notification('BlinkJournalProgress', sender=account, data=NotificationData(phase=phase, done=done, total=total))
 
     def _apply_server_history_messages(self, account, messages, first_sync=False, contacts=None, stats=None, progress=None, mark_synced=True,
-                                       batch=None, duty=None):
+                                       batch=None, duty=None, pace=None):
         """Apply journal entries by content type (blink.journal.journal_action). Runs in the sync thread.
 
         Bulk mode: nothing here creates a conversation or decrypts; an entry for a
@@ -1895,9 +1950,13 @@ class MessageManager(object, metaclass=Singleton):
         stored = MessageHistory().stored_message_ids(message.get('message_id') for message in messages)
         db_wait = 0.0       # seconds waited for the db thread (stats of the journal log)
         # batch: entries between pauses; duty: the pause is this many times the time the batch took
-        # (2.0: busy a third of the time), for work in the background that must not hog the CPU
+        # (2.0: busy a third of the time), for work in the background that must not hog the CPU;
+        # pace: a callable giving (batch, duty) again after every pause, as the user changes it
+        if pace is not None:
+            batch, duty = pace()
         batch = batch or self.journal_progress_every
         batch_started = time.monotonic()
+        in_batch = 0
         for index, message in enumerate(messages, 1):
             if self.quitting:
                 # what fails while Blink stops would be counted as failed and the page deleted with it
@@ -1918,7 +1977,9 @@ class MessageManager(object, metaclass=Singleton):
             outcomes[outcome] += 1
             if stats is not None:
                 stats.entry(content_type, outcome, message.get('contact'), message.get('direction'), message.get('timestamp'))
-            if index % batch == 0:
+            in_batch += 1
+            if in_batch >= batch:
+                in_batch = 0
                 # wait for the db thread to store what was queued: the queue stays short, so a
                 # conversation opened meanwhile loads between batches, not after the whole run;
                 # the contact list and the open conversation hear of the batch once per conversation
@@ -1932,6 +1993,10 @@ class MessageManager(object, metaclass=Singleton):
                     progress(index, len(messages), db_wait)
                 busy = time.monotonic() - batch_started
                 time.sleep(max(self.journal_throttle, busy * duty) if duty else self.journal_throttle)
+                if pace is not None:
+                    while self.journal_import_speed == 'paused' and not self.quitting:
+                        time.sleep(0.5)     # paused by the user (the button by the progress bar)
+                    batch, duty = pace()
                 batch_started = time.monotonic()
         MessageHistory().flush_batched_stores()
         MessageHistory().wait_for_writes()

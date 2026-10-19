@@ -85,6 +85,7 @@ class MainWindow(base_class, ui_class):
         notification_center.add_observer(self, name='BlinkMessagePaneDidReadConversation')
         notification_center.add_observer(self, name='BlinkJournalProgress')
         notification_center.add_observer(self, name='BlinkJournalBacklogProgress')
+        notification_center.add_observer(self, name='BlinkJournalImportSpeedDidChange')
         notification_center.add_observer(self, name='BlinkBackgroundDecryptionProgress')
 
         notification_center.add_observer(self, sender=AccountManager())
@@ -385,6 +386,31 @@ class MainWindow(base_class, ui_class):
         self.decryption_speed_button.setMenu(self.decryption_speed_menu)
         self.decryption_speed_button.hide()
         progress_layout.addWidget(self.decryption_speed_button)
+        # the same for the import of the older history of a first sync (MessageManager.set_journal_import_speed)
+        self.import_speed_button = QToolButton(self.progress_row)
+        self.import_speed_button.setFont(font)
+        self.import_speed_button.setAutoRaise(True)
+        self.import_speed_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.import_speed_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.import_speed_button.setStyleSheet('QToolButton::menu-indicator { image: none; width: 0px; }')
+        self.import_speed_button.setFixedHeight(self.journal_progress.height())
+        self.import_speed_button.setToolTip(translate('main_window', 'How much CPU importing the older messages may use'))
+        self.import_speed_menu = QMenu(self.import_speed_button)
+        self.import_speed_group = QActionGroup(self.import_speed_menu)
+        for speed, name in MessageManager.journal_import_speed_names:
+            action = self.import_speed_menu.addAction(translate('main_window', name))
+            action.setToolTip(translate('main_window', MessageManager.journal_import_speed_descriptions[speed]))
+            action.setStatusTip(action.toolTip())
+            action.setData(speed)
+            action.setCheckable(True)
+            self.import_speed_group.addAction(action)
+            if speed == 'paused':
+                self.import_speed_menu.insertSeparator(action)
+        self.import_speed_menu.setToolTipsVisible(True)
+        self.import_speed_group.triggered.connect(self._SH_ImportSpeedChosen)
+        self.import_speed_button.setMenu(self.import_speed_menu)
+        self.import_speed_button.hide()
+        progress_layout.addWidget(self.import_speed_button)
         self.progress_row.hide()
         self._progress_shown = None         # the last (labels, done, total): drawn again to fit when the bar is resized
         self.journal_progress.installEventFilter(self)
@@ -1647,6 +1673,7 @@ class MainWindow(base_class, ui_class):
             return
         self._journal_in_progress = True
         self.decryption_speed_button.hide()
+        self.import_speed_button.hide()
         account = notification.sender.id
         done, total = notification.data.done or 0, notification.data.total
         if phase == 'download':
@@ -1669,11 +1696,37 @@ class MainWindow(base_class, ui_class):
     def _show_backlog_progress(self):
         done, total, account, phase = self._backlog_progress
         self.decryption_speed_button.hide()
+        speed = MessageManager().journal_import_speed
         if phase == 'download':
+            self.import_speed_button.hide()
             labels = (translate('main_window', 'Downloading older messages'), translate('main_window', 'Older messages'))
         else:
-            labels = (translate('main_window', 'Importing older messages'), translate('main_window', 'Older messages'))
+            names = dict(MessageManager.journal_import_speed_names)
+            for action in self.import_speed_group.actions():
+                if action.data() == 'paused':
+                    action.setText(translate('main_window', 'Resume' if speed == 'paused' else 'Pause'))
+                    action.setToolTip(translate('main_window', 'Go on at the speed it had before' if speed == 'paused' else MessageManager.journal_import_speed_descriptions['paused']))
+                    action.setChecked(False)
+                else:
+                    action.setChecked(action.data() == speed)
+            self.import_speed_button.setText(translate('main_window', 'Paused' if speed == 'paused' else names.get(speed, 'Normal')) + ' \u25be')
+            self.import_speed_button.show()
+            if speed == 'paused':
+                labels = (translate('main_window', 'Importing older messages paused'), translate('main_window', 'Older messages paused'), translate('main_window', 'Paused'))
+            else:
+                labels = (translate('main_window', 'Importing older messages'), translate('main_window', 'Older messages'))
         self._show_progress(labels, done, total, account)
+
+    def _SH_ImportSpeedChosen(self, action):
+        manager = MessageManager()
+        if action.data() == 'paused' and manager.journal_import_speed == 'paused':
+            manager.resume_journal_import()
+        else:
+            manager.set_journal_import_speed(action.data())
+
+    def _NH_BlinkJournalImportSpeedDidChange(self, notification):
+        if self._backlog_progress is not None and not self._journal_in_progress:
+            self._show_backlog_progress()
 
     def _show_idle_progress(self):
         """No journal run: the older first sync pages, else the background decryption, else nothing."""
@@ -1708,6 +1761,7 @@ class MainWindow(base_class, ui_class):
                 action.setChecked(action.data() == speed)
         # the menu says what to do (Pause), the button what is (Paused)
         self.decryption_speed_button.setText(translate('main_window', 'Paused' if speed == 'paused' else names.get(speed, 'Normal')) + ' \u25be')
+        self.import_speed_button.hide()
         self.decryption_speed_button.show()
         if speed == 'paused':
             labels = (translate('main_window', 'Decrypting messages paused'), translate('main_window', 'Decrypting paused'), translate('main_window', 'Paused'))
@@ -1728,6 +1782,7 @@ class MainWindow(base_class, ui_class):
         self.journal_progress_timer.stop()
         self.progress_row.hide()
         self.decryption_speed_button.hide()
+        self.import_speed_button.hide()
 
     def _show_progress(self, labels, done, total, account=None, extra=None):
         """labels: the label, longest first, then shorter ones: the longest text that fits the bar is
