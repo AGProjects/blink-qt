@@ -1009,7 +1009,7 @@ class MessageManager(object, metaclass=Singleton):
 
     _journal_unverified_logged = False
     journal_since_years = 5     # how far back the history of a new device goes, as sylk mobile does
-    journal_recent_days = 7     # a first sync downloads and applies these last days, then it is finished; the older
+    journal_recent_days = 30    # a first sync downloads and applies these last days, then it is finished; the older
                                 # history is downloaded and applied in the background after it (_apply_snapshot_backlog)
     journal_max_pages = 200     # pages per run; the next run continues from the cursor
 
@@ -3537,16 +3537,18 @@ class MessageManager(object, metaclass=Singleton):
                                       notification=DeliveryNotification('delivered'))
         self._send_message(OutgoingMessage(account, contact, content, IMDNDocument.content_type, sessionless=True))
 
-    @staticmethod
-    def _before_first_sync(account, message_id, timestamp, state):
-        """A device never sends a receipt for a message older than its first sync of the account:
-        it was sent before this device had the account, its sender was answered by the others."""
+    def _before_first_sync(self, account, message_id, timestamp, state):
+        """A device never sends a receipt for a message older than the recent days of its first sync
+        of the account (journal_recent_days before it started): the older history is archive, its
+        senders were answered by the other devices. A recent message read or received here is
+        confirmed as on any device."""
         if account is None or account is BonjourAccount():
             return False
         from blink.history import first_sync_date
-        since = first_sync_date(account.id)
-        if since is None:
+        started = first_sync_date(account.id)
+        if started is None:
             return False
+        since = started - timedelta(days=self.journal_recent_days)
         try:
             when = timestamp if isinstance(timestamp, datetime) else ISOTimestamp(timestamp)
             older = when < since

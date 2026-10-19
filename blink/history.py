@@ -486,23 +486,13 @@ def first_sync_pending(account_id=None):
         return False
 
 
-def first_sync_start(account_id):
-    """When the first journal sync of the account started (the time written in its marker),
-    None when it is not running. What is older came from history, not live."""
-    try:
-        with open(ApplicationData.get(os.path.join('journal', str(account_id), FIRST_SYNC_MARKER))) as marker:
-            return ISOTimestamp(marker.read().strip())
-    except Exception:
-        return None
-
-
 FIRST_SYNC_DATE = 'first-sync.date'
 
 
 def first_sync_date(account_id):
     """When this device's first journal sync of the account started (journal/<account>/first-sync.date,
     kept for ever), None when not known (an account synced before it was kept, Bonjour).
-    What is older was sent before this device had the account: it never sends a receipt for it."""
+    No receipt is ever sent for a message older than its recent days (MessageManager._before_first_sync)."""
     try:
         with open(ApplicationData.get(os.path.join('journal', str(account_id), FIRST_SYNC_DATE))) as file:
             return ISOTimestamp(file.read().strip())
