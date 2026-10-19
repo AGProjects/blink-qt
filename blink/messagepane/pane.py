@@ -946,8 +946,8 @@ class MessagePane(QWidget):
             font.setPointSizeF(max(font.pointSizeF() + self._font_delta(), 6))
         # colour emoji fonts after the text font: Qt's own fallback does not always reach them
         # (Qt 6.4 on XWayland draws an empty box), and a reaction is an emoji alone in its bubble
-        from blink.messagepane.reactions import EMOJI_FAMILIES
-        font.setFamilies([font.family()] + [family for family in EMOJI_FAMILIES if family != font.family()])
+        from blink.messagepane.reactions import text_with_emoji_families
+        font = text_with_emoji_families(font)
         self.transcript.setFont(font)
         self.composer.edit.setFont(font)
 

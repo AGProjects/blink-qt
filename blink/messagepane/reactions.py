@@ -15,7 +15,7 @@ and messages that failed are not reacted to.
 import unicodedata
 
 from PyQt6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QFont, QFontMetrics, QGuiApplication, QTextCharFormat, QTextCursor
+from PyQt6.QtGui import QFont, QFontInfo, QFontMetrics, QGuiApplication, QTextCharFormat, QTextCursor
 from PyQt6.QtWidgets import (QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QScrollArea, QStackedWidget, QToolButton, QVBoxLayout,
                              QWidget, QWidgetAction)
 
@@ -104,9 +104,27 @@ CATEGORIES = (
 EMOJI_FAMILIES = ('Noto Color Emoji', 'Twemoji', 'JoyPixels', 'Apple Color Emoji', 'Segoe UI Emoji')
 
 
+def resolved_family(font):
+    """The installed family font is drawn from. QApplication.font().family() can be a fontconfig
+    alias ('Sans Serif') or a family that is not installed; at the head of a setFamilies() list such
+    a name matches nothing, so Qt takes the next entry: Noto Color Emoji, whose space, digits, '#'
+    and '*' (for keycaps) are wide emoji cells, the rest falling back to the default text font."""
+    probe = QFont(font)
+    probe.setFamilies([font.family()])
+    return QFontInfo(probe).family()
+
+
+def text_with_emoji_families(font):
+    """font with the colour emoji fonts after its (resolved) text family."""
+    family = resolved_family(font)
+    font = QFont(font)
+    font.setFamilies([family] + [name for name in EMOJI_FAMILIES if name != family])
+    return font
+
+
 def emoji_font(point_size):
     font = QFont(QGuiApplication.font())
-    font.setFamilies(list(EMOJI_FAMILIES) + [QGuiApplication.font().family()])
+    font.setFamilies(list(EMOJI_FAMILIES) + [resolved_family(QGuiApplication.font())])
     font.setPointSizeF(point_size)
     return font
 
