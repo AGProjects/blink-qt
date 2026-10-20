@@ -4255,11 +4255,13 @@ class Contact(object):
 
     @property
     def unread_messages(self):
-        main_window = QApplication.instance().main_window
+        """The unread messages of all the contact's addresses: its row is one conversation, as in
+        the message pane, and history counts them under the conversation keys, not the addresses."""
         try:
-            return main_window.unread_messages[self.uri.uri]
-        except (KeyError, AttributeError):
+            counts = QApplication.instance().main_window.unread_messages
+        except AttributeError:
             return 0
+        return sum(counts.get(key, 0) for key in self.conversation_keys)
 
     @property
     def location(self):
@@ -5646,9 +5648,34 @@ class ContactModel(QAbstractListModel):
             return
         total = QApplication.instance().main_window.total_unread_messages
         group.set_unread(total)
+        self._log_unread_messages(group, total)
         if total and groups[0] is not group:
             self.moveGroup(group, groups[0])
             ActivityLog().info(f'[contacts] Moved the Messages group to the top of the contact list: {total} unread messages')
+
+    def _log_unread_messages(self, group, total):
+        """Which conversation has how many unread messages, and the row of the Messages group
+        that shows it: a count with no row there is one the group adds up but nobody can see."""
+        counts = {key: count for key, count in QApplication.instance().main_window.unread_messages.items() if count}
+        summary = (total, tuple(sorted(counts.items())))
+        if summary == getattr(self, '_unread_log_summary', None):
+            return
+        self._unread_log_summary = summary
+        activity = ActivityLog()
+        activity.info(f'[contacts] Messages group: {total} unread messages in {len(counts)} conversations')
+        rows = [item for item in self.items if isinstance(item, Contact)]
+        for key, count in sorted(counts.items()):
+            matches = [item for item in rows if key in item.conversation_keys]
+            in_group = [item for item in matches if item.group is group]
+            if not in_group:
+                elsewhere = ', '.join(f'{item.name!r} in {getattr(item.group, "name", "?")!r}' for item in matches) or 'no contact'
+                activity.info(f'[contacts]   {key}: {count} unread, no row in Messages ({elsewhere})')
+                continue
+            for item in in_group:
+                badge = item.unread_messages
+                state = 'hidden' if self.row_hidden(item) else 'shown'
+                note = '' if badge == count else f', badge shows {badge}'
+                activity.info(f'[contacts]   {key}: {count} unread, {item.name!r} ({state}{note})')
 
     def _NH_BlinkMessagesGroupShouldPromote(self, notification):
         groups = self.items[GroupList]
