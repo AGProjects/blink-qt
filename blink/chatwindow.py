@@ -52,6 +52,7 @@ from blink.messagepane.files import local_file
 from blink.messagepane.header import contact_photo, draw_avatar
 from blink.messagepane.view import TranscriptView
 from blink.messages import MessageManager, BlinkMessage, msrp_message_id, send_msrp_message
+from blink import radio_ptt
 from blink.resources import IconManager, Resources, ui_settings
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, BlinkFileTransfer, conference_has_files, session_can_expand
@@ -210,13 +211,14 @@ class ChatComposer(Composer):
     def connected(self):
         return self.edit.isEnabled()
 
-    def set_connected(self, connected):
+    def set_connected(self, connected, reason=None):
         """Typing only into a connected chat: otherwise the text field and the send button are
-        disabled, the placeholder saying so. Attaching stays: a file goes in an MSRP file transfer
-        of its own, without the chat (set_files_allowed hides it where it cannot go)."""
+        disabled, the placeholder saying why (reason, else not connected). Attaching stays: a file
+        goes in an MSRP file transfer of its own, without the chat (set_files_allowed hides it where
+        it cannot go)."""
         self.edit.setEnabled(connected)
         self.send_button.setEnabled(connected and bool(self.text().strip()))
-        self.edit.setPlaceholderText(self._placeholder if connected else translate('chat_window', 'Not connected, messages can be sent while connected'))
+        self.edit.setPlaceholderText(self._placeholder if connected else (reason or translate('chat_window', 'Not connected, messages can be sent while connected')))
 
     def setFocus(self, *args):
         self.edit.setFocus(*args)
@@ -416,6 +418,20 @@ class ChatWidget(QWidget):
             if position >= 0:
                 row.insertWidget(position, self.header_chat_button)     # chat, then audio: one segmented control
                 break
+        # push to talk, right after the room's name; shown and driven by the window (ChatWindow._update_radio_ptt)
+        self.radio_ptt_button = QToolButton(header)
+        self.radio_ptt_button.setObjectName('radio_ptt_button')
+        self.radio_ptt_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.radio_ptt_button.setAutoRaise(True)
+        self.radio_ptt_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.radio_ptt_button.setMinimumHeight(30)
+        self.radio_ptt_button.setIconSize(QSize(22, 22))
+        self.radio_ptt_button.hide()
+        for row in header.findChildren(QHBoxLayout):
+            position = row.indexOf(header.account_button)
+            if position >= 0:
+                row.insertWidget(position, self.radio_ptt_button)
+                break
         header.fontStep.connect(self._SH_FontStep)
         self._header_conversation = None
 
@@ -431,6 +447,10 @@ class ChatWidget(QWidget):
         if conversation != self._header_conversation:
             self._header_conversation = conversation
             self.header.set_conversation(blink_session.contact, blink_session.contact_uri, session_conversation_key(blink_session), blink_session.account)
+            room_title = blink_session.conference_title
+            if room_title is not None and not mangling_enabled():
+                self.header.name_label.setText(room_title)      # a room: its own name, else Room <room>
+                self.header.name_label.setToolTip(room_title)
             self.header.lock_button.hide()
         state = str(blink_session.state or '')
         idle = state in ('', 'initialized', 'ended', 'deleted')
@@ -499,7 +519,10 @@ class ChatWidget(QWidget):
                     self.session.end()
             else:
                 self._log_header_action('Add audio to')
-                blink_session.add_stream(StreamDescription('audio'))
+                if 'chat' in streams:
+                    blink_session.add_stream(StreamDescription('audio'))
+                else:
+                    blink_session.add_streams([StreamDescription('audio'), StreamDescription('chat')])     # audio here always comes with MSRP chat
         self.update_header()
 
     def _SH_FontStep(self, step):
@@ -542,10 +565,11 @@ class ChatWidget(QWidget):
         (and after it ends, or the chat stream is removed) it is disabled."""
         session = self.session
         blink_session = session.blink_session if session is not None else None
-        ready = (blink_session is not None and str(blink_session.state or '').startswith('connected')
-                 and session.chat_stream is not None)
+        connected = blink_session is not None and str(blink_session.state or '').startswith('connected')
+        ready = connected and session.chat_stream is not None
         was_ready = self.chat_input.connected
-        self.chat_input.set_connected(ready)
+        reason = translate('chat_window', 'Connected without chat, add MSRP chat from the wheel to send messages') if connected and not ready else None
+        self.chat_input.set_connected(ready, reason)
         if ready and not was_ready and self.isVisible():
             self.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
 
@@ -1358,6 +1382,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification_center.add_observer(self, name='BlinkFileTransferDidEnd')
         notification_center.add_observer(self, name='BlinkSessionDidSaveCallRecording')
         notification_center.add_observer(self, name='BlinkMessageHistoryMustReload')
+        notification_center.add_observer(self, name='ConferenceParticipantDidChange')
 
 
         # self.splitter.splitterMoved.connect(self._SH_SplitterMoved) # check this and decide on what size to have in the window (see Notes) -Dan
@@ -1475,14 +1500,32 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.toolbar_layout.insertWidget(position, self.connect_audio_button)
         self.toolbar_layout.insertWidget(position + 1, self.connect_chat_button)
         self.toolbar_layout.insertWidget(position + 2, self.connection_status_label)
+        # a connected session (any media): hang up, at the left end of the bar, before the microphone
         self.hangup_button = connect_button('hangup_button', 'icons/handset12-red.svg', translate('chat_window', 'Hang up'), translate('chat_window', 'End the session'))
-        self.toolbar_layout.insertWidget(position + 3, self.hangup_button)
+        self.toolbar_layout.insertWidget(0, self.hangup_button)
+        # a room with participants that can key a two-way radio: push to talk, after the microphone
+        self._no_radio_ptt_button = QToolButton(self)      # stands in for the top bar's button when no session is selected
+        self._no_radio_ptt_button.hide()
+        # the bar, left to right: the wheel (always there), the microphone, push to talk, the connect
+        # buttons or the connection status; hang up alone at the right end, away from the others
+        while self.toolbar_layout.count():
+            self.toolbar_layout.takeAt(0)
+        for widget in (self.control_button, self.mute_button, self.hold_button, self.record_button,
+                       self.connect_audio_button, self.connect_chat_button, self.connection_status_label):
+            self.toolbar_layout.addWidget(widget)
+        self.toolbar_layout.addStretch(1)
+        self.toolbar_layout.addWidget(self.hangup_button)
+        self.toolbar_layout.setSpacing(6)     # the .ui packs them edge to edge
+        self.radio_pulse_timer = QTimer(self)
+        self.radio_pulse_timer.setInterval(radio_ptt.pulse.interval)
+        self.radio_pulse_timer.timeout.connect(self._SH_RadioPulseTimerTimeout)
+        self.radio_ptt_commands = {}     # id of a command sent -> (action, endpoint), until the room answers it
 
         self.control_menu = QMenu(self.control_button)
         self.control_button.setMenu(self.control_menu)
         self.control_button.actions = ContextMenuActions()
         self.control_button.actions.connect_with_msrp = QAction(translate('chat_window', "Start MSRP chat"), self, triggered=self._AH_Connect)
-        self.control_button.actions.connect_with_audio = QAction(translate('chat_window', "Start audio call"), self, triggered=self._AH_ConnectWithAudio)
+        self.control_button.actions.connect_with_audio = QAction(translate('chat_window', "Start audio and MSRP chat"), self, triggered=self._AH_ConnectWithAudio)
         self.control_button.actions.mark_messages_read = QAction(translate('chat_window', "Mark as read"), self, triggered=self._AH_MarkMessagesRead)
         self.control_button.actions.connect_with_video = QAction(translate('chat_window', "Start video call"), self, triggered=self._AH_ConnectWithVideo)
         self.control_button.actions.disconnect = QAction(translate('chat_window', "Disconnect"), self, triggered=self._AH_Disconnect)
@@ -1602,6 +1645,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 self._update_widgets_for_session()  # clean this up -Dan (too many functions called in 3 different places: on selection changed, here and on notifications handlers)
                 self._update_control_menu()
                 self._update_panel_buttons()
+                self._update_radio_ptt()
                 if ('audio' not in new_session.blink_session.streams and 'video' not in new_session.blink_session.streams):
                     self._SH_FilesButtonClicked(True)
                 self._show_conference_participants(new_session)
@@ -1640,11 +1684,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.video_icon.setEnabled(widget.video_icon.isEnabledTo(widget))
         self.screen_sharing_icon.setVisible(widget.screen_sharing_icon.isVisibleTo(widget))
         self.screen_sharing_icon.setEnabled(widget.screen_sharing_icon.isEnabledTo(widget))
-        # toolbar buttons
-        self.hold_button.setVisible('audio' in session.blink_session.streams)
-        self.hold_button.setChecked(session.blink_session.local_hold)
-        self.record_button.setVisible('audio' in session.blink_session.streams)
-        self.record_button.setChecked(session.blink_session.recording)
+        # toolbar buttons: no hold nor record here, both are in the audio drawer of the main window
+        self.hold_button.hide()
+        self.record_button.hide()
         self._update_window_title()
 
     default_window_title = 'Chat sessions (MSRP)'
@@ -1663,9 +1705,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         contact = blink_session.contact
         name = (getattr(contact, 'name', None) or '').strip()
         has_name = getattr(contact, 'type', None) not in (None, 'dummy') and name and name not in (uri, uri.partition('@')[0])
-        room = session.conference_room
-        if room is not None:
-            title = translate('chat_window', 'Conference room %s') % room + (f' - {name}' if has_name and name != room else '')
+        room_title = blink_session.conference_title
+        if room_title is not None:
+            title = room_title      # the room's own name, else Room <room>
         else:
             title = f'{name} <{uri}>' if has_name else uri
         self.setWindowTitle(title)
@@ -1700,6 +1742,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.connect_chat_button.hide()
             self.connection_status_label.hide()
             self.hangup_button.hide()
+            self.control_button.show()
+            self.control_button.setEnabled(False)
             return
 
         blink_session = self.selected_session.blink_session
@@ -1711,15 +1755,28 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.connect_chat_button.hide()
         connected = str(state or '').startswith('connected')
         self.connection_status_label.setVisible(not idle and not connected)     # while connecting or disconnecting only
-        self.hangup_button.hide()
+        self.hangup_button.setVisible(connected)
         if not idle and not connected:
             self.connection_status_label.setText(self._connection_status(blink_session))
-        self.control_button.setVisible(not idle)     # the wheel: a connected session's menu (or cancel, while connecting)
+        self.control_button.show()      # the wheel: always there; a connected session's menu (or cancel, while connecting)
         if idle:
+            # not connected: the wheel connects
+            self.control_button.setEnabled(True)
+            self.control_button.setIcon(self.control_icon)
+            menu.clear()
+            menu.addAction(self.control_button.actions.connect_with_msrp)
+            menu.addAction(self.control_button.actions.connect_with_audio)
+            if conference_has_files(self.selected_session):     # a conference where files were exchanged
+                menu.addSeparator()
+                menu.addAction(self.control_button.actions.show_transferred_files)
+            menu.addSeparator()
+            menu.addAction(self.control_button.actions.remove_conversation)
+            self.control_button.setMenu(menu)
             return
         if state == 'connecting/*' and blink_session.direction == 'outgoing' or state == 'connected/sent_proposal':
             self.control_button.setMenu(None)
             self.control_button.setIcon(self.cancel_icon)
+            self.control_button.setEnabled(True)
         elif state == 'connected/received_proposal':
             self.control_button.setEnabled(False)
         else:
@@ -1730,7 +1787,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             menu.addSeparator()
             if conference_takes_files(blink_session):
                 menu.addAction(self.control_button.actions.send_files)
-            menu.addAction(self.control_button.actions.show_transferred_files)
+            if conference_has_files(self.selected_session):     # a conference where files were exchanged
+                menu.addAction(self.control_button.actions.show_transferred_files)
             if True:    # only a connected session gets here (idle ones have the connect buttons)
                 if state == 'connected':
                     stream_types = blink_session.streams.types
@@ -2072,6 +2130,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         history.get_last_contacts(unread=True)
 
     def closeEvent(self, event):
+        self._stop_radio_pulse()
         ui_settings().setValue("chat_window/geometry", self.saveGeometry())
         ui_settings().setValue("chat_window/splitter", self.splitter.saveState())
         super(ChatWindow, self).closeEvent(event)
@@ -2441,12 +2500,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         self._update_control_menu()
         self._update_session_info_panel(update_visibility=True)
+        self._update_radio_ptt()
+
+    def _NH_BlinkSessionDidAddStream(self, notification):
+        self._update_radio_ptt()
 
     def _NH_BlinkSessionDidChangeState(self, notification):
         # even if we use this, we also need to listen for BlinkSessionDidRemoveStream as that transition doesn't change the state at all -Dan
         self._update_control_menu()
         self._update_panel_buttons()
         self._update_window_title()  # remote_focus is only known once connected
+        self._update_radio_ptt()
         if self.selected_session is not None and self.selected_session.blink_session is notification.sender:
             self._show_conference_participants(self.selected_session)
             old_state = str(notification.data.old_state or '')
@@ -2467,6 +2531,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.session_list.hide()
 
     def _NH_BlinkSessionDidEnd(self, notification):
+        self._update_radio_ptt()
         if not self.session_list.isVisibleTo(self) and self.isVisible() and not session_can_expand(self.selected_session):
             self._EH_ShowSessions()     # an ended session is not expanded (unless a conference with files): back to the list
         if self.selected_session.active_panel is not self.info_panel:
@@ -2483,6 +2548,19 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if self.selected_session is not None and self.selected_session.blink_session is notification.sender:
             self._update_panel_buttons()
             self._show_conference_participants(self.selected_session)
+            self._update_radio_ptt()
+
+    def _NH_BlinkSessionDidRemoveParticipant(self, notification):
+        if self.selected_session is not None and self.selected_session.blink_session is notification.sender:
+            self._update_radio_ptt()
+
+    def _NH_ConferenceParticipantDidChange(self, notification):
+        session = self.selected_session
+        if session is None or session.blink_session is None:
+            return
+        server_conference = getattr(session.blink_session, 'server_conference', None)
+        if server_conference is not None and notification.sender in server_conference.participants.values():
+            self._update_radio_ptt()
 
     @staticmethod
     def _shows_files(session):
@@ -3235,6 +3313,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session.update_composing_indication(notification.data)
 
     def _NH_ChatStreamDidSendMessage(self, notification):
+        if notification.data.message.message_id in self.radio_ptt_commands:
+            return
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
@@ -3261,6 +3341,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.new_messages_button.hide()
 
     def _NH_ChatStreamDidDeliverMessage(self, notification):
+        if self._radio_ptt_report(notification.data.message.message_id, 200, 'OK'):
+            return
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
@@ -3268,6 +3350,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         # TODO: implement -Saul
 
     def _NH_ChatStreamDidNotDeliverMessage(self, notification):
+        if self._radio_ptt_report(notification.data.message_id, getattr(notification.data, 'code', None), getattr(notification.data, 'reason', None)):
+            return
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
@@ -3332,6 +3416,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
         if str(notification.sender.blink_session.state or '').startswith('connected'):
             session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Chat started')))     # added to a session already connected; else "Connected" says it
+        if getattr(session, 'chat_widget', None) is not None:
+            session.chat_widget.update_input_state()    # the stream may start after the session said it connected
+        if session is self.selected_session:
+            self._update_radio_ptt()
 
     def _NH_MediaStreamDidEnd(self, notification):
         if notification.sender.type != 'chat':
@@ -3339,6 +3427,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         session = notification.sender.blink_session.items.chat
         if session is None:
             return
+        if session is self.selected_session:
+            self._update_radio_ptt()
+        if getattr(session, 'chat_widget', None) is not None:
+            session.chat_widget.update_input_state()
 
         if notification.data.error is not None:
             session.chat_widget.add_message(ChatStatus(translate('chat_window', 'Disconnected: %s') % notification.data.error))
@@ -3354,6 +3446,119 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if stream.type == self.zrtp_widget.stream_type and stream.blink_session.items.chat is self.selected_session:
             self.zrtp_widget.hide()
             self.zrtp_widget.stream_type = None
+
+    # Radio push to talk (docs/radio-ptt.md of SylkServer)
+    #
+    @property
+    def radio_ptt_button(self):
+        """Push to talk of the selected session, in the top bar of its chat."""
+        widget = getattr(self.selected_session, 'chat_widget', None)
+        return widget.radio_ptt_button if widget is not None else self._no_radio_ptt_button
+
+    def _session_radios(self, session):
+        """The radios of the conference of a session: [(participant, radio)], radios of participants
+        with audio only; empty when the session is not to a focus."""
+        blink_session = getattr(session, 'blink_session', None)
+        if blink_session is None or not blink_session.remote_focus:
+            return []
+        server_conference = getattr(blink_session, 'server_conference', None)
+        if server_conference is None:
+            return []
+        return [(participant, radio) for participant in server_conference.participants.values() for radio in participant.radios]
+
+    @staticmethod
+    def _chat_connected(session):
+        blink_session = session.blink_session
+        stream = session.chat_stream
+        return stream is not None and str(blink_session.state or '').startswith('connected')
+
+    def _update_radio_ptt(self):
+        """The push to talk button of the selected session, and the pulse, from the last conference-info:
+        the button is there only for a room where someone can key a radio, says what a click will do and
+        flashes while a radio is on air. Nothing changes on a click until the room reports it."""
+        session = self.selected_session
+        radios = [radio for participant, radio in self._session_radios(session)] if session is not None else []
+        if not radios:
+            self.radio_ptt_button.hide()
+            self._stop_radio_pulse()
+            return
+        keyed = any(radio.keyed for radio in radios)
+        transmitting = any(radio.state == 'transmitting' for radio in radios)
+        if keyed:
+            self.radio_ptt_button.setText(translate('chat_window', 'Push to Stop'))
+            self.radio_ptt_button.setToolTip(translate('chat_window', 'Release the radio'))
+        else:
+            self.radio_ptt_button.setText(translate('chat_window', 'Push to Talk'))
+            self.radio_ptt_button.setToolTip(translate('chat_window', 'Key the radio of conference participants'))
+        chat = self._chat_connected(session)
+        self.radio_ptt_button.setEnabled(chat)
+        if not chat:
+            self.radio_ptt_button.setToolTip(translate('chat_window', 'The radio is keyed through the MSRP chat with the room: add chat from the wheel'))
+        self.radio_ptt_button.show()
+        if transmitting:
+            if not self.radio_pulse_timer.isActive():
+                radio_ptt.pulse.on = True
+                self.radio_pulse_timer.start()
+        else:
+            self._stop_radio_pulse()
+        self.radio_ptt_button.setIcon(radio_ptt.radio_icon(22, transmitting and radio_ptt.pulse.on, self.devicePixelRatioF()))
+
+    def _stop_radio_pulse(self):
+        was_active = self.radio_pulse_timer.isActive()
+        self.radio_pulse_timer.stop()
+        if was_active or radio_ptt.pulse.on:
+            radio_ptt.pulse.on = False      # the plain picture: 'on' is the glowing phase
+            self._repaint_radio_participants()
+            if self.radio_ptt_button.isVisible():
+                self.radio_ptt_button.setIcon(radio_ptt.radio_icon(22, False, self.devicePixelRatioF()))
+
+    def _repaint_radio_participants(self):
+        model = self.participants_list.model()
+        for item in getattr(model, 'participants', ()):
+            if item.radio_state is not None:
+                item.widget.update_content(item)
+        self.participants_list.viewport().update()
+
+    def _SH_RadioPulseTimerTimeout(self):
+        radio_ptt.pulse.on = not radio_ptt.pulse.on
+        session = self.selected_session
+        if session is None or not any(radio.state == 'transmitting' for participant, radio in self._session_radios(session)):
+            self._stop_radio_pulse()
+            return
+        self.radio_ptt_button.setIcon(radio_ptt.radio_icon(22, radio_ptt.pulse.on, self.devicePixelRatioF()))
+        self._repaint_radio_participants()
+
+    def _SH_RadioPTTButtonClicked(self):
+        """A toggle: with no radio keyed, press every radio of the room; with any keyed, release those."""
+        session = self.selected_session
+        if session is None or not self._chat_connected(session):
+            return
+        radios = self._session_radios(session)
+        keyed = [(participant, radio) for participant, radio in radios if radio.keyed]
+        action, targets = ('release', keyed) if keyed else ('press', radios)
+        stream = session.chat_stream
+        for participant, radio in targets:
+            command_id, body = radio_ptt.command(action, radio.entity)
+            try:
+                message_id = send_msrp_message(stream, body, radio_ptt.CONTENT_TYPE)     # to the room itself, not saved in history
+            except Exception as e:
+                ActivityLog().error(f'[conference] Radio PTT {action} id={command_id} of {participant.uri} ({radio.entity}) in {session.blink_session.uri} not sent: {e}')
+                continue
+            self.radio_ptt_commands[message_id] = (action, command_id, participant.uri, radio.entity)
+            ActivityLog().info(f'[conference] Radio PTT {action} id={command_id} of {participant.uri} ({radio.entity}) in {session.blink_session.uri}')
+
+    def _radio_ptt_report(self, message_id, code, reason):
+        """The room's MSRP report on a command of ours: logged (the state comes with conference-info).
+        True when the message was one."""
+        try:
+            action, command_id, uri, entity = self.radio_ptt_commands.pop(message_id)
+        except KeyError:
+            return False
+        if code == 200:
+            ActivityLog().info(f'[conference] Radio PTT {action} id={command_id} of {uri} accepted by the room')
+        else:
+            ActivityLog().warning(f'[conference] Radio PTT {action} id={command_id} of {uri} ({entity}) refused by the room: {code} {reason or ""}'.rstrip())
+        return True
 
     # signal handlers
     #
@@ -3436,6 +3641,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         model = self.session_model
         position = model.sessions.index(session)
         session.chat_widget = ChatWidget(session, self.tab_widget)
+        session.chat_widget.radio_ptt_button.clicked.connect(self._SH_RadioPTTButtonClicked)
         session.active_panel = self.info_panel
         self.tab_widget.insertTab(position, session.chat_widget, session.name)
         self.no_sessions_label.hide()
@@ -3511,6 +3717,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.participants_list.setModel(None)
             self.control_button.setEnabled(False)
             self._update_window_title()
+            self._update_radio_ptt()
 
     def _reselect_session(self, session):
         if self.selected_session is not None or session not in self.session_model.sessions:
@@ -3576,8 +3783,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session.connect()
 
     def _AH_ConnectWithAudio(self):
-        stream_descriptions = [StreamDescription('audio')]
+        stream_descriptions = [StreamDescription('audio'), StreamDescription('chat')]     # audio here always comes with MSRP chat
         blink_session = self.selected_session.blink_session
+        self._log_action('Connect with audio and chat:', blink_session)
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=stream_descriptions, reinitialize=True)
         blink_session.connect()
 
@@ -3593,7 +3801,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         HistoryManager().message_history.update_displayed_for_uri(uri)
 
     def _AH_ConnectWithVideo(self):
-        stream_descriptions = [StreamDescription('audio'), StreamDescription('video')]
+        stream_descriptions = [StreamDescription('audio'), StreamDescription('video'), StreamDescription('chat')]
         blink_session = self.selected_session.blink_session
         blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=stream_descriptions, reinitialize=True)
         blink_session.connect()
@@ -3603,7 +3811,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.selected_session.end()
 
     def _AH_AddAudio(self):
-        self.selected_session.blink_session.add_stream(StreamDescription('audio'))
+        blink_session = self.selected_session.blink_session
+        if 'chat' in blink_session.streams:
+            blink_session.add_stream(StreamDescription('audio'))
+        else:
+            blink_session.add_streams([StreamDescription('audio'), StreamDescription('chat')])     # audio here always comes with MSRP chat
 
     def _AH_RemoveAudio(self):
         self.selected_session.blink_session.remove_stream(self.selected_session.blink_session.streams.get('audio'))

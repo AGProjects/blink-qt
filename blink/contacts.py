@@ -4241,13 +4241,16 @@ class Contact(object):
     @property
     def display_name(self):
         """The first line in the contact list: the name, then the organization in brackets.
-        A conference room reads 'Room <room>', with its name in brackets when it has one of its own."""
+        A conference room reads its name when it has one of its own, else 'Room <room>'."""
         name = self.name or ''
         room = self.conference_room
         if room is not None:
-            if not name or name.strip().lower() in (room.lower(), 'conference', 'conference call'):
+            uri = str(getattr(self.uri, 'uri', '') or '')
+            if uri.startswith(('sip:', 'sips:')):
+                uri = uri.partition(':')[2]
+            if not name.strip() or name.strip().lower() in (room.lower(), uri.lower(), 'conference', 'conference call'):
                 return translate('contact_list', 'Room %s') % room
-            return translate('contact_list', 'Room %s (%s)') % (room, name)
+            return name
         organization = (getattr(self.settings, 'organization', None) or '').strip() if self.type == 'addressbook' else ''
         if not organization or organization.lower() == name.lower():
             return name

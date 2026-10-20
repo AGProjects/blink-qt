@@ -68,6 +68,7 @@ from blink.streams.message import MessageStream
 from blink.pstn_normalize import pstn_dial_username
 from blink.file_transfer import MAX_ENCRYPT_BYTES
 from blink.uris import bare_instance_id, placeholder_instance_id
+from blink import radio_ptt     # registers <agp-conf:radio_ptt> with the conference-info parser
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
@@ -727,6 +728,21 @@ class BlinkSession(BlinkSessionBase):
     def conference_room(self):
         """The room, the user part of the URI, of a conference."""
         return self._uri_parts()[0] if self.is_conference else None
+
+    @property
+    def conference_title(self):
+        """What a conference is called: the display name of its contact when it has one of its own,
+        else 'Room <room>'; None when this is not a conference."""
+        room = self.conference_room
+        if room is None:
+            return None
+        name = (getattr(self.contact, 'name', None) or '').strip()
+        uri = str(getattr(self.contact_uri, 'uri', '') or '')
+        if uri.startswith(('sip:', 'sips:')):
+            uri = uri.partition(':')[2]
+        if name and name.lower() not in (room.lower(), uri.lower(), 'conference', 'conference call'):
+            return name
+        return translate('sessions', 'Room %s') % room
 
     def _uri_parts(self):
         return split_uri(self.contact_uri.uri) if self.contact_uri is not None else (None, None)
@@ -1615,6 +1631,7 @@ class ConferenceParticipant(object):
         self.on_hold = False
         self.is_composing = False    # TODO: set this from the chat stream -Saul
         self.request_status = None
+        self.radios = []             # radio_ptt.RadioEndpoint of each endpoint of it that can key a radio
 
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
@@ -1650,8 +1667,14 @@ class ConferenceParticipant(object):
     request_status = property(_get_request_status, _set_request_status)
     del _get_request_status, _set_request_status
 
+    @property
+    def radio_state(self):
+        """The state of its radio (the most active of them), None when it has none."""
+        return radio_ptt.combined_state(self.radios)
+
     def update(self, data):
-        old_values = dict(active_media=self.active_media.copy(), display_name=self.display_name, on_hold=self.on_hold)
+        old_values = dict(active_media=self.active_media.copy(), display_name=self.display_name, on_hold=self.on_hold,
+                          radio_key=[radio.key for radio in self.radios])
         self.display_name = data.display_text.value if data.display_text else None
         self.active_media.clear()
         for media in chain(*data):
@@ -1661,7 +1684,20 @@ class ConferenceParticipant(object):
                 self.active_media.add(media.media_type.value)
         audio_endpoints = [endpt for endpt in data if any(media.media_type == 'audio' for media in endpt)]
         self.on_hold = all(endpt.status == 'on-hold' for endpt in audio_endpoints) if audio_endpoints else False
+        old_radios = {radio.entity: radio for radio in self.radios}
+        self.radios = radio_ptt.radio_endpoints(data)
+        for radio in self.radios:
+            old = old_radios.get(radio.entity)
+            if old is None or old.state != radio.state:
+                ActivityLog().info(f'[conference] Radio PTT of {self.uri} ({radio.entity}): {old.state if old is not None else "new"} -> {radio.state}'
+                                   + (f' by {radio.by}' if radio.by else '') + (f' reason={radio.reason}' if radio.reason else '')
+                                   + (f' ({radio.timeout - (radio.elapsed or 0)}s left)' if radio.state == 'transmitting' and radio.timeout is not None else ''))
         for attr, value in old_values.items():
+            if attr == 'radio_key':
+                if value != [radio.key for radio in self.radios]:
+                    NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
+                    break
+                continue
             if value != getattr(self, attr):
                 NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
                 break
@@ -2247,10 +2283,7 @@ class AudioSessionItem(object):
 
     @property
     def name(self):
-        room = self.blink_session.conference_room
-        if room is not None:
-            return translate('sessions', 'Room %s') % room
-        return self.blink_session.contact.name
+        return self.blink_session.conference_title or self.blink_session.contact.name
 
     def __init__(self, session):
         assert session.items.audio is None
@@ -3987,10 +4020,7 @@ class ChatSessionItem(object):
 
     @property
     def name(self):
-        room = self.conference_room
-        if room is not None:
-            return translate('sessions', 'Room %s') % room
-        return self.blink_session.contact.name
+        return self.blink_session.conference_title or self.blink_session.contact.name
 
     @property
     def last_message(self):
@@ -6613,6 +6643,35 @@ class FileListView(QListView, ColorHelperMixin):
 #
 
 class ConferenceParticipantWidget(ChatSessionWidget):
+    """A participant row: its media as icons at the right, centred on both lines, in the order
+    audio (or the radio, a taller picture, in its place), chat, video, screen sharing."""
+    radio_height = 26     # the radio picture spans both lines of the row: it is tall and narrow
+    media_icon_size = 18
+
+    media_icons = (('audio', 'icons/speaker.svg'), ('chat', 'icons/chat.svg'), ('video', 'icons/camera.svg'), ('screen-sharing', 'icons/screen.svg'))
+
+    def __init__(self, parent=None):
+        super(ConferenceParticipantWidget, self).__init__(parent)
+        self.stream_icons.hide()        # replaced by the larger icons below
+        position = self.widget_layout.indexOf(self.unread_label)
+        self.radio_label = QLabel(self)
+        self.radio_label.setObjectName('radio_label')
+        self.radio_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.radio_label.setContentsMargins(2, 0, 2, 0)
+        self.radio_label.hide()
+        self.widget_layout.insertWidget(position, self.radio_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.media_labels = {}
+        size = QSize(self.media_icon_size, self.media_icon_size)
+        for offset, (media, icon) in enumerate(self.media_icons, 1):
+            label = QLabel(self)
+            label.setObjectName(f'{media}_media_label')
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setContentsMargins(2, 0, 2, 0)
+            label.setPixmap(QIcon(Resources.get(icon)).pixmap(size, screen_ratio()))
+            label.hide()
+            self.widget_layout.insertWidget(position + offset, label, 0, Qt.AlignmentFlag.AlignVCenter)
+            self.media_labels[media] = label
+
     def update_content(self, participant):
         self.unread_label.hide()    # a chat session badge, nothing to count for a participant
         self.setDisabled(participant.pending_request)
@@ -6622,10 +6681,32 @@ class ConferenceParticipantWidget(ChatSessionWidget):
         self.state_label.state = participant.state
         self.hold_icon.setVisible(participant.on_hold)
         self.composing_icon.setVisible(participant.is_composing)
-        self.chat_icon.setVisible('chat' in participant.active_media)
-        self.audio_icon.setVisible('audio' in participant.active_media)
-        self.video_icon.setVisible('video' in participant.active_media)
-        self.screen_sharing_icon.setVisible('screen-sharing' in participant.active_media)
+        radio_state = participant.radio_state
+        for media, label in self.media_labels.items():
+            label.setVisible(media in participant.active_media and not (media == 'audio' and radio_state is not None))   # a radio shows its picture instead of audio
+        if radio_state is not None:
+            tx = radio_state == 'transmitting' and radio_ptt.pulse.on
+            self.radio_label.setPixmap(radio_ptt.radio_pixmap(self.radio_height, tx, screen_ratio()))
+            self.radio_label.setToolTip(radio_state_text(participant.participant))
+        self.radio_label.setVisible(radio_state is not None)
+
+
+def radio_state_text(participant):
+    """What a participant's radio is doing, in words."""
+    state = participant.radio_state
+    radio = next((radio for radio in participant.radios if radio.state == state), None)
+    if radio is None:
+        return ''
+    if state == 'transmitting':
+        text = translate('sessions', 'Radio on air')
+        if radio.by:
+            text += ' ' + (translate('sessions', 'by %s') % (translate('sessions', 'hand') if radio.by == 'local' else radio.by))
+        return text
+    if state == 'keying':
+        return translate('sessions', 'Radio keying')
+    if state == 'error':
+        return translate('sessions', 'Radio failed to key') + (f' ({radio.reason})' if radio.reason else '')
+    return translate('sessions', 'Radio idle')
 
 
 @implementer(IObserver)
@@ -6673,6 +6754,10 @@ class ConferenceParticipantItem(object):
     @property
     def active_media(self):
         return self.participant.active_media
+
+    @property
+    def radio_state(self):
+        return self.participant.radio_state
 
     @property
     def icon(self):
@@ -7631,23 +7716,18 @@ class ConferenceInviteList(_QListWidget):
 
 
 class ConferenceDialog(base_class, ui_class):
-    """Join Conference: a room (digits only, 4 to 12 of them; a new random one is in the
-    field when the dialog opens), audio and/or chat, and, as on macOS, the people to
+    """Join Conference: a room (any name, or a full user@domain conference address; a new
+    random number is in the field when the dialog opens), audio and/or chat, and, as on macOS, the people to
     invite: chosen with the Forward selector or dragged from the contact list, invited
     (REFER to the conference) once the session to the room is connected."""
-
-    room_re = r'\d{4,12}'
 
     def __init__(self, parent=None):
         super(ConferenceDialog, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        from PyQt6.QtCore import QRegularExpression
-        from PyQt6.QtGui import QRegularExpressionValidator
         from PyQt6.QtWidgets import QHBoxLayout, QListWidget, QPushButton, QVBoxLayout
         from blink.messagepane.forward import ConversationRowDelegate
-        self.room_button.setValidator(QRegularExpressionValidator(QRegularExpression(self.room_re), self.room_button))
-        self.room_button.lineEdit().setPlaceholderText(translate('conference_dialog', '4 to 12 digits'))
+        self.room_button.lineEdit().setPlaceholderText(translate('conference_dialog', 'Room or user@domain'))
         # the people to invite, where the spacer was
         spacer = self.grid_layout.itemAtPosition(2, 0)     # uic does not keep spacers as attributes
         if spacer is not None and spacer.spacerItem() is not None:
@@ -7707,9 +7787,27 @@ class ConferenceDialog(base_class, ui_class):
     def random_room():
         return random.choice('123456789') + ''.join(random.choice('0123456789') for x in range(6))
 
+    @staticmethod
+    def conference_uri(room, account):
+        """The conference address for what was typed: a full address as is, a bare room at the account's Conference server."""
+        room = re.sub('^sips?:', '', room.strip(), flags=re.IGNORECASE)
+        if not room:
+            return None
+        if '@' not in room:
+            if account is not BonjourAccount():
+                room = '%s@%s' % (room, account.server.conference_server or 'conference.%s' % account.id.domain)
+            else:
+                room = '%s@%s' % (room, 'conference.sip2sip.info')
+        try:
+            SIPURI.parse('sip:%s' % room)
+        except SIPCoreError:
+            return None
+        return room
+
     def _update_accept_button(self):
         media = any(button.isChecked() for button in (self.audio_button, self.chat_button))
-        self.accept_button.setEnabled(media and self.room_button.lineEdit().hasAcceptableInput())
+        account = AccountManager().default_account
+        self.accept_button.setEnabled(media and account is not None and self.conference_uri(self.room_button.currentText(), account) is not None)
 
     def _SH_MediaButtonClicked(self, checked):
         self._update_accept_button()
@@ -7764,10 +7862,6 @@ class ConferenceDialog(base_class, ui_class):
             self.restoreGeometry(geometry)
         self.resize(self.size().expandedTo(self.minimumSize()))      # a geometry saved when the dialog was smaller
 
-        # rooms used before that are not digits (from before the rule) are left out
-        for number in reversed(range(self.room_button.count())):
-            if not re.fullmatch(self.room_re, self.room_button.itemText(number)):
-                self.room_button.removeItem(number)
         self.room_button.setCurrentIndex(-1)
         self.room_button.setEditText(self.random_room())
         self.invite_list.clear()
@@ -7783,21 +7877,18 @@ class ConferenceDialog(base_class, ui_class):
         ui_settings().setValue("conference_dialog/geometry", self.saveGeometry())
         from blink.contacts import URIUtils
 
+        account_manager = AccountManager()
+        session_manager = SessionManager()
+        account = account_manager.default_account
         current_text = self.room_button.currentText().strip()
-        if not re.fullmatch(self.room_re, current_text):
+        conference_uri = self.conference_uri(current_text, account) if account is not None else None
+        if conference_uri is None:
             return
         if self.room_button.findText(current_text) == -1:
             if self.room_button.count() == self.room_button.maxCount():
                 self.room_button.removeItem(self.room_button.count()-1)
             self.room_button.insertItem(0, current_text)
 
-        account_manager = AccountManager()
-        session_manager = SessionManager()
-        account = account_manager.default_account
-        if account is not BonjourAccount():
-            conference_uri = '%s@%s' % (current_text, account.server.conference_server or 'conference.%s' % account.id.domain)
-        else:
-            conference_uri = '%s@%s' % (current_text, 'conference.sip2sip.info')
         contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')
         streams = []
         if self.audio_button.isChecked():
@@ -7963,6 +8054,11 @@ class SessionManager(object, metaclass=Singleton):
             # no SIP video in conferences: audio (and whatever else was asked for) only
             streams = [stream for stream in streams if stream.type != 'video'] or [StreamDescription('audio')]
             ActivityLog().info(f'[conference] {getattr(contact_uri, "uri", contact_uri)} is a conference: no video, joining with {", ".join(stream.type for stream in streams)}')
+
+        if any(stream.type == 'audio' for stream in streams) and not any(stream.type == 'chat' for stream in streams) and is_conference_uri(getattr(contact_uri, 'uri', contact_uri), account):
+            # audio to a room always comes with its MSRP chat (the room's messages, push to talk)
+            streams = list(streams) + [StreamDescription('chat')]
+            ActivityLog().info(f'[conference] {getattr(contact_uri, "uri", contact_uri)} is a conference: joining with {", ".join(stream.type for stream in streams)}')
 
         try:
             session = next(session for session in self.sessions if session.reusable and session.contact.settings is contact.settings)
