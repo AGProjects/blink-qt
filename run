@@ -1,4 +1,4 @@
 #!/bin/sh
 
-exec bin/blink "$@"
+exec python3 bin/blink "$@"
 

@@ -6,7 +6,7 @@
 #     by mk-build-deps (remove them with: sudo apt purge blink-build-deps)
 #   - the runtime dependencies (Depends, and Recommends unless --no-recommends)
 #
-# Then: ./build_inplace && ./run
+# Then: sh build_inplace && sh run
 #
 # python3-sipsimple, python3-application, python3-eventlib and python3-otr come from
 # the AG Projects repository: add it first (python3-sipsimple docs/Install.linux).
@@ -16,7 +16,7 @@
 # that debian/control works on a release (run it in each build chroot). The exit
 # status is 1 when something is missing.
 #
-#   scripts/install_deps.sh [--no-recommends] [--build-only | --runtime-only] [-y] [--simulate]
+#   sh scripts/install_deps.sh [--no-recommends] [--build-only | --runtime-only] [-y] [--simulate]
 
 set -e
 
@@ -115,4 +115,4 @@ if [ "$runtime" = yes ]; then
     $sudo apt-get satisfy $assume_yes "$deps"
 fi
 
-echo "== Done. Build and run from this folder with: ./build_inplace && ./run"
+echo "== Done. Build and run from this folder with: sh build_inplace && sh run"

@@ -3,7 +3,7 @@
 # Reset Blink Qt to a "first start" state for message and contact import tests,
 # keeping the account configuration (and by default the PGP keys).
 #
-# Usage: scripts/reset_state.sh [--keys] [--logs] [account]
+# Usage: sh scripts/reset_state.sh [--keys] [--logs] [account]
 #
 #   account   only clear the XCAP cache and journal cursor of this account
 #             (default: all accounts); message history is always cleared

@@ -19,16 +19,22 @@ MINGW64 environment. Everything below runs in the "MSYS2 UCRT64" shell.
   and update it (`pacman -Syu`, twice).
 * Open the **MSYS2 UCRT64** shell and install the toolchain:
 
-      pacman -S mingw-w64-ucrt-x86_64-toolchain git darcs
+      pacman -S mingw-w64-ucrt-x86_64-toolchain git patch wget
 
 
 ## 2. SIP SIMPLE SDK
 
-Follow python3-sipsimple's `docs/Install.windows`, with one change: it is
-written for MINGW64, so every package named `mingw-w64-x86_64-...` is
-`mingw-w64-ucrt-x86_64-...` here, and the shell is UCRT64. The packages built
-with `makepkg-mingw` (intsafe-headers, dshow-baseclasses) build for UCRT64 by
-themselves when run from the UCRT64 shell.
+Follow python3-sipsimple's `docs/Install.windows`, with these changes:
+
+* it is written for MINGW64: every package named `mingw-w64-x86_64-...` is
+  `mingw-w64-ucrt-x86_64-...` here, and the shell is UCRT64;
+* skip mingw-w64-intsafe-headers and mingw-w64-dshow-baseclasses: pjsip 2.17
+  carries the DirectShow base classes itself (third_party/BaseClasses);
+* `setup_pjsip.py` points at `/mingw64`, so build it with
+  `CFLAGS=-I/ucrt64/include LDFLAGS=-L/ucrt64/lib`.
+
+`.github/workflows/windows.yml` (kept here as `windows.yml` until it is moved
+there) does all of this on a GitHub Windows runner.
 
 Check it before going on:
 
