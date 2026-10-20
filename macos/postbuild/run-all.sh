@@ -10,17 +10,17 @@
 # Prerequisites: the app is already built with `pyinstaller blink.spec -y`
 # (inside the venv). See ./README for signing/notarization credentials.
 #
-# Usage:  ./run-all.sh
-#         SIGN_IDENTITY="Developer ID Application: ..." ./run-all.sh
+# Usage:  bash run-all.sh
+#         SIGN_IDENTITY="Developer ID Application: ..." bash run-all.sh
 
 set -e
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-"$HERE/00-slim-qt.sh"
-"$HERE/01-relink.sh"
-"$HERE/02-strip.sh"
-"$HERE/03-codesign.sh"
-"$HERE/04-notarize-dmg.sh"
+bash "$HERE/00-slim-qt.sh"
+bash "$HERE/01-relink.sh"
+bash "$HERE/02-strip.sh"
+bash "$HERE/03-codesign.sh"
+bash "$HERE/04-notarize-dmg.sh"
 
 echo "Pipeline complete."

@@ -43,6 +43,6 @@ spctl -a -t exec -vvv "$APP"
 rm -f "$ZIP"
 
 echo "==> Building DMG"
-"$REPO/macos/create_dmg.sh"
+bash "$REPO/macos/create_dmg.sh"
 
 echo "Done."

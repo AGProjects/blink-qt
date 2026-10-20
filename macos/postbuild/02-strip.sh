@@ -6,9 +6,9 @@
 #
 # IMPORTANT: run 01-relink.sh FIRST, so the reference graph is accurate.
 #
-# Usage:  ./02-strip.sh                 # prune (default, per project policy)
-#         ./02-strip.sh --dry-run       # report only, move nothing
-#         APP=/path/to/Foo.app ./02-strip.sh
+# Usage:  bash 02-strip.sh                 # prune (default, per project policy)
+#         bash 02-strip.sh --dry-run       # report only, move nothing
+#         APP=/path/to/Foo.app bash 02-strip.sh
 
 set -e
 

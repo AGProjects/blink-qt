@@ -7,8 +7,7 @@ Install Blink Qt locally
 
 To install blink-qt and its dependencies:
 
-chmod +x ./macos/install_blink.sh
-./macos/install_blink.sh
+bash macos/install_blink.sh
 
 Everything is installed into a dedicated virtualenv:
 
@@ -39,11 +38,11 @@ pip3 install -r macos/requirements-osx.txt
 Optional GStreamer support (voice notes compressed to AAC, video call
 recording); without it voice notes are sent as WAV:
 
-WITH_GSTREAMER=1 ./macos/install_blink.sh
+WITH_GSTREAMER=1 bash macos/install_blink.sh
 
 To run Blink in place:
 
-./run
+sh run
 
 To run Blink from the virtualenv, activate it and run blink:
 
@@ -74,7 +73,7 @@ sudo port install create-dmg
 
 To generate a .dmg run:
 
-./macos/create_dmg.sh 
+bash macos/create_dmg.sh
 
 Note. The resulting DMG has a very large size due to bundling of all system
 installed Qt6 frameworks and Python packages.  This can be optimized by

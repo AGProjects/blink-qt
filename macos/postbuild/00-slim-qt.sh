@@ -9,9 +9,9 @@
 # automatically (e.g. if QtQuick pulls QtShaderTools), unless you pass --force.
 # Run this BEFORE codesigning.
 #
-# Usage:  ./00-slim-qt.sh            # safe: skip anything still referenced
-#         ./00-slim-qt.sh --force    # remove regardless (verify the app after!)
-#         APP=/path/to/Foo.app ./00-slim-qt.sh
+# Usage:  bash 00-slim-qt.sh            # safe: skip anything still referenced
+#         bash 00-slim-qt.sh --force    # remove regardless (verify the app after!)
+#         APP=/path/to/Foo.app bash 00-slim-qt.sh
 
 set -e
 

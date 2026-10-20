@@ -58,19 +58,18 @@ if [ ! -f "$SIPSIMPLE_SRC/setup.py" ]; then
 fi
 
 MAC="$SIPSIMPLE_SRC/mac"
-if [ ! -x "$MAC/04-install_sipsimple.sh" ] && [ ! -f "$MAC/04-install_sipsimple.sh" ]; then
+if [ ! -f "$MAC/04-install_sipsimple.sh" ]; then
     echo "$MAC/04-install_sipsimple.sh not found - $SIPSIMPLE_SRC is too old, update it."
     exit 1
 fi
-chmod +x "$MAC"/*.sh
 
 # Blink-specific codec defaults for the SDK.
 cp "$HERE/_sipsimple_codecs.py" "$SIPSIMPLE_SRC/sipsimple/configuration/_codecs.py"
 
 # --- Build ------------------------------------------------------------------
-"$MAC/01-install-build-env.sh"
-"$MAC/02-install-c-deps.sh"
-"$MAC/02b-install-bcg729.sh"            # fail-soft: no G.729 if it can't build
+bash "$MAC/01-install-build-env.sh"
+bash "$MAC/02-install-c-deps.sh"
+bash "$MAC/02b-install-bcg729.sh"            # fail-soft: no G.729 if it can't build
 
 export CFLAGS="-I/opt/local/include"
 export LDFLAGS="-L/opt/local/lib"
@@ -78,11 +77,11 @@ pip3 install --upgrade pip wheel setuptools
 pip3 install -r "$HERE/python-requirements.txt"
 pip3 install --no-build-isolation -r "$HERE/sipsimple-requirements.txt"
 
-"$MAC/04-install_sipsimple.sh" --version "$PJSIP_VERSION"
+bash "$MAC/04-install_sipsimple.sh" --version "$PJSIP_VERSION"
 
 # --- Command line SIP clients (optional) -----------------------------------
 if [ -f "$SIPCLIENTS_SRC/setup.py" ]; then
-    "$MAC/05-install_sipclients.sh"
+    bash "$MAC/05-install_sipclients.sh"
 else
     echo "sipclients3 not found at $SIPCLIENTS_SRC - skipping the sip-* CLI tools."
 fi

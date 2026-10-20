@@ -4,8 +4,8 @@
 # the built app to bundle-relative paths, copying any missing libraries in, so
 # the .app is self-contained. Then verify none remain.
 #
-# Usage:  ./01-relink.sh              # dist/Blink-Qt.app
-#         APP=/path/to/Foo.app ./01-relink.sh
+# Usage:  bash 01-relink.sh              # dist/Blink-Qt.app
+#         APP=/path/to/Foo.app bash 01-relink.sh
 
 set -e
 

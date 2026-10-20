@@ -34,8 +34,7 @@ source "$HERE/activate_venv.sh"
 # install_sipsimple.sh self-detects an already-installed SDK and skips the
 # expensive build when possible. It inherits the active virtualenv via the
 # exported VIRTUAL_ENV / PATH set above.
-chmod +x "$HERE/install_sipsimple.sh"
-"$HERE/install_sipsimple.sh"
+bash "$HERE/install_sipsimple.sh"
 
 # --- Build & install Blink Qt into the same environment --------------------
 cd "$REPO"
@@ -69,8 +68,7 @@ fi
 cp "$HERE/_codecs.py" blink/configuration/
 cp "$HERE/_tls.py" blink/configuration/
 
-chmod +x ./build_inplace ./run ./bin/blink ./blink-run.py
-./build_inplace
+sh build_inplace
 
 # --no-build-isolation so pip builds against the cython/setuptools already in
 # this virtualenv (setup.py imports Cython at build time).
@@ -108,6 +106,6 @@ PY2
 
 echo
 echo "Blink Qt installed into $VENV"
-echo "Run it in place with:   ./run"
+echo "Run it in place with:   sh run"
 echo "or from the venv with:  blink"
 echo
