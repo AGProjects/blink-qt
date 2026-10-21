@@ -2494,6 +2494,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         position = model.sessions.index(notification.sender.items.chat)
         selection_model = self.session_list.selectionModel()
         selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        self._sync_selection()      # selected already: select() changes nothing and Qt says nothing
         self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         self.show()
 
@@ -3692,7 +3693,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _SH_SessionListSelectionChanged(self, selected, deselected):
         #print("-- chat selection changed %s -> %s" % ([x.row() for x in deselected.indexes()], [x.row() for x in selected.indexes()]))
         previous = self.selected_session
-        self.selected_session = selected[0].topLeft().data(Qt.ItemDataRole.UserRole) if selected else None
+        # what is selected now, not what this change selected: a change can only deselect another
+        # row (removed, hidden) while the selected one stays, and its delta then selects nothing
+        indexes = self.session_list.selectionModel().selectedIndexes()
+        current = indexes[0].data(Qt.ItemDataRole.UserRole) if indexes else None
+        if current is not None and current is previous and self.tab_widget.currentWidget() is current.chat_widget:
+            return      # still selected and in view: nothing to do
+        self.selected_session = current
         if self.selected_session is not None:
             self.tab_widget.setCurrentWidget(self.selected_session.chat_widget)  # why do we switch the tab here, but do everything else in the selected_session property setter? -Dan
             self._set_details(self.selected_session.active_panel)
@@ -3719,12 +3726,23 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self._update_window_title()
             self._update_radio_ptt()
 
+    def _sync_selection(self):
+        """Show the session the list has selected, when the window shows another one (or none)."""
+        indexes = self.session_list.selectionModel().selectedIndexes()
+        current = indexes[0].data(Qt.ItemDataRole.UserRole) if indexes else None
+        if current is not self.selected_session or (current is not None and self.tab_widget.currentWidget() is not current.chat_widget):
+            self._SH_SessionListSelectionChanged(None, None)
+
     def _reselect_session(self, session):
         if self.selected_session is not None or session not in self.session_model.sessions:
             return
         model = self.session_model
         index = model.index(model.sessions.index(session))
         self.session_list.selectionModel().select(index, self.session_list.selectionModel().SelectionFlag.ClearAndSelect)
+        self._sync_selection()      # it may never have been deselected: then select() says nothing
+        if self.selected_session is not session:
+            ActivityLog().warning(f'[ui] Chat window: could not select {session.blink_session.uri} again')
+            return
         ActivityLog().info(f'[ui] Chat window: selected {session.blink_session.uri} again')
 
     def _SH_OTRWidgetNameChanged(self):
