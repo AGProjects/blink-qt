@@ -1,3 +1,12 @@
+blink (7.1.6) unstable; urgency=medium
+
+  * Allow selection of partial text from text bubbles
+  * Fix initial session tile for MSRP window
+  * Added radio PTT for conferences
+  * Fix unread badge counter
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Wed, 21 Oct 2026 10:31:44 -0300
+
 blink (7.1.5) unstable; urgency=medium
 
   * Fix for missing fonts 
