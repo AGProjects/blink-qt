@@ -12,9 +12,9 @@ Blink for macOS (dark or light with the theme), tiled from the viewport so the
 weave stays still while the transcript scrolls.
 """
 
-from PyQt6.QtCore import Qt, QPoint, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QBrush, QDesktopServices, QGuiApplication, QPalette, QPixmap
-from PyQt6.QtWidgets import QAbstractItemView, QFrame, QListView, QMenu
+from PyQt6.QtCore import Qt, QElapsedTimer, QPersistentModelIndex, QPoint, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QBrush, QClipboard, QDesktopServices, QGuiApplication, QKeySequence, QPalette, QPixmap
+from PyQt6.QtWidgets import QAbstractItemView, QApplication, QFrame, QListView, QMenu
 
 from blink.messagepane.delegate import BubbleDelegate
 from blink.messagepane.files import local_file
@@ -80,6 +80,9 @@ class TranscriptView(QListView):
             VideoProbe.instance().probed.connect(self._SH_VideoProbed)
         self._anchor = None         # (maximum, value) before rows were inserted at the top
         self._stick = True          # follow the bottom
+        self._selecting = None      # (row being selected in, as a persistent index; anchor character) while the button is down
+        self._dragged = False       # the press became a text selection: its release is not a click
+        self._double_click = QElapsedTimer()     # a press soon after a double click is a triple click: the paragraph
         self._decrypt_timer = QTimer(self)      # the rows in view that hold ciphertext are decrypted once the view settles
         self._decrypt_timer.setSingleShot(True)
         self._decrypt_timer.setInterval(150)
@@ -222,8 +225,100 @@ class TranscriptView(QListView):
         index = self.indexAt(position)
         return index.isValid() and self.bubble_delegate.actions_at(index, self.visualRect(index), position)
 
+    # Selecting text in a bubble with the mouse: drag, double click (a word), triple click (a paragraph);
+    # Ctrl+C or Copy in the menu copies it, and on X11 it is the selection middle click pastes
+
+    def _set_text_selection(self, selection):
+        if selection != self.bubble_delegate.text_selection:
+            self.bubble_delegate.text_selection = selection
+            self.viewport().update()
+
+    def _selection_index(self):
+        """The row the selection is in, or None."""
+        selection = self.bubble_delegate.text_selection
+        model = self.model()
+        if selection is None or model is None or not hasattr(model, 'row_of'):
+            return None
+        row = model.row_of(selection[0])
+        return model.index(row, 0) if row is not None else None
+
+    def selected_text(self):
+        index = self._selection_index()
+        if index is None or not index.isValid():
+            return ''
+        return self.bubble_delegate.selected_text(index, self.visualRect(index))
+
+    def _publish_selection(self):
+        text = self.selected_text()
+        clipboard = QGuiApplication.clipboard()
+        if text and clipboard.supportsSelection():
+            clipboard.setText(text, QClipboard.Mode.Selection)      # what middle click pastes, as anywhere on X11
+
+    def _select_range(self, index, unit, position):
+        found = self.bubble_delegate.text_range(index, self.visualRect(index), position, unit)
+        if found is None:
+            return False
+        item = index.data(Qt.ItemDataRole.UserRole)
+        self._set_text_selection((item.id, found[0], found[1]))
+        self._dragged = True
+        self._publish_selection()
+        return True
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            position = event.position().toPoint()
+            index = self.indexAt(position)
+            self._selecting = None
+            self._dragged = False
+            on_control = index.isValid() and (self._on_actions_button(position) or self.bubble_delegate.quote_at(index, self.visualRect(index), position) is not None
+                                              or self.bubble_delegate.cancel_at(index, self.visualRect(index), position) or self.bubble_delegate.download_at(index, self.visualRect(index), position))
+            found = self.bubble_delegate.text_position(index, self.visualRect(index), position) if index.isValid() and not on_control else None
+            if found is not None:
+                self.setFocus(Qt.FocusReason.MouseFocusReason)      # for Ctrl+C
+                if self._double_click.isValid() and self._double_click.elapsed() < QApplication.doubleClickInterval():
+                    self._double_click.invalidate()
+                    if self._select_range(index, 'block', position):
+                        return
+                item = index.data(Qt.ItemDataRole.UserRole)
+                self._selecting = (QPersistentModelIndex(index), found)
+                self._set_text_selection((item.id, found, found))
+            elif not on_control:
+                self._set_text_selection(None)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            position = event.position().toPoint()
+            index = self.indexAt(position)
+            if index.isValid() and not self._link_at(position) and self._select_range(index, 'word', position):
+                self._selecting = None
+                self._double_click.start()
+                return
+        super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Copy) and self.selected_text():
+            copy_text(self.selected_text())
+            return
+        if event.key() == Qt.Key.Key_Escape and self.bubble_delegate.text_selection is not None:
+            self._set_text_selection(None)
+            return
+        super().keyPressEvent(event)
+
     def mouseMoveEvent(self, event):
         position = event.position().toPoint()
+        if event.buttons() & Qt.MouseButton.LeftButton and self._selecting is not None:
+            persistent = self._selecting[0]
+            if persistent.isValid():
+                index = self.model().index(persistent.row(), 0)
+                found = self.bubble_delegate.text_position(index, self.visualRect(index), position, exact=False)
+                if found is not None:
+                    item = index.data(Qt.ItemDataRole.UserRole)
+                    if found != self._selecting[1]:
+                        self._dragged = True
+                    self._set_text_selection((item.id, self._selecting[1], found))
+                    self.viewport().setCursor(Qt.CursorShape.IBeamCursor)
+                    return
         if event.buttons() & Qt.MouseButton.LeftButton:
             index = self.indexAt(position)
             hit = self.bubble_delegate.audio_hit(index, self.visualRect(index), position) if index.isValid() else None
@@ -243,6 +338,8 @@ class TranscriptView(QListView):
         on_cancel = on_cancel or on_download
         if on_cancel or self._link_at(position) or self._on_actions_button(position) or on_quote or self._on_clickable_bubble(index, position):
             self.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
+        elif index.isValid() and self.bubble_delegate.text_position(index, self.visualRect(index), position) is not None:
+            self.viewport().setCursor(Qt.CursorShape.IBeamCursor)
         else:
             self.viewport().unsetCursor()
         super().mouseMoveEvent(event)
@@ -257,6 +354,14 @@ class TranscriptView(QListView):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            self._selecting = None
+            if self._dragged:
+                self._dragged = False       # the end of a selection, not a click (on a link, say)
+                self._publish_selection()
+                return
+            selection = self.bubble_delegate.text_selection
+            if selection is not None and selection[1] == selection[2]:
+                self._set_text_selection(None)      # a click, nothing selected
             position = event.position().toPoint()
             index = self.indexAt(position)
             if index.isValid() and self.bubble_delegate.cancel_at(index, self.visualRect(index), position):
@@ -321,6 +426,9 @@ class TranscriptView(QListView):
             menu.addAction(reaction_action(menu, lambda emoji: self._react(item, emoji, 'message menu'),
                                            lambda position: QTimer.singleShot(0, lambda: pick_more(position))))
             menu.addSeparator()
+        selected = self.bubble_delegate.selected_text(index, self.visualRect(index))
+        if selected:
+            menu.addAction(translate('message_pane', 'Copy'), lambda: copy_text(selected))
         anchor = self._link_at(position)
         if anchor:
             menu.addAction(translate('message_pane', 'Copy Link'), lambda: copy_text(anchor))

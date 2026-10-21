@@ -923,6 +923,79 @@ class BubbleDelegate(QStyledItemDelegate):
         origin = self.text_origin(layout, self.bubble_rect(layout, item, QRectF(rect)))
         return layout.document.documentLayout().anchorAt(QPointF(position) - origin) or ''
 
+    # Selecting text in a bubble: (message id, anchor, position), character positions in its document
+
+    text_selection = None
+
+    def text_position(self, index, rect, position, exact=True):
+        """The character of a text bubble under a point of the view, or None (not a text bubble, or,
+        exact, not on its text). Not exact: the nearest character, for a drag going past the text."""
+        item = self._item(index)
+        if item is None:
+            return None
+        layout = self.layout(index, rect.width(), self.parent().font())
+        if layout.kind != 'text':
+            return None
+        origin = self.text_origin(layout, self.bubble_rect(layout, item, QRectF(rect)))
+        point = QPointF(position) - origin
+        size = layout.text_size
+        if exact:
+            if not QRectF(0, 0, size.width(), size.height()).contains(point):
+                return None
+        else:
+            if point.y() < 0:
+                return 0
+            if point.y() > size.height():
+                return layout.document.characterCount() - 1
+            point = QPointF(min(max(point.x(), 0.0), size.width()), point.y())
+        found = layout.document.documentLayout().hitTest(point, Qt.HitTestAccuracy.FuzzyHit)
+        return found if found >= 0 else None
+
+    def text_range(self, index, rect, position, unit):
+        """(start, end) of the word or block ('word', 'block') under a point of a text bubble, or None."""
+        found = self.text_position(index, rect, position)
+        if found is None:
+            return None
+        layout = self.layout(index, rect.width(), self.parent().font())
+        cursor = QTextCursor(layout.document)
+        cursor.setPosition(found)
+        cursor.select(QTextCursor.SelectionType.WordUnderCursor if unit == 'word' else QTextCursor.SelectionType.BlockUnderCursor)
+        start, end = cursor.selectionStart(), cursor.selectionEnd()
+        if unit == 'block' and start > 0 and layout.document.characterAt(start) == ' ':
+            start += 1      # BlockUnderCursor takes the break before the block along
+        return (start, end) if end > start else None
+
+    def selected_text(self, index, rect):
+        """The selected text of a bubble, '' when none of it is selected."""
+        item = self._item(index)
+        selection = self.text_selection
+        if item is None or selection is None or selection[0] != item.id or selection[1] == selection[2]:
+            return ''
+        layout = self.layout(index, rect.width(), self.parent().font())
+        if layout.kind != 'text':
+            return ''
+        last = layout.document.characterCount() - 1
+        cursor = QTextCursor(layout.document)
+        cursor.setPosition(min(selection[1], last))
+        cursor.setPosition(min(selection[2], last), QTextCursor.MoveMode.KeepAnchor)
+        return cursor.selectedText().replace(' ', '\n').replace(' ', '\n').replace('\xa0', ' ')
+
+    def _selection_for(self, layout, item, palette):
+        selection = self.text_selection
+        if selection is None or selection[0] != item.id or selection[1] == selection[2]:
+            return None
+        last = layout.document.characterCount() - 1
+        cursor = QTextCursor(layout.document)
+        cursor.setPosition(min(selection[1], last))
+        cursor.setPosition(min(selection[2], last), QTextCursor.MoveMode.KeepAnchor)
+        highlight = QAbstractTextDocumentLayout.Selection()
+        highlight.cursor = cursor
+        text_format = QTextCharFormat()
+        text_format.setBackground(palette.color(QPalette.ColorRole.Highlight))
+        text_format.setForeground(palette.color(QPalette.ColorRole.HighlightedText))
+        highlight.format = text_format
+        return highlight
+
     # Painting
 
     def _colours(self, palette, outgoing):
@@ -1030,6 +1103,10 @@ class BubbleDelegate(QStyledItemDelegate):
 
         if layout.kind not in ('file', 'call', 'audio'):
             context.palette = self._text_palette(palette, text_colour if layout.kind == 'text' else secondary)
+            if layout.kind == 'text':
+                highlight = self._selection_for(layout, item, palette)
+                if highlight is not None:
+                    context.selections = [highlight]
             painter.save()
             origin = self.text_origin(layout, bubble)
             painter.translate(origin)
