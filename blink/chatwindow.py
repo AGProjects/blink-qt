@@ -1542,6 +1542,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.control_button.actions.enable_otr = QAction(translate('chat_window', "Enable OTR for messaging"), self, triggered=self._AH_EnableOTR)
         self.control_button.actions.enable_otr_progress = QAction(translate('chat_window', "Enabling OTR for messaging"), self, enabled=False)
         self.control_button.actions.disable_otr = QAction(translate('chat_window', "Disable OTR for messaging"), self, triggered=self._AH_DisableOTR)
+        self.control_button.actions.enable_chat_otr = QAction(translate('chat_window', "Enable OTR encryption"), self, triggered=self._AH_EnableChatOTR)
+        self.control_button.actions.disable_chat_otr = QAction(translate('chat_window', "Disable OTR encryption"), self, triggered=self._AH_DisableChatOTR)
         self.control_button.actions.main_window = QAction(translate('chat_window', "Main Window"), self, triggered=self._AH_MainWindow, shortcut='Ctrl+B', shortcutContext=Qt.ShortcutContext.ApplicationShortcut)
         self.control_button.actions.show_transferred_files = QAction(translate('chat_window', "Show transferred files"), self, triggered=self._AH_ShowTransferredFiles)
         self.control_button.actions.remove_conversation = QAction(translate('chat_window', "Remove conversation"), self, triggered=self._AH_RemoveConversation)
@@ -1802,6 +1804,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         else:
                             if messages_info.encryption != 'OpenPGP':
                                 menu.addAction(self.control_button.actions.disable_otr)
+                    elif not blink_session.is_conference:     # OTR on the MSRP chat stream; not with a conference focus
+                        if blink_session.info.streams.chat.encryption == 'OTR':
+                            menu.addAction(self.control_button.actions.disable_chat_otr)
+                        else:
+                            menu.addAction(self.control_button.actions.enable_chat_otr)
                     if 'audio' not in stream_types:
                         menu.addAction(self.control_button.actions.add_audio)
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
@@ -3886,6 +3893,27 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _AH_DisableOTR(self):
         self.selected_session.chat_widget.stop_otr_timer()
         self.selected_session.messages_stream.disable_otr()
+
+    def _AH_EnableChatOTR(self):
+        """Start OTR on the MSRP chat stream (what /otr+ does)."""
+        stream = self.selected_session.chat_stream
+        if stream is None or stream._done:
+            return
+        try:
+            stream.encryption.start()
+        except Exception as e:
+            log.error('Cannot start OTR on the chat stream: %s' % e)
+        self._update_control_menu()
+
+    def _AH_DisableChatOTR(self):
+        stream = self.selected_session.chat_stream
+        if stream is None or stream._done:
+            return
+        try:
+            stream.encryption.stop()
+        except Exception as e:
+            log.error('Cannot stop OTR on the chat stream: %s' % e)
+        self._update_control_menu()
 
     def _AH_MainWindow(self):
         blink = QApplication.instance()
