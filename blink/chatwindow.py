@@ -30,6 +30,7 @@ from sipsimple.application import SIPApplication
 from sipsimple.audio import WavePlayer
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.payloads import ParserError
+from sipsimple.payloads.imdn import IMDNDocument
 from sipsimple.payloads.rcsfthttp import FTHTTPDocument
 from sipsimple.streams.msrp.chat import OTRState
 from sipsimple.threading import run_in_thread
@@ -3238,6 +3239,17 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
 
         message = notification.data.message
+
+        if message.content_type.lower() == IMDNDocument.content_type:
+            # a displayed receipt for one of ours, sent over the stream
+            try:
+                document = IMDNDocument.parse(message.content)
+                data = NotificationData(id=document.message_id.value, status=str(document.notification.status))
+            except (ParserError, AttributeError) as e:
+                log.warning(f'Invalid IMDN received over MSRP: {e}')
+                return
+            NotificationCenter().post_notification('BlinkGotDispositionNotification', sender=blink_session, data=data)
+            return
 
         message_id = msrp_message_id(message)       # the id history keeps it by
         content_type = message.content_type

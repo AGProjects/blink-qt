@@ -40,7 +40,7 @@ from sipsimple.payloads import ParserError
 from sipsimple.payloads.iscomposing import IsComposingDocument, IsComposingMessage, State, LastActive, Refresh, ContentType
 from sipsimple.payloads.imdn import IMDNDocument, DeliveryNotification, DisplayNotification
 from sipsimple.payloads.rcsfthttp import FTHTTPDocument, FileInfo
-from sipsimple.streams.msrp.chat import CPIMPayload, CPIMParserError, CPIMNamespace, CPIMHeader, ChatIdentity, Message as MSRPChatMessage, SimplePayload
+from sipsimple.streams.msrp.chat import CPIMPayload, CPIMParserError, CPIMNamespace, CPIMHeader, ChatIdentity, ChatStream, Message as MSRPChatMessage, SimplePayload
 from sipsimple.threading import run_in_thread
 from sipsimple.util import ISOTimestamp
 
@@ -391,6 +391,12 @@ def msrp_message_id(message):
     return str(uuid.UUID(digest[:32]).hex)
 
 
+# A displayed receipt on an MSRP chat comes back over the stream as a CPIM wrapped IMDN
+# (delivery is the MSRP success report): advertise it in a=accept-wrapped-types.
+if IMDNDocument.content_type not in ChatStream.accept_wrapped_types:
+    ChatStream.accept_wrapped_types = ChatStream.accept_wrapped_types + [IMDNDocument.content_type]
+
+
 def send_msrp_message(chat_stream, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None):
     """Send a chat message over MSRP with an id of ours (also its imdn.Message-ID when the stream
     wraps it in CPIM; a header would force CPIM on a peer without it and fail), returned."""
@@ -399,7 +405,13 @@ def send_msrp_message(chat_stream, content, content_type='text/plain', recipient
     message_id = uuid.uuid4().hex
     headers = [header for header in (additional_headers or ()) if header.name != 'Message-ID']
     if getattr(chat_stream, 'cpim_enabled', False) and contains_mime_type(getattr(chat_stream, 'remote_accept_wrapped_types', None) or [], content_type):
-        headers.append(CPIMHeader('Message-ID', CPIMNamespace('urn:ietf:params:imdn', 'imdn'), message_id))
+        imdn_ns = CPIMNamespace('urn:ietf:params:imdn', 'imdn')
+        headers.append(CPIMHeader('Message-ID', imdn_ns, message_id))
+        # one to one only: in a room every participant would answer
+        blink_session = getattr(chat_stream, 'blink_session', None)
+        account = getattr(blink_session, 'account', None)
+        if content_type.startswith('text/') and not getattr(chat_stream.session, 'remote_focus', False) and getattr(getattr(account, 'sms', None), 'enable_imdn', False):
+            headers.append(CPIMHeader('Disposition-Notification', imdn_ns, 'display'))
     message = QueuedMessage(content, content_type, recipients=recipients, courtesy_recipients=courtesy_recipients, subject=subject, timestamp=timestamp,
                             required=required, additional_headers=headers, id=message_id, notify_progress=True)
     chat_stream._enqueue_message(message)
