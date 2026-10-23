@@ -164,6 +164,7 @@ class ConversationHeader(QWidget):
         self.contact = self.uri = self.key = None
         self.account = None
         self.day_counts = {}
+        self.search_day_counts = lambda: None  # set by the pane: the days a search shows ({'YYYY-MM-DD': hits}), None without a search
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -371,6 +372,10 @@ class ConversationHeader(QWidget):
             self.calendar_button.setEnabled(bool(counts))
 
     def _fill_calendar_menu(self):
+        searched = self.search_day_counts()
+        if searched is not None:    # searching: the days with hits, with their number of hits
+            fill_calendar_menu(self.calendar_menu, searched, self.dayChosen.emit)
+            return
         fill_calendar_menu(self.calendar_menu, self.day_counts, self.dayChosen.emit, self.nowChosen.emit if self.jumped() else None)
 
     def set_account(self, account):

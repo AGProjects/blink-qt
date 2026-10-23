@@ -12,8 +12,10 @@ jump_to(day) loads the page ending with that day instead; the newer messages
 then come a page at a time as the view reaches the bottom (load_newer), and
 live messages wait until they are reached.
 
-search(text) shows the conversation's text messages containing the text
-instead (newest 200, oldest first); search('') goes back to the conversation.
+search(text) shows the days on which the conversation has text messages
+containing the text instead, each day whole (the newest 200 hits, on at most the
+newest 30 such days, oldest first), so the hits are read in their context;
+search('') goes back to the conversation.
 
 Files being sent over HTTP (blink.messagepane.uploads) are rows too, after the
 newest page, until a message of their transfer is in history.
@@ -401,7 +403,9 @@ class ConversationModel(QAbstractListModel):
 
     # Loading
 
-    search_limit = 200
+    search_limit = 200          # hits
+    search_day_limit = 30       # days shown, the newest ones with hits
+    search_context_limit = 3000 # rows of those days
 
     def search(self, text):
         """Show the messages containing text; an empty text shows the conversation again."""
@@ -419,22 +423,31 @@ class ConversationModel(QAbstractListModel):
     @run_in_thread('db')
     def _search(self, generation, text):
         from blink.history import MessageHistory
+        history = MessageHistory()
         try:
-            rows = MessageHistory().search_messages(self.history_key, text, limit=self.search_limit)
+            rows = history.search_messages(self.history_key, text, limit=self.search_limit)
+            hits, day_counts = set(), {}
+            for row in rows:
+                if is_renderable(row) and row.message_id not in hits:
+                    hits.add(row.message_id)
+                    day = row.timestamp.replace(tzinfo=timezone.utc).astimezone().date().isoformat()     # stored naive UTC
+                    day_counts[day] = day_counts.get(day, 0) + 1
+            days = sorted(day_counts, reverse=True)[:self.search_day_limit]
+            context = history.get_messages_on_days(self.history_key, days, category=self.category, limit=self.search_context_limit)
         except Exception as e:
             log.warning(f'Searching the conversation with {self.name} failed: {e!r}')
             call_in_gui_thread(self._apply_failed, generation)
             return
         seen, found = set(), []
-        for row in rows:
+        for row in context:       # oldest first
             if row.message_id not in seen and is_renderable(row):
                 seen.add(row.message_id)
                 found.append(MessageItem(row))
-        found.reverse()
         attach_replies(found)
-        call_in_gui_thread(self._apply_search, generation, text, found, len(rows) >= self.search_limit)
+        truncated = len(rows) >= self.search_limit or len(day_counts) > len(days) or len(context) >= self.search_context_limit
+        call_in_gui_thread(self._apply_search, generation, text, found, hits, {day: day_counts[day] for day in days}, truncated)
 
-    def _apply_search(self, generation, text, found, truncated):
+    def _apply_search(self, generation, text, found, hits, day_counts, truncated):
         if generation != self._generation or self.closed:
             return
         self.beginResetModel()
@@ -442,12 +455,28 @@ class ConversationModel(QAbstractListModel):
         self.ids = {item.id: item for item in found}
         self.endResetModel()
         self.has_more = False
+        self.has_newer = False
+        self.search_hits = {item.id for item in found if item.id in hits}
+        self.search_day_counts = day_counts
         self.search_truncated = truncated
         self._set_loading(False)
-        ActivityLog().info(f'[Message with {self.name}] Search for {text!r}: {len(found)} messages' + (f' (the newest {self.search_limit})' if truncated else ''))
+        ActivityLog().info(f'[Message with {self.name}] Search for {text!r}: {len(self.search_hits)} messages on {len(day_counts)} days, {len(found)} messages shown'
+                           + (' (the newest only)' if truncated else ''))
         self.initialLoadFinished.emit()
+        newest = next((position for position in range(len(found) - 1, -1, -1) if found[position].id in self.search_hits), None)
+        if newest is not None:
+            self.jumped.emit(newest)    # the newest hit at the top, its day after it
 
     search_truncated = False
+    search_hits = frozenset()       # ids of the rows shown that contain the searched text
+    search_day_counts = {}          # 'YYYY-MM-DD': hits that day, for the days shown
+
+    def search_day_row(self, day):
+        """The first row of a day shown by the search, or None."""
+        for position, item in enumerate(self.items):
+            if item.timestamp.astimezone().date() == day:
+                return position
+        return None
 
     def set_category(self, category):
         """Show one category only (None: everything), from the newest page."""
@@ -458,6 +487,10 @@ class ConversationModel(QAbstractListModel):
         ActivityLog().info(f'[Message with {self.name}] Showing ' + (f'{category} only' if category else 'all messages'))
         if not self.search_text:
             self.load()
+        else:       # the days found, of that category only
+            self._generation += 1
+            self._set_loading(True)
+            self._search(self._generation, self.search_text)
 
     def _shows(self, item):
         return self.category is None or item.category == self.category

@@ -1243,6 +1243,36 @@ class MessageHistory(object, metaclass=Singleton):
                  + f" group by remote_uri")
         return {remote_uri: count for remote_uri, count in self.db.queryAll(query)}
 
+    # Message search (the main window search box in messages mode)
+
+    search_min_length = 4       # shorter text would match half the database
+
+    @run_in_thread('db')
+    def search_conversations(self, text, callback):
+        """Calls back in the GUI thread with (text, {conversation key: (matches, last match time)}) of
+        the messages whose text contains `text` (case insensitive), over the whole database but only
+        for the enabled accounts: the database may hold the history of other accounts too. Only text
+        messages are searched, as the message pane's search does (search_messages); ciphertext not
+        decrypted yet cannot match."""
+        text = str(text or '').strip()
+        if len(text) < self.search_min_length:
+            call_in_gui_thread(callback, text, {})
+            return
+        table = Message.sqlmeta.table
+        db = self.db
+        pattern = '%' + text.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+        query = (f"select remote_uri, count(*), max(timestamp) from {table}"
+                 f" where {self._get_enabled_account_filter()} and {NOT_DELETED_SQL} and state != 'deleted'"
+                 f" and category = 'text' and content not like '-----BEGIN PGP%'"
+                 f" and content like {db.sqlrepr(pattern)} escape '!'"
+                 f" group by remote_uri")
+        try:
+            rows = db.queryAll(query)
+        except Exception as e:
+            ActivityLog().error(f'[db] Searching the messages failed: {e}')
+            rows = []
+        call_in_gui_thread(callback, text, {str(remote_uri): (int(count), str(last or '')) for remote_uri, count, last in rows if remote_uri})
+
     # Tombstones
     #
     # A removed message or conversation is hidden (deleted = 1, deleted_time =
@@ -1651,6 +1681,18 @@ class MessageHistory(object, metaclass=Singleton):
         query = (f"{self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL} and category = 'text'"
                  f" and content like {self.db.sqlrepr(pattern)} escape '\\'" + self._shown_accounts_sql(accounts))
         return list(Message.select(query, orderBy=['-timestamp', '-id'], limit=int(limit)))
+
+    def get_messages_on_days(self, remote_uri, days, category=None, limit=2000, accounts=None):
+        """The messages of a conversation on some days (local dates), oldest first, as get_messages
+        pages them (no trail ticks, no sidecars): the days a search found something on, whole."""
+        days = sorted({str(day) for day in days if day})
+        if not days:
+            return []
+        actions = ', '.join(self.db.sqlrepr(action) for action in self.__trail_actions__)
+        query = (f'{self._remote_uri_sql(remote_uri)} and {NOT_DELETED_SQL}' + self._category_sql(category) + self._shown_accounts_sql(accounts)
+                 + f" and content_type != '{METADATA_CONTENT_TYPE}' and (related_action is null or related_action not in ({actions}))"
+                 + f" and date(timestamp, 'localtime') in ({', '.join(self.db.sqlrepr(day) for day in days)})")
+        return list(Message.select(query, orderBy=['timestamp', 'id'], limit=int(limit)))
 
     def present_categories(self, remote_uri, accounts=None):
         """The category filters a conversation has messages for, 'links' included."""

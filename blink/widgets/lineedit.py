@@ -312,13 +312,72 @@ class ClearButton(QAbstractButton):
             painter.drawLine(padding, height-padding, width-padding, padding)
 
 
+class SearchModeButton(QAbstractButton):
+    """What the search box searches: contacts (a person) or, checked, the text of the messages (a bubble)."""
+
+    def __init__(self, parent=None, size=16):
+        super(SearchModeButton, self).__init__(parent)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setCheckable(True)
+        self.setMinimumSize(size+2, size+2)
+        self.icons = {}
+        for checked, name in ((False, 'icons/user.svg'), (True, 'icons/chat.svg')):
+            pixmap = QPixmap()
+            self.icons[checked] = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation) if pixmap.load(Resources.get(name)) else None
+        self._tinted = {}
+        self.toggled.connect(self._update_tooltip)
+        self._update_tooltip(False)
+
+    def _update_tooltip(self, checked):
+        if checked:
+            self.setToolTip(translate('search_box', 'Searching messages. Click to search contacts'))
+        else:
+            self.setToolTip(translate('search_box', 'Searching contacts. Click to search messages'))
+
+    def _icon(self):
+        icon = self.icons.get(self.isChecked())
+        if icon is None:
+            return None
+        # drawn dark for a light background; tinted like the loupe under a dark theme, and in the highlight colour while searching messages
+        if self.isChecked():
+            color = self.palette().color(QPalette.ColorRole.Highlight)
+        elif is_dark_theme():
+            color = self.palette().color(QPalette.ColorRole.PlaceholderText)
+        else:
+            return icon
+        key = (self.isChecked(), color.rgba())
+        if key not in self._tinted:
+            pixmap = QPixmap(icon)
+            painter = QPainter(pixmap)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(pixmap.rect(), color)
+            painter.end()
+            self._tinted[key] = pixmap
+        return self._tinted[key]
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        if self.isDown():
+            painter.setOpacity(0.6)
+        icon = self._icon()
+        if icon is not None:
+            x = int((self.width() - icon.width()) / 2)
+            y = int((self.height() - icon.height()) / 2)
+            painter.drawPixmap(x, y, icon)
+
+
 class SearchBox(LineEdit):
+    searchModeChanged = pyqtSignal(bool)    # True: messages, False: contacts
+
     def __init__(self, parent=None):
         super(SearchBox, self).__init__(parent=parent)
         self.search_icon = SearchIcon(self)
         self.clear_button = ClearButton(self)
+        self.mode_button = SearchModeButton(self)
         self.addHeadWidget(self.search_icon)
         self.addTailWidget(self.clear_button)
+        self.addTailWidget(self.mode_button)    # left of the clear button, which comes and goes
         option = QStyleOptionFrame()
         self.initStyleOption(option)
         frame_width = self.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth, option, self)
@@ -326,8 +385,30 @@ class SearchBox(LineEdit):
         self.setMinimumHeight(widgets_height + 2 + 2*frame_width)
         self.clear_button.hide()
         self.clear_button.clicked.connect(self.clear)
+        self.mode_button.hide()                 # offered where messages can be searched (enable_message_search)
+        self.mode_button.toggled.connect(self._SH_ModeButtonToggled)
         self.textChanged.connect(self._SH_TextChanged)
         self.inactiveText = translate('search_box', "Search")
+        self.contacts_inactive_text = self.messages_inactive_text = None
+
+    def enable_message_search(self, contacts_text, messages_text):
+        """Offer the toggle between searching contacts and searching messages, with the
+        placeholder text of each mode."""
+        self.contacts_inactive_text = contacts_text
+        self.messages_inactive_text = messages_text
+        self.mode_button.show()
+        self._SH_ModeButtonToggled(self.mode_button.isChecked())
+
+    @property
+    def searching_messages(self):
+        return not self.mode_button.isHidden() and self.mode_button.isChecked()
+
+    def _SH_ModeButtonToggled(self, checked):
+        text = self.messages_inactive_text if checked else self.contacts_inactive_text
+        if text:
+            self.inactiveText = text
+            self.update()
+        self.searchModeChanged.emit(checked)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:

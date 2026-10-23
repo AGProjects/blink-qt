@@ -6470,6 +6470,28 @@ class ContactSearchModel(QSortFilterProxyModel):
         self.search_text = text or ''
         super(ContactSearchModel, self).setFilterFixedString(text)
 
+    # Messages mode: the contacts with a conversation whose messages contain the searched text
+    # (MessageHistory.search_conversations), the most recent match first
+    messages_mode = False
+    message_matches = {}        # conversation key: (matches, last match time)
+
+    def set_messages_mode(self, enabled):
+        enabled = bool(enabled)
+        if enabled != self.messages_mode:
+            self.messages_mode = enabled
+            self.message_matches = {}
+            self.invalidate()
+
+    def set_message_matches(self, matches):
+        self.message_matches = dict(matches or {})
+        self.invalidate()
+
+    def _last_match(self, item):
+        """The time of the contact's most recent matching message ('' for none)."""
+        if not self.message_matches or not isinstance(item, Contact):
+            return ''
+        return max((self.message_matches[key][1] for key in contact_conversation_keys(item) if key in self.message_matches), default='')
+
     def flags(self, index):
         if index.isValid():
             return QSortFilterProxyModel.flags(self, index) | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsDragEnabled
@@ -6482,11 +6504,17 @@ class ContactSearchModel(QSortFilterProxyModel):
         item = source_index.data(Qt.ItemDataRole.UserRole)
         if isinstance(item, Group) or not item.group.virtual:
             return False
+        if self.messages_mode:
+            return bool(self._last_match(item))
         search_tokens = [token.removeprefix('sips:').removeprefix('sip:') for token in self.search_text.lower().split()]
         searched_item = ' '.join([str(item.name or '')] + [str(uri.uri) for uri in item.uris]).lower()
         return all(token in searched_item for token in search_tokens)
 
     def lessThan(self, left_index, right_index):
+        if self.messages_mode:
+            left, right = (self._last_match(index.data(Qt.ItemDataRole.UserRole)) for index in (left_index, right_index))
+            if left != right:
+                return left > right     # most recent first
         return left_index.data(Qt.ItemDataRole.DisplayRole) < right_index.data(Qt.ItemDataRole.DisplayRole)
 
     def supportedDropActions(self):

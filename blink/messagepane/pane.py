@@ -82,6 +82,7 @@ class MessagePane(QWidget):
         self.header.dayChosen.connect(self._jump_to)
         self.header.nowChosen.connect(self._back_to_now)
         self.header.jumped = self._jumped
+        self.header.search_day_counts = self._search_day_counts
         self.header.locationAction.connect(self._location_action)
         self.header.addressChosen.connect(self._SH_AddressChosen)
         self.header.accountChosen.connect(self._SH_AccountChosen)
@@ -179,21 +180,25 @@ class MessagePane(QWidget):
             palette.setColor(group, QPalette.ColorRole.WindowText, secondary_text_color(self.palette(), group))
         self.empty_label.setPalette(palette)
 
-    def show_conversation(self, contact, uri, key):
+    def show_conversation(self, contact, uri, key, search=None):
         """Switch to the conversation with a contact, sending to one of its addresses (key: its conversation key).
 
         The messages of all the contact's addresses are shown, as one conversation; the
         address only says where the next message goes (the one chosen last for the
         contact, when there is one). With the pane closed nothing is loaded: the
-        conversation is shown when the pane opens."""
+        conversation is shown when the pane opens.
+
+        With search, the conversation opens searched for that text (the main window searching
+        messages): the days with messages containing it."""
         if not self.isVisible():
-            self._pending = (contact, uri, key)
+            self._pending = (contact, uri, key, search)
             return
         self._pending = None
         view_key = self._contact_keys(contact, key)
         if contact is self.contact and view_key == self.view_key:
             if key != self.key:
                 self._switch_address(uri, key)
+            self._search_for(search)
             return
         chosen_address = self.chosen_addresses.get(view_key)
         if chosen_address is not None and chosen_address[1] in view_key:
@@ -222,6 +227,19 @@ class MessagePane(QWidget):
         also = [other for other in view_key if other != key]
         ActivityLog().info(f'[Message with {key}] Conversation selected in the message pane ({uri.uri}, {how})' + (f', with the messages of {", ".join(also)}' if also else ''))
         self._update_auto_download_button()
+        self._search_for(search)
+
+    def _search_for(self, search):
+        model = self.models.get(self.view_key) if self.view_key is not None else None
+        search = (search or '').strip()
+        if model is not None and search and (model.search_text != search or not self.strip.search_active):
+            ActivityLog().info(f'[Message with {self.key}] Searching for {search!r} (from the contact list)')
+            self.strip.search_for(search)
+
+    def _search_day_counts(self):
+        """The calendar while searching: the days shown, with their hits."""
+        model = self.models.get(self.view_key) if self.view_key is not None else None
+        return dict(model.search_day_counts) if model is not None and model.search_text and not model.loading else None
 
     def _set_conference_mode(self, key):
         """A conference room's messages are the room's conversation but written by its participants:
@@ -600,6 +618,11 @@ class MessagePane(QWidget):
         model = self.models.get(self.view_key)
         if model is None:
             return
+        if model.search_text:
+            row = model.search_day_row(day)
+            if row is not None:     # a day the search shows: go there, the search stays
+                model.jumped.emit(row)
+                return
         model.jump_to(day)
         self.strip.set_conversation(model, self.transcript)     # a search gives way to the jump
 

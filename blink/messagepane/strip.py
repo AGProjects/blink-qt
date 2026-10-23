@@ -4,7 +4,7 @@ On the left, what is loaded ("36 messages, 6 Oct 08:07 – 7 Oct 09:12") and a
 note: loading older messages, the beginning of the conversation, or, only once
 the user has scrolled up, that scrolling further up loads older messages. On
 the right the calendar (the header's: jump to a date) and the search field: typing searches the whole conversation in history
-(the transcript shows the hits, highlighted).
+(the transcript shows the days with hits, whole, the hits highlighted; the calendar then offers those days only).
 
 Clicking the field opens the search: an X appears at its right and the
 category chips show (searchActiveChanged). They stay, with or without text,
@@ -168,6 +168,18 @@ class TranscriptStrip(QWidget):
     def _signals(model):
         return (model.rowsInserted, model.rowsRemoved, model.modelReset, model.loadingChanged)
 
+    def search_for(self, text):
+        """Open the search with a text, as if typed (the main window searching messages)."""
+        if self.model is None:
+            return
+        self._search_timer.stop()
+        self.search_field.blockSignals(True)
+        self.search_field.setText(text)
+        self.search_field.blockSignals(False)
+        self.set_search_active(True)
+        self.model.search(text)
+        self.update_text()
+
     def _search(self):
         self._search_timer.stop()
         if self.model is not None:
@@ -181,14 +193,15 @@ class TranscriptStrip(QWidget):
         if model.search_text:
             if model.loading:
                 text = translate('message_pane', 'Searching…')
-            elif not model.items:
+            elif not model.search_hits:
                 text = translate('message_pane', 'No messages contain “%s”') % model.search_text
             else:
-                count = len(model.items)
+                count, days = len(model.search_hits), len(model.search_day_counts)
                 text = (translate('message_pane', '1 message contains “%s”') % model.search_text if count == 1
                         else translate('message_pane', '%d messages contain “%s”') % (count, model.search_text))
+                text += translate('message_pane', ', on 1 day') if days == 1 else translate('message_pane', ', on %d days') % days
                 if model.search_truncated:
-                    text += translate('message_pane', ' (the newest %d)') % count
+                    text += translate('message_pane', ' (the newest)')
         else:
             text = range_text(model.items)
             if model.loading:

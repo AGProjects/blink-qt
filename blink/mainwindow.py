@@ -291,6 +291,8 @@ class MainWindow(base_class, ui_class):
         self.search_box.textChanged.connect(self._SH_SearchBoxTextChanged)
         self.search_box.returnPressed.connect(self._SH_SearchBoxReturnPressed)
         self.search_box.shortcut.activated.connect(self.search_box.setFocus)
+        self.search_box.searchModeChanged.connect(self._SH_SearchBoxModeChanged)
+        self.message_search_timer.timeout.connect(self._search_messages)
 
         self.search_list.selectionModel().selectionChanged.connect(self._SH_SearchListSelectionChanged)
 
@@ -398,6 +400,14 @@ class MainWindow(base_class, ui_class):
 
         self.search_box.shortcut = QShortcut(self.search_box)
         self.search_box.shortcut.setKey('Ctrl+F')
+        self.search_box.enable_message_search(translate('main_window', 'Search Contacts or Enter Address'),
+                                              translate('main_window', 'Search Messages (at least 4 letters)'))
+        # messages are searched once typing pauses, the query runs over the whole database
+        self.message_search_timer = QTimer(self)
+        self.message_search_timer.setSingleShot(True)
+        self.message_search_timer.setInterval(300)
+        self._message_search_answered = None   # the text the last message search answered
+        self._not_found_text = self.not_found_label.text()
 
         self.output_devices_group = QActionGroup(self)
         self.input_devices_group = QActionGroup(self)
@@ -1342,22 +1352,37 @@ class MainWindow(base_class, ui_class):
         self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) == 1 and isinstance(selected_items[0].data(Qt.ItemDataRole.UserRole), Contact))
         self._follow_selection(selected_items)
 
-    def _follow_selection(self, selected_indexes):
-        """The message pane shows the one selected contact's conversation (and opens only when asked)."""
+    def _follow_selection(self, selected_indexes, search=None):
+        """The message pane shows the one selected contact's conversation (and opens only when asked).
+        A result of searching messages opens the pane, its conversation searched for the same text."""
         contact = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if len(selected_indexes) == 1 else None
         if isinstance(contact, Contact):
             uri, key = conversation_uri(contact)
             if uri is not None:
-                self.message_pane.show_conversation(contact, uri, key)
+                if search:
+                    self.set_message_pane_visible(True)
+                self.message_pane.show_conversation(contact, uri, key, search=search)
                 return
         self.message_pane.clear()
 
     def _SH_ContactModelAddedItems(self, items):
         if not self.search_box.text():
             return
-        active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
-        self.search_view.setCurrentWidget(active_widget)
+        self._show_search_results()
         self._update_add_search_contact_button()
+
+    def _show_search_results(self):
+        """The result list, or the not found panel when nothing matched. Searching messages, the
+        list (empty) stays while the text is too short or the query has not answered yet."""
+        if self.search_box.searching_messages:
+            searched = self.search_box.text().strip()
+            answered = getattr(self, '_message_search_answered', None) == searched and len(searched) >= self.history_manager.message_history.search_min_length
+            empty = answered and not self.contact_search_model.rowCount()
+            self.not_found_label.setText(translate('main_window', 'No conversation contains "%s".') % searched if empty else self._not_found_text)
+        else:
+            empty = not self.contact_search_model.rowCount()
+            self.not_found_label.setText(self._not_found_text)
+        self.search_view.setCurrentWidget(self.not_found_panel if empty else self.search_list_panel)
 
     def _searched_addresses(self, text):
         """The addresses the search text stands for: itself when it has a domain, else the text
@@ -1373,9 +1398,10 @@ class MainWindow(base_class, ui_class):
         return {f'{text}@{domain}' for domain in domains}
 
     def _update_add_search_contact_button(self):
-        """No Add Contact while the searched address is already a contact in the results."""
-        wanted = self._searched_addresses(self.search_box.text())
-        found = False
+        """No Add Contact while the searched address is already a contact in the results, nor
+        while searching messages (the text is no address)."""
+        wanted = set() if self.search_box.searching_messages else self._searched_addresses(self.search_box.text())
+        found = self.search_box.searching_messages
         if wanted:
             model = self.contact_search_model
             for row in range(model.rowCount()):
@@ -1404,11 +1430,10 @@ class MainWindow(base_class, ui_class):
     def _SH_ContactModelRemovedItems(self, items):
         if not self.search_box.text():
             return
-        if any(type(item) is Contact for item in items) and self.contact_search_model.rowCount() == 0:
+        if any(type(item) is Contact for item in items) and self.contact_search_model.rowCount() == 0 and not self.search_box.searching_messages:
             self.search_box.clear()  # check this. it is no longer be the correct behaviour as now contacts can be deleted from remote -Dan
         else:
-            active_widget = self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel
-            self.search_view.setCurrentWidget(active_widget)
+            self._show_search_results()
             self._update_add_search_contact_button()
 
     def _SH_DisplayNameEditingFinished(self):
@@ -1479,21 +1504,59 @@ class MainWindow(base_class, ui_class):
         selected = self.search_list.selectionModel().selectedIndexes()
         index = selected[0] if len(selected) == 1 else self.contact_search_model.index(0, 0)
         item = index.data(Qt.ItemDataRole.UserRole) if index.isValid() else None
+        if self.search_box.searching_messages:
+            # searched text, not an address: the result's conversation, searched for it
+            if isinstance(item, Contact):
+                self._follow_selection([index], search=address)
+            return
         if isinstance(item, Contact) and item.uri is not None and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:
             start_contact_conversation(item, item.uri)
             return
         contact, contact_uri = URIUtils.find_contact(address)
         start_contact_conversation(contact, contact_uri)
 
+    def _SH_SearchBoxModeChanged(self, messages):
+        self.contact_search_model.set_messages_mode(messages)
+        self._message_search_answered = None
+        self.search_list.selectionModel().clearSelection()
+        self._SH_SearchBoxTextChanged(self.search_box.text())
+
+    def _search_messages(self):
+        """Ask the database which conversations contain the searched text (enabled accounts only)."""
+        if not self.search_box.searching_messages:
+            return
+        text = self.search_box.text().strip()
+        if len(text) >= self.history_manager.message_history.search_min_length:
+            self.history_manager.message_history.search_conversations(text, self._SH_MessageSearchFinished)
+
+    def _SH_MessageSearchFinished(self, text, matches):
+        if not self.search_box.searching_messages or text != self.search_box.text().strip():
+            return      # an answer to text since changed
+        self._message_search_answered = text
+        self.contact_search_model.set_message_matches(matches)
+        if self.contacts_view.currentWidget() is self.search_panel:
+            self._show_search_results()
+            # the result still selected follows the text typed since: its conversation searched again
+            selected = self.search_list.selectionModel().selectedIndexes()
+            if len(selected) == 1 and self.message_pane.isVisible():
+                self._follow_selection(selected, search=text)
+
     def _SH_SearchBoxTextChanged(self, text):
         self.contact_search_model.setFilterFixedString(text)
         account_manager = AccountManager()
+        if self.search_box.searching_messages:
+            self.message_search_timer.stop()
+            if len(text.strip()) >= self.history_manager.message_history.search_min_length:
+                self.message_search_timer.start()
+            else:
+                self._message_search_answered = None
+                self.contact_search_model.set_message_matches({})
         if text:
             self.switch_view_button.view = SwitchViewButton.ContactView
             if self.contacts_view.currentWidget() is not self.search_panel:
                 self.search_list.selectionModel().clearSelection()
             self.contacts_view.setCurrentWidget(self.search_panel)
-            self.search_view.setCurrentWidget(self.search_list_panel if self.contact_search_model.rowCount() else self.not_found_panel)
+            self._show_search_results()
             selected_items = self.search_list.selectionModel().selectedIndexes()
             self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) <= 1)
             self._update_add_search_contact_button()
@@ -1508,7 +1571,7 @@ class MainWindow(base_class, ui_class):
         account_manager = AccountManager()
         selected_items = self.search_list.selectionModel().selectedIndexes()
         self.enable_call_buttons(account_manager.default_account is not None and len(selected_items) <= 1)
-        self._follow_selection(selected_items)
+        self._follow_selection(selected_items, search=self.search_box.text().strip() if self.search_box.searching_messages else None)
 
     def _SH_ServerToolsAccountModelChanged(self, parent_index, start, end):
         server_tools_enabled = self.server_tools_account_model.rowCount() > 0
