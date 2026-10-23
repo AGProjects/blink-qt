@@ -180,6 +180,7 @@ class BlinkSettings(SettingsObject):
     interface = BlinkInterfaceSettings
 
     video_settings_version = Setting(type=int, default=0)   # see Blink._migrate_video_settings
+    preferred_media_version = Setting(type=int, default=0)  # see Blink._migrate_preferred_media
     screenshots_directory = Setting(type=Path, default=Path('~/Downloads'))
     transfers_directory = Setting(type=Path, default=Path('~/Downloads'))
 

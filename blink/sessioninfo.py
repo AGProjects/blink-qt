@@ -399,7 +399,7 @@ class SessionInfoPanel(base_class, ui_class):
         return False
 
     def _SH_LatencyGraphUpdated(self):
-        self.latency_label.setText(translate('chat_window', 'Network Latency: %dms, max=%dms') % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
+        self.latency_label.setText(translate('chat_window', 'Round-trip time: %dms, max=%dms') % (max(self.audio_latency_graph.last_value, self.video_latency_graph.last_value), self.latency_graph.max_value))
 
     def _SH_PacketLossGraphUpdated(self):
         self.packet_loss_label.setText(translate('chat_window', 'Packet Loss: %.1f%%, max=%.1f%%') % (max(self.audio_packet_loss_graph.last_value, self.video_packet_loss_graph.last_value), self.packet_loss_graph.max_value))

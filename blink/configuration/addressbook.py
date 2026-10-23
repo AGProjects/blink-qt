@@ -29,7 +29,7 @@ class ContactExtension(ContactExtension):
 
     # shared with Blink for macOS and Sylk Mobile. Booleans use Boolean: a value
     # applied from the XCAP document is the string 'true' or 'false'
-    preferred_media = SharedSetting(type=str, default='audio')
+    preferred_media = SharedSetting(type=str, default='messages')    # what double-click / Enter does: messages, audio or video
     auto_answer = SharedSetting(type=Boolean, default=False)
     organization = SharedSetting(type=str, default='')
     disable_smileys = SharedSetting(type=Boolean, default=False)

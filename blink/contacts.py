@@ -99,16 +99,35 @@ def is_messages_group(group_settings):
     return group_settings is not None and (getattr(group_settings, 'id', None) == MESSAGES_GROUP_ID or group_settings is MessageContactsGroup())
 
 
+def preferred_media_choice(value):
+    """A preferred media value reduced to what double-click / Enter can do: 'messages', 'audio'
+    or 'video'. Values left from older versions (chat, audio+chat) map to the call they
+    included, else messages."""
+    streams = set(str(value or 'messages').split('+'))
+    if 'video' in streams:
+        return 'video'
+    if 'audio' in streams:
+        return 'audio'
+    return 'messages'
+
+
 def start_contact_conversation(contact, contact_uri):
-    """What double-click / Enter on a contact does: open its conversation in the message pane.
+    """What double-click / Enter on a contact does, by the contact's preferred media: open its
+    conversation in the message pane (the default), or start an audio or a video call.
     A conference room is the exception: a room is session based (MSRP, RTP) and has no message
-    conversation, so its MSRP chat window opens, from where it is connected. Calls, video and the rest are started from their own buttons
-    and menus (a contact's preferred media is no longer used here, nor offered in the editor)."""
+    conversation, so its MSRP chat window opens, from where it is connected."""
     uri = getattr(contact_uri, 'uri', contact_uri)
     if uri is not None and is_conference_uri(str(uri)):
         _join_conference_chat(contact, contact_uri, str(uri))
         return
-    QApplication.instance().main_window.show_conversation_in_pane(contact, contact_uri)
+    # only addressbook contacts carry an editable preference (Bonjour neighbours and the like open the conversation)
+    media = preferred_media_choice(contact.preferred_media) if getattr(contact, 'type', None) == 'addressbook' else 'messages'
+    if media == 'audio':
+        SessionManager().create_session(contact, contact_uri, [StreamDescription('audio')])
+    elif media == 'video':
+        SessionManager().create_session(contact, contact_uri, [StreamDescription('audio'), StreamDescription('video')])
+    else:
+        QApplication.instance().main_window.show_conversation_in_pane(contact, contact_uri)
 
 
 def _join_conference_chat(contact, contact_uri, uri):
@@ -1201,7 +1220,7 @@ class CallsGroupFiler(object, metaclass=Singleton):
                 contact = addressbook.Contact()
                 contact.name = address.partition('@')[0] if conference else (display_name or address)
                 contact.uris = [addressbook.ContactURI(uri=address, type='tel' if e164 else 'SIP')]
-                contact.preferred_media = 'audio'
+                contact.preferred_media = 'messages'
                 contact.save()
                 publish_contact_for_groups(contact)
             targets = [(CONFERENCE, None)] if conference else [(CALLS, '_calls')] + ([(TEL, None)] if e164 else [])
@@ -1408,7 +1427,7 @@ class ContactRepair(object, metaclass=Singleton):
                     contact = addressbook.Contact()
                     contact.name = name or uri
                     contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
-                    contact.preferred_media = 'audio'
+                    contact.preferred_media = 'messages'
                     contact.save()
                     existing.append(contact)
                     created.append(f'{contact.name} <{uri}>')
@@ -8501,9 +8520,6 @@ class ContactEditorDialog(base_class, ui_class):
         self.preferred_media.setItemData(0, translate('contact_editor', 'messages'))
         self.preferred_media.setItemData(1, translate('contact_editor', 'audio'))
         self.preferred_media.setItemData(2, translate('contact_editor', 'video'))
-        self.preferred_media.setItemData(3, translate('contact_editor', 'chat'))
-        self.preferred_media.setItemData(4, translate('contact_editor', 'audio+chat'))
-        self.preferred_media.hide()     # double-click always opens the conversation: nothing to prefer
         self.pgp_key_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.pgp_key_label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
         self.pgp_key_label.hide()
@@ -8549,8 +8565,8 @@ class ContactEditorDialog(base_class, ui_class):
         self.presence_policy.setChecked(contact.presence.policy == 'allow')
         self.auto_answer.setChecked(contact.auto_answer)
         self.auto_download_media.setChecked(bool(contact.auto_download_media))
-        self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
-        self.original_groups = [group for group in self._selectable_groups() if contact.id in {member.id for member in group.contacts}]
+        self.preferred_media.setCurrentIndex(self.preferred_media.findData(preferred_media_choice(contact.preferred_media)))
+        self.original_groups =[group for group in self._selectable_groups() if contact.id in {member.id for member in group.contacts}]
         self.selected_groups = list(self.original_groups)
         self._update_groups_button()
         # a deleted contact is edited where it is: Restore brings it back to its groups and its presence
@@ -8729,6 +8745,9 @@ class ContactEditorDialog(base_class, ui_class):
         else:
             contact.auto_answer = False
         contact.auto_download_media = self.auto_download_media.isChecked()     # shared: replicated to the other devices
+        preferred_media = self.preferred_media.currentData() or 'messages'
+        if self.edited_contact is None or preferred_media != preferred_media_choice(contact.preferred_media):
+            contact.preferred_media = preferred_media     # a legacy value (audio+chat) is kept unless the choice changed
 
         # only an explicit action in the picture well changes the picture: a presence icon on
         # show is never uploaded (docs/CONTACT-AVATARS.md, Contact editor)
@@ -8828,7 +8847,7 @@ class ContactEditorDialog(base_class, ui_class):
         if 'presence.policy' in modified_attributes:
             self.presence_policy.setChecked(contact.presence.policy == 'allow')
         if 'preferred_media' in modified_attributes:
-            self.preferred_media.setCurrentIndex(self.preferred_media.findData(contact.preferred_media))
+            self.preferred_media.setCurrentIndex(self.preferred_media.findData(preferred_media_choice(contact.preferred_media)))
         if modified_attributes.intersection(('uris', 'uris.default')):
             self.contact_uri_model.update_from_contact(contact)
         if modified_attributes.intersection(('icon', 'alternate_icon', 'avatar_pending')):

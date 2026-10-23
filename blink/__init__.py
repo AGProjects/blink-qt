@@ -544,6 +544,29 @@ class Blink(QApplication, metaclass=QSingleton):
         blink_settings.video_settings_version = self.VIDEO_SETTINGS_VERSION
         blink_settings.save()
 
+    PREFERRED_MEDIA_VERSION = 1
+
+    def _migrate_preferred_media(self):
+        """Once, contacts that prefer audio go to messages: double-click / Enter follows the
+        preferred media again, and 'audio' was what contacts made from the call history and
+        imports got, and the old default, not a choice made in the contact editor."""
+        blink_settings = BlinkSettings()
+        if blink_settings.preferred_media_version >= self.PREFERRED_MEDIA_VERSION:
+            return
+        from sipsimple.addressbook import AddressbookManager
+        from blink.contacts import in_one_xcap_update
+        contacts = [contact for contact in AddressbookManager().get_contacts() if contact.preferred_media == 'audio']
+
+        def reset_preferred_media():
+            for contact in contacts:
+                contact.preferred_media = 'messages'
+                contact.save()
+        if contacts:
+            in_one_xcap_update('preferred-media-migration', reset_preferred_media)
+            ActivityLog().info('Preferred media of %d contacts changed from audio to messages' % len(contacts))
+        blink_settings.preferred_media_version = self.PREFERRED_MEDIA_VERSION
+        blink_settings.save()
+
     @staticmethod
     def _pin_h264_settings():
         """H.264 is not configurable: Constrained Baseline, which is all WebRTC peers
@@ -569,6 +592,10 @@ class Blink(QApplication, metaclass=QSingleton):
             self._pin_h264_settings()
         except Exception as e:
             ActivityLog().error('Cannot update the video settings: %s' % e)
+        try:
+            self._migrate_preferred_media()
+        except Exception as e:
+            ActivityLog().error('Cannot migrate the contacts preferred media: %s' % e)
         self.ip_address_monitor.start()
         try:
             from blink.reactor_watch import ReactorWatch

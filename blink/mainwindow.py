@@ -1469,9 +1469,9 @@ class MainWindow(base_class, ui_class):
         settings.save()
 
     def _SH_SearchBoxReturnPressed(self):
-        """Enter in the search box opens a conversation in the message pane, as Enter on a
-        contact does (calls start from their own buttons): the selected result, else the
-        first one, else the typed address."""
+        """Enter in the search box does what Enter on a contact does (its preferred media:
+        messages, audio or video): the selected result, else the first one, else the typed
+        address (which opens a conversation)."""
         address = self.search_box.text().strip()
         if not address:
             return
