@@ -140,7 +140,7 @@ class RTPStreamInfo(object, metaclass=ABCMeta):
             self._total_packets += packets
             self._total_packets_lost += packets_lost
             self._total_packets_discarded += packets_discarded
-            self.latency.append(statistics['rtt']['last'] / 1000 / 2)
+            self.latency.append(statistics['rtt']['last'] / 1000)  # full RTCP round-trip time, in ms
             self.jitter.append(statistics['rx']['jitter']['last'] / 1000)
             self.incoming_traffic.append(float(statistics['rx']['bytes'] - self.bytes_received))  # bytes/second
             self.outgoing_traffic.append(float(statistics['tx']['bytes'] - self.bytes_sent))      # bytes/second

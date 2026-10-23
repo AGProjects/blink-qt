@@ -11,6 +11,9 @@ to logs/rtp_trace.txt. Ported from DebugWindow.py (renderAudio, renderVideo and
 the RTPStream* handlers); the wording is kept so logs from both clients read
 the same. The echo canceller statistics (sipsimple AudioMixer.ec_statistics)
 are read during audio calls and once more when one ends, as macOS does.
+Every 5 seconds the RTP statistics of each audio and video stream (RTT, packet
+loss over the interval, jitter) are logged, worded as the command line clients
+(sip-session) print them.
 """
 
 import os
@@ -42,6 +45,19 @@ def _text(value):
     return value
 
 
+def _call_id(session):
+    call_id = getattr(getattr(session, '_invitation', None), 'call_id', None)
+    return _text(call_id) if call_id else None
+
+
+def _session_target(session):
+    """' to <address> (Call-ID <id>)' for the periodic lines, so concurrent calls can be told apart."""
+    uri = getattr(getattr(session, 'remote_identity', None), 'uri', None)
+    target = (' to %s' % str(uri).partition(':')[2]) if uri is not None else ''
+    call_id = _call_id(session)
+    return target + (' (Call-ID %s)' % call_id if call_id else '')
+
+
 def _candidate_type(candidate):
     kind = str(getattr(candidate, 'type', '') or '').lower()
     return ice_candidates.get(kind, kind or '?')
@@ -58,6 +74,8 @@ class RTPLog(object, metaclass=Singleton):
     EC_SUSPECT_ERL_DB = 12
     EC_SUSPECT_ERLE_DB = 10
     EC_SUSPECT_MIN_DURATION = 5
+    # RTP statistics, as sip-session prints them
+    rtp_stats_interval = 5
 
     notifications = ('SIPSessionDidEnd', 'SIPSessionDidFail', 'SIPSessionDidStart', 'SIPSessionDidRenegotiateStreams', 'RTPStreamDidChangeRTPParameters',
                      'RTPStreamICENegotiationDidSucceed', 'RTPStreamICENegotiationDidFail', 'RTPStreamICENegotiationStateDidChange',
@@ -71,6 +89,8 @@ class RTPLog(object, metaclass=Singleton):
         self._file = None
         self._audio_sessions = set()
         self._ec_timer_armed = False
+        self._rtp_stats_armed = False
+        self._rtp_counters = {}     # stream -> (rx packets, rx packets lost) at the previous tick
 
     def start(self):
         if self._started:
@@ -140,6 +160,11 @@ class RTPLog(object, metaclass=Singleton):
             self._ec_timer_armed = True
         if arm:
             call_in_gui_thread(call_later, self.ec_first_delay, self._ec_tick)
+        with self._lock:
+            arm = not self._rtp_stats_armed
+            self._rtp_stats_armed = True
+        if arm:
+            call_in_gui_thread(call_later, self.rtp_stats_interval, self._rtp_stats_tick)
 
     def _end_echo_canceller(self, session):
         with self._lock:
@@ -158,6 +183,42 @@ class RTPLog(object, metaclass=Singleton):
             self._log_echo_canceller(session, False)
         call_later(self.ec_interval, self._ec_tick)
 
+    # RTP statistics
+
+    def _rtp_stats_tick(self):
+        with self._lock:
+            sessions = list(self._audio_sessions)
+            self._rtp_stats_armed = bool(sessions)
+        live = set()
+        for session in sessions:
+            for stream in list(session.streams or []):
+                if stream.type in ('audio', 'video'):
+                    live.add(stream)
+                    self._log_rtp_statistics(session, stream)
+        for stream in list(self._rtp_counters):
+            if stream not in live:
+                del self._rtp_counters[stream]
+        if sessions:
+            call_later(self.rtp_stats_interval, self._rtp_stats_tick)
+
+    def _log_rtp_statistics(self, session, stream):
+        try:
+            statistics = stream.statistics
+        except Exception:
+            return
+        if not statistics:
+            return
+        rx = statistics['rx']
+        packets, lost = rx['packets'], rx['packets_lost']
+        previous_packets, previous_lost = self._rtp_counters.get(stream, (0, 0))
+        self._rtp_counters[stream] = (packets, lost)
+        packets_delta = max(packets - previous_packets, 0)
+        lost_delta = max(lost - previous_lost, 0)
+        loss = 100.0 * lost_delta / (packets_delta + lost_delta) if lost_delta else 0.0
+        self.write('%s RTP %s statistics%s: RTT=%d ms, packet loss=%.1f%%, jitter RX/TX=%d/%d ms' % (
+            datetime.now(), stream.type, _session_target(session), statistics['rtt']['last'] / 1000, loss,
+            rx['jitter']['last'] / 1000, statistics['tx']['jitter']['last'] / 1000))
+
     def _log_echo_canceller(self, session, final):
         from sipsimple.application import SIPApplication
         try:
@@ -168,10 +229,8 @@ class RTPLog(object, metaclass=Singleton):
             return
         if not stats:
             return      # no software canceller on this device, or under a second of audio
-        uri = getattr(getattr(session, 'remote_identity', None), 'uri', None)
-        target = str(uri).partition(':')[2] if uri is not None else None
         summary = stats.get('info') or ', '.join('%s=%s' % item for item in sorted(stats.items()) if item[1] is not None)
-        text = '%s Audio echo canceller%s%s: %s' % (datetime.now(), ' at end of call' if final else '', (' to %s' % target) if target else '', summary)
+        text = '%s Audio echo canceller%s%s: %s' % (datetime.now(), ' at end of call' if final else '', _session_target(session), summary)
         erl, erle, duration = stats.get('erl'), stats.get('erle'), stats.get('duration')
         if (erl is not None and erle is not None and duration is not None and duration >= self.EC_SUSPECT_MIN_DURATION
                 and erl < self.EC_SUSPECT_ERL_DB and erle < self.EC_SUSPECT_ERLE_DB):
@@ -187,7 +246,8 @@ class RTPLog(object, metaclass=Singleton):
     def _render_stream(self, session, stream):
         when = session.start_time
         media = stream.type.capitalize()
-        text = '\n%s New %s call %s\n' % (when, media, session.remote_identity)
+        call_id = _call_id(session)
+        text = '\n%s New %s call %s%s\n' % (when, media, session.remote_identity, (' Call-ID %s' % call_id) if call_id else '')
         if stream.local_rtp_address and stream.local_rtp_port and stream.remote_rtp_address and stream.remote_rtp_port:
             if stream.ice_active and stream.local_rtp_candidate and stream.remote_rtp_candidate:
                 text += '%s %s RTP endpoints %s:%d (ICE type %s) <-> %s:%d (ICE type %s)\n' % (when, media,
