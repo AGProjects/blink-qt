@@ -2,6 +2,9 @@ blink (7.1.7) unstable; urgency=medium
 
   * Fix RTT calculus
   * Re-added preffered media per contact
+  * Allow search entire messages database from main search bar
+  * Added OTR controls for MSRP sessions
+
 
  -- Adrian Georgescu <ag@ag-projects.com>  Fri, 23 Oct 2026 10:26:26 -0300
 
