@@ -4246,7 +4246,21 @@ class ChatSessionDelegate(QStyledItemDelegate, ColorHelperMixin):
             elif cross_rect.contains(event.pos()):
                 session = index.data(Qt.ItemDataRole.UserRole)
                 blink_session = session.blink_session
-                ActivityLog().info(f'[chat window] Close the tile of {blink_session.contact_uri.uri if blink_session.contact_uri is not None else "?"} (state {blink_session.state or "new"})')
+                party = blink_session.contact_uri.uri if blink_session.contact_uri is not None else '?'
+                from blink.webrtc import active_videoroom
+                video_room = active_videoroom(blink_session.contact_uri.uri) if blink_session.contact_uri is not None else None
+                state = str(blink_session.state or '')
+                in_room = blink_session.is_conference and state.startswith(('connecting', 'connected'))
+                if in_room or video_room is not None:
+                    # a room we are in: the x hangs up (its video room too) and the tile stays; once
+                    # disconnected, the x closes it
+                    ActivityLog().info(f'[chat window] Hang up {party} from its tile (state {state or "new"}' + (', and its video room' if video_room is not None else '') + ')')
+                    if video_room is not None:
+                        video_room.leave()
+                    if in_room:
+                        session.end()
+                    return True
+                ActivityLog().info(f'[chat window] Close the tile of {party} (state {state or "new"})')
                 session.end(delete=True)
                 return True
         return super(ChatSessionDelegate, self).editorEvent(event, model, option, index)
