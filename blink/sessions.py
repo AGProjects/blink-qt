@@ -6948,21 +6948,44 @@ class ConferenceParticipantModel(QAbstractListModel):
 
     def _DH_ApplicationXBlinkContactList(self, mime_data, action, index):
         try:
-            contacts = pickle.loads(str(mime_data.data('application/x-blink-contact-list')))
-        except Exception:
+            contacts = pickle.loads(bytes(mime_data.data('application/x-blink-contact-list')))
+        except Exception as e:
+            ActivityLog().warning(f'[conference] Cannot read the contacts dropped on the participants: {e!r}')
             return False
         for contact in contacts:
-            self.session.server_conference.add_participant(contact, contact.uri)
+            if contact.uri is not None:
+                self._invite(contact, contact.uri)
         return True
 
     def _DH_ApplicationXBlinkContactUriList(self, mime_data, action, index):
         try:
-            contact, contact_uris = pickle.loads(str(mime_data.data('application/x-blink-contact-uri-list')))
-        except Exception:
+            contact, contact_uris = pickle.loads(bytes(mime_data.data('application/x-blink-contact-uri-list')))
+        except Exception as e:
+            ActivityLog().warning(f'[conference] Cannot read the addresses dropped on the participants: {e!r}')
             return False
         for contact_uri in contact_uris:
-            self.session.server_conference.add_participant(contact, contact_uri.uri)
+            self._invite(contact, contact_uri)
         return True
+
+    def _invite(self, contact, contact_uri):
+        """Invite someone dropped on the participants: the room calls them. Through the MSRP session
+        to the room (a REFER to the focus) when it is connected, else through its video room (WebRTC)."""
+        from blink.webrtc import active_videoroom
+        session = self.session
+        if session is None:
+            return
+        uri = re.sub('^sips?:', '', str(contact_uri.uri))
+        conference = getattr(session, 'server_conference', None)
+        if conference is not None and str(session.state or '').startswith('connected'):
+            ActivityLog().info(f'[conference] Inviting {uri} to {session.uri} (REFER to the focus)')
+            conference.add_participant(contact, contact_uri)
+            return
+        video_room = active_videoroom(session.contact_uri.uri) if session.contact_uri is not None else None
+        if video_room is not None:
+            ActivityLog().info(f'[conference] Inviting {uri} to {video_room.room} (through the video room)')
+            video_room.invite([uri])
+            return
+        ActivityLog().warning(f'[conference] Cannot invite {uri} to {session.uri}: not in the room')
 
     def _DH_TextUriList(self, mime_data, action, index):
         return False
