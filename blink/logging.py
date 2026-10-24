@@ -21,7 +21,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from blink.resources import ApplicationData
 
 
-__all__ = ['ActivityLog', 'JournalLog', 'LogManager', 'MessagingTrace']
+__all__ = ['ActivityLog', 'JournalLog', 'LogManager', 'MessagingTrace', 'msrp_note']
 
 
 class ActivityLog(object, metaclass=Singleton):
@@ -667,6 +667,20 @@ class LogManager(object, metaclass=Singleton):
 
         message = ("%s XCAP manager client did not initialize: %s" % (notification.datetime, notification.data.error))
         self.log_xcap(notification, message)
+
+
+def msrp_note(text):
+    """A line of ours in the MSRP log (msrp_trace.txt and the MSRP tab of the logs window), saying
+    what the library leaves unsaid (why a connection failed)."""
+    from datetime import datetime
+    manager = LogManager()
+    msg = '%s: NOTE %s\n' % (datetime.now(), text)
+    try:
+        manager.msrptrace_file.write(msg)
+        manager.msrptrace_file.flush()
+    except Exception:
+        pass
+    NotificationCenter().post_notification('UILogMessage', data=NotificationData(message=msg, section='msrp'))
 
 
 class MessagingTrace(object, metaclass=Singleton):

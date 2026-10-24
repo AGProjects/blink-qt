@@ -889,6 +889,66 @@ class Blink(QApplication, metaclass=QSingleton):
         what = ' '.join(str(part) for part in (code, reason) if part) or 'no answer'
         detail = f', {failure}' if failure and failure != reason else ''
         ActivityLog().warning(f'[call] Call with {self._call_party(session)} failed{f" ({originator})" if originator else ""}: {what}{detail}{self._call_route(session) if getattr(session, 'direction', None) == 'outgoing' else ''} ({self._call_info(session)})')
+        if 'media stream' in f'{reason} {failure}'.lower() or 'msrp' in f'{reason} {failure}'.lower():
+            self._explain_msrp_failure(session, failure or reason)
+
+    @staticmethod
+    def _msrp_paths(session):
+        """(stream type, the far end's MSRP path) of each MSRP stream of a session, from its SDP."""
+        paths = []
+        for stream in list(getattr(session, 'streams', None) or []) + list(getattr(session, 'proposed_streams', None) or []):
+            if getattr(stream, 'type', None) not in ('chat', 'file-transfer'):
+                continue
+            media = getattr(stream, 'remote_media', None)
+            try:
+                path = media.attributes.getfirst(b'path') if media is not None else None
+            except Exception:
+                path = None
+            if path:
+                path = path.decode() if isinstance(path, bytes) else str(path)
+                if (stream.type, path) not in paths:
+                    paths.append((stream.type, path))
+        return paths
+
+    def _explain_msrp_failure(self, session, reason):
+        """Why an MSRP stream could not start, in words: the address the far end gave, and whether it can be reached at all."""
+        import ipaddress
+        import re
+        from blink.logging import msrp_note
+        party = self._call_party(session)
+        paths = self._msrp_paths(session)
+        if not paths:
+            text = f'MSRP with {party} did not start ({reason}): no MSRP path known for the far end'
+            ActivityLog().warning(f'[msrp] {text}')
+            msrp_note(text)
+            return
+        for stream_type, path in paths:
+            uri = path.split()[-1]       # the far end is the last hop of the path
+            match = re.match(r'^msrps?://([^:/;]+|\[[^\]]+\]):(\d+)', uri)
+            host, port = (match.group(1).strip('[]'), match.group(2)) if match else (None, None)
+            try:
+                address = ipaddress.ip_address(host) if host else None
+            except ValueError:
+                address = None         # a host name
+            certificate = re.search(r'(peer certificate[^(]*|certificate[^(]*(not trusted|expired|revoked|issuer is unknown)[^(]*)', str(reason), re.IGNORECASE)
+            if certificate is not None:
+                issued = re.search(r'for CN (.+?) issued by (.+?)(?: at |$)', str(reason))
+                why = (f'the TLS certificate of {host}:{port} was refused ({certificate.group(0).strip().rstrip(":")}'
+                       + (f'; it is for {issued.group(1)}, issued by {issued.group(2)}' if issued else '')
+                       + '): the far end reached, but its MSRP server uses a certificate that is not trusted '
+                         '(on SylkServer: [TLS] certificate, a certificate for its MSRP hostname)')
+            elif address is not None and (address.is_private or address.is_loopback or address.is_link_local):
+                why = (f'the far end advertised the private address {host}:{port}, which cannot be reached from here: '
+                       f'its MSRP server is behind NAT or in a container without a public address (on SylkServer: '
+                       f'[MSRP] msrp_hostname and a reachable port, e.g. host networking)')
+            elif host:
+                why = (f'no MSRP connection to {host}:{port} within the timeout: the far end does not answer there '
+                       f'(a firewall, or a port that is not forwarded to it)')
+            else:
+                why = f'the far end gave an MSRP path that cannot be read: {uri}'
+            text = f'MSRP {stream_type} with {party} did not start ({reason}): {why}'
+            ActivityLog().warning(f'[msrp] {text}')
+            msrp_note(text)
 
     def _NH_SIPAccountRegistrationDidEnd(self, notification):
         account = notification.sender
