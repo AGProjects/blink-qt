@@ -8,6 +8,7 @@ except ImportError:     # PyQt6 built without QtDBus: no portal, Qt's own scheme
     QDBusConnection = QDBusInterface = QDBusVariant = None
     QDBusMessage = object
 from PyQt6.QtGui import QColor, QPalette
+from PyQt6 import sip
 from PyQt6.QtWidgets import QApplication
 
 from application.python import limit
@@ -149,7 +150,15 @@ def follow_theme(obj):
 
 
 def apply_theme_change():
-    for obj in sorted(list(_theme_followers), key=lambda obj: getattr(obj, 'theme_order', 10)):
+    # The set holds the Python wrappers, which can outlive the Qt object they wrap (a widget
+    # deleted on the C++ side while something still references the wrapper): drop those.
+    followers = []
+    for obj in list(_theme_followers):
+        if isinstance(obj, sip.simplewrapper) and sip.isdeleted(obj):
+            _theme_followers.discard(obj)
+        else:
+            followers.append(obj)
+    for obj in sorted(followers, key=lambda obj: getattr(obj, 'theme_order', 10)):
         try:
             obj.apply_theme()
         except Exception as e:
