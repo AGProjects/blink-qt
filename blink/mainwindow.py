@@ -480,8 +480,14 @@ class MainWindow(base_class, ui_class):
         self.main_splitter.setStretchFactor(0, 0)
         self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.splitterMoved.connect(self._SH_MainSplitterMoved)
+        self.main_splitter.installEventFilter(self)
         self.setCentralWidget(self.main_splitter)
+        # the window may narrow the pane below its minimum (it is hidden once narrower than the contact list); the splitter handle may not
+        self.message_pane.setMinimumWidth(1)
         self.message_pane.hide()
+        self._message_pane_opening = False
+        self._message_pane_squeezed = False
+        self._width_lock = None                 # (minimum, maximum) width of the window while it is held after the pane was squeezed out
 
         self.message_pane_action = QAction(translate('main_window', 'Messages Pane'), self)
         self.message_pane_action.setCheckable(True)
@@ -515,7 +521,27 @@ class MainWindow(base_class, ui_class):
             ui_settings().setValue('main_window/message_pane_width', self.message_pane.width())
 
     def _SH_MainSplitterMoved(self, position, index):
+        if self.message_pane.isVisible() and self.message_pane.width() < MessagePane.minimum_width:
+            total = sum(self.main_splitter.sizes())
+            self.main_splitter.setSizes([total - MessagePane.minimum_width, MessagePane.minimum_width])
         self._save_message_pane_width()
+
+    def eventFilter(self, watched, event):
+        if watched is self.main_splitter and event.type() == event.Type.Resize:
+            self._check_message_pane_room(event.size().width())
+        return super(MainWindow, self).eventFilter(watched, event)
+
+    def _check_message_pane_room(self, splitter_width):
+        """Hide the message pane when the window is scaled down until it would be narrower than the contact list."""
+        if self._message_pane_opening or not self.message_pane.isVisible():
+            return
+        list_width = self.contacts_column.width()
+        if splitter_width - list_width - self.main_splitter.handleWidth() < list_width:
+            self._message_pane_squeezed = True
+            try:
+                self.set_message_pane_visible(False)
+            finally:
+                self._message_pane_squeezed = False
 
     def set_message_pane_visible(self, visible):
         """Open or close the message pane; the window grows or shrinks by its width, the contact list keeps its own."""
@@ -529,18 +555,52 @@ class MainWindow(base_class, ui_class):
         handle = self.main_splitter.handleWidth()
         if visible:
             pane_width = self.message_pane_width
-            self.message_pane.show()
-            if resizable:
-                self.resize(list_width + handle + pane_width, self.height())
-                self._keep_on_screen()
-            self.main_splitter.setSizes([list_width, pane_width])
+            self._unlock_width()
+            self._message_pane_opening = True
+            try:
+                self.message_pane.show()
+                if resizable:
+                    self.resize(list_width + handle + pane_width, self.height())
+                    self._keep_on_screen()
+                self.main_splitter.setSizes([list_width, pane_width])
+            finally:
+                self._message_pane_opening = False
             ActivityLog().info(f'[ui] Message pane opened ({pane_width} px wide' + (f', showing {self.message_pane.key})' if self.message_pane.key else ', no conversation selected)'))
+        elif self._message_pane_squeezed:
+            # closed as by Ctrl+M: the window shrinks to the contact list, which keeps its width; the squeezed pane width is not saved
+            self.message_pane.hide()
+            if resizable:
+                self._lock_width(list_width)
+            ActivityLog().info('[ui] Message pane closed (window narrower than room for it)')
         else:
             self._save_message_pane_width()
             self.message_pane.hide()
             if resizable:
                 self.resize(list_width, self.height())
             ActivityLog().info('[ui] Message pane closed')
+
+    def _lock_width(self, width):
+        """Hold the window at the contact list's width, so the window drag that squeezed the pane out stops acting on it.
+
+        The window manager owns an interactive resize until the button is released and does not let it be cancelled; a fixed
+        width makes the rest of the drag do nothing. Released when the pointer comes back into the window (the drag is over),
+        when the pane is opened, or after a few seconds at most."""
+        if self._width_lock is None:
+            self._width_lock = (self.minimumWidth(), self.maximumWidth())
+        self.setFixedWidth(width)
+        QTimer.singleShot(3000, self._unlock_width)
+
+    def _unlock_width(self):
+        if self._width_lock is None:
+            return
+        minimum, maximum = self._width_lock
+        self._width_lock = None
+        self.setMinimumWidth(minimum)
+        self.setMaximumWidth(maximum)
+
+    def enterEvent(self, event):
+        super(MainWindow, self).enterEvent(event)
+        self._unlock_width()
 
     def _keep_on_screen(self):
         screen = self.screen()
