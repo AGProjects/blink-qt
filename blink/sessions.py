@@ -7326,6 +7326,15 @@ class IncomingDialog(IncomingDialogBase, ui_class):
             self.hide()
 
     def _update_streams_layout(self):
+        invitation = getattr(self, 'invitation', None)
+        if invitation:
+            # a conference invitation: what it is, whatever the media (refusing one still works by its icon)
+            multiple = len([stream for stream in self.streams if stream.in_use]) > 1
+            for stream in (self.audio_stream, self.chat_stream, self.screensharing_stream, self.video_stream):
+                stream.active = multiple
+            self.note_label.setText(invitation)
+            self._update_accept_button()
+            return
         if len([stream for stream in self.streams if stream.in_use]) > 1:
             self.audio_stream.active = True
             self.chat_stream.active = True
@@ -7351,6 +7360,26 @@ class IncomingDialog(IncomingDialogBase, ui_class):
 
 
 del ui_class, base_class
+
+
+def _conference_inviter(session):
+    """(contact, address) of who invited us, for an INVITE from a conference focus that carries
+    Referred-By (RFC 3892, SylkServer's focus sets it from the REFER), or None."""
+    from blink.contacts import URIUtils
+    from blink.conference import is_conference_uri
+    referred_by = getattr(getattr(session, 'transfer_info', None), 'referred_by', None)
+    if not referred_by:
+        return None
+    if not (getattr(session, 'remote_focus', False) or is_conference_uri(str(session.remote_identity.uri), getattr(session, 'account', None))):
+        return None
+    text = referred_by.decode() if isinstance(referred_by, bytes) else str(referred_by)
+    match = re.search(r'<([^>]+)>', text)
+    uri = (match.group(1) if match else text.split(';', 1)[0]).strip()
+    uri = re.sub(r'^sips?:', '', uri).split(';', 1)[0]
+    if '@' not in uri:
+        return None
+    contact, contact_uri = URIUtils.find_contact(uri)
+    return contact, uri
 
 
 class IncomingRequest(QObject):
@@ -7379,6 +7408,17 @@ class IncomingRequest(QObject):
         address = '%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
+        # a conference focus calling because someone invited us (REFER): shown as that person
+        # inviting us to the room, from the Referred-By the focus copies into its INVITE
+        inviter = None if proposal else _conference_inviter(session)
+        if inviter is not None:
+            inviter_contact, inviter_address = inviter
+            room = address.partition('@')[0]
+            self.dialog.setWindowTitle(translate('incoming_dialog', 'Conference Invitation'))
+            self.dialog.uri_label.setText(inviter_address)
+            self.dialog.username_label.setText(inviter_contact.name if inviter_contact.type != 'dummy' else inviter_address)
+            self.dialog.invitation = translate('incoming_dialog', 'invites you to conference %s') % room
+            self.dialog.setToolTip(translate('incoming_dialog', 'Conference %s, invited by %s') % (address, inviter_address))
         settings = SIPSimpleSettings()
 
         auto_answer_interval = 0
@@ -7408,11 +7448,16 @@ class IncomingRequest(QObject):
             self._timeout_timer.start()
 
         from blink.contacts import contact_avatar_pixmap
-        self.dialog.user_icon.setPixmap(contact_avatar_pixmap(contact, 48, display_name=session.remote_identity.display_name))
+        if inviter is not None:
+            self.dialog.user_icon.setPixmap(contact_avatar_pixmap(inviter[0], 48, display_name=inviter[1]))
+        else:
+            self.dialog.user_icon.setPixmap(contact_avatar_pixmap(contact, 48, display_name=session.remote_identity.display_name))
         self.dialog.audio_stream.setVisible(self.audio_stream is not None)
         self.dialog.video_stream.setVisible(self.video_stream is not None)
         self.dialog.chat_stream.setVisible(self.chat_stream is not None)
         self.dialog.screensharing_stream.setVisible(self.screensharing_stream is not None)
+        if inviter is not None:
+            self.dialog._update_streams_layout()     # the note says the invitation
         if self.screensharing_stream is not None:
             if self.screensharing_stream.handler.type == 'active':
                 self.dialog.screensharing_label.setText(translate('incoming_dialog', 'is offering screen sharing'))
