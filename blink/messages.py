@@ -1915,7 +1915,8 @@ class MessageManager(object, metaclass=Singleton):
             stats_path = None
             activity.warning(f'[journal] Cannot write the import statistics: {e}')
         else:
-            activity.info(f'[journal] Import statistics written to {stats_path}')
+            if stats_path is not None:
+                activity.info(f'[journal] Import statistics written to {stats_path}')
         self._journal_progress(account, 'done')
         jlog(account.id, 'apply end', pages=f'{applied}/{len(names)}', entries=f'{done_entries}/{total_entries}', took=f'{stats.apply_seconds:.1f}s',
              failed=totals.get('failed') or None, quarantined=len(stats.quarantined) or None)

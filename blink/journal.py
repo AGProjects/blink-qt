@@ -367,11 +367,37 @@ class JournalStats(object):
                 'unhandled': self.unhandled(),
                 'quarantined': self.quarantined}
 
+    keep = 5        # import files kept per account, the newest
+
+    @property
+    def worth_keeping(self):
+        """A first sync, or a run that stored or changed something: one with nothing new is not
+        written (the activity log has its summary line)."""
+        if self.first_sync or self.quarantined:
+            return True
+        return any(count for outcome, count in self.outcomes().items() if outcome not in ('duplicates', 'ignored') and 'skipped' not in outcome)
+
     def write(self, directory):
-        """Write the run as logs/import-<account>-<time>.json; returns the path."""
+        """Write the run as logs/import-<account>-<time>.json, keeping the newest `keep` of the
+        account; returns the path, or None for a run not worth keeping."""
+        if not self.worth_keeping:
+            return None
         os.makedirs(directory, exist_ok=True)
         stamp = time.strftime('%Y%m%d-%H%M%S', time.localtime(self.started))
         path = os.path.join(directory, f'import-{self.account_id}-{stamp}.json')
         with open(path, 'w', encoding='utf-8') as stats_file:
             json.dump(self.as_dict(), stats_file, indent=1, sort_keys=True)
+        self._prune(directory)
         return path
+
+    def _prune(self, directory):
+        prefix, suffix = f'import-{self.account_id}-', '.json'
+        try:
+            names = sorted(name for name in os.listdir(directory) if name.startswith(prefix) and name.endswith(suffix))
+        except OSError:
+            return
+        for name in names[:-self.keep]:     # the stamp sorts by time
+            try:
+                os.unlink(os.path.join(directory, name))
+            except OSError:
+                pass
