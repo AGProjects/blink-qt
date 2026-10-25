@@ -1,0 +1,98 @@
+# Builds the Windows installer (dist/Blink-Installer-<version>.exe) on a GitHub Windows runner,
+# in MSYS2 UCRT64, following windows/README.md. Run it by hand (Actions > Windows installer >
+# Run workflow) or by pushing a tag; a tag also attaches the installer to a GitHub release.
+
+name: Windows installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      sipsimple_ref:
+        description: python3-sipsimple branch or tag to build against
+        default: master
+  push:
+    tags:
+      - '*'
+
+env:
+  PIP_BREAK_SYSTEM_PACKAGES: 1        # MSYS2's Python is marked externally managed
+  PIP_DISABLE_PIP_VERSION_CHECK: 1
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MSYS2 (UCRT64) and packages
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          cache: true
+          install: >-
+            git patch make wget tar zstd
+          pacboy: >-
+            toolchain:p pkgconf:p autotools:p
+            python:p python-pip:p python-setuptools:p python-wheel:p cython:p
+            gnutls:p openssl:p ffmpeg:p libvpx:p opus:p sqlite3:p
+            gmp:p mpc:p mpfr:p
+            python-lxml:p python-cryptography:p python-pyopenssl:p python-gmpy2:p
+            python-dateutil:p python-dnspython:p python-greenlet:p python-twisted:p
+            python-requests:p python-numpy:p python-pynacl:p
+            python-pyqt6:p qt6-base:p qt6-multimedia:p qt6-svg:p qt6-pdf:p qt6-positioning:p qt6-websockets:p
+            python-gobject:p gstreamer:p gst-plugins-base:p gst-plugins-good:p gst-plugins-bad:p gst-libav:p libnice:p
+            pyinstaller:p
+
+      - name: SIP SIMPLE SDK dependencies
+        run: |
+          python3 -m pip install git+https://github.com/AGProjects/python3-application.git
+          python3 -m pip install --no-build-isolation git+https://github.com/AGProjects/python3-gnutls.git
+          python3 -m pip install --no-build-isolation git+https://github.com/AGProjects/python3-otr.git
+          python3 -m pip install --no-build-isolation git+https://github.com/AGProjects/python3-eventlib.git
+          python3 -m pip install --no-build-isolation git+https://github.com/AGProjects/python3-xcaplib.git
+          python3 -m pip install --no-build-isolation git+https://github.com/AGProjects/python3-msrplib.git
+
+      - name: SIP SIMPLE SDK
+        run: |
+          git clone --depth 1 --branch "${{ inputs.sipsimple_ref || 'master' }}" https://github.com/AGProjects/python3-sipsimple.git ../python3-sipsimple
+          cd ../python3-sipsimple
+          bash get_dependencies.sh       # not executable in the git mirror
+          # setup_pjsip.py points at /mingw64; this is UCRT64
+          export CFLAGS="-I$MINGW_PREFIX/include" LDFLAGS="-L$MINGW_PREFIX/lib"
+          python3 -m pip install --no-build-isolation --verbose .
+          python3 -c "import sipsimple; print('sipsimple', sipsimple.__version__)"
+
+      - name: Blink dependencies
+        run: |
+          python3 -m pip install pgpy sqlobject lxml_html_clean segno
+
+      - name: Check that Blink imports
+        run: |
+          QT_QPA_PLATFORM=offscreen python3 -c "import blink.mainwindow; print('blink imports')"
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      - name: Build
+        run: |
+          bash windows/build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blink-Installer
+          path: dist/Blink-Installer-*.exe
+          if-no-files-found: error
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Blink-Installer-*.exe
